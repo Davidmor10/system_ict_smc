@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { detectFVGs as engineDetectFVGs, annotateFillPct, filterForBias } from '../lib/fvgEngine';
-export type { FVGStatus, EnhancedFVGZone } from '../lib/fvgEngine';
+import type { FVGStatus, EnhancedFVGZone } from '../lib/fvgEngine';
+export type { FVGStatus, EnhancedFVGZone };
 
 // ─── Exported Types ────────────────────────────────────────────────────────
 

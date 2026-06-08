@@ -7,6 +7,8 @@ import type {
   SMTState, ConfluenceState, MTFRow, OrderBlock, FVGZone, DailyBiasV2, BiasRule,
 } from '../hooks/useMarketStream';
 import SmcChart from './SmcChart';
+import { useLanguage } from '../hooks/useLanguage';
+import type { DictKey } from '../lib/i18n';
 
 // ─── Primitive helpers ──────────────────────────────────────────────────────
 
@@ -59,17 +61,17 @@ function isMarketOpen(): boolean {
 
 // ─── Dual Bias Strip (50/50 ES | NQ) ───────────────────────────────────────
 
-const RULE_SHORT: Record<BiasRule, string> = {
-  SWEEP_CHOCH_BULL:  'SSL Sweep + CHoCH',
-  D1_BULL_FVG:       'D1 Bull FVG',
-  H4_BULL_FVG:       'H4 Bull FVG',
-  BEAR_IFVG_SUPPORT: 'Bear iFVG Support',
-  SWEEP_CHOCH_BEAR:  'BSL Sweep + CHoCH',
-  D1_BEAR_FVG:       'D1 Bear FVG',
-  H4_BEAR_FVG:       'H4 Bear FVG',
-  BULL_IFVG_RESIST:  'Bull iFVG Resist',
-  CONFLICTING_ZONES: 'Conflicting Zones',
-  TIGHT_RANGE:       'No Clear Structure',
+const RULE_KEY: Record<BiasRule, DictKey> = {
+  SWEEP_CHOCH_BULL:  'rule_sweep_bull',
+  D1_BULL_FVG:       'rule_d1_bull_fvg',
+  H4_BULL_FVG:       'rule_h4_bull_fvg',
+  BEAR_IFVG_SUPPORT: 'rule_bear_ifvg',
+  SWEEP_CHOCH_BEAR:  'rule_sweep_bear',
+  D1_BEAR_FVG:       'rule_d1_bear_fvg',
+  H4_BEAR_FVG:       'rule_h4_bear_fvg',
+  BULL_IFVG_RESIST:  'rule_bull_ifvg',
+  CONFLICTING_ZONES: 'rule_conflict',
+  TIGHT_RANGE:       'rule_tight',
 };
 
 const biasColor: Record<Bias, string> = {
@@ -85,17 +87,19 @@ const activeCls: Record<Bias, string> = {
 };
 const dimCls = 'bg-background text-muted/40 border border-border';
 
-const FACTORS: { key: keyof DailyBiasV2['factors']; label: string }[] = [
-  { key: 'honoredGaps',       label: 'Honored Gaps'  },
-  { key: 'explosiveGaps',     label: 'Explosive Gaps' },
-  { key: 'iFVGsActive',       label: 'iFVGs Active'  },
-  { key: 'sessionLiqUnswept', label: 'Session Liq'   },
-  { key: 'inducementUnswept', label: 'Inducement'    },
+const FACTOR_KEYS: { key: keyof DailyBiasV2['factors']; labelKey: DictKey }[] = [
+  { key: 'honoredGaps',       labelKey: 'factor_honored'     },
+  { key: 'explosiveGaps',     labelKey: 'factor_explosive'   },
+  { key: 'iFVGsActive',       labelKey: 'factor_ifvgs'       },
+  { key: 'sessionLiqUnswept', labelKey: 'factor_session_liq' },
+  { key: 'inducementUnswept', labelKey: 'factor_inducement'  },
 ];
 
 function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
   return (
-    <div className="flex flex-col gap-1.5 px-5 py-3">
+    <div className="flex flex-col gap-1.5 px-5 py-3" dir={rtl ? 'rtl' : 'ltr'}>
       {/* Row 1 — title · status · rule */}
       <div className="flex items-center gap-3">
         <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] shrink-0">{symbol}</span>
@@ -103,17 +107,17 @@ function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
           {bias.bias === 'BULLISH' ? '▲' : bias.bias === 'BEARISH' ? '▼' : '◈'} {bias.bias}
         </span>
         <span className="text-[9px] font-mono text-muted/70 truncate max-w-[150px] tracking-wide">
-          {bias.rule ? RULE_SHORT[bias.rule] : '—'}
+          {bias.rule ? t(RULE_KEY[bias.rule]) : '—'}
         </span>
       </div>
       {/* Row 2 — factor badges */}
-      <div className="flex items-center gap-1.5">
-        {FACTORS.map(f => (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {FACTOR_KEYS.map(f => (
           <span
             key={f.key}
             className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-medium tracking-wide transition-all duration-700 ease-in-out ${bias.factors[f.key] ? activeCls[bias.bias] : dimCls}`}
           >
-            {f.label}
+            {t(f.labelKey)}
           </span>
         ))}
       </div>
@@ -178,9 +182,10 @@ function ChartPanel({ label, children }: { label: string; children: React.ReactN
 // ─── MTF Matrix ─────────────────────────────────────────────────────────────
 
 function MTFMatrix({ rows }: { rows: MTFRow[] }) {
+  const { t, lang } = useLanguage();
   return (
     <div>
-      <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3">MTF Structure</span>
+      <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3 ${lang === 'he' ? 'text-right' : ''}`}>{t('mtf_struct')}</span>
       <div className="flex flex-col">
         {rows.map(r => (
           <div key={r.tf} className="flex items-center justify-between py-2 border-b border-[#1c1c1e] last:border-0">
@@ -199,13 +204,14 @@ function MTFMatrix({ rows }: { rows: MTFRow[] }) {
 // ─── SMC Arrays ─────────────────────────────────────────────────────────────
 
 function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVGZone | null; ltfFVGs: FVGZone[] }) {
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
   return (
-    <div>
-      <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3">SMC Arrays</span>
+    <div dir={rtl ? 'rtl' : 'ltr'}>
+      <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3 ${rtl ? 'text-right' : ''}`}>{t('smc_arrays')}</span>
       <div className="flex flex-col gap-2.5">
-        {/* HTF Order Block */}
         <div className="flex justify-between items-center">
-          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF OB</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">{t('htf_ob')}</span>
           {ob
             ? <div className="flex items-center gap-1.5">
                 <Badge label={ob.type === 'BULLISH' ? 'BULL OB' : 'BEAR OB'} variant={ob.type === 'BULLISH' ? 'bullish' : 'bearish'} />
@@ -213,9 +219,8 @@ function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVG
               </div>
             : <Badge label="NONE" variant="muted" />}
         </div>
-        {/* HTF FVG — bullish=emerald, bearish=burgundy, both edged gold */}
         <div className="flex justify-between items-center">
-          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF FVG</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">{t('htf_fvg')}</span>
           {htfFVG
             ? <div className="flex items-center gap-1.5">
                 <Badge label={htfFVG.type === 'BULLISH' ? 'BULL FVG' : 'BEAR FVG'} variant={htfFVG.type === 'BULLISH' ? 'bullish' : 'bearish'} />
@@ -223,10 +228,9 @@ function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVG
               </div>
             : <Badge label="NONE" variant="muted" />}
         </div>
-        {/* LTF FVG pool — inducement glow in gold */}
         <div className={`flex justify-between items-center rounded px-2 py-1 transition-all duration-700 ease-in-out ${ltfFVGs.length > 0 ? 'bg-gold/5 border border-gold/15' : ''}`}>
-          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">LTF FVGs</span>
-          <span className={`text-[11px] font-mono tabular-nums ${ltfFVGs.length > 0 ? 'text-gold' : 'text-muted/50'}`}>{ltfFVGs.length} active</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">{t('ltf_fvgs')}</span>
+          <span className={`text-[11px] font-mono tabular-nums ${ltfFVGs.length > 0 ? 'text-gold' : 'text-muted/50'}`}>{ltfFVGs.length} {t('active_word')}</span>
         </div>
       </div>
     </div>
@@ -236,12 +240,13 @@ function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVG
 // ─── Gravity bar ─────────────────────────────────────────────────────────────
 
 function GravityBar({ score, zone }: { score: number; zone: ZoneState }) {
+  const { t } = useLanguage();
   const bar = zone === 'PREMIUM' ? 'bg-bearish' : zone === 'DISCOUNT' ? 'bg-bullish' : 'bg-muted/40';
   const tx  = score > 55 ? (zone === 'PREMIUM' ? 'text-bearish' : zone === 'DISCOUNT' ? 'text-bullish' : 'text-muted') : 'text-muted/60';
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
-        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">Gravity Score</span>
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">{t('gravity')}</span>
         <span className={`text-[11px] font-mono tabular-nums ${tx}`}>{score}%</span>
       </div>
       <div className="h-px bg-[#1c1c1e] rounded-full overflow-hidden">
@@ -254,23 +259,26 @@ function GravityBar({ score, zone }: { score: number; zone: ZoneState }) {
 // ─── Confluence panel ─────────────────────────────────────────────────────────
 
 function ConfluencePanel({ state, smt }: { state: ConfluenceState; smt: SMTState }) {
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
+  const ROWS: { labelKey: DictKey; active: boolean }[] = [
+    { labelKey: 'htf_zone', active: state.htfZoneAligned },
+    { labelKey: 'liq_sweep', active: state.liquiditySweep },
+    { labelKey: 'smt_div',   active: state.smtDivergence  },
+  ];
   return (
-    <div className={`rounded border p-4 transition-all duration-700 ease-in-out ${state.active ? 'border-gold/30 bg-gold/5' : 'border-[#1c1c1e] bg-transparent'}`}>
+    <div className={`rounded border p-4 transition-all duration-700 ease-in-out ${state.active ? 'border-gold/30 bg-gold/5' : 'border-[#1c1c1e] bg-transparent'}`} dir={rtl ? 'rtl' : 'ltr'}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">Confluence</span>
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">{t('confluence')}</span>
         <span className={`text-[10px] font-mono ${state.score === 3 ? 'text-gold' : state.score === 2 ? 'text-gold/60' : 'text-muted/50'}`}>{state.score}/3</span>
       </div>
       {state.active && (
-        <div className="text-[9px] font-mono text-gold tracking-[0.15em] mb-3">◈ INSTITUTIONAL ENTRY SIGNAL</div>
+        <div className="text-[9px] font-mono text-gold tracking-[0.15em] mb-3">{t('inst_signal')}</div>
       )}
-      {[
-        { label: 'HTF Zone Aligned', active: state.htfZoneAligned },
-        { label: 'Liquidity Sweep',  active: state.liquiditySweep },
-        { label: 'SMT Divergence',   active: state.smtDivergence  },
-      ].map(r => (
-        <div key={r.label} className="flex items-center gap-2 mb-1">
+      {ROWS.map(r => (
+        <div key={r.labelKey} className="flex items-center gap-2 mb-1">
           <span className={`text-[9px] transition-all duration-700 ease-in-out ${r.active ? 'text-gold' : 'text-[#1c1c1e]'}`}>{r.active ? '✓' : '○'}</span>
-          <span className={`text-[9px] font-mono tracking-wider transition-all duration-700 ease-in-out ${r.active ? 'text-foreground' : 'text-muted/50'}`}>{r.label}</span>
+          <span className={`text-[9px] font-mono tracking-wider transition-all duration-700 ease-in-out ${r.active ? 'text-foreground' : 'text-muted/50'}`}>{t(r.labelKey)}</span>
         </div>
       ))}
       {smt.active && smt.type && (
@@ -282,45 +290,148 @@ function ConfluencePanel({ state, smt }: { state: ConfluenceState; smt: SMTState
   );
 }
 
+// ─── Macro sidebar ──────────────────────────────────────────────────────────
+
+const ECO_EVENTS: { impact: 'HIGH' | 'MED'; day: string; time: string; nameKey: DictKey; fcst: string | null; actual: string | null }[] = [
+  { impact: 'MED',  day: 'Mon', time: '10:00', nameKey: 'ev_ism',      fcst: '51.0',  actual: null },
+  { impact: 'HIGH', day: 'Tue', time: '14:00', nameKey: 'ev_fomc_min', fcst: null,    actual: null },
+  { impact: 'HIGH', day: 'Wed', time: '08:30', nameKey: 'ev_cpi',      fcst: '0.2%',  actual: null },
+  { impact: 'MED',  day: 'Thu', time: '08:30', nameKey: 'ev_claims',   fcst: '217K',  actual: null },
+  { impact: 'MED',  day: 'Thu', time: '08:30', nameKey: 'ev_ppi',      fcst: '0.1%',  actual: null },
+  { impact: 'HIGH', day: 'Fri', time: '08:30', nameKey: 'ev_retail',   fcst: '0.3%',  actual: null },
+];
+
+const FEDWATCH: { labelKey: DictKey; pct: number }[] = [
+  { labelKey: 'fed_hold', pct: 71 },
+  { labelKey: 'fed_cut',  pct: 26 },
+  { labelKey: 'fed_hike', pct:  3 },
+];
+
+function MacroSidebar() {
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
+  const align = rtl ? 'text-right' : '';
+
+  const FED_ROWS: [DictKey, string][] = [
+    ['fed_rate',   '5.25 – 5.50%'],
+    ['fed_stance', 'RESTRICTIVE'  ],
+    ['fed_last',   'May 7, 2026'  ],
+    ['fed_next',   'Jun 17–18'    ],
+  ];
+
+  return (
+    <aside className="w-52 shrink-0 border-r border-[#1c1c1e] bg-[#0d0d0f] flex flex-col overflow-y-auto">
+      <div className={`px-5 py-3 border-b border-[#1c1c1e] shrink-0 ${align}`}>
+        <span className="font-serif text-[11px] tracking-[0.1em] text-[#c0c0c0]/70 uppercase">{t('macro')}</span>
+      </div>
+
+      <div className="flex flex-col gap-5 px-4 py-4" dir={rtl ? 'rtl' : 'ltr'}>
+
+        {/* Economic calendar */}
+        <div>
+          <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3 ${align}`}>{t('eco_calendar')}</span>
+          <div className="flex flex-col">
+            {ECO_EVENTS.map((e, i) => (
+              <div key={i} className="flex items-start gap-2 py-2 border-b border-[#1c1c1e] last:border-0">
+                <span className={`mt-[5px] h-1.5 w-1.5 rounded-full shrink-0 ${e.impact === 'HIGH' ? 'bg-bearish' : 'bg-gold/50'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[8px] font-mono text-muted/50 uppercase tracking-wider">{e.day}</span>
+                    <span className="text-[8px] font-mono text-muted/35">{e.time}</span>
+                  </div>
+                  <span className={`text-[9px] font-mono text-foreground/65 block leading-tight tracking-wide ${align}`}>{t(e.nameKey)}</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {e.fcst && <span className="text-[8px] font-mono text-muted/45">{t('fcst')} {e.fcst}</span>}
+                    {e.actual !== null
+                      ? <span className="text-[8px] font-mono text-gold">{e.actual}</span>
+                      : <span className="text-[8px] font-mono text-muted/25">—</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <span className={`text-[7px] font-mono text-muted/25 tracking-wider mt-2 block ${align}`}>{t('demo_note')}</span>
+        </div>
+
+        <Rule />
+
+        {/* Fed sentiment */}
+        <div>
+          <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3 ${align}`}>{t('fed_sentiment')}</span>
+          <div className="flex flex-col gap-2 mb-4">
+            {FED_ROWS.map(([key, val]) => (
+              <div key={key} className="flex justify-between items-start gap-1">
+                <span className="text-[8px] font-mono text-muted/45 uppercase tracking-wider shrink-0">{t(key)}</span>
+                <span className="text-[9px] font-mono text-foreground/55 text-right leading-tight">{val}</span>
+              </div>
+            ))}
+          </div>
+          <span className={`text-[8px] font-mono text-muted/35 uppercase tracking-wider block mb-2 ${align}`}>{t('fed_watch')}</span>
+          <div className="flex flex-col gap-2">
+            {FEDWATCH.map(w => (
+              <div key={w.labelKey}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[8px] font-mono text-muted/45">{t(w.labelKey)}</span>
+                  <span className="text-[9px] font-mono text-foreground/55 tabular-nums">{w.pct}%</span>
+                </div>
+                <div className="h-px bg-[#1c1c1e] rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${w.pct >= 50 ? 'bg-gold/45' : w.pct >= 20 ? 'bg-muted/35' : 'bg-muted/15'}`}
+                    style={{ width: `${w.pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <span className={`text-[7px] font-mono text-muted/25 tracking-wider mt-2 block ${align}`}>{t('fed_static_note')}</span>
+        </div>
+
+        <Rule />
+
+        {/* Market context */}
+        <div>
+          <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-2 ${align}`}>{t('mkt_context')}</span>
+          <p className={`text-[9px] font-mono text-muted/45 leading-relaxed tracking-wide ${align}`}>{t('mkt_context_body')}</p>
+          <span className={`text-[7px] font-mono text-muted/25 tracking-wider mt-2 block ${align}`}>{t('mkt_manual_note')}</span>
+        </div>
+
+      </div>
+    </aside>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DashboardView() {
   const {
     esDailyBias, nqDailyBias,
-    dailyBias, mtfMatrix,
+    mtfMatrix,
     htfOB, htfFVG, ltfFVGs,
     orderFlow, smt, confluence,
   } = useMarketStream();
 
   const live = useLivePrices();
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
+  const align = rtl ? 'text-right' : '';
+
+  const PRICE_LEVELS: { labelKey: DictKey; val: number; cls: string }[] = [
+    { labelKey: 'range_h', val: orderFlow.rangeHigh,   cls: 'text-bearish' },
+    { labelKey: 'equil',   val: orderFlow.equilibrium, cls: 'text-gold'    },
+    { labelKey: 'range_l', val: orderFlow.rangeLow,    cls: 'text-bullish' },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[#050505] text-[#c0c0c0] overflow-hidden">
 
-      {/* Dual bias strip — ES left / NQ right */}
       <DualBiasStrip es={esDailyBias} nq={nqDailyBias} />
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
         <div className="flex items-center gap-6">
-          {/* ES — live CME futures price */}
-          <PriceBlock
-            symbol="ES1! · S&P 500 Futures"
-            price={live.es.price}
-            change={live.es.change}
-            pct={live.es.pct}
-            flash={live.es.flash}
-          />
+          <PriceBlock symbol={t('es_label')} price={live.es.price} change={live.es.change} pct={live.es.pct} flash={live.es.flash} />
           <div className="h-8 w-px bg-[#1c1c1e]" />
-          {/* NQ — live CME futures price */}
-          <PriceBlock
-            symbol="NQ1! · Nasdaq Futures"
-            price={live.nq.price}
-            change={live.nq.change}
-            pct={live.nq.pct}
-            flash={live.nq.flash}
-          />
-          {/* State badges */}
+          <PriceBlock symbol={t('nq_label')} price={live.nq.price} change={live.nq.change} pct={live.nq.pct} flash={live.nq.flash} />
           <div className="hidden xl:flex items-center gap-2 ml-2">
             <Badge label={orderFlow.zone}  variant={zv(orderFlow.zone)} />
             <Badge label={orderFlow.trend} variant={tv(orderFlow.trend)} />
@@ -328,64 +439,58 @@ export default function DashboardView() {
             {smt.active && smt.type && <Badge label={smt.type.replace('_', ' ')} variant={smv(smt)} />}
           </div>
         </div>
-
-        {/* Market status indicator — steady, no animation */}
         {isMarketOpen() ? (
           <div className="flex items-center gap-2 shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-gold shrink-0" />
-            <span className="text-[9px] text-gold font-mono uppercase tracking-[0.25em]">Live</span>
+            <span className="text-[9px] text-gold font-mono uppercase tracking-[0.25em]">{t('market_live')}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2 shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-muted/40 shrink-0" />
-            <span className="text-[9px] text-muted/50 font-mono uppercase tracking-[0.25em]">Closed</span>
+            <span className="text-[9px] text-muted/50 font-mono uppercase tracking-[0.25em]">{t('market_closed')}</span>
           </div>
         )}
       </header>
 
-      {/* ── Chart area (50/50 split + analytics sidebar) ── */}
+      {/* Chart area */}
       <div className="flex flex-1 min-h-0">
 
-        {/* ES Chart — live TradingView data */}
-        <ChartPanel label="ES1! — S&P 500 · Liquidity & Structure">
+        <MacroSidebar />
+
+        <ChartPanel label={t('panel_es')}>
           <SmcChart symbol="ES" interval="5" />
         </ChartPanel>
 
         <div className="w-px bg-[#1c1c1e] shrink-0" />
 
-        {/* NQ Chart — live TradingView data */}
-        <ChartPanel label="NQ1! — Nasdaq · SMT Divergence Monitor">
+        <ChartPanel label={t('panel_nq')}>
           <SmcChart symbol="NQ" interval="5" />
         </ChartPanel>
 
         {/* Analytics sidebar */}
         <aside className="w-56 shrink-0 border-l border-[#1c1c1e] bg-[#0d0d0f] flex flex-col overflow-y-auto">
-          <div className="px-5 py-3 border-b border-[#1c1c1e] shrink-0">
-            <span className="font-serif text-[11px] tracking-[0.1em] text-[#c0c0c0]/70 uppercase">Analytics</span>
+          <div className={`px-5 py-3 border-b border-[#1c1c1e] shrink-0 ${align}`}>
+            <span className="font-serif text-[11px] tracking-[0.1em] text-[#c0c0c0]/70 uppercase">{t('analytics')}</span>
           </div>
 
-          <div className="flex flex-col gap-5 px-5 py-5">
+          <div className="flex flex-col gap-5 px-5 py-5" dir={rtl ? 'rtl' : 'ltr'}>
 
             <GravityBar score={orderFlow.gravityScore} zone={orderFlow.zone} />
 
             {/* Liquidity Magnet */}
             <div>
-              <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-2">Liq. Magnet</span>
+              <span className={`text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-2 ${align}`}>{t('liq_magnet')}</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-mono text-gold tabular-nums">{orderFlow.liquidityMagnet.toFixed(2)}</span>
-                <span className="text-[9px] font-mono text-muted/50">{orderFlow.zone === 'PREMIUM' ? '↓ draw' : '↑ draw'}</span>
+                <span className="text-[9px] font-mono text-muted/50">{t(orderFlow.zone === 'PREMIUM' ? 'draw_down' : 'draw_up')}</span>
               </div>
             </div>
 
             {/* Price levels */}
             <div className="flex flex-col gap-2">
-              {[
-                { label: 'Range H',  val: orderFlow.rangeHigh,    cls: 'text-bearish' },
-                { label: 'Equilib.', val: orderFlow.equilibrium,  cls: 'text-gold'    },
-                { label: 'Range L',  val: orderFlow.rangeLow,     cls: 'text-bullish' },
-              ].map(r => (
-                <div key={r.label} className="flex justify-between items-center">
-                  <span className="text-[9px] font-mono text-muted/60 uppercase tracking-wider">{r.label}</span>
+              {PRICE_LEVELS.map(r => (
+                <div key={r.labelKey} className="flex justify-between items-center">
+                  <span className="text-[9px] font-mono text-muted/60 uppercase tracking-wider">{t(r.labelKey)}</span>
                   <span className={`text-[11px] font-mono tabular-nums ${r.cls}`}>{r.val.toFixed(2)}</span>
                 </div>
               ))}
