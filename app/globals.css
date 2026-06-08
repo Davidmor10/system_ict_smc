@@ -48,3 +48,13 @@ body {
 }
 .price-flash-up   { animation: flash-up   0.6s ease-out; }
 .price-flash-down { animation: flash-down 0.6s ease-out; }
+
+/* Thin dark scrollbars — zinc theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a transparent;
+}
+*::-webkit-scrollbar         { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track   { background: transparent; }
+*::-webkit-scrollbar-thumb   { background-color: #27272a; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background-color: #3f3f46; }

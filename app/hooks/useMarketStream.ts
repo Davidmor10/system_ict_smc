@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { detectFVGs as engineDetectFVGs, annotateFillPct, filterForBias } from '../lib/fvgEngine';
+export type { FVGStatus, EnhancedFVGZone } from '../lib/fvgEngine';
 
 // ─── Exported Types ────────────────────────────────────────────────────────
 
@@ -18,8 +20,11 @@ export type StructureEvent = 'BOS_BULL' | 'BOS_BEAR' | 'CHoCH_BULL' | 'CHoCH_BEA
 export type ZoneState     = 'PREMIUM' | 'DISCOUNT' | 'EQUILIBRIUM';
 export type TrendState    = 'BULLISH' | 'BEARISH' | 'RANGING';
 export type SweepState    = 'BUY_SIDE_SWEEP' | 'SELL_SIDE_SWEEP' | null;
-export type FVGStatus     = 'ACTIVE' | 'HONORED' | 'EXPLOSIVE' | 'INVERTED' | 'MITIGATED';
 export type SessionName   = 'ASIA' | 'LONDON' | 'NY_AM' | 'NY_PM';
+export type BiasRule      =
+  | 'SWEEP_CHOCH_BULL' | 'D1_BULL_FVG' | 'H4_BULL_FVG' | 'BEAR_IFVG_SUPPORT'
+  | 'SWEEP_CHOCH_BEAR' | 'D1_BEAR_FVG' | 'H4_BEAR_FVG' | 'BULL_IFVG_RESIST'
+  | 'CONFLICTING_ZONES' | 'TIGHT_RANGE';
 
 export interface MTFRow {
   tf: string;
@@ -48,13 +53,6 @@ export interface FVGZone {
   tf: string;
 }
 
-export interface EnhancedFVGZone extends FVGZone {
-  midpoint: number;
-  status: FVGStatus;
-  explosive: boolean;
-  inverted: boolean;
-}
-
 export interface SessionLiq {
   session: SessionName;
   high: number;
@@ -79,7 +77,8 @@ export interface BiasFactors {
 
 export interface DailyBiasV2 {
   bias: Bias;
-  score: number;
+  rule: BiasRule | null;
+  commentary: string;  // "BULLISH — Holding H4 Bullish FVG"
   factors: {
     honoredGaps: boolean;
     explosiveGaps: boolean;
@@ -87,7 +86,6 @@ export interface DailyBiasV2 {
     sessionLiqUnswept: boolean;
     inducementUnswept: boolean;
   };
-  commentary: string;
   d1Event: StructureEvent;
   h4Event: StructureEvent;
 }
@@ -294,89 +292,9 @@ function detectSessionLiquidity(h1Bars: CandleBar[], price: number): SessionLiq[
     });
 }
 
-// ─── Enhanced FVG Detection ────────────────────────────────────────────────
-// Status hierarchy: ACTIVE → EXPLOSIVE → HONORED → INVERTED | (MITIGATED unreachable)
-
-function detectEnhancedFVGs(bars: CandleBar[], tf: string, price: number): EnhancedFVGZone[] {
-  if (!bars || bars.length < 3) return [];
-  const result: EnhancedFVGZone[] = [];
-
-  for (let i = 2; i < bars.length; i++) {
-    const b0 = bars[i - 2], b2 = bars[i];
-
-    // ── Bullish FVG: bar[i].low > bar[i-2].high ───────────────────────────
-    if (b2.low > b0.high) {
-      const bottom = b0.high, top = b2.low;
-      const sz = top - bottom;
-      if (sz < 0.1) continue;
-      const midpoint = (top + bottom) / 2;
-
-      let tested = false, crossedCE = false, wasInverted = false;
-      for (let j = i + 1; j < bars.length; j++) {
-        const lb = bars[j];
-        if (lb.low > top) continue;
-        tested = true;
-        const bodyLow = Math.min(lb.open, lb.close);
-        if (bodyLow < bottom) { wasInverted = true; break; }
-        if (bodyLow < midpoint) crossedCE = true;
-      }
-
-      // Blown-through without formal test → INVERTED (not MITIGATED)
-      const status: FVGStatus =
-        wasInverted                 ? 'INVERTED' :
-        (!tested && price < bottom) ? 'INVERTED' :
-        !tested                     ? 'ACTIVE'   :
-        crossedCE                   ? 'HONORED'  : 'EXPLOSIVE';
-
-      const inGap  = price >= bottom && price <= top;
-      const fillPct = inGap ? ((price - bottom) / sz) * 100 : price <= bottom ? 100 : 0;
-      result.push({
-        type: 'BULLISH', top, bottom, midpoint, time: bars[i - 1].time,
-        mitigated: false, fillPct, tf,
-        status, explosive: status === 'EXPLOSIVE', inverted: status === 'INVERTED',
-      });
-    }
-
-    // ── Bearish FVG: bar[i].high < bar[i-2].low ───────────────────────────
-    if (b2.high < b0.low) {
-      const bottom = b2.high, top = b0.low;
-      const sz = top - bottom;
-      if (sz < 0.1) continue;
-      const midpoint = (top + bottom) / 2;
-
-      let tested = false, crossedCE = false, wasInverted = false;
-      for (let j = i + 1; j < bars.length; j++) {
-        const lb = bars[j];
-        if (lb.high < bottom) continue;
-        tested = true;
-        const bodyHigh = Math.max(lb.open, lb.close);
-        if (bodyHigh > top) { wasInverted = true; break; }
-        if (bodyHigh > midpoint) crossedCE = true;
-      }
-
-      const status: FVGStatus =
-        wasInverted              ? 'INVERTED' :
-        (!tested && price > top) ? 'INVERTED' :
-        !tested                  ? 'ACTIVE'   :
-        crossedCE                ? 'HONORED'  : 'EXPLOSIVE';
-
-      const inGap  = price >= bottom && price <= top;
-      const fillPct = inGap ? ((top - price) / sz) * 100 : price >= top ? 100 : 0;
-      result.push({
-        type: 'BEARISH', top, bottom, midpoint, time: bars[i - 1].time,
-        mitigated: false, fillPct, tf,
-        status, explosive: status === 'EXPLOSIVE', inverted: status === 'INVERTED',
-      });
-    }
-  }
-
-  // INVERTED zones stay (they're active opposing zones). MITIGATED is filtered out.
-  return result.filter(f => f.status !== 'MITIGATED');
-}
-
 // Legacy thin wrapper — used for ltfFVGs count display in sidebar
 function detectFVGs(bars: CandleBar[], tf: string, price: number): FVGZone[] {
-  return detectEnhancedFVGs(bars, tf, price).filter(f => !f.inverted);
+  return annotateFillPct(engineDetectFVGs(bars, tf), price).filter(f => !f.inverted);
 }
 
 // ─── Inducement Levels (Structural Liquidity Pools) ───────────────────────
@@ -391,118 +309,140 @@ function detectInducementLevels(bars: CandleBar[], tf: string, price: number): I
   return levels;
 }
 
-// ─── Daily Bias V2 — 6-factor scoring engine ──────────────────────────────
+// ─── Bias Rule labels ──────────────────────────────────────────────────────
 
-function computeDailyBiasV2(
-  d1: MTFRow, h4: MTFRow, price: number,
-  h4FVGs: EnhancedFVGZone[], h1FVGs: EnhancedFVGZone[],
-  sessionLiq: SessionLiq[],
-  inducement: InducementLevel[],
-): DailyBiasV2 {
-  let score = 0;
-  const all = [...h4FVGs, ...h1FVGs];
+const RULE_REASON: Record<BiasRule, string> = {
+  SWEEP_CHOCH_BULL:  'H4 SSL Sweep + Bullish CHoCH',
+  D1_BULL_FVG:       'Holding D1 Bullish FVG',
+  H4_BULL_FVG:       'Holding H4 Bullish FVG',
+  BEAR_IFVG_SUPPORT: 'Closed Above Bearish iFVG',
+  SWEEP_CHOCH_BEAR:  'H4 BSL Sweep + Bearish CHoCH',
+  D1_BEAR_FVG:       'Holding D1 Bearish FVG',
+  H4_BEAR_FVG:       'Holding H4 Bearish FVG',
+  BULL_IFVG_RESIST:  'Closed Below Bullish iFVG',
+  CONFLICTING_ZONES: 'Conflicting HTF Zones',
+  TIGHT_RANGE:       'No Clear H4 Structure',
+};
 
-  // ── 1. HTF Structure ──────────────────────────────────────────────────────
-  if      (d1.bias === 'BULLISH') score += 1.0;
-  else if (d1.bias === 'BEARISH') score -= 1.0;
-  if      (h4.bias === 'BULLISH') score += 0.5;
-  else if (h4.bias === 'BEARISH') score -= 0.5;
+// ─── Sweep + CHoCH detection on H4 completed candles ─────────────────────
 
-  // ── 2. Honored / Explosive FVGs (acting as live support/resistance) ───────
-  const honoredBull = all.filter(f =>
-    f.type === 'BULLISH' && !f.inverted &&
-    (f.status === 'HONORED' || f.status === 'EXPLOSIVE') && f.top < price,
-  );
-  const honoredBear = all.filter(f =>
-    f.type === 'BEARISH' && !f.inverted &&
-    (f.status === 'HONORED' || f.status === 'EXPLOSIVE') && f.bottom > price,
-  );
-  if (honoredBull.length > 0) score += 1.0;
-  if (honoredBear.length > 0) score -= 1.0;
+function detectSweepChoCH(bars: CandleBar[]): { bullish: boolean; bearish: boolean } {
+  if (bars.length < 10) return { bullish: false, bearish: false };
+  const w = bars.slice(-Math.min(bars.length, 40));
+  const { highs, lows } = swingPoints(w, 2);
+  if (highs.length < 2 || lows.length < 2) return { bullish: false, bearish: false };
 
-  // ── 3. Explosive bonus ────────────────────────────────────────────────────
-  const explosiveBull = honoredBull.filter(f => f.explosive);
-  const explosiveBear = honoredBear.filter(f => f.explosive);
-  if (explosiveBull.length > 0) score += 0.5;
-  if (explosiveBear.length > 0) score -= 0.5;
+  // Reference levels from 2nd-to-last swings (pre-sweep anchors)
+  const refH = highs[highs.length - 2];
+  const refL = lows[lows.length - 2];
 
-  // ── 4. iFVGs (inverted → reversed polarity zones) ────────────────────────
-  const iFVGSupport    = all.filter(f => f.inverted && f.type === 'BEARISH' && f.top    < price);
-  const iFVGResistance = all.filter(f => f.inverted && f.type === 'BULLISH' && f.bottom > price);
-  if (iFVGSupport.length > 0)    score += 0.5;
-  if (iFVGResistance.length > 0) score -= 0.5;
+  let sslIdx = -1, bslIdx = -1;
+  let bullChoCH = false, bearChoCH = false;
 
-  // ── 5. Session Liquidity Draw (nearest unswept level wins) ────────────────
-  const unsweptAbove = sessionLiq.filter(s => !s.highSwept && s.high > price);
-  const unsweptBelow = sessionLiq.filter(s => !s.lowSwept  && s.low  < price);
-  const distUp   = unsweptAbove.reduce((m, s) => Math.min(m, s.high - price), Infinity);
-  const distDown = unsweptBelow.reduce((m, s) => Math.min(m, price - s.low),  Infinity);
-  if      (unsweptAbove.length > 0 && distUp   < distDown) score += 1.0;
-  else if (unsweptBelow.length > 0 && distDown < distUp)   score -= 1.0;
-
-  // ── 6. Inducement (structural swing targets) ──────────────────────────────
-  const indAbove = inducement.filter(l => l.side === 'HIGH' && !l.swept && l.price > price);
-  const indBelow = inducement.filter(l => l.side === 'LOW'  && !l.swept && l.price < price);
-  const distIndUp   = indAbove.reduce((m, l) => Math.min(m, l.price - price), Infinity);
-  const distIndDown = indBelow.reduce((m, l) => Math.min(m, price - l.price), Infinity);
-  if      (indAbove.length > 0 && distIndUp   < distIndDown) score += 0.5;
-  else if (indBelow.length > 0 && distIndDown < distIndUp)   score -= 0.5;
-
-  const bias: Bias = score > 1.0 ? 'BULLISH' : score < -1.0 ? 'BEARISH' : 'INDECISIVE';
-
-  // ── Commentary — single sentence ≤65 chars, HTF factors only ───────────────
-  const nearAboveSess = [...unsweptAbove].sort((a, b) => a.high - b.high)[0];
-  const nearBelowSess = [...unsweptBelow].sort((a, b) => b.low  - a.low)[0];
-  let commentary: string;
-  if (bias === 'BULLISH') {
-    if (explosiveBull.length > 0)
-      commentary = 'HTF Bullish | Explosive FVG holding, BSL in draw';
-    else if (honoredBull.length > 0 && nearAboveSess && distUp < distDown)
-      commentary = `HTF Bullish | FVG support, targeting ${nearAboveSess.session} BSL`;
-    else if (honoredBull.length > 0)
-      commentary = 'HTF Bullish | Discount FVG holding, targets above';
-    else if (iFVGSupport.length > 0)
-      commentary = 'HTF Bullish | iFVG support active, draw on liquidity';
-    else if (nearAboveSess && distUp < distDown)
-      commentary = `HTF Bullish | Draw on ${nearAboveSess.session} BSL, discount zone`;
-    else
-      commentary = 'HTF Bullish | D1/H4 aligned, await discount FVG';
-  } else if (bias === 'BEARISH') {
-    if (explosiveBear.length > 0)
-      commentary = 'HTF Bearish | Explosive FVG capping, SSL in draw';
-    else if (honoredBear.length > 0 && nearBelowSess && distDown < distUp)
-      commentary = `HTF Bearish | FVG supply, targeting ${nearBelowSess.session} SSL`;
-    else if (honoredBear.length > 0)
-      commentary = 'HTF Bearish | Premium FVG in control, targets below';
-    else if (iFVGResistance.length > 0)
-      commentary = 'HTF Bearish | iFVG resistance active, draw on SSL';
-    else if (nearBelowSess && distDown < distUp)
-      commentary = `HTF Bearish | Draw on ${nearBelowSess.session} SSL, premium zone`;
-    else
-      commentary = 'HTF Bearish | D1/H4 aligned, await premium FVG';
-  } else {
-    if (iFVGSupport.length > 0 || iFVGResistance.length > 0)
-      commentary = 'Indecisive | Conflicting iFVG zones, await resolution';
-    else if (nearAboveSess || nearBelowSess)
-      commentary = 'Indecisive | Session liq. unswept, no clear draw';
-    else
-      commentary = 'Indecisive | Choppy HTF structure, await sweep/break';
+  for (let i = 0; i < w.length; i++) {
+    const b = w[i];
+    // SSL sweep: wick dips below refL, body closes back above (rejection)
+    if (sslIdx < 0 && b.low < refL && b.close > refL) sslIdx = i;
+    // BSL sweep: wick pushes above refH, body closes back below
+    if (bslIdx < 0 && b.high > refH && b.close < refH) bslIdx = i;
+    // Bullish CHoCH: close above refH AFTER a confirmed SSL sweep
+    if (sslIdx >= 0 && i > sslIdx && b.close > refH) bullChoCH = true;
+    // Bearish CHoCH: close below refL AFTER a confirmed BSL sweep
+    if (bslIdx >= 0 && i > bslIdx && b.close < refL) bearChoCH = true;
   }
 
+  return { bullish: sslIdx >= 0 && bullChoCH, bearish: bslIdx >= 0 && bearChoCH };
+}
+
+// ─── Factor badges (live-price context only, does NOT drive bias) ─────────
+
+function computeFactors(
+  fvgs: EnhancedFVGZone[],
+  sessionLiq: SessionLiq[],
+  inducement: InducementLevel[],
+  price: number,
+): DailyBiasV2['factors'] {
+  const { honoredBull, honoredBear, explosiveBull, explosiveBear, iFVGSupport, iFVGResistance } =
+    filterForBias(fvgs, price);
+  const unsweptAbove = sessionLiq.filter(s => !s.highSwept && s.high > price);
+  const unsweptBelow = sessionLiq.filter(s => !s.lowSwept  && s.low  < price);
+  const indAbove     = inducement.filter(l => l.side === 'HIGH' && !l.swept && l.price > price);
+  const indBelow     = inducement.filter(l => l.side === 'LOW'  && !l.swept && l.price < price);
   return {
-    bias,
-    score: Math.round(score * 10) / 10,
-    factors: {
-      honoredGaps:       honoredBull.length > 0 || honoredBear.length > 0,
-      explosiveGaps:     explosiveBull.length > 0 || explosiveBear.length > 0,
-      iFVGsActive:       iFVGSupport.length > 0 || iFVGResistance.length > 0,
-      sessionLiqUnswept: unsweptAbove.length > 0 || unsweptBelow.length > 0,
-      inducementUnswept: indAbove.length > 0 || indBelow.length > 0,
-    },
-    commentary,
-    d1Event: d1.event,
-    h4Event: h4.event,
+    honoredGaps:       honoredBull.length > 0 || honoredBear.length > 0,
+    explosiveGaps:     explosiveBull.length > 0 || explosiveBear.length > 0,
+    iFVGsActive:       iFVGSupport.length > 0 || iFVGResistance.length > 0,
+    sessionLiqUnswept: unsweptAbove.length > 0 || unsweptBelow.length > 0,
+    inducementUnswept: indAbove.length > 0 || indBelow.length > 0,
   };
+}
+
+// ─── Stable Daily Bias — locked to completed H4/D1 candle closes ──────────
+// Zero dependency on live tick price. Runs FVG detection internally.
+
+function computeStableBias(
+  h4Bars: CandleBar[],
+  d1Bars: CandleBar[],
+): { bias: Bias; rule: BiasRule | null; commentary: string } {
+  if (!h4Bars.length || !d1Bars.length) {
+    return { bias: 'INDECISIVE', rule: null, commentary: 'Initializing...' };
+  }
+
+  const lastH4Close = h4Bars[h4Bars.length - 1].close;
+
+  // Detect FVGs from completed candles only (no price annotation needed)
+  const h4FVGs = engineDetectFVGs(h4Bars, 'H4');
+  const d1FVGs = engineDetectFVGs(d1Bars, 'D1');
+
+  // Sweep + CHoCH
+  const sweep = detectSweepChoCH(h4Bars);
+
+  // ── Bullish condition checks (priority 4 → 1) ─────────────────────────
+  const bullSweep   = sweep.bullish;
+  const bullD1FVG   = d1FVGs.some(f => f.type === 'BULLISH' && !f.inverted && f.status !== 'MITIGATED' && lastH4Close >= f.bottom);
+  const bullH4FVG   = h4FVGs.some(f => f.type === 'BULLISH' && !f.inverted && f.status !== 'MITIGATED' && lastH4Close >= f.bottom);
+  const bearIFVGSup = h4FVGs.some(f => f.inverted && f.type === 'BEARISH'  && lastH4Close > f.top);
+
+  // ── Bearish condition checks (priority 4 → 1) ─────────────────────────
+  const bearSweep    = sweep.bearish;
+  const bearD1FVG    = d1FVGs.some(f => f.type === 'BEARISH' && !f.inverted && f.status !== 'MITIGATED' && lastH4Close <= f.top);
+  const bearH4FVG    = h4FVGs.some(f => f.type === 'BEARISH' && !f.inverted && f.status !== 'MITIGATED' && lastH4Close <= f.top);
+  const bullIFVGRest = h4FVGs.some(f => f.inverted && f.type === 'BULLISH'  && lastH4Close < f.bottom);
+
+  const maxBull = Math.max(
+    bullSweep   ? 4 : 0,
+    bullD1FVG   ? 3 : 0,
+    bullH4FVG   ? 2 : 0,
+    bearIFVGSup ? 1 : 0,
+  );
+  const maxBear = Math.max(
+    bearSweep    ? 4 : 0,
+    bearD1FVG    ? 3 : 0,
+    bearH4FVG    ? 2 : 0,
+    bullIFVGRest ? 1 : 0,
+  );
+
+  if (maxBull > 0 && maxBull > maxBear) {
+    const rule: BiasRule =
+      maxBull === 4 ? 'SWEEP_CHOCH_BULL' :
+      maxBull === 3 ? 'D1_BULL_FVG'      :
+      maxBull === 2 ? 'H4_BULL_FVG'      : 'BEAR_IFVG_SUPPORT';
+    return { bias: 'BULLISH', rule, commentary: `BULLISH — ${RULE_REASON[rule]}` };
+  }
+
+  if (maxBear > 0 && maxBear > maxBull) {
+    const rule: BiasRule =
+      maxBear === 4 ? 'SWEEP_CHOCH_BEAR' :
+      maxBear === 3 ? 'D1_BEAR_FVG'      :
+      maxBear === 2 ? 'H4_BEAR_FVG'      : 'BULL_IFVG_RESIST';
+    return { bias: 'BEARISH', rule, commentary: `BEARISH — ${RULE_REASON[rule]}` };
+  }
+
+  if (maxBull > 0 && maxBear > 0) {
+    return { bias: 'INDECISIVE', rule: 'CONFLICTING_ZONES', commentary: 'INDECISIVE — Conflicting HTF Zones' };
+  }
+
+  return { bias: 'INDECISIVE', rule: 'TIGHT_RANGE', commentary: 'INDECISIVE — No Clear H4 Structure' };
 }
 
 // ─── Order Block ───────────────────────────────────────────────────────────
@@ -661,9 +601,9 @@ export function useMarketStream(): MarketStream {
     // Defensive: return empty state before first tick populates streams
     if (!es.length || !nq.length) {
       const emptyBiasV2: DailyBiasV2 = {
-        bias: 'INDECISIVE', score: 0,
+        bias: 'INDECISIVE', rule: null,
         factors: { honoredGaps: false, explosiveGaps: false, iFVGsActive: false, sessionLiqUnswept: false, inducementUnswept: false },
-        commentary: 'initializing...', d1Event: null, h4Event: null,
+        commentary: 'Initializing...', d1Event: null, h4Event: null,
       };
       const emptyLegacy: DailyBias = { bias: 'INDECISIVE', d1Event: null, h4Event: null, reason: 'initializing...' };
       const emptyFactors: BiasFactors = { h4FVGs: [], h1FVGs: [], sessionLiq: [], inducement: [] };
@@ -691,13 +631,13 @@ export function useMarketStream(): MarketStream {
     const d1NQRow = analyzeStructure(d1NQ.current, 'D1');
     const h4NQRow = analyzeStructure(h4NQ.current, 'H4');
 
-    // ── Enhanced FVGs — ES (H4 + H1) ─────────────────────────────────────
-    const h4ESFVGs = detectEnhancedFVGs(h4ES.current, 'H4', esPrice);
-    const h1ESFVGs = detectEnhancedFVGs(h1ES.current, 'H1', esPrice);
+    // ── Enhanced FVGs — ES (H4 + H1) — status locked to candle closes ────
+    const h4ESFVGs = annotateFillPct(engineDetectFVGs(h4ES.current, 'H4'), esPrice);
+    const h1ESFVGs = annotateFillPct(engineDetectFVGs(h1ES.current, 'H1'), esPrice);
 
     // ── Enhanced FVGs — NQ (H4 + H1) ─────────────────────────────────────
-    const h4NQFVGs = detectEnhancedFVGs(h4NQ.current, 'H4', nqPrice);
-    const h1NQFVGs = detectEnhancedFVGs(h1NQ.current, 'H1', nqPrice);
+    const h4NQFVGs = annotateFillPct(engineDetectFVGs(h4NQ.current, 'H4'), nqPrice);
+    const h1NQFVGs = annotateFillPct(engineDetectFVGs(h1NQ.current, 'H1'), nqPrice);
 
     // ── Session Liquidity (H1 resolution) ────────────────────────────────
     const esSessionLiq = detectSessionLiquidity(h1ES.current, esPrice);
@@ -715,13 +655,24 @@ export function useMarketStream(): MarketStream {
       ...detectInducementLevels(nq.slice(-15), '15m', nqPrice),
     ];
 
-    // ── Daily Bias V2 — concurrent ES + NQ ───────────────────────────────
-    const esDailyBias = computeDailyBiasV2(
-      d1ESRow, h4ESRow, esPrice, h4ESFVGs, h1ESFVGs, esSessionLiq, esInducement,
-    );
-    const nqDailyBias = computeDailyBiasV2(
-      d1NQRow, h4NQRow, nqPrice, h4NQFVGs, h1NQFVGs, nqSessionLiq, nqInducement,
-    );
+    // ── Stable Bias — H4/D1 candle closes only, zero tick-price dependency ─
+    const esStable = computeStableBias(h4ES.current, d1ES.current);
+    const nqStable = computeStableBias(h4NQ.current, d1NQ.current);
+
+    // ── Factor badges — live-price context (informational, not bias input) ─
+    const esAllFVGs = [...h4ESFVGs, ...h1ESFVGs];
+    const nqAllFVGs = [...h4NQFVGs, ...h1NQFVGs];
+
+    const esDailyBias: DailyBiasV2 = {
+      bias: esStable.bias, rule: esStable.rule, commentary: esStable.commentary,
+      factors: computeFactors(esAllFVGs, esSessionLiq, esInducement, esPrice),
+      d1Event: d1ESRow.event, h4Event: h4ESRow.event,
+    };
+    const nqDailyBias: DailyBiasV2 = {
+      bias: nqStable.bias, rule: nqStable.rule, commentary: nqStable.commentary,
+      factors: computeFactors(nqAllFVGs, nqSessionLiq, nqInducement, nqPrice),
+      d1Event: d1NQRow.event, h4Event: h4NQRow.event,
+    };
 
     // ── Legacy DailyBias — ES only, for existing DashboardView callsites ──
     const dailyBias: DailyBias = {

@@ -4,7 +4,7 @@ import { useMarketStream } from '../hooks/useMarketStream';
 import { useLivePrices } from '../hooks/useLivePrices';
 import type {
   Bias, StructureEvent, ZoneState, TrendState, SweepState,
-  SMTState, ConfluenceState, MTFRow, OrderBlock, FVGZone, DailyBiasV2,
+  SMTState, ConfluenceState, MTFRow, OrderBlock, FVGZone, DailyBiasV2, BiasRule,
 } from '../hooks/useMarketStream';
 import SmcChart from './SmcChart';
 
@@ -59,6 +59,19 @@ function isMarketOpen(): boolean {
 
 // ─── Dual Bias Strip (50/50 ES | NQ) ───────────────────────────────────────
 
+const RULE_SHORT: Record<BiasRule, string> = {
+  SWEEP_CHOCH_BULL:  'SSL Sweep + CHoCH',
+  D1_BULL_FVG:       'D1 Bull FVG',
+  H4_BULL_FVG:       'H4 Bull FVG',
+  BEAR_IFVG_SUPPORT: 'Bear iFVG Support',
+  SWEEP_CHOCH_BEAR:  'BSL Sweep + CHoCH',
+  D1_BEAR_FVG:       'D1 Bear FVG',
+  H4_BEAR_FVG:       'H4 Bear FVG',
+  BULL_IFVG_RESIST:  'Bull iFVG Resist',
+  CONFLICTING_ZONES: 'Conflicting Zones',
+  TIGHT_RANGE:       'No Clear Structure',
+};
+
 const biasColor: Record<Bias, string> = {
   BULLISH:    'text-green-400',
   BEARISH:    'text-red-400',
@@ -89,7 +102,9 @@ function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
         <span className={`text-[11px] font-mono font-bold tracking-widest ${biasColor[bias.bias]}`}>
           {bias.bias === 'BULLISH' ? '▲' : bias.bias === 'BEARISH' ? '▼' : '◈'} {bias.bias}
         </span>
-        <span className="text-[10px] font-mono text-muted tabular-nums">Score: {bias.score}/6</span>
+        <span className="text-[10px] font-mono text-muted truncate max-w-[150px]">
+          {bias.rule ? RULE_SHORT[bias.rule] : '—'}
+        </span>
       </div>
       {/* Row 2 — factor badges (fixed order, always visible) */}
       <div className="flex items-center gap-1.5">
