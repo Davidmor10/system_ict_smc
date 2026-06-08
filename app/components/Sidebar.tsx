@@ -4,62 +4,65 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV = [
-  { href: '/dashboard',           icon: '📊', label: 'Main Charts'       },
-  { href: '/dashboard/analytics', icon: '🧠', label: 'Market Analytics'  },
-  { href: '/dashboard/journal',   icon: '📓', label: 'Trading Journal'   },
+  { href: '/dashboard',           label: 'Main Workspace'   },
+  { href: '/dashboard/analytics', label: 'Market Analytics' },
+  { href: '/dashboard/journal',   label: 'Trading Journal'  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-[200px] shrink-0 flex flex-col border-r border-[#27272a] bg-[#18181b]">
+    <aside className="w-[200px] shrink-0 flex flex-col border-r border-[#1c1c1e] bg-[#0d0d0f]">
 
-      {/* ── Branding ───────────────────────────────────────────── */}
-      <div className="px-5 py-5 border-b border-[#27272a]">
-        <span className="block font-mono font-bold text-[11px] tracking-[0.22em] text-[#f4f4f5] leading-none">
-          FRACTAL
+      {/* ── Branding ─────────────────────────────────────────── */}
+      <div className="px-5 py-5 border-b border-[#1c1c1e]">
+        <span
+          className="block font-serif text-[16px] tracking-[0.06em] text-[#c0c0c0] leading-none"
+          style={{ fontStyle: 'normal' }}
+        >
+          Onyx
         </span>
-        <span className="block font-mono font-bold text-[11px] tracking-[0.22em] text-[#3b82f6] leading-none mt-0.5">
-          // ENGINE
+        <span className="block font-mono text-[8px] tracking-[0.38em] text-[#c9a84c] uppercase leading-none mt-1.5">
+          Trading
         </span>
       </div>
 
-      {/* ── Navigation ─────────────────────────────────────────── */}
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
-        {NAV.map(({ href, icon, label }) => {
+      {/* ── Navigation ───────────────────────────────────────── */}
+      <nav className="flex-1 px-3 py-5 flex flex-col gap-0.5">
+        {NAV.map(({ href, label }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
               className={[
-                'flex items-center gap-3 px-3 py-2.5 rounded-md',
-                'text-[11px] font-mono tracking-wide transition-colors duration-150',
+                'flex items-center gap-3 px-3 py-2.5 rounded-sm',
+                'text-[10px] font-mono tracking-[0.14em] uppercase',
+                'transition-all duration-700 ease-in-out',
                 active
-                  ? 'bg-[#3b82f6]/15 text-[#f4f4f5] border border-[#3b82f6]/25'
-                  : 'text-[#71717a] hover:bg-[#27272a] hover:text-[#a1a1aa]',
+                  ? 'border-l-2 border-[#c9a84c] bg-[#c9a84c]/6 text-[#c0c0c0] pl-[10px]'
+                  : 'border-l-2 border-transparent text-[#52525b] hover:text-[#c0c0c0] hover:border-[#1c1c1e] pl-[10px]',
               ].join(' ')}
             >
-              <span className="text-sm leading-none">{icon}</span>
+              {active && (
+                <span className="w-1 h-1 rounded-full bg-[#c9a84c] shrink-0" />
+              )}
               <span>{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* ── Connection status ───────────────────────────────────── */}
-      <div className="px-5 py-4 border-t border-[#27272a]">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="relative flex h-2 w-2 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-70" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22c55e]" />
-          </span>
-          <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#71717a]">
+      {/* ── System status ─────────────────────────────────────── */}
+      <div className="px-5 py-4 border-t border-[#1c1c1e]">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#c9a84c] shrink-0" />
+          <span className="text-[9px] font-mono uppercase tracking-[0.22em] text-[#c9a84c]">
             System Live
           </span>
         </div>
-        <span className="text-[9px] font-mono text-[#3f3f46] tracking-wider block">
+        <span className="text-[8px] font-mono text-[#52525b] tracking-[0.18em] uppercase block">
           CME · ES · NQ · Real-time
         </span>
       </div>

@@ -21,12 +21,12 @@ const variantCls: Record<Variant, string> = {
 };
 function Badge({ label, variant }: { label: string; variant: Variant }) {
   return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold tracking-widest ${variantCls[variant]}`}>
+    <span className={`px-2 py-0.5 rounded text-[9px] font-mono tracking-widest ${variantCls[variant]}`}>
       {label}
     </span>
   );
 }
-function Rule() { return <div className="h-px bg-border w-full" />; }
+function Rule() { return <div className="h-px bg-[#1c1c1e] w-full" />; }
 
 // ─── Variant mappers ────────────────────────────────────────────────────────
 
@@ -167,10 +167,10 @@ function PriceBlock({ symbol, price, change, pct, flash }: {
 function ChartPanel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0">
-      <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-surface shrink-0">
-        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">{label}</span>
+      <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0 flex items-center justify-between">
+        <span className="font-serif text-[11px] tracking-[0.08em] text-[#c0c0c0]/70 uppercase">{label}</span>
       </div>
-      <div className="flex-1 min-h-0">{children}</div>
+      <div className="flex-1 min-h-0 bg-[#050505]">{children}</div>
     </div>
   );
 }
@@ -203,21 +203,30 @@ function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVG
     <div>
       <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3">SMC Arrays</span>
       <div className="flex flex-col gap-2.5">
+        {/* HTF Order Block */}
         <div className="flex justify-between items-center">
           <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF OB</span>
           {ob
-            ? <div className="flex items-center gap-1.5"><Badge label={ob.type === 'BULLISH' ? 'BULL OB' : 'BEAR OB'} variant={ob.type === 'BULLISH' ? 'bullish' : 'bearish'} /><span className="text-[9px] font-mono text-muted tabular-nums">{ob.low.toFixed(1)}–{ob.high.toFixed(1)}</span></div>
+            ? <div className="flex items-center gap-1.5">
+                <Badge label={ob.type === 'BULLISH' ? 'BULL OB' : 'BEAR OB'} variant={ob.type === 'BULLISH' ? 'bullish' : 'bearish'} />
+                <span className="text-[9px] font-mono text-muted/60 tabular-nums">{ob.low.toFixed(1)}–{ob.high.toFixed(1)}</span>
+              </div>
             : <Badge label="NONE" variant="muted" />}
         </div>
+        {/* HTF FVG — bullish=emerald, bearish=burgundy, both edged gold */}
         <div className="flex justify-between items-center">
           <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF FVG</span>
           {htfFVG
-            ? <div className="flex items-center gap-1.5"><Badge label={htfFVG.type === 'BULLISH' ? 'BULL FVG' : 'BEAR FVG'} variant={htfFVG.type === 'BULLISH' ? 'blue' : 'gold'} /><span className="text-[9px] font-mono text-muted tabular-nums">{Math.round(htfFVG.fillPct)}%</span></div>
+            ? <div className="flex items-center gap-1.5">
+                <Badge label={htfFVG.type === 'BULLISH' ? 'BULL FVG' : 'BEAR FVG'} variant={htfFVG.type === 'BULLISH' ? 'bullish' : 'bearish'} />
+                <span className="text-[9px] font-mono text-gold tabular-nums">{Math.round(htfFVG.fillPct)}%</span>
+              </div>
             : <Badge label="NONE" variant="muted" />}
         </div>
-        <div className="flex justify-between items-center">
+        {/* LTF FVG pool — inducement glow in gold */}
+        <div className={`flex justify-between items-center rounded px-2 py-1 transition-all duration-700 ease-in-out ${ltfFVGs.length > 0 ? 'bg-gold/5 border border-gold/15' : ''}`}>
           <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">LTF FVGs</span>
-          <span className={`text-[11px] font-mono ${ltfFVGs.length > 0 ? 'text-gold' : 'text-muted/50'}`}>{ltfFVGs.length} active</span>
+          <span className={`text-[11px] font-mono tabular-nums ${ltfFVGs.length > 0 ? 'text-gold' : 'text-muted/50'}`}>{ltfFVGs.length} active</span>
         </div>
       </div>
     </div>
@@ -286,7 +295,7 @@ export default function DashboardView() {
   const live = useLivePrices();
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-full bg-[#050505] text-[#c0c0c0] overflow-hidden">
 
       {/* Dual bias strip — ES left / NQ right */}
       <DualBiasStrip es={esDailyBias} nq={nqDailyBias} />
@@ -338,21 +347,21 @@ export default function DashboardView() {
       <div className="flex flex-1 min-h-0">
 
         {/* ES Chart — live TradingView data */}
-        <ChartPanel label="Panel 1 — ES1! · Liquidity Magnet &amp; Gravity Score">
+        <ChartPanel label="ES1! — S&P 500 · Liquidity & Structure">
           <SmcChart symbol="ES" interval="5" />
         </ChartPanel>
 
-        <div className="w-px bg-border shrink-0" />
+        <div className="w-px bg-[#1c1c1e] shrink-0" />
 
         {/* NQ Chart — live TradingView data */}
-        <ChartPanel label="Panel 2 — NQ1! · SMT Monitor">
+        <ChartPanel label="NQ1! — Nasdaq · SMT Divergence Monitor">
           <SmcChart symbol="NQ" interval="5" />
         </ChartPanel>
 
         {/* Analytics sidebar */}
-        <aside className="w-56 shrink-0 border-l border-[#1c1c1e] bg-surface flex flex-col overflow-y-auto">
+        <aside className="w-56 shrink-0 border-l border-[#1c1c1e] bg-[#0d0d0f] flex flex-col overflow-y-auto">
           <div className="px-5 py-3 border-b border-[#1c1c1e] shrink-0">
-            <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.25em]">Analytics</span>
+            <span className="font-serif text-[11px] tracking-[0.1em] text-[#c0c0c0]/70 uppercase">Analytics</span>
           </div>
 
           <div className="flex flex-col gap-5 px-5 py-5">
