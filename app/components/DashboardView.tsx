@@ -14,7 +14,7 @@ type Variant = 'bullish' | 'bearish' | 'gold' | 'blue' | 'muted' | 'indecisive';
 const variantCls: Record<Variant, string> = {
   bullish:    'bg-bullish/10 text-bullish border border-bullish/25',
   bearish:    'bg-bearish/10 text-bearish border border-bearish/25',
-  gold:       'bg-sweep/10 text-sweep border border-sweep/25',
+  gold:       'bg-gold/10 text-gold border border-gold/25',
   blue:       'bg-accent/10 text-accent border border-accent/25',
   muted:      'bg-background text-muted border border-border',
   indecisive: 'bg-surface text-muted border border-border',
@@ -73,17 +73,17 @@ const RULE_SHORT: Record<BiasRule, string> = {
 };
 
 const biasColor: Record<Bias, string> = {
-  BULLISH:    'text-green-400',
-  BEARISH:    'text-red-400',
-  INDECISIVE: 'text-gray-400',
+  BULLISH:    'text-bullish',
+  BEARISH:    'text-bearish',
+  INDECISIVE: 'text-muted',
 };
 
 const activeCls: Record<Bias, string> = {
-  BULLISH:    'bg-green-950 text-green-400 border border-green-800',
-  BEARISH:    'bg-red-950 text-red-400 border border-red-800',
-  INDECISIVE: 'bg-neutral-800 text-neutral-300 border border-neutral-700',
+  BULLISH:    'bg-bullish/10 text-bullish border border-bullish/30',
+  BEARISH:    'bg-bearish/10 text-bearish border border-bearish/30',
+  INDECISIVE: 'bg-surface text-muted border border-border',
 };
-const dimCls = 'bg-neutral-900 text-neutral-500 border border-neutral-800';
+const dimCls = 'bg-background text-muted/40 border border-border';
 
 const FACTORS: { key: keyof DailyBiasV2['factors']; label: string }[] = [
   { key: 'honoredGaps',       label: 'Honored Gaps'  },
@@ -95,30 +95,30 @@ const FACTORS: { key: keyof DailyBiasV2['factors']; label: string }[] = [
 
 function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
   return (
-    <div className="flex flex-col gap-1 px-5 py-2">
-      {/* Row 1 — title · status · score */}
+    <div className="flex flex-col gap-1.5 px-5 py-3">
+      {/* Row 1 — title · status · rule */}
       <div className="flex items-center gap-3">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-[0.18em] shrink-0">{symbol}</span>
-        <span className={`text-[11px] font-mono font-bold tracking-widest ${biasColor[bias.bias]}`}>
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] shrink-0">{symbol}</span>
+        <span className={`text-[11px] font-mono font-semibold tracking-widest ${biasColor[bias.bias]}`}>
           {bias.bias === 'BULLISH' ? '▲' : bias.bias === 'BEARISH' ? '▼' : '◈'} {bias.bias}
         </span>
-        <span className="text-[10px] font-mono text-muted truncate max-w-[150px]">
+        <span className="text-[9px] font-mono text-muted/70 truncate max-w-[150px] tracking-wide">
           {bias.rule ? RULE_SHORT[bias.rule] : '—'}
         </span>
       </div>
-      {/* Row 2 — factor badges (fixed order, always visible) */}
+      {/* Row 2 — factor badges */}
       <div className="flex items-center gap-1.5">
         {FACTORS.map(f => (
           <span
             key={f.key}
-            className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide ${bias.factors[f.key] ? activeCls[bias.bias] : dimCls}`}
+            className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-medium tracking-wide transition-all duration-700 ease-in-out ${bias.factors[f.key] ? activeCls[bias.bias] : dimCls}`}
           >
             {f.label}
           </span>
         ))}
       </div>
       {/* Row 3 — commentary */}
-      <p className="text-[9px] font-mono text-neutral-500 truncate leading-tight">
+      <p className="text-[9px] font-mono text-muted/50 truncate leading-tight tracking-wider">
         {bias.commentary}
       </p>
     </div>
@@ -127,11 +127,11 @@ function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
 
 function DualBiasStrip({ es, nq }: { es: DailyBiasV2; nq: DailyBiasV2 }) {
   return (
-    <div className="grid grid-cols-2 border-b border-border shrink-0">
-      <div className="border-r border-border bg-surface/40">
+    <div className="grid grid-cols-2 border-b border-[#1c1c1e] shrink-0">
+      <div className="border-r border-[#1c1c1e] bg-surface">
         <BiasPanel symbol="ES1! · S&P 500" bias={es} />
       </div>
-      <div className="bg-surface/40">
+      <div className="bg-surface">
         <BiasPanel symbol="NQ1! · Nasdaq" bias={nq} />
       </div>
     </div>
@@ -147,14 +147,14 @@ function PriceBlock({ symbol, price, change, pct, flash }: {
   const bull = change >= 0;
   return (
     <div>
-      <span className="text-[10px] font-mono text-muted uppercase tracking-[0.18em] block leading-none mb-1">
+      <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block leading-none mb-1.5">
         {symbol}
       </span>
-      <div className="flex items-baseline gap-2">
-        <span className={`text-xl font-semibold font-mono text-foreground tabular-nums ${flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : ''}`}>
+      <div className="flex items-baseline gap-2.5">
+        <span className={`text-xl font-semibold font-mono text-foreground tabular-nums tracking-tight ${flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : ''}`}>
           {price > 0 ? price.toFixed(2) : '—'}
         </span>
-        <span className={`text-xs font-mono font-medium tabular-nums ${bull ? 'text-bullish' : 'text-bearish'}`}>
+        <span className={`text-[11px] font-mono tabular-nums ${bull ? 'text-bullish' : 'text-bearish'}`}>
           {price > 0 ? `${bull ? '+' : ''}${change.toFixed(2)} (${bull ? '+' : ''}${pct.toFixed(2)}%)` : ''}
         </span>
       </div>
@@ -167,8 +167,8 @@ function PriceBlock({ symbol, price, change, pct, flash }: {
 function ChartPanel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0">
-      <div className="px-4 py-2 border-b border-border bg-surface/40 shrink-0">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-[0.15em]">{label}</span>
+      <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-surface shrink-0">
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">{label}</span>
       </div>
       <div className="flex-1 min-h-0">{children}</div>
     </div>
@@ -180,11 +180,11 @@ function ChartPanel({ label, children }: { label: string; children: React.ReactN
 function MTFMatrix({ rows }: { rows: MTFRow[] }) {
   return (
     <div>
-      <span className="text-[10px] font-mono text-muted uppercase tracking-[0.15em] block mb-2">MTF Structure</span>
+      <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3">MTF Structure</span>
       <div className="flex flex-col">
         {rows.map(r => (
-          <div key={r.tf} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
-            <span className="text-[10px] font-mono text-muted uppercase tracking-wider w-9 shrink-0">{r.tf}</span>
+          <div key={r.tf} className="flex items-center justify-between py-2 border-b border-[#1c1c1e] last:border-0">
+            <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider w-9 shrink-0">{r.tf}</span>
             <div className="flex items-center gap-1.5 ml-auto">
               <Badge label={r.bias} variant={bv(r.bias)} />
               {r.event && <Badge label={evLabel(r.event)} variant={evVariant(r.event)} />}
@@ -201,23 +201,23 @@ function MTFMatrix({ rows }: { rows: MTFRow[] }) {
 function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVGZone | null; ltfFVGs: FVGZone[] }) {
   return (
     <div>
-      <span className="text-[10px] font-mono text-muted uppercase tracking-[0.15em] block mb-2">SMC Arrays</span>
-      <div className="flex flex-col gap-2">
+      <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-3">SMC Arrays</span>
+      <div className="flex flex-col gap-2.5">
         <div className="flex justify-between items-center">
-          <span className="text-[10px] font-mono text-muted uppercase">HTF OB</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF OB</span>
           {ob
-            ? <div className="flex items-center gap-1"><Badge label={ob.type === 'BULLISH' ? 'BULL OB' : 'BEAR OB'} variant={ob.type === 'BULLISH' ? 'bullish' : 'bearish'} /><span className="text-[9px] font-mono text-muted tabular-nums">{ob.low.toFixed(1)}–{ob.high.toFixed(1)}</span></div>
+            ? <div className="flex items-center gap-1.5"><Badge label={ob.type === 'BULLISH' ? 'BULL OB' : 'BEAR OB'} variant={ob.type === 'BULLISH' ? 'bullish' : 'bearish'} /><span className="text-[9px] font-mono text-muted tabular-nums">{ob.low.toFixed(1)}–{ob.high.toFixed(1)}</span></div>
             : <Badge label="NONE" variant="muted" />}
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-[10px] font-mono text-muted uppercase">HTF FVG</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">HTF FVG</span>
           {htfFVG
-            ? <div className="flex items-center gap-1"><Badge label={htfFVG.type === 'BULLISH' ? 'BULL FVG' : 'BEAR FVG'} variant={htfFVG.type === 'BULLISH' ? 'blue' : 'gold'} /><span className="text-[9px] font-mono text-muted tabular-nums">{Math.round(htfFVG.fillPct)}%</span></div>
+            ? <div className="flex items-center gap-1.5"><Badge label={htfFVG.type === 'BULLISH' ? 'BULL FVG' : 'BEAR FVG'} variant={htfFVG.type === 'BULLISH' ? 'blue' : 'gold'} /><span className="text-[9px] font-mono text-muted tabular-nums">{Math.round(htfFVG.fillPct)}%</span></div>
             : <Badge label="NONE" variant="muted" />}
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-[10px] font-mono text-muted uppercase">LTF FVGs</span>
-          <span className={`text-xs font-mono font-semibold ${ltfFVGs.length > 0 ? 'text-accent' : 'text-muted'}`}>{ltfFVGs.length} active</span>
+          <span className="text-[9px] font-mono text-muted/70 uppercase tracking-wider">LTF FVGs</span>
+          <span className={`text-[11px] font-mono ${ltfFVGs.length > 0 ? 'text-gold' : 'text-muted/50'}`}>{ltfFVGs.length} active</span>
         </div>
       </div>
     </div>
@@ -227,16 +227,16 @@ function SMCArrays({ ob, htfFVG, ltfFVGs }: { ob: OrderBlock | null; htfFVG: FVG
 // ─── Gravity bar ─────────────────────────────────────────────────────────────
 
 function GravityBar({ score, zone }: { score: number; zone: ZoneState }) {
-  const bar = zone === 'PREMIUM' ? 'bg-bearish' : zone === 'DISCOUNT' ? 'bg-bullish' : 'bg-muted';
-  const tx  = score > 55 ? (zone === 'PREMIUM' ? 'text-bearish' : zone === 'DISCOUNT' ? 'text-bullish' : 'text-muted') : 'text-muted';
+  const bar = zone === 'PREMIUM' ? 'bg-bearish' : zone === 'DISCOUNT' ? 'bg-bullish' : 'bg-muted/40';
+  const tx  = score > 55 ? (zone === 'PREMIUM' ? 'text-bearish' : zone === 'DISCOUNT' ? 'text-bullish' : 'text-muted') : 'text-muted/60';
   return (
     <div>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-wider">Gravity Score</span>
-        <span className={`text-xs font-mono font-semibold tabular-nums ${tx}`}>{score}%</span>
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">Gravity Score</span>
+        <span className={`text-[11px] font-mono tabular-nums ${tx}`}>{score}%</span>
       </div>
-      <div className="h-1.5 bg-border rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-700 ease-out ${bar}`} style={{ width: `${score}%` }} />
+      <div className="h-px bg-[#1c1c1e] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ease-in-out ${bar}`} style={{ width: `${score}%` }} />
       </div>
     </div>
   );
@@ -246,26 +246,26 @@ function GravityBar({ score, zone }: { score: number; zone: ZoneState }) {
 
 function ConfluencePanel({ state, smt }: { state: ConfluenceState; smt: SMTState }) {
   return (
-    <div className={`rounded border p-3 transition-all duration-500 ${state.active ? 'border-sweep/50 bg-sweep/8' : 'border-border bg-transparent'}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-[0.15em]">Confluence</span>
-        <span className={`text-[10px] font-mono font-bold ${state.score === 3 ? 'text-bullish' : state.score === 2 ? 'text-sweep' : 'text-muted'}`}>{state.score}/3</span>
+    <div className={`rounded border p-4 transition-all duration-700 ease-in-out ${state.active ? 'border-gold/30 bg-gold/5' : 'border-[#1c1c1e] bg-transparent'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em]">Confluence</span>
+        <span className={`text-[10px] font-mono ${state.score === 3 ? 'text-gold' : state.score === 2 ? 'text-gold/60' : 'text-muted/50'}`}>{state.score}/3</span>
       </div>
       {state.active && (
-        <div className="text-[10px] font-mono text-sweep font-semibold tracking-wide mb-2">◈ PROBABLE INSTITUTIONAL ENTRY</div>
+        <div className="text-[9px] font-mono text-gold tracking-[0.15em] mb-3">◈ INSTITUTIONAL ENTRY SIGNAL</div>
       )}
       {[
         { label: 'HTF Zone Aligned', active: state.htfZoneAligned },
         { label: 'Liquidity Sweep',  active: state.liquiditySweep },
         { label: 'SMT Divergence',   active: state.smtDivergence  },
       ].map(r => (
-        <div key={r.label} className="flex items-center gap-2 mb-0.5">
-          <span className={`text-[10px] ${r.active ? 'text-sweep' : 'text-border'}`}>{r.active ? '✓' : '○'}</span>
-          <span className={`text-[10px] font-mono ${r.active ? 'text-foreground' : 'text-muted'}`}>{r.label}</span>
+        <div key={r.label} className="flex items-center gap-2 mb-1">
+          <span className={`text-[9px] transition-all duration-700 ease-in-out ${r.active ? 'text-gold' : 'text-[#1c1c1e]'}`}>{r.active ? '✓' : '○'}</span>
+          <span className={`text-[9px] font-mono tracking-wider transition-all duration-700 ease-in-out ${r.active ? 'text-foreground' : 'text-muted/50'}`}>{r.label}</span>
         </div>
       ))}
       {smt.active && smt.type && (
-        <div className="mt-2 pt-2 border-t border-border">
+        <div className="mt-3 pt-3 border-t border-[#1c1c1e]">
           <Badge label={smt.type.replace('_', ' ')} variant={smv(smt)} />
         </div>
       )}
@@ -292,8 +292,8 @@ export default function DashboardView() {
       <DualBiasStrip es={esDailyBias} nq={nqDailyBias} />
 
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-surface shrink-0">
-        <div className="flex items-center gap-5">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+        <div className="flex items-center gap-6">
           {/* ES — live CME futures price */}
           <PriceBlock
             symbol="ES1! · S&P 500 Futures"
@@ -302,7 +302,7 @@ export default function DashboardView() {
             pct={live.es.pct}
             flash={live.es.flash}
           />
-          <div className="h-8 w-px bg-border" />
+          <div className="h-8 w-px bg-[#1c1c1e]" />
           {/* NQ — live CME futures price */}
           <PriceBlock
             symbol="NQ1! · Nasdaq Futures"
@@ -320,21 +320,16 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* Market status indicator */}
+        {/* Market status indicator — steady, no animation */}
         {isMarketOpen() ? (
           <div className="flex items-center gap-2 shrink-0">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bullish opacity-70" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-bullish" />
-            </span>
-            <span className="text-[10px] text-muted font-mono uppercase tracking-widest">LIVE</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-gold shrink-0" />
+            <span className="text-[9px] text-gold font-mono uppercase tracking-[0.25em]">Live</span>
           </div>
         ) : (
           <div className="flex items-center gap-2 shrink-0">
-            <span className="h-2 w-2 rounded-full bg-neutral-600 shrink-0" />
-            <span className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">
-              Market Closed · Data Frozen
-            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-muted/40 shrink-0" />
+            <span className="text-[9px] text-muted/50 font-mono uppercase tracking-[0.25em]">Closed</span>
           </div>
         )}
       </header>
@@ -355,34 +350,34 @@ export default function DashboardView() {
         </ChartPanel>
 
         {/* Analytics sidebar */}
-        <aside className="w-52 shrink-0 border-l border-border bg-surface flex flex-col overflow-y-auto">
-          <div className="px-4 py-2 border-b border-border shrink-0">
-            <span className="text-[10px] font-mono text-muted uppercase tracking-[0.15em]">Analytics</span>
+        <aside className="w-56 shrink-0 border-l border-[#1c1c1e] bg-surface flex flex-col overflow-y-auto">
+          <div className="px-5 py-3 border-b border-[#1c1c1e] shrink-0">
+            <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.25em]">Analytics</span>
           </div>
 
-          <div className="flex flex-col gap-4 px-4 py-4">
+          <div className="flex flex-col gap-5 px-5 py-5">
 
             <GravityBar score={orderFlow.gravityScore} zone={orderFlow.zone} />
 
             {/* Liquidity Magnet */}
             <div>
-              <span className="text-[10px] font-mono text-muted uppercase tracking-wider block mb-1">Liq. Magnet</span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-sm font-mono text-sweep font-semibold tabular-nums">{orderFlow.liquidityMagnet.toFixed(2)}</span>
-                <span className="text-[10px] font-mono text-muted">{orderFlow.zone === 'PREMIUM' ? '↓ draw' : '↑ draw'}</span>
+              <span className="text-[9px] font-mono text-muted/60 uppercase tracking-[0.22em] block mb-2">Liq. Magnet</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-mono text-gold tabular-nums">{orderFlow.liquidityMagnet.toFixed(2)}</span>
+                <span className="text-[9px] font-mono text-muted/50">{orderFlow.zone === 'PREMIUM' ? '↓ draw' : '↑ draw'}</span>
               </div>
             </div>
 
             {/* Price levels */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               {[
-                { label: 'Range H', val: orderFlow.rangeHigh,  cls: 'text-bearish' },
-                { label: 'Equilib.', val: orderFlow.equilibrium, cls: 'text-sweep'   },
-                { label: 'Range L', val: orderFlow.rangeLow,   cls: 'text-bullish'  },
+                { label: 'Range H',  val: orderFlow.rangeHigh,    cls: 'text-bearish' },
+                { label: 'Equilib.', val: orderFlow.equilibrium,  cls: 'text-gold'    },
+                { label: 'Range L',  val: orderFlow.rangeLow,     cls: 'text-bullish' },
               ].map(r => (
                 <div key={r.label} className="flex justify-between items-center">
-                  <span className="text-[10px] font-mono text-muted uppercase tracking-wider">{r.label}</span>
-                  <span className={`text-[11px] font-mono font-semibold tabular-nums ${r.cls}`}>{r.val.toFixed(2)}</span>
+                  <span className="text-[9px] font-mono text-muted/60 uppercase tracking-wider">{r.label}</span>
+                  <span className={`text-[11px] font-mono tabular-nums ${r.cls}`}>{r.val.toFixed(2)}</span>
                 </div>
               ))}
             </div>

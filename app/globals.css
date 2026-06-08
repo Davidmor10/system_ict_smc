@@ -1,60 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  /* Base palette — always dark */
-  --background: #09090b;
-  --surface: #18181b;
-  --border: #27272a;
-  --foreground: #f4f4f5;
-  --muted: #71717a;
+  /* ── Onyx Master Palette ─────────────────────────────────── */
+  --background:  #050505;   /* absolute obsidian */
+  --surface:     #0d0d0f;   /* heavy panel backdrop */
+  --border:      #1c1c1e;   /* metallic charcoal dividers */
+  --foreground:  #c0c0c0;   /* refined silver */
+  --muted:       #52525b;   /* subdued silver */
 
-  /* Trading state colors */
-  --bullish: #22c55e;
-  --bearish: #ef4444;
-  --sweep: #f59e0b;
-  --accent: #3b82f6;
+  /* ── Wealth signal colors ────────────────────────────────── */
+  --gold:        #c9a84c;   /* wealth accent — confirmations, live state, priority labels */
+  --bullish:     #4a7c59;   /* dark emerald — institutional long bias */
+  --bearish:     #8b3a3a;   /* dark burgundy — institutional short bias */
+  --sweep:       #c9a84c;   /* aliased to gold — FVG zones, confluence */
+  --accent:      #7a8fa8;   /* steel blue — secondary interactive */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
+  --color-background:  var(--background);
+  --color-foreground:  var(--foreground);
+  --color-surface:     var(--surface);
+  --color-border:      var(--border);
+  --color-muted:       var(--muted);
+  --color-gold:        var(--gold);
+  --color-bullish:     var(--bullish);
+  --color-bearish:     var(--bearish);
+  --color-sweep:       var(--sweep);
+  --color-accent:      var(--accent);
 
-  /* Trading utilities: bg-bullish, text-bearish, border-sweep, etc. */
-  --color-bullish: var(--bullish);
-  --color-bearish: var(--bearish);
-  --color-sweep: var(--sweep);
-  --color-accent: var(--accent);
-
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:   var(--font-geist-sans);
+  --font-mono:   var(--font-geist-mono);
+  --font-serif:  var(--font-playfair);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* ── Price flash — slow, gold-tinged, unhurried ──────────── */
 @keyframes flash-up {
   0%, 100% { color: inherit; }
-  25%       { color: var(--bullish); }
+  30%       { color: var(--gold); }
 }
 @keyframes flash-down {
   0%, 100% { color: inherit; }
-  25%       { color: var(--bearish); }
+  30%       { color: var(--bearish); }
 }
-.price-flash-up   { animation: flash-up   0.6s ease-out; }
-.price-flash-down { animation: flash-down 0.6s ease-out; }
+.price-flash-up   { animation: flash-up   1.4s ease-in-out; }
+.price-flash-down { animation: flash-down 1.4s ease-in-out; }
 
-/* Thin dark scrollbars — zinc theme */
+/* ── Scrollbars — obsidian, 4px, near-invisible ──────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #27272a transparent;
+  scrollbar-color: #1c1c1e transparent;
 }
-*::-webkit-scrollbar         { width: 6px; height: 6px; }
-*::-webkit-scrollbar-track   { background: transparent; }
-*::-webkit-scrollbar-thumb   { background-color: #27272a; border-radius: 3px; }
-*::-webkit-scrollbar-thumb:hover { background-color: #3f3f46; }
+*::-webkit-scrollbar              { width: 4px; height: 4px; }
+*::-webkit-scrollbar-track        { background: transparent; }
+*::-webkit-scrollbar-thumb        { background-color: #1c1c1e; border-radius: 2px; }
+*::-webkit-scrollbar-thumb:hover  { background-color: #2c2c2e; }

@@ -14,10 +14,10 @@ type Variant = 'bullish' | 'bearish' | 'gold' | 'blue' | 'muted' | 'indecisive';
 const variantCls: Record<Variant, string> = {
   bullish:    'bg-bullish/10 text-bullish border border-bullish/25',
   bearish:    'bg-bearish/10 text-bearish border border-bearish/25',
-  gold:       'bg-sweep/10 text-sweep border border-sweep/25',
+  gold:       'bg-gold/10 text-gold border border-gold/25',
   blue:       'bg-accent/10 text-accent border border-accent/25',
-  muted:      'bg-background text-muted border border-border',
-  indecisive: 'bg-surface text-muted border border-border',
+  muted:      'bg-background text-muted/60 border border-[#1c1c1e]',
+  indecisive: 'bg-surface text-muted/60 border border-[#1c1c1e]',
 };
 
 function Badge({ label, variant }: { label: string; variant: Variant }) {
@@ -68,8 +68,8 @@ function isMarketOpen(): boolean {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted border-b border-border/50 pb-1">
+    <div className="flex flex-col gap-3">
+      <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50 border-b border-[#1c1c1e] pb-1.5">
         {title}
       </span>
       {children}
@@ -80,12 +80,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ─── Prominent Bias Card (stable, rule-locked) ────────────────────────────────
 
 const BIAS_BG: Record<Bias, string> = {
-  BULLISH:    'bg-green-950/60 border-green-800/60',
-  BEARISH:    'bg-red-950/60 border-red-800/60',
-  INDECISIVE: 'bg-neutral-900/60 border-neutral-700/60',
+  BULLISH:    'bg-bullish/8 border-bullish/25',
+  BEARISH:    'bg-bearish/8 border-bearish/25',
+  INDECISIVE: 'bg-surface border-[#1c1c1e]',
 };
 const BIAS_TEXT: Record<Bias, string> = {
-  BULLISH: 'text-green-400', BEARISH: 'text-red-400', INDECISIVE: 'text-gray-400',
+  BULLISH: 'text-bullish', BEARISH: 'text-bearish', INDECISIVE: 'text-muted',
 };
 const BIAS_ICON: Record<Bias, string> = { BULLISH: '▲', BEARISH: '▼', INDECISIVE: '◈' };
 const RULE_LABEL: Record<BiasRule, string> = {
@@ -110,40 +110,40 @@ const FACTOR_LABELS: { key: keyof DailyBiasV2['factors']; label: string }[] = [
 ];
 
 const factorActiveCls: Record<Bias, string> = {
-  BULLISH:    'bg-green-950 text-green-400 border border-green-800',
-  BEARISH:    'bg-red-950 text-red-400 border border-red-800',
-  INDECISIVE: 'bg-neutral-800 text-neutral-300 border border-neutral-700',
+  BULLISH:    'bg-bullish/10 text-bullish border border-bullish/30',
+  BEARISH:    'bg-bearish/10 text-bearish border border-bearish/30',
+  INDECISIVE: 'bg-surface text-muted border border-[#1c1c1e]',
 };
-const factorDimCls = 'bg-neutral-900 text-neutral-600 border border-neutral-800';
+const factorDimCls = 'bg-background text-muted/40 border border-[#1c1c1e]';
 
 function BiasCard({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
   return (
-    <div className={`rounded-lg border p-4 flex flex-col gap-3 ${BIAS_BG[bias.bias]}`}>
+    <div className={`rounded border p-5 flex flex-col gap-4 ${BIAS_BG[bias.bias]}`}>
       {/* Symbol + direction */}
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted">{symbol}</span>
-        <span className={`text-[10px] font-mono font-bold ${BIAS_TEXT[bias.bias]}`}>
+        <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-muted/60">{symbol}</span>
+        <span className={`text-[10px] font-mono font-semibold tracking-widest ${BIAS_TEXT[bias.bias]}`}>
           {BIAS_ICON[bias.bias]} {bias.bias}
         </span>
       </div>
-      {/* Rule label — the locked reason */}
+      {/* Rule label */}
       <div>
-        <p className={`text-[13px] font-mono font-semibold leading-tight ${BIAS_TEXT[bias.bias]}`}>
-          {bias.rule ? RULE_LABEL[bias.rule] : 'No signal'}
+        <p className={`font-serif text-[15px] font-semibold leading-tight tracking-wide ${BIAS_TEXT[bias.bias]}`}>
+          {bias.rule ? RULE_LABEL[bias.rule] : 'No Signal'}
         </p>
         {(bias.d1Event || bias.h4Event) && (
-          <div className="flex items-center gap-1.5 mt-1.5">
+          <div className="flex items-center gap-1.5 mt-2">
             {bias.d1Event && <Badge label={`D1 ${evLabel(bias.d1Event)}`} variant={evVariant(bias.d1Event)} />}
             {bias.h4Event && <Badge label={`H4 ${evLabel(bias.h4Event)}`} variant={evVariant(bias.h4Event)} />}
           </div>
         )}
       </div>
-      {/* Informational factor badges */}
-      <div className="flex flex-wrap gap-1">
+      {/* Factor badges */}
+      <div className="flex flex-wrap gap-1.5">
         {FACTOR_LABELS.map(f => (
           <span
             key={f.key}
-            className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-semibold tracking-wide ${bias.factors[f.key] ? factorActiveCls[bias.bias] : factorDimCls}`}
+            className={`px-1.5 py-0.5 rounded text-[8px] font-mono tracking-wide transition-all duration-700 ease-in-out ${bias.factors[f.key] ? factorActiveCls[bias.bias] : factorDimCls}`}
           >
             {f.label}
           </span>
@@ -160,8 +160,8 @@ function MTFRows({ rows }: { rows: MTFRow[] }) {
   return (
     <div className="flex flex-col">
       {rows.map(r => (
-        <div key={r.tf} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
-          <span className="text-[10px] font-mono text-muted uppercase w-9 shrink-0">{r.tf}</span>
+        <div key={r.tf} className="flex items-center justify-between py-2 border-b border-[#1c1c1e] last:border-0">
+          <span className="text-[9px] font-mono text-muted/60 uppercase tracking-wider w-9 shrink-0">{r.tf}</span>
           <div className="flex items-center gap-1.5 ml-auto">
             <Badge label={r.bias} variant={bv(r.bias)} />
             {r.event && <Badge label={evLabel(r.event)} variant={evVariant(r.event)} />}
@@ -193,21 +193,21 @@ function FVGList({ fvgs, max = 5 }: { fvgs: EnhancedFVGZone[]; max?: number }) {
 // ─── Session liquidity ────────────────────────────────────────────────────────
 
 function SessionLiqTable({ levels }: { levels: SessionLiq[] }) {
-  if (!levels.length) return <span className="text-[9px] font-mono text-muted/50 italic">No session data</span>;
+  if (!levels.length) return <span className="text-[8px] font-mono text-muted/40 italic tracking-wider">No session data</span>;
   return (
     <div className="flex flex-col">
       {levels.map(s => (
-        <div key={s.session} className="flex items-center gap-2 py-1 border-b border-border/30 last:border-0">
-          <span className="text-[9px] font-mono text-muted uppercase w-14 shrink-0">{s.session}</span>
-          <span className={`text-[9px] font-mono tabular-nums ${s.highSwept ? 'text-muted line-through' : 'text-bearish'}`}>
+        <div key={s.session} className="flex items-center gap-2 py-1.5 border-b border-[#1c1c1e] last:border-0">
+          <span className="text-[8px] font-mono text-muted/60 uppercase tracking-wider w-14 shrink-0">{s.session}</span>
+          <span className={`text-[9px] font-mono tabular-nums ${s.highSwept ? 'text-muted/40 line-through' : 'text-bearish'}`}>
             H {s.high.toFixed(2)}
           </span>
-          <span className="text-border text-[9px]">·</span>
-          <span className={`text-[9px] font-mono tabular-nums ${s.lowSwept ? 'text-muted line-through' : 'text-bullish'}`}>
+          <span className="text-[#1c1c1e] text-[9px]">·</span>
+          <span className={`text-[9px] font-mono tabular-nums ${s.lowSwept ? 'text-muted/40 line-through' : 'text-bullish'}`}>
             L {s.low.toFixed(2)}
           </span>
           {(s.highSwept || s.lowSwept) && (
-            <span className="text-[9px] font-mono text-sweep ml-auto">{s.highSwept ? 'BSL ✓' : 'SSL ✓'}</span>
+            <span className="text-[8px] font-mono text-gold ml-auto">{s.highSwept ? 'BSL ✓' : 'SSL ✓'}</span>
           )}
         </div>
       ))}
@@ -246,7 +246,7 @@ function TechnicalColumn({
   mtfRows: MTFRow[];
 }) {
   return (
-    <div className="flex flex-col gap-4 px-4 py-4 overflow-y-auto">
+    <div className="flex flex-col gap-5 px-5 py-5 overflow-y-auto">
       {/* Prominent, stable bias card */}
       <BiasCard symbol={symbol} bias={bias} />
 
@@ -298,24 +298,24 @@ function TechnicalColumn({
 function SMTBanner({ smt, confluence }: { smt: SMTState; confluence: ConfluenceState }) {
   const active = smt.active || confluence.active;
   return (
-    <div className={`px-5 py-2 border-b flex items-center gap-3 shrink-0 ${active ? 'bg-sweep/8 border-sweep/30' : 'bg-surface/40 border-border'}`}>
-      <span className="text-[9px] font-mono text-muted uppercase tracking-widest">SMT Monitor</span>
+    <div className={`px-5 py-2.5 border-b flex items-center gap-3 shrink-0 transition-all duration-700 ease-in-out ${active ? 'bg-gold/5 border-gold/20' : 'bg-surface border-[#1c1c1e]'}`}>
+      <span className="text-[8px] font-mono text-muted/50 uppercase tracking-[0.25em]">SMT Monitor</span>
       {smt.active && smt.type
         ? <Badge label={smt.type.replace('_', ' ')} variant={smt.type === 'BULLISH_SMT' ? 'bullish' : 'bearish'} />
-        : <span className="text-[9px] font-mono text-muted/50">No divergence</span>
+        : <span className="text-[8px] font-mono text-muted/40 tracking-wider">No divergence</span>
       }
       {confluence.active && (
-        <span className="text-[10px] font-mono text-sweep font-semibold tracking-wide ml-2">
+        <span className="text-[9px] font-mono text-gold tracking-[0.15em] ml-2">
           ◈ CONFLUENCE {confluence.score}/3
         </span>
       )}
-      <div className="ml-auto flex items-center gap-3 text-[9px] font-mono">
+      <div className="ml-auto flex items-center gap-4 text-[8px] font-mono tracking-wider">
         {[
           { label: 'HTF Zone', on: confluence.htfZoneAligned },
           { label: 'Liq Sweep', on: confluence.liquiditySweep },
           { label: 'SMT Div',   on: confluence.smtDivergence  },
         ].map(r => (
-          <span key={r.label} className={r.on ? 'text-sweep' : 'text-muted/40'}>
+          <span key={r.label} className={`transition-all duration-700 ease-in-out ${r.on ? 'text-gold' : 'text-muted/30'}`}>
             {r.on ? '✓' : '○'} {r.label}
           </span>
         ))}
@@ -342,13 +342,13 @@ const ECON_EVENTS: EconEvent[] = [
 
 const impactCls: Record<EconEvent['impact'], string> = {
   HIGH: 'text-bearish',
-  MED:  'text-sweep',
-  LOW:  'text-muted',
+  MED:  'text-gold',
+  LOW:  'text-muted/50',
 };
 
 function MacroColumn() {
   return (
-    <div className="flex flex-col gap-5 px-4 py-4 overflow-y-auto">
+    <div className="flex flex-col gap-6 px-5 py-5 overflow-y-auto">
 
       {/* Economic Calendar */}
       <Section title="Economic Calendar">
@@ -444,22 +444,19 @@ export default function AnalyticsView() {
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
 
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-surface shrink-0">
-        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-foreground">
+      <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+        <span className="font-serif text-[13px] tracking-[0.12em] text-foreground uppercase">
           Market Analytics
         </span>
         {open ? (
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bullish opacity-70" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-bullish" />
-            </span>
-            <span className="text-[10px] text-muted font-mono uppercase tracking-widest">LIVE</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-gold shrink-0" />
+            <span className="text-[9px] text-gold font-mono uppercase tracking-[0.25em]">Live</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-neutral-600 shrink-0" />
-            <span className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">Market Closed</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-muted/40 shrink-0" />
+            <span className="text-[9px] text-muted/50 font-mono uppercase tracking-[0.25em]">Closed</span>
           </div>
         )}
       </header>
@@ -468,20 +465,20 @@ export default function AnalyticsView() {
       <SMTBanner smt={smt} confluence={confluence} />
 
       {/* Three-column layout: Macro | ES | NQ */}
-      <div className="grid grid-cols-[220px_1fr_1fr] flex-1 min-h-0 overflow-hidden divide-x divide-border">
+      <div className="grid grid-cols-[220px_1fr_1fr] flex-1 min-h-0 overflow-hidden divide-x divide-[#1c1c1e]">
 
         {/* Left — Macro / Fundamental */}
-        <div className="overflow-y-auto bg-surface/20">
-          <div className="px-4 py-2 border-b border-border bg-surface/40 sticky top-0 z-10">
-            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted">Macro · Fundamentals</span>
+        <div className="overflow-y-auto bg-surface">
+          <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-surface sticky top-0 z-10">
+            <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">Macro · Fundamentals</span>
           </div>
           <MacroColumn />
         </div>
 
         {/* Middle — ES Technical */}
         <div className="overflow-hidden flex flex-col">
-          <div className="px-4 py-2 border-b border-border bg-surface/40 shrink-0">
-            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted">ES1! · S&P 500 Futures</span>
+          <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-surface shrink-0">
+            <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">ES1! · S&P 500 Futures</span>
           </div>
           <div className="flex-1 overflow-y-auto">
             <TechnicalColumn
@@ -495,8 +492,8 @@ export default function AnalyticsView() {
 
         {/* Right — NQ Technical */}
         <div className="overflow-hidden flex flex-col">
-          <div className="px-4 py-2 border-b border-border bg-surface/40 shrink-0">
-            <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted">NQ1! · Nasdaq Futures</span>
+          <div className="px-5 py-2.5 border-b border-[#1c1c1e] bg-surface shrink-0">
+            <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">NQ1! · Nasdaq Futures</span>
           </div>
           <div className="flex-1 overflow-y-auto">
             <TechnicalColumn
