@@ -4,7 +4,7 @@ import { useMarketStream } from '../hooks/useMarketStream';
 import { useLivePrices } from '../hooks/useLivePrices';
 import type {
   Bias, StructureEvent, ZoneState, TrendState, SweepState,
-  SMTState, ConfluenceState, MTFRow, OrderBlock, FVGZone,
+  SMTState, ConfluenceState, MTFRow, OrderBlock, FVGZone, DailyBiasV2,
 } from '../hooks/useMarketStream';
 import SmcChart from './SmcChart';
 
@@ -38,29 +38,86 @@ function smv(s: SMTState): Variant  { return s.active ? (s.type === 'BULLISH_SMT
 function evLabel(e: StructureEvent): string  { return e ? e.replace('_', ' ') : '—'; }
 function evVariant(e: StructureEvent): Variant { return !e ? 'muted' : e.includes('BULL') ? 'bullish' : 'bearish'; }
 
-// ─── Daily Bias Strip ───────────────────────────────────────────────────────
+// ─── Market-hours check (CME Globex: Sun 6pm–Fri 5pm ET, daily 4–5pm break) ─
 
-function BiasStrip({ bias, reason, d1Event, h4Event }: {
-  bias: Bias; reason: string; d1Event: StructureEvent; h4Event: StructureEvent;
-}) {
-  const strip: Record<Bias, string> = {
-    BULLISH:    'bg-bullish/8 border-b border-bullish/20',
-    BEARISH:    'bg-bearish/8 border-b border-bearish/20',
-    INDECISIVE: 'bg-surface border-b border-border',
-  };
-  const lc: Record<Bias, string> = {
-    BULLISH: 'text-bullish', BEARISH: 'text-bearish', INDECISIVE: 'text-muted',
-  };
+function isMarketOpen(): boolean {
+  const now   = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(now);
+  const day      = parts.find(p => p.type === 'weekday')?.value ?? '';
+  const hour     = parseInt(parts.find(p => p.type === 'hour')?.value   ?? '0', 10);
+  const minute   = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+  const totalMin = hour * 60 + minute;
+  if (day === 'Sat') return false;
+  if (day === 'Sun' && totalMin < 18 * 60) return false;
+  if (day === 'Fri' && totalMin >= 17 * 60) return false;
+  if (totalMin >= 16 * 60 && totalMin < 17 * 60) return false; // daily settlement break
+  return true;
+}
+
+// ─── Dual Bias Strip (50/50 ES | NQ) ───────────────────────────────────────
+
+const biasColor: Record<Bias, string> = {
+  BULLISH:    'text-green-400',
+  BEARISH:    'text-red-400',
+  INDECISIVE: 'text-gray-400',
+};
+
+const activeCls: Record<Bias, string> = {
+  BULLISH:    'bg-green-950 text-green-400 border border-green-800',
+  BEARISH:    'bg-red-950 text-red-400 border border-red-800',
+  INDECISIVE: 'bg-neutral-800 text-neutral-300 border border-neutral-700',
+};
+const dimCls = 'bg-neutral-900 text-neutral-500 border border-neutral-800';
+
+const FACTORS: { key: keyof DailyBiasV2['factors']; label: string }[] = [
+  { key: 'honoredGaps',       label: 'Honored Gaps'  },
+  { key: 'explosiveGaps',     label: 'Explosive Gaps' },
+  { key: 'iFVGsActive',       label: 'iFVGs Active'  },
+  { key: 'sessionLiqUnswept', label: 'Session Liq'   },
+  { key: 'inducementUnswept', label: 'Inducement'    },
+];
+
+function BiasPanel({ symbol, bias }: { symbol: string; bias: DailyBiasV2 }) {
   return (
-    <div className={`flex items-center gap-4 px-5 py-1.5 shrink-0 ${strip[bias]}`}>
-      <span className="text-[10px] font-mono text-muted uppercase tracking-[0.2em]">Daily Bias</span>
-      <span className={`text-[11px] font-mono font-bold tracking-widest ${lc[bias]}`}>
-        {bias === 'BULLISH' ? '▲' : bias === 'BEARISH' ? '▼' : '◈'} {bias}
-      </span>
-      <span className="text-[10px] font-mono text-muted hidden lg:block truncate max-w-sm">{reason}</span>
-      <div className="ml-auto flex items-center gap-2">
-        {d1Event && <Badge label={`D1: ${evLabel(d1Event)}`} variant={evVariant(d1Event)} />}
-        {h4Event && <Badge label={`H4: ${evLabel(h4Event)}`} variant={evVariant(h4Event)} />}
+    <div className="flex flex-col gap-1 px-5 py-2">
+      {/* Row 1 — title · status · score */}
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] font-mono text-muted uppercase tracking-[0.18em] shrink-0">{symbol}</span>
+        <span className={`text-[11px] font-mono font-bold tracking-widest ${biasColor[bias.bias]}`}>
+          {bias.bias === 'BULLISH' ? '▲' : bias.bias === 'BEARISH' ? '▼' : '◈'} {bias.bias}
+        </span>
+        <span className="text-[10px] font-mono text-muted tabular-nums">Score: {bias.score}/6</span>
+      </div>
+      {/* Row 2 — factor badges (fixed order, always visible) */}
+      <div className="flex items-center gap-1.5">
+        {FACTORS.map(f => (
+          <span
+            key={f.key}
+            className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wide ${bias.factors[f.key] ? activeCls[bias.bias] : dimCls}`}
+          >
+            {f.label}
+          </span>
+        ))}
+      </div>
+      {/* Row 3 — commentary */}
+      <p className="text-[9px] font-mono text-neutral-500 truncate leading-tight">
+        {bias.commentary}
+      </p>
+    </div>
+  );
+}
+
+function DualBiasStrip({ es, nq }: { es: DailyBiasV2; nq: DailyBiasV2 }) {
+  return (
+    <div className="grid grid-cols-2 border-b border-border shrink-0">
+      <div className="border-r border-border bg-surface/40">
+        <BiasPanel symbol="ES1! · S&P 500" bias={es} />
+      </div>
+      <div className="bg-surface/40">
+        <BiasPanel symbol="NQ1! · Nasdaq" bias={nq} />
       </div>
     </div>
   );
@@ -205,6 +262,7 @@ function ConfluencePanel({ state, smt }: { state: ConfluenceState; smt: SMTState
 
 export default function DashboardView() {
   const {
+    esDailyBias, nqDailyBias,
     dailyBias, mtfMatrix,
     htfOB, htfFVG, ltfFVGs,
     orderFlow, smt, confluence,
@@ -215,13 +273,8 @@ export default function DashboardView() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
 
-      {/* Daily Bias strip */}
-      <BiasStrip
-        bias={dailyBias.bias}
-        reason={dailyBias.reason}
-        d1Event={dailyBias.d1Event}
-        h4Event={dailyBias.h4Event}
-      />
+      {/* Dual bias strip — ES left / NQ right */}
+      <DualBiasStrip es={esDailyBias} nq={nqDailyBias} />
 
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-surface shrink-0">
@@ -252,14 +305,23 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* Live indicator */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bullish opacity-70" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-bullish" />
-          </span>
-          <span className="text-[10px] text-muted font-mono uppercase tracking-widest">LIVE</span>
-        </div>
+        {/* Market status indicator */}
+        {isMarketOpen() ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-bullish opacity-70" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-bullish" />
+            </span>
+            <span className="text-[10px] text-muted font-mono uppercase tracking-widest">LIVE</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="h-2 w-2 rounded-full bg-neutral-600 shrink-0" />
+            <span className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">
+              Market Closed · Data Frozen
+            </span>
+          </div>
+        )}
       </header>
 
       {/* ── Chart area (50/50 split + analytics sidebar) ── */}
