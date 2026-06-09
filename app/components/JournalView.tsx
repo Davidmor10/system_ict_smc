@@ -24,6 +24,12 @@ interface TradeEntry {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Institutional-gold hero metric: heavy weight + soft glow (matches calculator).
+const GOLD_GLOW = 'text-[#d4af37] [text-shadow:0_0_22px_rgba(212,175,55,0.5)]';
+
+// CME standard point values — used for realized PnL (1 standard contract).
+const PT_VALUE: Record<TradeEntry['symbol'], number> = { ES: 50, NQ: 20 };
+
 const SESSION_LABELS: Record<SessionName, string> = {
   ASIA:  'Asia · 00:00–08:00 ET',
   LONDON: 'London · 09:00–12:00 ET',
@@ -45,15 +51,68 @@ function getCurrentSession(): SessionName | null {
   return null;
 }
 
+// Realized PnL in USD for one standard contract; null for still-open trades.
+function tradePnL(t: TradeEntry): number | null {
+  if (t.result === 'OPEN') return null;
+  if (t.result === 'BE')   return 0;
+  const dir  = t.direction === 'LONG' ? 1 : -1;
+  const exit = t.result === 'WIN' ? t.target : t.stop;
+  return (exit - t.entry) * dir * PT_VALUE[t.symbol];
+}
+
 function resultCls(r: TradeResult): string {
   if (r === 'WIN')  return 'text-bullish';
   if (r === 'LOSS') return 'text-bearish';
-  if (r === 'BE')   return 'text-gold';
-  return 'text-muted/50';
+  if (r === 'BE')   return 'text-[#d4af37]';
+  return 'text-white/50';
 }
 
 function biasCls(b: Bias): string {
-  return b === 'BULLISH' ? 'text-bullish' : b === 'BEARISH' ? 'text-bearish' : 'text-muted/60';
+  return b === 'BULLISH' ? 'text-bullish' : b === 'BEARISH' ? 'text-bearish' : 'text-white/60';
+}
+
+const usd = (n: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, signDisplay: 'always' })
+    .format(Number.isFinite(n) ? n : 0);
+
+// ─── Performance stats bar ─────────────────────────────────────────────────────
+
+function StatsBar({ trades }: { trades: TradeEntry[] }) {
+  const closed  = trades.filter(t => t.result !== 'OPEN');
+  const wins    = closed.filter(t => t.result === 'WIN').length;
+  const losses  = closed.filter(t => t.result === 'LOSS').length;
+  const decided = wins + losses;
+  const winRate = decided > 0 ? (wins / decided) * 100 : 0;
+
+  const pnls      = closed.map(tradePnL).filter((n): n is number => n !== null);
+  const grossWin  = pnls.filter(n => n > 0).reduce((a, b) => a + b, 0);
+  const grossLoss = Math.abs(pnls.filter(n => n < 0).reduce((a, b) => a + b, 0));
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
+  const totalPnL  = pnls.reduce((a, b) => a + b, 0);
+
+  const heroes: { label: string; val: string }[] = [
+    { label: 'Win Rate',      val: `${winRate.toFixed(1)}%` },
+    { label: 'Profit Factor', val: profitFactor === Infinity ? '∞' : profitFactor.toFixed(2) },
+    { label: 'Total PnL',     val: usd(totalPnL) },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
+      {heroes.map(s => (
+        <div key={s.label} className="bg-[#000000] px-5 py-4 flex flex-col gap-1.5">
+          <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.18em]">{s.label}</span>
+          <span className={`text-3xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>{s.val}</span>
+        </div>
+      ))}
+      <div className="bg-[#000000] px-5 py-4 flex flex-col gap-1.5">
+        <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.18em]">Trades</span>
+        <span className="text-3xl font-black font-mono tabular-nums text-white">
+          {trades.length}
+          <span className="text-base font-bold text-white/50 ml-2">{wins}W · {losses}L</span>
+        </span>
+      </div>
+    </div>
+  );
 }
 
 // ─── Live Signal sidebar ──────────────────────────────────────────────────────
@@ -78,34 +137,34 @@ function SignalSidebar({
   sessionLabel: string;
 }) {
   return (
-    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-5 px-5 py-5 overflow-y-auto">
+    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-5 px-5 py-5 overflow-y-auto bg-[#000000]">
 
       {/* Bias snapshot */}
       <div className="flex flex-col gap-2">
-        <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50 border-b border-[#1c1c1e] pb-1.5">
+        <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white border-b border-[#1c1c1e] pb-2">
           Live Bias
         </span>
         {([['ES', esBias, esPrice], ['NQ', nqBias, nqPrice]] as [string, Bias, number][]).map(([sym, b, p]) => (
           <div key={sym} className="flex items-center justify-between py-1.5 border-b border-[#1c1c1e] last:border-0">
-            <span className="text-[9px] font-mono text-muted/60 uppercase tracking-wider w-6 shrink-0">{sym}</span>
-            <span className={`text-[10px] font-mono font-semibold ${biasCls(b as Bias)}`}>
+            <span className="text-sm font-bold font-mono text-white/70 uppercase tracking-wider w-7 shrink-0">{sym}</span>
+            <span className={`text-base font-bold font-mono ${biasCls(b as Bias)}`}>
               {b === 'BULLISH' ? '▲' : b === 'BEARISH' ? '▼' : '◈'} {b}
             </span>
-            <span className="text-[10px] font-mono text-foreground tabular-nums">{(p as number).toFixed(2)}</span>
+            <span className="text-base font-bold font-mono text-white tabular-nums">{(p as number).toFixed(2)}</span>
           </div>
         ))}
       </div>
 
       {/* Confluence checklist */}
-      <div className={`flex flex-col gap-2 rounded border p-4 transition-all duration-700 ease-in-out ${confluence.active ? 'border-gold/30 bg-gold/5' : 'border-[#1c1c1e]'}`}>
+      <div className={`flex flex-col gap-2 rounded border p-4 transition-all duration-700 ease-in-out ${confluence.active ? 'border-[#d4af37]/35 bg-[#d4af37]/5' : 'border-[#1c1c1e]'}`}>
         <div className="flex items-center justify-between">
-          <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">Confluence</span>
-          <span className={`text-[9px] font-mono ${confluence.score === 3 ? 'text-gold' : confluence.score === 2 ? 'text-gold/60' : 'text-muted/50'}`}>
+          <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">Confluence</span>
+          <span className={`text-sm font-bold font-mono ${confluence.score === 3 ? 'text-[#d4af37]' : confluence.score === 2 ? 'text-[#d4af37]/70' : 'text-white/50'}`}>
             {confluence.score}/3
           </span>
         </div>
         {confluence.active && (
-          <span className="text-[9px] font-mono text-gold tracking-[0.15em]">◈ ENTRY SIGNAL</span>
+          <span className="text-sm font-bold font-mono text-[#d4af37] tracking-[0.15em]">◈ ENTRY SIGNAL</span>
         )}
         {[
           { label: 'HTF Zone Aligned', on: confluence.htfZoneAligned },
@@ -113,20 +172,20 @@ function SignalSidebar({
           { label: 'SMT Divergence',   on: confluence.smtDivergence  },
         ].map(r => (
           <div key={r.label} className="flex items-center gap-2">
-            <span className={`text-[9px] transition-all duration-700 ease-in-out ${r.on ? 'text-gold' : 'text-[#1c1c1e]'}`}>{r.on ? '✓' : '○'}</span>
-            <span className={`text-[9px] font-mono tracking-wider transition-all duration-700 ease-in-out ${r.on ? 'text-foreground' : 'text-muted/50'}`}>{r.label}</span>
+            <span className={`text-sm font-bold transition-all duration-700 ease-in-out ${r.on ? 'text-[#d4af37]' : 'text-white/25'}`}>{r.on ? '✓' : '○'}</span>
+            <span className={`text-sm font-bold font-mono tracking-wider transition-all duration-700 ease-in-out ${r.on ? 'text-white' : 'text-white/50'}`}>{r.label}</span>
           </div>
         ))}
       </div>
 
       {/* SMT alert */}
       {smt.active && smt.type && (
-        <div className="rounded border border-gold/20 bg-gold/5 p-4 flex flex-col gap-2">
-          <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">SMT Divergence</span>
-          <span className={`text-[11px] font-mono ${smt.type === 'BULLISH_SMT' ? 'text-bullish' : 'text-bearish'}`}>
+        <div className="rounded border border-[#d4af37]/25 bg-[#d4af37]/5 p-4 flex flex-col gap-2">
+          <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">SMT Divergence</span>
+          <span className={`text-base font-bold font-mono ${smt.type === 'BULLISH_SMT' ? 'text-bullish' : 'text-bearish'}`}>
             {smt.type.replace('_', ' ')}
           </span>
-          <p className="text-[9px] font-mono text-muted/60 leading-relaxed tracking-wide">
+          <p className="text-sm font-bold font-mono text-[#c0c0c0] leading-relaxed tracking-wide">
             {smt.type === 'BULLISH_SMT'
               ? 'ES swept SSL; NQ held. Watch for bullish reversal.'
               : 'ES swept BSL; NQ failed to confirm. Bearish div.'}
@@ -136,38 +195,38 @@ function SignalSidebar({
 
       {/* Active session liq */}
       <div className="flex flex-col gap-2">
-        <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50 border-b border-[#1c1c1e] pb-1.5">
+        <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white border-b border-[#1c1c1e] pb-2">
           {sessionLabel}
         </span>
         {esSessionHigh !== null ? (
           <>
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-muted/60">ES BSL</span>
-              <span className={`tabular-nums ${esHighSwept ? 'text-muted/40 line-through' : 'text-bearish'}`}>
+            <div className="flex justify-between text-sm font-bold font-mono">
+              <span className="text-white/70">ES BSL</span>
+              <span className={`tabular-nums ${esHighSwept ? 'text-white/40 line-through' : 'text-bearish'}`}>
                 {esSessionHigh.toFixed(2)}{esHighSwept ? ' swept' : ''}
               </span>
             </div>
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-muted/60">ES SSL</span>
-              <span className={`tabular-nums ${esLowSwept ? 'text-muted/40 line-through' : 'text-bullish'}`}>
+            <div className="flex justify-between text-sm font-bold font-mono">
+              <span className="text-white/70">ES SSL</span>
+              <span className={`tabular-nums ${esLowSwept ? 'text-white/40 line-through' : 'text-bullish'}`}>
                 {esSessionLow?.toFixed(2)}{esLowSwept ? ' swept' : ''}
               </span>
             </div>
           </>
         ) : (
-          <span className="text-[9px] font-mono text-muted/40 italic tracking-wider">No session data</span>
+          <span className="text-sm font-bold font-mono text-white/50 tracking-wider">No session data</span>
         )}
         {nqSessionHigh !== null && (
           <>
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-muted/60">NQ BSL</span>
-              <span className={`tabular-nums ${nqHighSwept ? 'text-muted/40 line-through' : 'text-bearish'}`}>
+            <div className="flex justify-between text-sm font-bold font-mono">
+              <span className="text-white/70">NQ BSL</span>
+              <span className={`tabular-nums ${nqHighSwept ? 'text-white/40 line-through' : 'text-bearish'}`}>
                 {nqSessionHigh.toFixed(2)}{nqHighSwept ? ' swept' : ''}
               </span>
             </div>
-            <div className="flex justify-between text-[9px] font-mono">
-              <span className="text-muted/60">NQ SSL</span>
-              <span className={`tabular-nums ${nqLowSwept ? 'text-muted/40 line-through' : 'text-bullish'}`}>
+            <div className="flex justify-between text-sm font-bold font-mono">
+              <span className="text-white/70">NQ SSL</span>
+              <span className={`tabular-nums ${nqLowSwept ? 'text-white/40 line-through' : 'text-bullish'}`}>
                 {nqSessionLow?.toFixed(2)}{nqLowSwept ? ' swept' : ''}
               </span>
             </div>
@@ -239,23 +298,27 @@ export default function JournalView() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-full bg-[#000000] text-foreground overflow-hidden">
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
         <div>
-          <span className="font-serif text-[13px] tracking-[0.12em] text-foreground uppercase block">
+          <span className="font-serif text-xl font-bold tracking-[0.1em] text-white uppercase block">
             Trading Journal
           </span>
-          <span className="text-[9px] font-mono text-muted/50 tracking-wider mt-0.5 block">{dateStr}</span>
+          <span className="text-sm font-bold font-mono text-white/60 tracking-wider mt-1 block">{dateStr}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {session && <span className="h-1.5 w-1.5 rounded-full bg-gold shrink-0" />}
-          <span className={`text-[9px] font-mono uppercase tracking-[0.22em] ${session ? 'text-gold' : 'text-muted/50'}`}>
-            {session ? sessionLabel : sessionLabel}
+        <div className="flex items-center gap-2.5">
+          {session && <span className="h-2.5 w-2.5 rounded-full bg-[#d4af37] shrink-0" />}
+          {!session && <span className="h-2.5 w-2.5 rounded-full bg-white/40 shrink-0" />}
+          <span className={`text-base font-bold font-mono uppercase tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>
+            {sessionLabel}
           </span>
         </div>
       </header>
+
+      {/* Performance stats */}
+      <StatsBar trades={trades} />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
@@ -282,11 +345,11 @@ export default function JournalView() {
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
           {/* Log header + add button */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#1c1c1e] bg-surface shrink-0">
-            <span className="text-[8px] font-mono uppercase tracking-[0.28em] text-muted/50">Trade Log</span>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+            <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">Trade Log</span>
             <button
               onClick={() => setAddOpen(o => !o)}
-              className="px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] bg-gold/8 text-gold border border-gold/20 rounded hover:bg-gold/15 hover:border-gold/35 transition-all duration-700 ease-in-out"
+              className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 rounded hover:bg-[#d4af37]/20 hover:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
             >
               + Add Entry
             </button>
@@ -304,11 +367,11 @@ export default function JournalView() {
                 { key: 'result',    label: 'Result',    type: 'select', opts: ['OPEN','WIN','LOSS','BE'] },
                 { key: 'notes',     label: 'Notes',     type: 'text' },
               ] as { key: string; label: string; type: string; opts?: string[] }[]).map(f => (
-                <div key={f.key} className="flex flex-col gap-1">
-                  <label className="text-[8px] font-mono uppercase tracking-[0.25em] text-muted/50">{f.label}</label>
+                <div key={f.key} className="flex flex-col gap-1.5">
+                  <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">{f.label}</label>
                   {f.type === 'select' ? (
                     <select
-                      className="bg-background border border-[#1c1c1e] rounded px-2 py-1 text-[9px] font-mono text-foreground focus:outline-none focus:border-gold/30 transition-all duration-700 ease-in-out"
+                      className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white focus:outline-none focus:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
                       value={(draft as Record<string, unknown>)[f.key] as string ?? ''}
                       onChange={e => setField(f.key, e.target.value)}
                     >
@@ -317,7 +380,7 @@ export default function JournalView() {
                   ) : (
                     <input
                       type={f.type === 'number' ? 'number' : 'text'}
-                      className="bg-background border border-[#1c1c1e] rounded px-2 py-1 text-[9px] font-mono text-foreground w-24 focus:outline-none focus:border-gold/30 transition-all duration-700 ease-in-out"
+                      className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-28 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
                       value={(draft as Record<string, unknown>)[f.key] as string ?? ''}
                       onChange={e => setField(f.key, e.target.value)}
                     />
@@ -326,13 +389,13 @@ export default function JournalView() {
               ))}
               <button
                 onClick={submitTrade}
-                className="px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] bg-bullish/10 text-bullish border border-bullish/25 rounded hover:bg-bullish/20 transition-all duration-700 ease-in-out"
+                className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-bullish/12 text-bullish border border-bullish/30 rounded hover:bg-bullish/20 transition-all duration-700 ease-in-out"
               >
                 Record
               </button>
               <button
                 onClick={() => setAddOpen(false)}
-                className="px-3 py-1 text-[9px] font-mono uppercase tracking-[0.18em] bg-background text-muted/60 border border-[#1c1c1e] rounded hover:text-foreground transition-all duration-700 ease-in-out"
+                className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#000000] text-white/60 border border-[#2a2a2d] rounded hover:text-white transition-all duration-700 ease-in-out"
               >
                 Cancel
               </button>
@@ -340,20 +403,20 @@ export default function JournalView() {
           )}
 
           {/* Table */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-auto">
             {trades.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
-                <span className="font-serif text-[15px] text-foreground/40 tracking-[0.12em] uppercase">No Trades Recorded</span>
-                <span className="text-[9px] font-mono text-muted/40 leading-relaxed tracking-wider max-w-xs">
+                <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">No Trades Recorded</span>
+                <span className="text-base font-bold font-mono text-white/50 leading-relaxed tracking-wider max-w-md">
                   Use + Add Entry to log a setup. Bias and session context are auto-stamped from live data.
                 </span>
               </div>
             ) : (
-              <table className="w-full text-[9px] font-mono">
+              <table className="w-full text-sm font-mono">
                 <thead className="sticky top-0 bg-surface border-b border-[#1c1c1e] z-10">
                   <tr>
                     {['Time','Sym','Dir','Entry','Stop','Target','Session','Bias','R:R','Result','Notes'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[8px] uppercase tracking-[0.2em] text-muted/50 font-normal whitespace-nowrap">
+                      <th key={h} className="px-3 py-3 text-left text-sm font-bold uppercase tracking-[0.16em] text-white whitespace-nowrap">
                         {h}
                       </th>
                     ))}
@@ -365,19 +428,19 @@ export default function JournalView() {
                     const rr = isNaN(rrRaw) ? '—' : rrRaw.toFixed(2);
                     return (
                       <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-surface transition-all duration-700 ease-in-out">
-                        <td className="px-3 py-2.5 text-muted/50 tabular-nums">{t.time}</td>
-                        <td className="px-3 py-2.5 text-foreground">{t.symbol}</td>
-                        <td className={`px-3 py-2.5 font-semibold ${t.direction === 'LONG' ? 'text-bullish' : 'text-bearish'}`}>
+                        <td className="px-3 py-3 text-[#c0c0c0] font-bold tabular-nums whitespace-nowrap">{t.time}</td>
+                        <td className="px-3 py-3 text-white font-bold">{t.symbol}</td>
+                        <td className={`px-3 py-3 font-bold ${t.direction === 'LONG' ? 'text-bullish' : 'text-bearish'}`}>
                           {t.direction}
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums text-foreground">{t.entry.toFixed(2)}</td>
-                        <td className="px-3 py-2.5 tabular-nums text-bearish">{t.stop.toFixed(2)}</td>
-                        <td className="px-3 py-2.5 tabular-nums text-bullish">{t.target.toFixed(2)}</td>
-                        <td className="px-3 py-2.5 text-muted/60">{t.session}</td>
-                        <td className={`px-3 py-2.5 ${biasCls(t.bias)}`}>{t.bias}</td>
-                        <td className="px-3 py-2.5 tabular-nums text-gold">{rr}</td>
-                        <td className={`px-3 py-2.5 font-semibold ${resultCls(t.result)}`}>{t.result}</td>
-                        <td className="px-3 py-2.5 text-muted/50 max-w-[140px] truncate">{t.notes || '—'}</td>
+                        <td className="px-3 py-3 tabular-nums text-white font-bold">{t.entry.toFixed(2)}</td>
+                        <td className="px-3 py-3 tabular-nums text-bearish font-bold">{t.stop.toFixed(2)}</td>
+                        <td className="px-3 py-3 tabular-nums text-bullish font-bold">{t.target.toFixed(2)}</td>
+                        <td className="px-3 py-3 text-[#c0c0c0] font-bold whitespace-nowrap">{t.session}</td>
+                        <td className={`px-3 py-3 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
+                        <td className="px-3 py-3 tabular-nums text-[#d4af37] font-bold">{rr}</td>
+                        <td className={`px-3 py-3 font-bold ${resultCls(t.result)}`}>{t.result}</td>
+                        <td className="px-3 py-3 text-white/70 font-medium max-w-[160px] truncate">{t.notes || '—'}</td>
                       </tr>
                     );
                   })}

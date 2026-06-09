@@ -21,12 +21,12 @@ export default function Sidebar() {
       {/* ── Branding ─────────────────────────────────────────── */}
       <div className="px-5 py-5 border-b border-[#1c1c1e]">
         <span
-          className="block font-serif text-[16px] tracking-[0.06em] text-[#c0c0c0] leading-none"
+          className="block font-serif text-lg font-bold tracking-[0.06em] text-white leading-none"
           style={{ fontStyle: 'normal' }}
         >
           Onyx
         </span>
-        <span className={`block font-mono text-[8px] tracking-[0.38em] text-[#c9a84c] uppercase leading-none mt-1.5 ${rtl ? 'text-right' : ''}`}>
+        <span className={`block font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase leading-none mt-1.5 ${rtl ? 'text-right' : ''}`}>
           {t('brand_sub')}
         </span>
       </div>
@@ -42,16 +42,16 @@ export default function Sidebar() {
               dir={rtl ? 'rtl' : 'ltr'}
               className={[
                 'flex items-center gap-3 px-3 py-2.5 rounded-sm',
-                'text-[10px] font-mono tracking-[0.14em] uppercase',
+                'text-sm font-bold font-mono tracking-[0.12em] uppercase',
                 'transition-all duration-700 ease-in-out',
                 rtl ? 'pr-[10px] pl-3 border-r-2 border-l-0' : 'pl-[10px] pr-3 border-l-2',
                 active
-                  ? `border-[#c9a84c] bg-[#c9a84c]/6 text-[#c0c0c0]`
-                  : `border-transparent text-[#52525b] hover:text-[#c0c0c0] hover:border-[#1c1c1e]`,
+                  ? `border-[#d4af37] bg-[#d4af37]/8 text-white`
+                  : `border-transparent text-white/55 hover:text-white hover:border-[#1c1c1e]`,
               ].join(' ')}
             >
               {active && (
-                <span className={`w-1 h-1 rounded-full bg-[#c9a84c] shrink-0 ${rtl ? 'order-last' : ''}`} />
+                <span className={`w-1.5 h-1.5 rounded-full bg-[#d4af37] shrink-0 ${rtl ? 'order-last' : ''}`} />
               )}
               <span>{t(key)}</span>
             </Link>
@@ -62,12 +62,12 @@ export default function Sidebar() {
       {/* ── System status + language toggle ──────────────────── */}
       <div className="px-5 py-4 border-t border-[#1c1c1e]">
         <div className={`flex items-center gap-2 mb-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-[#c9a84c] shrink-0" />
-          <span className={`text-[9px] font-mono uppercase tracking-[0.22em] text-[#c9a84c] ${rtl ? 'text-right' : ''}`}>
+          <span className="h-2 w-2 rounded-full bg-[#d4af37] shrink-0" />
+          <span className={`text-sm font-bold font-mono uppercase tracking-[0.18em] text-[#d4af37] ${rtl ? 'text-right' : ''}`}>
             {t('sys_live')}
           </span>
         </div>
-        <span className={`text-[8px] font-mono text-[#52525b] tracking-[0.18em] uppercase block mb-3 ${rtl ? 'text-right' : ''}`}>
+        <span className={`text-[10px] font-bold font-mono text-white/40 tracking-[0.16em] uppercase block mb-3 ${rtl ? 'text-right' : ''}`}>
           CME · ES · NQ · Real-time
         </span>
 
@@ -75,11 +75,11 @@ export default function Sidebar() {
         <button
           onClick={toggle}
           aria-label="Toggle language"
-          className="w-full flex items-center justify-between px-3 py-1.5 border border-[#1c1c1e] rounded-sm text-[9px] font-mono tracking-[0.25em] text-[#52525b] hover:text-[#c9a84c] hover:border-[#c9a84c]/25 transition-all duration-700 ease-in-out group"
+          className="w-full flex items-center justify-between px-3 py-2 border border-[#1c1c1e] rounded-sm text-xs font-bold font-mono tracking-[0.25em] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all duration-700 ease-in-out group"
         >
-          <span className="text-[#c9a84c]/40 group-hover:text-[#c9a84c]/60 transition-colors duration-700">◈</span>
+          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-700">◈</span>
           <span>{t('lang_other')}</span>
-          <span className="text-[#c9a84c]/40 group-hover:text-[#c9a84c]/60 transition-colors duration-700">◈</span>
+          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-700">◈</span>
         </button>
       </div>
     </aside>

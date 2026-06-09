@@ -9,10 +9,10 @@
   --muted:       #52525b;   /* subdued silver */
 
   /* ── Wealth signal colors ────────────────────────────────── */
-  --gold:        #c9a84c;   /* wealth accent — confirmations, live state, priority labels */
+  --gold:        #d4af37;   /* Institutional Gold — confirmations, live state, priority labels */
   --bullish:     #4a7c59;   /* dark emerald — institutional long bias */
   --bearish:     #8b3a3a;   /* dark burgundy — institutional short bias */
-  --sweep:       #c9a84c;   /* aliased to gold — FVG zones, confluence */
+  --sweep:       #d4af37;   /* aliased to gold — FVG zones, confluence */
   --accent:      #7a8fa8;   /* steel blue — secondary interactive */
 }
 
@@ -50,6 +50,15 @@ body {
 }
 .price-flash-up   { animation: flash-up   1.4s ease-in-out; }
 .price-flash-down { animation: flash-down 1.4s ease-in-out; }
+
+/* ── Matrix laser scan — one-shot sweep on reveal ────────── */
+@keyframes laser-sweep {
+  0%   { top: 0%;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.laser-run { animation: laser-sweep 1.9s cubic-bezier(0.45, 0, 0.2, 1) 0.2s both; }
 
 /* ── Scrollbars — obsidian, 4px, near-invisible ──────────── */
 * {

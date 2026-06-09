@@ -24,6 +24,9 @@ export const DICT = {
   // ── Macro sidebar ─────────────────────────────────────────────────
   macro:                { en: 'Macro',                  he: 'מאקרו'                          },
   eco_calendar:         { en: 'Economic Calendar',      he: 'לוח אירועים'                   },
+  today_news:           { en: "Today's News",           he: 'חדשות היום'                    },
+  weekly_outlook:       { en: 'Weekly Outlook',         he: 'מבט שבועי'                      },
+  eco_none:             { en: 'No high-impact events today', he: 'אין אירועים משמעותיים היום' },
   fcst:                 { en: 'Fcst:',                  he: 'תחזית:'                         },
   demo_note:            { en: 'Demo — connect live API',he: 'דמו — חבר API חי'              },
 
@@ -89,6 +92,26 @@ export const DICT = {
   factor_ifvgs:         { en: 'iFVGs Active',           he: 'iFVGs פעיל'                    },
   factor_session_liq:   { en: 'Session Liq',            he: 'נזילות מפגש'                   },
   factor_inducement:    { en: 'Inducement',             he: 'פיתוי'                          },
+
+  // ── Position sizing calculator ───────────────────────────────────
+  calc_title:           { en: 'Institutional Risk Manager', he: 'מחשבון ניהול סיכונים מוסדי' },
+  calc_subtitle:        { en: 'Position sizing · live-synced pricing', he: 'חישוב גודל פוזיציה · תמחור חי מסונכרן' },
+  calc_asset:           { en: 'Asset',                   he: 'נכס'                            },
+  calc_balance:         { en: 'Account Balance',         he: 'יתרת חשבון'                    },
+  calc_risk:            { en: 'Risk %',                  he: 'אחוז סיכון'                    },
+  calc_stop:            { en: 'Stop Loss (points)',      he: 'סטופ לוס (נקודות)'             },
+  calc_entry:           { en: 'Entry Price',             he: 'מחיר כניסה'                    },
+  calc_sync:            { en: 'Live',                    he: 'חי'                             },
+  calc_manual:          { en: 'Manual entry — tap Live to re-sync', he: 'כניסה ידנית — הקש חי לסנכרון' },
+  calc_results:         { en: 'Risk Output',             he: 'תוצאת סיכון'                   },
+  calc_cash_risk:       { en: 'Total Cash at Risk',      he: 'סכום כולל בסיכון'              },
+  calc_std:             { en: 'Standard Contracts',      he: 'חוזים סטנדרטיים'               },
+  calc_micro:           { en: 'Micro Contracts',         he: 'חוזי מיקרו'                     },
+  calc_risk_per_std:    { en: 'Risk / Standard',         he: 'סיכון / סטנדרטי'               },
+  calc_risk_per_micro:  { en: 'Risk / Micro',            he: 'סיכון / מיקרו'                 },
+  calc_pt_value:        { en: 'Point Value',             he: 'ערך נקודה'                     },
+  calc_stop_level:      { en: 'Stop Level (long)',       he: 'רמת סטופ (לונג)'               },
+  calc_spec_note:       { en: 'CME spec — ES $50/pt · MES $5/pt · NQ $20/pt · MNQ $2/pt', he: 'מפרט CME — ES $50/נק׳ · MES $5/נק׳ · NQ $20/נק׳ · MNQ $2/נק׳' },
 } satisfies Record<string, { en: string; he: string }>;
 
 export type DictKey = keyof typeof DICT;
