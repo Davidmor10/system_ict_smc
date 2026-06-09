@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { UserButton } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
+
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const NAV_KEYS = [
   { href: '/dashboard',           key: 'nav_workspace' },
@@ -59,8 +62,14 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* ── System status + language toggle ──────────────────── */}
+      {/* ── Account + system status + language toggle ─────────── */}
       <div className="px-5 py-4 border-t border-[#1c1c1e]">
+        {CLERK_ENABLED && (
+          <div className={`flex items-center gap-2.5 mb-3 ${rtl ? 'flex-row-reverse' : ''}`}>
+            <UserButton />
+            <span className="text-xs font-bold font-mono text-white/50 uppercase tracking-[0.18em]">{t('sys_account')}</span>
+          </div>
+        )}
         <div className={`flex items-center gap-2 mb-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
           <span className="h-2 w-2 rounded-full bg-[#d4af37] shrink-0" />
           <span className={`text-sm font-bold font-mono uppercase tracking-[0.18em] text-[#d4af37] ${rtl ? 'text-right' : ''}`}>

@@ -1,54 +1,39 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useLivePrices } from '../hooks/useLivePrices';
 import SmcChart from './SmcChart';
+import TickerWidget from './TickerWidget';
 import PositionCalculator from './PositionCalculator';
 import { useLanguage } from '../hooks/useLanguage';
 import type { DictKey } from '../lib/i18n';
-
-// ─── Market-hours check (CME Globex: Sun 6pm–Fri 5pm ET, daily 4–5pm break) ─
-
-function isMarketOpen(): boolean {
-  const now   = new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
-  }).formatToParts(now);
-  const day      = parts.find(p => p.type === 'weekday')?.value ?? '';
-  const hour     = parseInt(parts.find(p => p.type === 'hour')?.value   ?? '0', 10);
-  const minute   = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
-  const totalMin = hour * 60 + minute;
-  if (day === 'Sat') return false;
-  if (day === 'Sun' && totalMin < 18 * 60) return false;
-  if (day === 'Fri' && totalMin >= 17 * 60) return false;
-  if (totalMin >= 16 * 60 && totalMin < 17 * 60) return false; // daily settlement break
-  return true;
-}
+import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
 
 function todayET(): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date());
 }
 
-// ─── Instrument price block ─────────────────────────────────────────────────
+// ─── Institutional clock + session countdown HUD ────────────────────────────
 
-function PriceBlock({ symbol, price, change, pct, flash }: {
-  symbol: string; price: number; change: number; pct: number;
-  flash?: 'up' | 'down' | null;
-}) {
-  const bull = change >= 0;
+function ClockHUD({ clock, status }: { clock: string; status: SessionStatus }) {
   return (
-    <div>
-      <span className="text-[11px] font-bold font-mono text-white/70 uppercase tracking-[0.22em] block leading-none mb-2">
-        {symbol}
-      </span>
-      <div className="flex items-baseline gap-3">
-        <span className={`text-2xl font-bold font-mono text-white tabular-nums tracking-tight ${flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : ''}`}>
-          {price > 0 ? price.toFixed(2) : '—'}
+    <div className="flex flex-col items-end gap-1.5 shrink-0" dir="rtl">
+      <div className="flex items-center gap-2">
+        <span className="text-2xl font-black font-mono text-white tabular-nums tracking-tight [text-shadow:0_0_20px_rgba(212,175,55,0.25)]">
+          {clock}
         </span>
-        <span className={`text-sm font-bold font-mono tabular-nums ${bull ? 'text-bullish' : 'text-bearish'}`}>
-          {price > 0 ? `${bull ? '+' : ''}${change.toFixed(2)} (${bull ? '+' : ''}${pct.toFixed(2)}%)` : ''}
-        </span>
+        <span className="text-xs font-bold font-mono text-[#d4af37] uppercase tracking-[0.2em]">IDT</span>
       </div>
+      <div className="flex items-center gap-2 px-3 py-1 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
+        <span className={`h-2 w-2 rounded-full ${status.inSession ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
+        <span className="text-sm font-bold font-mono text-white/80">
+          {status.inSession ? 'הסשן הנוכחי מסתיים בעוד:' : 'הסשן הבא מתחיל בעוד:'}
+        </span>
+        <span className="text-sm font-black font-mono text-[#d4af37] tabular-nums">{fmtHMS(status.remaining)}</span>
+      </div>
+      <span className="text-xs font-bold font-mono text-white/50 tracking-wide">
+        {status.inSession ? 'סשן נוכחי' : 'הסשן הבא'}: {status.session.label}
+      </span>
     </div>
   );
 }
@@ -110,8 +95,6 @@ function MacroSidebar() {
       </div>
 
       <div className="flex flex-col gap-8 px-5 py-6" dir={rtl ? 'rtl' : 'ltr'}>
-
-        {/* Today's News */}
         <section>
           <span className={`text-sm font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em] block mb-4 ${align}`}>{t('today_news')}</span>
           {todays.length > 0
@@ -119,15 +102,28 @@ function MacroSidebar() {
             : <span className={`text-sm font-semibold font-mono text-white/50 tracking-wide block ${align}`}>{t('eco_none')}</span>}
         </section>
 
-        {/* Weekly Outlook */}
         <section>
           <span className={`text-sm font-bold font-mono text-white uppercase tracking-[0.18em] block mb-4 ${align}`}>{t('weekly_outlook')}</span>
           <div className="flex flex-col">{ECO_EVENTS.map((e, i) => EventRow(e, `w-${i}`, true))}</div>
           <span className={`text-[10px] font-medium font-mono text-white/30 tracking-wider mt-4 block ${align}`}>{t('demo_note')}</span>
         </section>
-
       </div>
     </aside>
+  );
+}
+
+// ─── Session gating box ──────────────────────────────────────────────────────
+
+function SessionGate() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-8 bg-[#000000]">
+      <div className="max-w-lg text-center rounded-xl border border-[#d4af37]/50 bg-[#0d0d0f] p-10 [box-shadow:0_0_60px_-15px_rgba(212,175,55,0.4)]" dir="rtl">
+        <span className="text-[#d4af37] text-4xl">◈</span>
+        <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">
+          אין סשן מסחר פעיל כרגע — הגרפים ומערכת הציטוטים יתעדכנו עם תחילת הסשן הבא.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -135,43 +131,66 @@ function MacroSidebar() {
 
 export default function DashboardView() {
   const live = useLivePrices();
-  const { t } = useLanguage();
+
+  const [clock, setClock] = useState(() => israelClock());
+  const [override, setOverride] = useState(false);
+
+  // Live IDT clock + session countdown (1s tick). Client-only (ssr:false route).
+  useEffect(() => {
+    const id = setInterval(() => setClock(israelClock()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const status  = getSessionStatus(clock.sec);
+  const visible = override || status.inSession;
+  const isDev   = process.env.NODE_ENV !== 'production';
 
   return (
     <div className="flex flex-col h-full bg-[#000000] text-[#c0c0c0] overflow-hidden">
 
-      {/* Minimal price-ticker header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
-        <div className="flex items-center gap-6">
-          <PriceBlock symbol={t('es_label')} price={live.es.price} change={live.es.change} pct={live.es.pct} flash={live.es.flash} />
-          <div className="h-8 w-px bg-[#1c1c1e]" />
-          <PriceBlock symbol={t('nq_label')} price={live.nq.price} change={live.nq.change} pct={live.nq.pct} flash={live.nq.flash} />
+      {/* Header — TradingView tickers + clock HUD */}
+      <header className="flex items-center justify-between gap-6 px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:ES1!" /></div>
+          <div className="h-12 w-px bg-[#1c1c1e] shrink-0" />
+          <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:NQ1!" /></div>
         </div>
-        {isMarketOpen() ? (
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#d4af37] shrink-0" />
-            <span className="text-lg font-bold text-[#d4af37] font-mono uppercase tracking-[0.2em]">{t('market_live')}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className="h-2.5 w-2.5 rounded-full bg-white/40 shrink-0" />
-            <span className="text-lg font-bold text-white/55 font-mono uppercase tracking-[0.2em]">{t('market_closed')}</span>
-          </div>
-        )}
+
+        <div className="flex items-center gap-4 shrink-0">
+          {isDev && (
+            <button
+              onClick={() => setOverride(o => !o)}
+              className={`px-3 py-1.5 rounded-sm border text-sm font-bold font-mono transition-colors duration-300 ${
+                override ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] text-white/60 hover:text-white'
+              }`}
+              dir="rtl"
+            >
+              עקוף סשן (פיתוח)
+            </button>
+          )}
+          <ClockHUD clock={clock.clock} status={status} />
+        </div>
       </header>
 
       {/* Scroll region: charts fill the first screen, calculator below the fold */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* Macro sidebar + expansive 50/50 chart grid (full viewport height) */}
         <div className="flex h-full min-h-0">
           <MacroSidebar />
-          <div className="grid grid-cols-2 flex-1 min-w-0 min-h-0">
-            <ChartPanel label={t('panel_es')} className="border-r border-[#1c1c1e]">
-              <SmcChart symbol="ES" interval="5" />
-            </ChartPanel>
-            <ChartPanel label={t('panel_nq')}>
-              <SmcChart symbol="NQ" interval="5" />
-            </ChartPanel>
+
+          {/* Chart workspace — charts when active/override, gated overlay otherwise */}
+          <div className="relative flex-1 min-w-0 min-h-0">
+            {visible ? (
+              <div className="flex h-full min-h-0">
+                <ChartPanel label="ES1! — S&P 500" className="flex-1 border-r border-[#1c1c1e]">
+                  <SmcChart symbol="ES" interval="5" />
+                </ChartPanel>
+                <ChartPanel label="NQ1! — NASDAQ" className="flex-1">
+                  <SmcChart symbol="NQ" interval="5" />
+                </ChartPanel>
+              </div>
+            ) : (
+              <SessionGate />
+            )}
           </div>
         </div>
 

@@ -9,6 +9,7 @@ export const DICT = {
   nav_analytics:        { en: 'Market Analytics',       he: 'ניתוח שוק'                      },
   nav_journal:          { en: 'Trading Journal',        he: 'יומן מסחר'                      },
   sys_live:             { en: 'System Live',            he: 'מערכת פעילה'                    },
+  sys_account:          { en: 'Account',                he: 'חשבון'                          },
   brand_sub:            { en: 'Trading',                he: 'מסחר'                           },
 
   // ── Header ───────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ export const DICT = {
   calc_cash_risk:       { en: 'Total Cash at Risk',      he: 'סכום כולל בסיכון'              },
   calc_std:             { en: 'Standard Contracts',      he: 'חוזים סטנדרטיים'               },
   calc_micro:           { en: 'Micro Contracts',         he: 'חוזי מיקרו'                     },
+  calc_actual_risk:     { en: 'Actual Risk',             he: 'סיכון בפועל'                   },
   calc_risk_per_std:    { en: 'Risk / Standard',         he: 'סיכון / סטנדרטי'               },
   calc_risk_per_micro:  { en: 'Risk / Micro',            he: 'סיכון / מיקרו'                 },
   calc_pt_value:        { en: 'Point Value',             he: 'ערך נקודה'                     },
