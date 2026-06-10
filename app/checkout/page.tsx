@@ -8,7 +8,31 @@ import LegalDisclaimer from '../components/LegalDisclaimer';
 export default function CheckoutPage() {
   const [selected, setSelected] = useState<string>('deluxe');
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const tier = TIERS.find(t => t.id === selected) ?? TIERS[0];
+
+  // Start a real Stripe Checkout session; fall back to the demo confirmation
+  // whenever Stripe isn't configured yet or the request fails.
+  async function startCheckout() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: selected }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.url) {
+        window.location.href = data.url as string;
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main className="relative min-h-screen bg-[#000000] text-white flex flex-col">
@@ -66,10 +90,11 @@ export default function CheckoutPage() {
             </div>
           ) : (
             <button
-              onClick={() => setSubmitted(true)}
-              className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 rounded-sm bg-[#d4af37] text-black font-serif text-base font-bold [box-shadow:0_0_36px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_56px_rgba(212,175,55,0.65)] transition-shadow duration-500"
+              onClick={startCheckout}
+              disabled={loading}
+              className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 rounded-sm bg-[#d4af37] text-black font-serif text-base font-bold [box-shadow:0_0_36px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_56px_rgba(212,175,55,0.65)] transition-shadow duration-500 disabled:opacity-60 disabled:cursor-wait"
             >
-              המשך לתשלום מאובטח ←
+              {loading ? 'מעבד…' : 'המשך לתשלום מאובטח ←'}
             </button>
           )}
 
