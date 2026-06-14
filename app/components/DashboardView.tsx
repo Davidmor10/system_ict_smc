@@ -5,13 +5,7 @@ import { useLivePrices } from '../hooks/useLivePrices';
 import SmcChart from './SmcChart';
 import TickerWidget from './TickerWidget';
 import PositionCalculator from './PositionCalculator';
-import { useLanguage } from '../hooks/useLanguage';
-import type { DictKey } from '../lib/i18n';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
-
-function todayET(): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date());
-}
 
 // ─── Institutional clock + session countdown HUD ────────────────────────────
 
@@ -53,65 +47,6 @@ function ChartPanel({ label, className = '', children }: {
   );
 }
 
-// ─── Macro news sidebar (Today's News + Weekly Outlook) ─────────────────────
-
-const ECO_EVENTS: { impact: 'HIGH' | 'MED'; day: string; time: string; nameKey: DictKey; fcst: string | null }[] = [
-  { impact: 'MED',  day: 'Mon', time: '10:00', nameKey: 'ev_ism',      fcst: '51.0' },
-  { impact: 'HIGH', day: 'Tue', time: '14:00', nameKey: 'ev_fomc_min', fcst: null   },
-  { impact: 'HIGH', day: 'Wed', time: '08:30', nameKey: 'ev_cpi',      fcst: '0.2%' },
-  { impact: 'MED',  day: 'Thu', time: '08:30', nameKey: 'ev_claims',   fcst: '217K' },
-  { impact: 'MED',  day: 'Thu', time: '08:30', nameKey: 'ev_ppi',      fcst: '0.1%' },
-  { impact: 'HIGH', day: 'Fri', time: '08:30', nameKey: 'ev_retail',   fcst: '0.3%' },
-];
-
-function MacroSidebar() {
-  const { t, lang } = useLanguage();
-  const rtl   = lang === 'he';
-  const align = rtl ? 'text-right' : '';
-  const today = todayET();
-  const todays = ECO_EVENTS.filter(e => e.day === today);
-
-  const EventRow = (e: typeof ECO_EVENTS[number], key: string, showDay: boolean) => (
-    <div key={key} className="flex items-start gap-3 py-3 border-b border-[#1c1c1e] last:border-0">
-      <span className={`mt-[7px] h-2 w-2 rounded-full shrink-0 ${e.impact === 'HIGH' ? 'bg-bearish' : 'bg-[#d4af37]'}`} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          {showDay && <span className="text-xs font-bold font-mono text-white/70 uppercase tracking-wider">{e.day}</span>}
-          <span className="text-sm font-bold font-mono text-[#d4af37] tabular-nums">{e.time}</span>
-          {e.impact === 'HIGH' && (
-            <span className="text-[10px] font-bold font-mono text-bearish uppercase tracking-[0.18em] ms-auto">High</span>
-          )}
-        </div>
-        <span className={`text-base font-bold font-mono text-white block leading-snug ${align}`}>{t(e.nameKey)}</span>
-        {e.fcst && <span className="text-sm font-bold font-mono text-white/60 block mt-1">{t('fcst')} {e.fcst}</span>}
-      </div>
-    </div>
-  );
-
-  return (
-    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] bg-[#0d0d0f] flex flex-col overflow-y-auto">
-      <div className={`px-5 py-4 border-b border-[#1c1c1e] shrink-0 ${align}`}>
-        <span className="font-serif text-base font-bold tracking-[0.1em] text-white uppercase">{t('macro')}</span>
-      </div>
-
-      <div className="flex flex-col gap-8 px-5 py-6" dir={rtl ? 'rtl' : 'ltr'}>
-        <section>
-          <span className={`text-sm font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em] block mb-4 ${align}`}>{t('today_news')}</span>
-          {todays.length > 0
-            ? <div className="flex flex-col">{todays.map((e, i) => EventRow(e, `t-${i}`, false))}</div>
-            : <span className={`text-sm font-semibold font-mono text-white/50 tracking-wide block ${align}`}>{t('eco_none')}</span>}
-        </section>
-
-        <section>
-          <span className={`text-sm font-bold font-mono text-white uppercase tracking-[0.18em] block mb-4 ${align}`}>{t('weekly_outlook')}</span>
-          <div className="flex flex-col">{ECO_EVENTS.map((e, i) => EventRow(e, `w-${i}`, true))}</div>
-          <span className={`text-[10px] font-medium font-mono text-white/30 tracking-wider mt-4 block ${align}`}>{t('demo_note')}</span>
-        </section>
-      </div>
-    </aside>
-  );
-}
-
 // ─── Session gating box ──────────────────────────────────────────────────────
 
 function SessionGate() {
@@ -129,7 +64,9 @@ function SessionGate() {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function DashboardView() {
+// `sidebar` is a Server Component (NewsWidget) passed in from the server page,
+// so the macro feed renders server-side even though this view is client-only.
+export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }) {
   const live = useLivePrices();
 
   const [clock, setClock] = useState(() => israelClock());
@@ -175,7 +112,7 @@ export default function DashboardView() {
       {/* Scroll region: charts fill the first screen, calculator below the fold */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex h-full min-h-0">
-          <MacroSidebar />
+          {sidebar}
 
           {/* Chart workspace — charts when active/override, gated overlay otherwise */}
           <div className="relative flex-1 min-w-0 min-h-0">

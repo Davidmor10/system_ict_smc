@@ -2,11 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Header from './components/Header';
 import { PricingCards } from './components/Pricing';
 import LegalDisclaimer from './components/LegalDisclaimer';
+import { useLanguage } from './hooks/useLanguage';
+import type { DictKey } from './lib/i18n';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
+
+// Auth controls render only when Clerk is configured (its components must live
+// inside ClerkProvider, which is itself env-guarded). Falls back to the
+// original scroll cue otherwise — the landing page never depends on auth.
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 // Scroll progress (rAF-throttled). Used only for the gate + dock; clarity of
 // content is driven by reveal-on-enter so it never sticks mid-blur.
@@ -95,6 +103,7 @@ const PREVIEW_NEWS: { t: string; e: string; hi: boolean }[] = [
 ];
 
 function LivePreview() {
+  const { t, lang } = useLanguage();
   const [ref, shown] = useReveal();
   return (
     <div ref={ref} className="relative mx-auto w-[min(94vw,1120px)]">
@@ -135,8 +144,8 @@ function LivePreview() {
 
         {/* Workspace body: macro rail + dual charts */}
         <div className="grid grid-cols-[130px_1fr_1fr] h-[clamp(240px,38vh,360px)]">
-          <div className="border-r border-[#1c1c1e] bg-[#0d0d0f] p-3 flex flex-col gap-2.5" dir="rtl">
-            <span className="text-[10px] font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em]">חדשות היום</span>
+          <div className="border-r border-[#1c1c1e] bg-[#0d0d0f] p-3 flex flex-col gap-2.5" dir={lang === 'he' ? 'rtl' : 'ltr'}>
+            <span className="text-[10px] font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em]">{t('today_news')}</span>
             {PREVIEW_NEWS.map((n, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.hi ? 'bg-bearish' : 'bg-[#d4af37]'}`} />
@@ -146,7 +155,7 @@ function LivePreview() {
             ))}
           </div>
           <div className="p-2.5 border-r border-[#1c1c1e]"><ChartMock symbol="ES" sub="S&P 500" /></div>
-          <div className="p-2.5"><ChartMock symbol="NQ" sub="נאסד״ק" /></div>
+          <div className="p-2.5"><ChartMock symbol="NQ" sub="Nasdaq" /></div>
         </div>
 
         {/* Matrix laser sweep (one-shot on reveal) */}
@@ -169,25 +178,29 @@ function LivePreview() {
 }
 
 // ─── Capabilities data ──────────────────────────────────────────────────────
-const CAPABILITIES: { k: string; title: string; body: string }[] = [
-  { k: '01', title: 'דיברגנס SMT', body: 'זיהוי דיברגנס בזמן אמת בין ES ל־NQ בנקודות שיא ושפל — אישור מוסדי להיפוכי מגמה.' },
-  { k: '02', title: 'מבנה מולטי־טיים־פריים', body: 'ניתוח BOS · CHoCH · MSS על פני D1 · H4 · H1 ופריים הביצוע, מסונתז להטיה אחת נעולה.' },
-  { k: '03', title: 'מערכי FVG', body: 'פערי הוגנות, אימבלנס, iFVG ונקודות Consequent Encroachment (50%) ממופים על הגרף החי.' },
-  { k: '04', title: 'בלוקי הזמנות ונזילות', body: 'מיפוי Order Blocks, sweeps של נזילות ובריכות אינדיוסמנט בטווחי הזמן הגבוהים.' },
-  { k: '05', title: 'הטיית מאקרו יומית', body: 'הטיה מוסדית נעולה לנרות H4 ו־D1 שנסגרו — ללא רעש טיק, רק מבנה מאומת.' },
-  { k: '06', title: 'ניהול סיכונים מובנה', body: 'מחשבון גודל פוזיציה לפי מפרט CME, מסונכרן ישירות למחירי הלייב של ES ו־NQ.' },
+const CAPABILITIES: { k: string; titleKey: DictKey; bodyKey: DictKey }[] = [
+  { k: '01', titleKey: 'cap1_title', bodyKey: 'cap1_body' },
+  { k: '02', titleKey: 'cap2_title', bodyKey: 'cap2_body' },
+  { k: '03', titleKey: 'cap3_title', bodyKey: 'cap3_body' },
+  { k: '04', titleKey: 'cap4_title', bodyKey: 'cap4_body' },
+  { k: '05', titleKey: 'cap5_title', bodyKey: 'cap5_body' },
+  { k: '06', titleKey: 'cap6_title', bodyKey: 'cap6_body' },
 ];
-
-const SPECS = ['ES', 'NQ', 'CME Futures', '5M → D1', 'Real-time Sync', 'עברית · English'];
 
 // ─── Landing ─────────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  const { t, lang } = useLanguage();
+  const rtl = lang === 'he';
   const { y, vh } = useScroll();
   const gate = clamp(y / (vh * 0.6));          // Onyx Gate vanish (tight)
   const ctaScale = 1.18 - clamp(y / vh) * 0.30;
+  const SPECS = ['ES', 'NQ', 'CME Futures', '5M → D1', 'Real-time Sync', t('spec_langs')];
 
   return (
     <main className="relative bg-[#000000] text-white overflow-x-hidden">
+
+      {/* Fixed top nav — auth entry points, always above the fold */}
+      {CLERK_ENABLED && <Header />}
 
       {/* ════ ACT I — The Onyx Gate ════ */}
       <section className="relative h-[140vh]">
@@ -210,13 +223,13 @@ export default function LandingPage() {
           <div
             className="mt-7 flex flex-col items-center gap-3 text-center"
             style={{ opacity: clamp(1 - gate * 2.4), transform: `translateY(${gate * -36}px)` }}
-            dir="rtl"
+            dir={rtl ? 'rtl' : 'ltr'}
           >
-            <p className="font-serif text-2xl md:text-3xl font-bold text-white tracking-wide">מנוע מיפוי השוק המוסדי</p>
-            <p className="text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.3em]">נזילות · מבנה · דיוק</p>
+            <p className="font-serif text-2xl md:text-3xl font-bold text-white tracking-wide">{t('hero_tagline')}</p>
+            <p className="text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.3em]">{t('hero_pillars')}</p>
           </div>
-          <div className="absolute bottom-24 flex flex-col items-center gap-2" style={{ opacity: clamp(1 - gate * 3) }} dir="rtl">
-            <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.25em]">גלול כדי להיכנס</span>
+          <div className="absolute bottom-24 flex flex-col items-center gap-2" style={{ opacity: clamp(1 - gate * 3) }} dir={rtl ? 'rtl' : 'ltr'}>
+            <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.25em]">{t('hero_scroll')}</span>
             <span className="text-[#d4af37] text-lg animate-bounce">↓</span>
           </div>
         </div>
@@ -226,50 +239,50 @@ export default function LandingPage() {
       <section className="relative px-6 py-16 md:py-20">
         <Reveal className="max-w-3xl mx-auto text-center mb-12" >
           <span className="inline-block mb-5 px-4 py-1.5 border border-[#1c1c1e] text-xs font-bold font-mono tracking-[0.3em] text-[#d4af37] uppercase">
-            The Workspace
+            {t('ws_kicker')}
           </span>
-          <h2 className="font-serif text-[clamp(1.8rem,4.5vw,3rem)] font-bold text-white leading-tight" dir="rtl">
-            שולחן מסחר מוסדי. <span className="text-[#d4af37]">בזמן אמת.</span>
+          <h2 className="font-serif text-[clamp(1.8rem,4.5vw,3rem)] font-bold text-white leading-tight" dir={rtl ? 'rtl' : 'ltr'}>
+            {t('ws_title')} <span className="text-[#d4af37]">{t('ws_title_accent')}</span>
           </h2>
         </Reveal>
         <LivePreview />
       </section>
 
       {/* ════ ACT III — Core: Liquidity & Risk (solid, bold) ════ */}
-      <section className="relative px-6 py-16 md:py-20 border-t border-[#1c1c1e]" dir="rtl">
+      <section className="relative px-6 py-16 md:py-20 border-t border-[#1c1c1e]" dir={rtl ? 'rtl' : 'ltr'}>
         <div
           className="absolute inset-0 pointer-events-none -z-10"
           style={{ background: 'radial-gradient(60% 60% at 50% 40%, rgba(212,175,55,0.07), transparent 60%)' }}
         />
         <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 md:gap-14">
           <Reveal>
-            <h3 className="font-serif font-black leading-none text-[#d4af37] text-[clamp(3rem,8vw,6rem)] [text-shadow:0_0_40px_rgba(212,175,55,0.3)]">נזילות</h3>
+            <h3 className="font-serif font-black leading-none text-[#d4af37] text-[clamp(3rem,8vw,6rem)] [text-shadow:0_0_40px_rgba(212,175,55,0.3)]">{t('core_liq')}</h3>
             <p className="mt-5 text-lg font-bold text-[#c0c0c0] leading-relaxed tracking-wide">
-              איתור ומיפוי אלגוריתמי של מניפולציות שוק, sweeps של נזילות מוסדית ונקודות עניין בטווחי זמן גבוהים (HTF).
+              {t('core_liq_body')}
             </p>
           </Reveal>
           <Reveal delay={120}>
-            <h3 className="font-serif font-black leading-none text-white text-[clamp(3rem,8vw,6rem)] [text-shadow:0_0_30px_rgba(192,192,192,0.18)]">ניהול סיכונים</h3>
+            <h3 className="font-serif font-black leading-none text-white text-[clamp(3rem,8vw,6rem)] [text-shadow:0_0_30px_rgba(192,192,192,0.18)]">{t('core_risk')}</h3>
             <p className="mt-5 text-lg font-bold text-[#c0c0c0] leading-relaxed tracking-wide">
-              מחשבון ניהול סיכונים מובנה המסתנכרן ישירות למחירי הלייב של בורסת שיקגו למניעת טעויות אנוש בגודל הפוזיציה.
+              {t('core_risk_body')}
             </p>
           </Reveal>
         </div>
       </section>
 
       {/* ════ ACT IV — Capabilities density grid ════ */}
-      <section className="relative px-6 py-16 md:py-20 border-t border-[#1c1c1e]" dir="rtl">
+      <section className="relative px-6 py-16 md:py-20 border-t border-[#1c1c1e]" dir={rtl ? 'rtl' : 'ltr'}>
         <Reveal className="max-w-5xl mx-auto mb-10 text-center">
-          <span className="text-sm font-bold font-mono text-[#d4af37] uppercase tracking-[0.3em]">Core Capabilities</span>
-          <h2 className="font-serif text-[clamp(1.8rem,4.5vw,3rem)] font-bold text-white leading-tight mt-3">ארסנל מוסדי מלא</h2>
+          <span className="text-sm font-bold font-mono text-[#d4af37] uppercase tracking-[0.3em]">{t('caps_kicker')}</span>
+          <h2 className="font-serif text-[clamp(1.8rem,4.5vw,3rem)] font-bold text-white leading-tight mt-3">{t('caps_title')}</h2>
         </Reveal>
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden">
           {CAPABILITIES.map((c, i) => (
             <Reveal key={c.k} delay={(i % 3) * 90} className="h-full">
               <div className="h-full bg-[#000000] p-6 hover:bg-[#0d0d0f] transition-colors duration-500 group">
                 <span className="block font-mono text-sm font-bold text-[#d4af37] tracking-[0.3em] mb-4">{c.k}</span>
-                <h4 className="font-serif text-xl font-bold text-white mb-3 leading-tight group-hover:text-[#d4af37] transition-colors duration-500">{c.title}</h4>
-                <p className="text-base font-bold text-[#c0c0c0] leading-relaxed tracking-wide">{c.body}</p>
+                <h4 className="font-serif text-xl font-bold text-white mb-3 leading-tight group-hover:text-[#d4af37] transition-colors duration-500">{t(c.titleKey)}</h4>
+                <p className="text-base font-bold text-[#c0c0c0] leading-relaxed tracking-wide">{t(c.bodyKey)}</p>
               </div>
             </Reveal>
           ))}
@@ -289,31 +302,26 @@ export default function LandingPage() {
       </section>
 
       {/* ════ ACT V — Pricing tiers (checkout funnel) ════ */}
-      <section className="relative px-6 py-20 md:py-24 border-t border-[#1c1c1e] pb-40" dir="rtl">
+      <section className="relative px-6 py-20 md:py-24 border-t border-[#1c1c1e] pb-40" dir={rtl ? 'rtl' : 'ltr'}>
         <div
           className="absolute inset-0 pointer-events-none -z-10"
           style={{ background: 'radial-gradient(55% 55% at 50% 40%, rgba(212,175,55,0.10), transparent 60%)' }}
         />
         <Reveal className="max-w-3xl mx-auto text-center mb-14">
           <h2 className="font-serif text-[clamp(2rem,6vw,4.5rem)] font-bold text-white leading-[1.1]">
-            כל הקצה המוסדי.<br /><span className="text-[#d4af37]">במסך אחד.</span>
+            {t('cta_title')}<br /><span className="text-[#d4af37]">{t('cta_title_accent')}</span>
           </h2>
           <p className="mt-6 text-lg font-bold text-[#c0c0c0] leading-relaxed tracking-wide">
-            בחר את המסלול שלך והתחל לסחור עם הכלים של המוסדיים.
+            {t('cta_sub')}
           </p>
         </Reveal>
 
         <Reveal>
-          <PricingCards ctaHref="/checkout" ctaLabel="לרכישת מנוי ושדרוג המערכת ←" />
+          <PricingCards ctaHref="/checkout" />
         </Reveal>
 
-        <div className="text-center mt-10">
-          <Link href="/dashboard" className="text-sm font-bold font-mono text-white/55 uppercase tracking-[0.18em] hover:text-[#d4af37] transition-colors duration-500">
-            כניסה לדמו של שולחן המסחר ←
-          </Link>
-        </div>
-        <p className="mt-6 text-center text-xs font-bold font-mono text-white/35 uppercase tracking-[0.2em]">
-          נתוני הדגמה · לשימוש מחקרי וחינוכי בלבד
+        <p className="mt-10 text-center text-xs font-bold font-mono text-white/35 uppercase tracking-[0.2em]">
+          {t('demo_disclaimer')}
         </p>
       </section>
 
@@ -323,12 +331,12 @@ export default function LandingPage() {
       {/* ════ Sticky Dock CTA (follows the user) ════ */}
       <Link
         href="/checkout"
-        dir="rtl"
+        dir={rtl ? 'rtl' : 'ltr'}
         className="fixed bottom-7 left-1/2 z-50 origin-bottom will-change-transform flex flex-col items-center gap-1 px-9 py-3.5 rounded-sm bg-[#d4af37] text-black font-bold [box-shadow:0_0_40px_rgba(212,175,55,0.45)] hover:[box-shadow:0_0_60px_rgba(212,175,55,0.7)] transition-shadow duration-500"
         style={{ transform: `translate(-50%, 0) scale(${ctaScale})` }}
       >
-        <span className="font-serif text-lg font-bold tracking-wide leading-none">לרכישת מנוי ושדרוג המערכת ←</span>
-        <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-black/70">Upgrade · Onyx Trading</span>
+        <span className="font-serif text-lg font-bold tracking-wide leading-none">{t('cta_upgrade')} ←</span>
+        <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-black/70">{t('dock_sub')}</span>
       </Link>
     </main>
   );

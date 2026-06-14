@@ -114,6 +114,75 @@ export const DICT = {
   calc_pt_value:        { en: 'Point Value',             he: 'ערך נקודה'                     },
   calc_stop_level:      { en: 'Stop Level (long)',       he: 'רמת סטופ (לונג)'               },
   calc_spec_note:       { en: 'CME spec — ES $50/pt · MES $5/pt · NQ $20/pt · MNQ $2/pt', he: 'מפרט CME — ES $50/נק׳ · MES $5/נק׳ · NQ $20/נק׳ · MNQ $2/נק׳' },
+
+  // ── Landing: header / auth ───────────────────────────────────────
+  hdr_signin:           { en: 'System Access',            he: 'כניסה למערכת'                  },
+  hdr_signup:           { en: 'Request Access',           he: 'בקשת גישה'                     },
+  hdr_workspace:        { en: 'Enter Workspace',          he: 'כניסה לסביבת העבודה'           },
+
+  // ── Landing: hero ────────────────────────────────────────────────
+  hero_tagline:         { en: 'The Institutional Market-Mapping Engine', he: 'מנוע מיפוי השוק המוסדי' },
+  hero_pillars:         { en: 'Liquidity · Structure · Precision', he: 'נזילות · מבנה · דיוק'  },
+  hero_scroll:          { en: 'Scroll to enter',          he: 'גלול כדי להיכנס'               },
+
+  // ── Landing: workspace preview ───────────────────────────────────
+  ws_kicker:            { en: 'The Workspace',            he: 'סביבת העבודה'                  },
+  ws_title:             { en: 'An institutional trading desk.', he: 'שולחן מסחר מוסדי.'        },
+  ws_title_accent:      { en: 'In real time.',            he: 'בזמן אמת.'                     },
+
+  // ── Landing: core (liquidity / risk) ─────────────────────────────
+  core_liq:             { en: 'Liquidity',                he: 'נזילות'                        },
+  core_liq_body:        { en: 'Algorithmic detection and mapping of market manipulation, institutional liquidity sweeps, and points of interest across high time frames (HTF).', he: 'איתור ומיפוי אלגוריתמי של מניפולציות שוק, sweeps של נזילות מוסדית ונקודות עניין בטווחי זמן גבוהים (HTF).' },
+  core_risk:            { en: 'Risk Management',          he: 'ניהול סיכונים'                 },
+  core_risk_body:       { en: 'A built-in risk manager synced directly to live CME pricing, eliminating human error in position sizing.', he: 'מחשבון ניהול סיכונים מובנה המסתנכרן ישירות למחירי הלייב של בורסת שיקגו למניעת טעויות אנוש בגודל הפוזיציה.' },
+
+  // ── Landing: capabilities ────────────────────────────────────────
+  caps_kicker:          { en: 'Core Capabilities',        he: 'יכולות הליבה'                  },
+  caps_title:           { en: 'A complete institutional arsenal', he: 'ארסנל מוסדי מלא'        },
+  cap1_title:           { en: 'SMT Divergence',           he: 'דיברגנס SMT'                   },
+  cap1_body:            { en: 'Real-time divergence detection between ES and NQ at highs and lows — institutional confirmation of trend reversals.', he: 'זיהוי דיברגנס בזמן אמת בין ES ל־NQ בנקודות שיא ושפל — אישור מוסדי להיפוכי מגמה.' },
+  cap2_title:           { en: 'Multi-Timeframe Structure', he: 'מבנה מולטי־טיים־פריים'         },
+  cap2_body:            { en: 'BOS · CHoCH · MSS analysis across D1 · H4 · H1 and the execution frame, synthesized into one locked bias.', he: 'ניתוח BOS · CHoCH · MSS על פני D1 · H4 · H1 ופריים הביצוע, מסונתז להטיה אחת נעולה.' },
+  cap3_title:           { en: 'FVG Arrays',               he: 'מערכי FVG'                     },
+  cap3_body:            { en: 'Fair-value gaps, imbalances, iFVGs, and Consequent Encroachment (50%) points mapped onto the live chart.', he: 'פערי הוגנות, אימבלנס, iFVG ונקודות Consequent Encroachment (50%) ממופים על הגרף החי.' },
+  cap4_title:           { en: 'Order Blocks & Liquidity', he: 'בלוקי הזמנות ונזילות'           },
+  cap4_body:            { en: 'Mapping of Order Blocks, liquidity sweeps, and inducement pools across the high time frames.', he: 'מיפוי Order Blocks, sweeps של נזילות ובריכות אינדיוסמנט בטווחי הזמן הגבוהים.' },
+  cap5_title:           { en: 'Daily Macro Bias',         he: 'הטיית מאקרו יומית'             },
+  cap5_body:            { en: 'An institutional bias locked to closed H4 and D1 candles — no tick noise, only verified structure.', he: 'הטיה מוסדית נעולה לנרות H4 ו־D1 שנסגרו — ללא רעש טיק, רק מבנה מאומת.' },
+  cap6_title:           { en: 'Built-in Risk Management', he: 'ניהול סיכונים מובנה'           },
+  cap6_body:            { en: 'Position-sizing calculator per CME spec, synced directly to live ES and NQ pricing.', he: 'מחשבון גודל פוזיציה לפי מפרט CME, מסונכרן ישירות למחירי הלייב של ES ו־NQ.' },
+  spec_langs:           { en: 'Hebrew · English',         he: 'עברית · English'               },
+
+  // ── Landing: pricing CTA block ───────────────────────────────────
+  cta_title:            { en: 'Every institutional edge.', he: 'כל הקצה המוסדי.'               },
+  cta_title_accent:     { en: 'On one screen.',           he: 'במסך אחד.'                     },
+  cta_sub:              { en: 'Choose your plan and start trading with institutional tools.', he: 'בחר את המסלול שלך והתחל לסחור עם הכלים של המוסדיים.' },
+  cta_upgrade:          { en: 'Subscribe & Upgrade the System', he: 'לרכישת מנוי ושדרוג המערכת' },
+  dock_sub:             { en: 'Upgrade · Onyx Trading',   he: 'שדרוג · Onyx Trading'          },
+  demo_disclaimer:      { en: 'Demo data · For research and educational use only', he: 'נתוני הדגמה · לשימוש מחקרי וחינוכי בלבד' },
+
+  // ── Pricing tiers ────────────────────────────────────────────────
+  tier_premium_name:    { en: 'PREMIUM Plan',             he: 'מנוי PREMIUM'                  },
+  tier_premium_tag:     { en: 'Full Trading Access',      he: 'גישת מסחר מלאה'                },
+  tier_premium_sub:     { en: 'Everything you need to trade live.', he: 'כל הכלים שאתה צריך בשביל לסחור בלייב.' },
+  tier_premium_f1:      { en: 'Central trading dashboard', he: 'דשבורד המסחר המרכזי'           },
+  tier_premium_f2:      { en: 'Live ES & NQ futures chart sync', he: 'סינכרון גרפים חי של חוזי ES ו-NQ' },
+  tier_premium_f3:      { en: 'Built-in CME risk manager', he: 'מחשבון ניהול סיכונים CME מובנה' },
+  tier_premium_f4:      { en: 'Real-time macro news panel', he: 'פאנל חדשות מאקרו בזמן אמת'     },
+  tier_deluxe_name:     { en: 'DELUXE Plan',              he: 'מנוי DELUXE'                   },
+  tier_deluxe_tag:      { en: "The Professionals' Suite", he: 'חבילת המקצוענים'               },
+  tier_deluxe_badge:    { en: "Professionals' Choice",    he: 'הבחירה של המקצוענים'           },
+  tier_deluxe_sub:      { en: 'The most complete and advanced version of the system.', he: 'הגרסה המלאה והמתקדמת ביותר של המערכת.' },
+  tier_deluxe_f1:       { en: 'All Premium plan capabilities', he: 'כל יכולות מנוי ה-Premium'  },
+  tier_deluxe_f2:       { en: 'Exclusive access to the Analytics screen', he: 'גישה בלעדית למסך הניתוחים' },
+  tier_deluxe_f3:       { en: 'Digital trading journal for logging trades', he: 'יומן המסחר הדיגיטלי לתיעוד עסקאות' },
+  tier_deluxe_f4:       { en: 'Essential performance metrics bar (StatsBar)', he: 'שורת מדדי הביצוע החיוניים (StatsBar)' },
+  card_selected:        { en: 'Selected ✓',               he: 'נבחר ✓'                        },
+  card_select:          { en: 'Select Plan',              he: 'בחר מסלול'                     },
+
+  // ── Footer / legal ───────────────────────────────────────────────
+  legal_title:          { en: 'Legal Notice · Risk Disclaimer', he: 'הבהרה משפטית · Risk Disclaimer' },
+  legal_body:           { en: 'Risk Disclaimer: The information and tools presented in the ONYX TRADING system are intended for educational, research, and informational purposes only, and do not constitute in any way investment advice, financial or business advice, or a recommendation/solicitation to buy or sell securities, futures, or any other financial instrument. Trading in the capital markets involves high financial risk and may lead to full or partial loss of your funds. The company, its developers, and its owners bear no direct or indirect responsibility for any loss, damage, or financial harm resulting from use of the system, its indicators, or the data presented within it. Use of the system is at the sole responsibility of the user.', he: 'הבהרה משפטית וסרת אחריות (Risk Disclaimer): המידע והכלים המוצגים במערכת ONYX TRADING נועדו למטרות לימודיות, מחקריות ואינפורמטיביות בלבד, ואינם מהווים בשום אופן ייעוץ השקעות, ייעוץ פיננסי, עסקי, או המלצה/שידול לביצוע פעולות קנייה ומכירה בניירות ערך, חוזים עתידיים או כל מכשיר פיננסי אחר. המסחר בשוק ההון כרוך בסיכון כלכלי גבוה ועלול להוביל להפסד מלא או חלקי של כספך. החברה, מפתחיה או בעליה אינם נושאים באחריות ישירה או עקיפה לכל הפסד, נזק או אובדן כספי שייגרם כתוצאה משימוש במערכת, באינדיקטורים או בנתונים המוצגים בה. השימוש במערכת הוא על אחריותו הבלעדית של המשתמש בלבד.' },
 } satisfies Record<string, { en: string; he: string }>;
 
 export type DictKey = keyof typeof DICT;

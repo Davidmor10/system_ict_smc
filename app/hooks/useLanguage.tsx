@@ -11,13 +11,14 @@ interface LangCtx {
 }
 
 const Ctx = createContext<LangCtx>({
-  lang:   'en',
+  lang:   'he',
   toggle: () => {},
-  t:      (key) => _t('en', key),
+  t:      (key) => _t('he', key),
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>('en');
+  // Hebrew-first: all authored copy is Hebrew; English is the toggle target.
+  const [lang, setLang] = useState<Lang>('he');
   const toggle = () => setLang(l => l === 'en' ? 'he' : 'en');
   const t = (key: DictKey) => _t(lang, key);
   return <Ctx.Provider value={{ lang, toggle, t }}>{children}</Ctx.Provider>;

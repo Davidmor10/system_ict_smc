@@ -1,5 +1,10 @@
+import { dark } from '@clerk/themes';
+
 // Shared Clerk appearance — Onyx pitch-black + Institutional Gold (#d4af37).
+// `baseTheme: dark` forces a dark starting palette so auth modals never flash
+// white before our variables/elements apply.
 export const clerkAppearance = {
+  baseTheme: dark,
   variables: {
     colorPrimary: '#d4af37',
     colorBackground: '#0d0d0f',

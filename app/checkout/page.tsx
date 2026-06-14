@@ -4,12 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { TIERS, PricingCards } from '../components/Pricing';
 import LegalDisclaimer from '../components/LegalDisclaimer';
+import { useLanguage } from '../hooks/useLanguage';
 
 export default function CheckoutPage() {
+  const { t } = useLanguage();
   const [selected, setSelected] = useState<string>('deluxe');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const tier = TIERS.find(t => t.id === selected) ?? TIERS[0];
+  const tier = TIERS.find(tr => tr.id === selected) ?? TIERS[0];
 
   // Start a real Stripe Checkout session; fall back to the demo confirmation
   // whenever Stripe isn't configured yet or the request fails.
@@ -72,9 +74,9 @@ export default function CheckoutPage() {
         <div className="max-w-md mx-auto mt-10 rounded-xl border border-[#d4af37]/30 bg-[#0d0d0f] p-7 [box-shadow:0_0_60px_-18px_rgba(212,175,55,0.4)]" dir="rtl">
           <div className="flex items-center justify-between pb-4 border-b border-[#1c1c1e]">
             <span className="text-sm font-bold font-mono text-white/55 uppercase tracking-[0.2em]">המסלול שנבחר</span>
-            <span className="font-serif text-lg font-bold text-[#d4af37]">{tier.name}</span>
+            <span className="font-serif text-lg font-bold text-[#d4af37]">{t(tier.nameKey)}</span>
           </div>
-          <p className="text-base font-bold text-[#c0c0c0] leading-relaxed mt-4">{tier.subtitle}</p>
+          <p className="text-base font-bold text-[#c0c0c0] leading-relaxed mt-4">{t(tier.subtitleKey)}</p>
 
           {submitted ? (
             <div className="mt-6 flex flex-col gap-4 text-center">

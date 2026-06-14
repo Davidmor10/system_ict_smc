@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.3",
+    "@clerk/themes": "^2.4.57",
     "@supabase/supabase-js": "^2.108.1",
     "lightweight-charts": "^5.2.0",
     "next": "16.2.7",
