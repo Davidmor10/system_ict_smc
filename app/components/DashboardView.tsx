@@ -34,14 +34,13 @@ function ClockHUD({ clock, status }: { clock: string; status: SessionStatus }) {
 
 // ─── Chart panel wrapper ────────────────────────────────────────────────────
 
-function ChartPanel({ label, className = '', children }: {
-  label: string; className?: string; children: React.ReactNode;
+function ChartPanel({ className = '', children }: {
+  className?: string; children: React.ReactNode;
 }) {
+  // Symbol header bar (ES1! / NQ1!) intentionally removed — the bare chart
+  // fills the panel for a clean, header-free monochrome surface.
   return (
     <div className={`flex flex-col min-w-0 min-h-0 ${className}`}>
-      <div className="px-5 py-3 border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0 flex items-center">
-        <span className="font-serif text-[14px] font-bold tracking-[0.08em] text-white uppercase">{label}</span>
-      </div>
       <div className="flex-1 min-h-0 bg-[#000000]">{children}</div>
     </div>
   );
@@ -118,10 +117,10 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
           <div className="relative flex-1 min-w-0 min-h-0">
             {visible ? (
               <div className="flex h-full min-h-0">
-                <ChartPanel label="ES1! — S&P 500" className="flex-1 border-r border-[#1c1c1e]">
+                <ChartPanel className="flex-1 border-r border-[#1c1c1e]">
                   <SmcChart symbol="ES" interval="5" />
                 </ChartPanel>
-                <ChartPanel label="NQ1! — NASDAQ" className="flex-1">
+                <ChartPanel className="flex-1">
                   <SmcChart symbol="NQ" interval="5" />
                 </ChartPanel>
               </div>
@@ -131,7 +130,9 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
           </div>
         </div>
 
-        <PositionCalculator live={live} />
+        <div id="risk-calculator" className="scroll-mt-16">
+          <PositionCalculator live={live} />
+        </div>
       </div>
     </div>
   );

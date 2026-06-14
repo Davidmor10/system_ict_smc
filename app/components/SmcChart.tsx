@@ -12,23 +12,25 @@ interface Props {
   interval?: string;
 }
 
-// Monochromatic "Quiet Luxury" overrides — pitch-black, gridless, B&W candles.
+// ─── Immutable Monochrome Charting Protocol (system default) ────────────────
+// Hard-coded black & white candle scheme — no green/red coloring is ever used.
+// Bullish: white fill, white border, white wick.
+// Bearish: black fill, white border, white wick.
 const OVERRIDES = {
   'paneProperties.background': '#000000',
   'paneProperties.backgroundType': 'solid',
   'paneProperties.vertGridProperties.color': 'rgba(0,0,0,0)',
   'paneProperties.horzGridProperties.color': 'rgba(0,0,0,0)',
 
-  // Bullish — solid white (body, border, wick)
-  'mainSeriesProperties.candleStyle.upColor':       '#ffffff',
-  'mainSeriesProperties.candleStyle.borderUpColor': '#ffffff',
-  'mainSeriesProperties.candleStyle.wickUpColor':   '#ffffff',
+  // Bullish — white body, white border + wick
+  'mainSeriesProperties.candleStyle.upColor':       '#FFFFFF',
+  'mainSeriesProperties.candleStyle.borderUpColor': '#FFFFFF',
+  'mainSeriesProperties.candleStyle.wickUpColor':   '#FFFFFF',
 
-  // Bearish — rich charcoal body with a sharp contrasting border/wick so it
-  // stays fully legible against the pitch-black background.
-  'mainSeriesProperties.candleStyle.downColor':       '#1c1c1e',
-  'mainSeriesProperties.candleStyle.borderDownColor': '#787878',
-  'mainSeriesProperties.candleStyle.wickDownColor':   '#787878',
+  // Bearish — black body, white border + wick (legible against pitch-black bg)
+  'mainSeriesProperties.candleStyle.downColor':       '#000000',
+  'mainSeriesProperties.candleStyle.borderDownColor': '#FFFFFF',
+  'mainSeriesProperties.candleStyle.wickDownColor':   '#FFFFFF',
 
   'mainSeriesProperties.candleStyle.drawBorder': true,
   'mainSeriesProperties.candleStyle.drawWick':   true,
@@ -67,7 +69,7 @@ function SmcChart({ symbol, interval = '5' }: Props) {
       backgroundColor: '#000000',
       gridColor: 'rgba(0,0,0,0)',
       hide_side_toolbar: true,
-      hide_top_toolbar: false,
+      hide_top_toolbar: true,
       hide_legend: false,
       hide_volume: true,
       allow_symbol_change: false,

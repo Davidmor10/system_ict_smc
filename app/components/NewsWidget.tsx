@@ -7,7 +7,7 @@ export default function NewsWidget() {
   const groups = getHighImpactUsdEvents();
 
   return (
-    <aside className="w-72 shrink-0 flex flex-col border-r border-[#1c1c1e] bg-[#0d0d0f] overflow-y-auto">
+    <aside id="market-intel" className="w-72 shrink-0 flex flex-col border-r border-[#1c1c1e] bg-[#0d0d0f] overflow-y-auto scroll-mt-16">
 
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-[#1c1c1e]">

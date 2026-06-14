@@ -177,14 +177,13 @@ function LivePreview() {
   );
 }
 
-// ─── Capabilities data ──────────────────────────────────────────────────────
-const CAPABILITIES: { k: string; titleKey: DictKey; bodyKey: DictKey }[] = [
-  { k: '01', titleKey: 'cap1_title', bodyKey: 'cap1_body' },
-  { k: '02', titleKey: 'cap2_title', bodyKey: 'cap2_body' },
-  { k: '03', titleKey: 'cap3_title', bodyKey: 'cap3_body' },
-  { k: '04', titleKey: 'cap4_title', bodyKey: 'cap4_body' },
-  { k: '05', titleKey: 'cap5_title', bodyKey: 'cap5_body' },
-  { k: '06', titleKey: 'cap6_title', bodyKey: 'cap6_body' },
+// ─── Workspace modules ──────────────────────────────────────────────────────
+// Click-to-navigate cards linked to their respective dashboard sub-routes.
+const CAPABILITIES: { k: string; titleKey: DictKey; bodyKey: DictKey; href: string }[] = [
+  { k: '01', titleKey: 'cap1_title', bodyKey: 'cap1_body', href: '/dashboard/journal' },
+  { k: '02', titleKey: 'cap2_title', bodyKey: 'cap2_body', href: '/dashboard#risk-calculator' },
+  { k: '03', titleKey: 'cap3_title', bodyKey: 'cap3_body', href: '/dashboard#market-intel' },
+  { k: '04', titleKey: 'cap4_title', bodyKey: 'cap4_body', href: '/dashboard/analytics' },
 ];
 
 // ─── Landing ─────────────────────────────────────────────────────────────────
@@ -194,7 +193,7 @@ export default function LandingPage() {
   const { y, vh } = useScroll();
   const gate = clamp(y / (vh * 0.6));          // Onyx Gate vanish (tight)
   const ctaScale = 1.18 - clamp(y / vh) * 0.30;
-  const SPECS = ['ES', 'NQ', 'CME Futures', '5M → D1', 'Real-time Sync', t('spec_langs')];
+  const SPECS = ['ES', 'NQ', 'CME Futures', '5M → Daily', 'Real-time Sync', t('spec_langs')];
 
   return (
     <main className="relative bg-[#000000] text-white overflow-x-hidden">
@@ -276,14 +275,20 @@ export default function LandingPage() {
           <span className="text-sm font-bold font-mono text-[#d4af37] uppercase tracking-[0.3em]">{t('caps_kicker')}</span>
           <h2 className="font-serif text-[clamp(1.8rem,4.5vw,3rem)] font-bold text-white leading-tight mt-3">{t('caps_title')}</h2>
         </Reveal>
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden">
           {CAPABILITIES.map((c, i) => (
-            <Reveal key={c.k} delay={(i % 3) * 90} className="h-full">
-              <div className="h-full bg-[#000000] p-6 hover:bg-[#0d0d0f] transition-colors duration-500 group">
+            <Reveal key={c.k} delay={(i % 2) * 90} className="h-full">
+              <Link
+                href={c.href}
+                className="flex h-full flex-col bg-[#000000] p-6 hover:bg-[#0d0d0f] transition-colors duration-500 group"
+              >
                 <span className="block font-mono text-sm font-bold text-[#d4af37] tracking-[0.3em] mb-4">{c.k}</span>
-                <h4 className="font-serif text-xl font-bold text-white mb-3 leading-tight group-hover:text-[#d4af37] transition-colors duration-500">{t(c.titleKey)}</h4>
+                <h4 className="font-mono text-xl font-bold uppercase tracking-[0.06em] text-white mb-3 leading-tight group-hover:text-[#d4af37] transition-colors duration-500">{t(c.titleKey)}</h4>
                 <p className="text-base font-bold text-[#c0c0c0] leading-relaxed tracking-wide">{t(c.bodyKey)}</p>
-              </div>
+                <span className="mt-5 inline-flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-[0.25em] text-[#d4af37] opacity-60 group-hover:opacity-100 transition-opacity duration-500">
+                  {t('cap_open')} <span aria-hidden>{rtl ? '←' : '→'}</span>
+                </span>
+              </Link>
             </Reveal>
           ))}
         </div>
