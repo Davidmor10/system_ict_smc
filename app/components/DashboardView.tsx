@@ -6,6 +6,20 @@ import SmcChart from './SmcChart';
 import TickerWidget from './TickerWidget';
 import PositionCalculator from './PositionCalculator';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
+import { useMarketStatus } from '../hooks/useMarketStatus';
+
+// ─── Market-closed fallback (weekend) — mirrors ClockHUD's design tokens ─────
+
+function MarketClosedHUD({ nextOpenLabel }: { nextOpenLabel: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5 shrink-0">
+      <span className="h-2 w-2 rounded-full bg-white/40" />
+      <span className="text-sm font-bold font-mono text-white/80 uppercase tracking-[0.18em]">Market Closed</span>
+      <span className="h-3 w-px bg-[#d4af37]/20" />
+      <span className="text-sm font-black font-mono text-[#d4af37] uppercase tracking-[0.14em] tabular-nums">{nextOpenLabel}</span>
+    </div>
+  );
+}
 
 // ─── Institutional clock + session countdown HUD ────────────────────────────
 
@@ -67,6 +81,7 @@ function SessionGate() {
 // so the macro feed renders server-side even though this view is client-only.
 export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }) {
   const live = useLivePrices();
+  const { isMarketOpen, nextOpenLabel } = useMarketStatus();
 
   const [clock, setClock] = useState(() => israelClock());
   const [override, setOverride] = useState(false);
@@ -77,19 +92,27 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
     return () => clearInterval(id);
   }, []);
 
-  const status  = getSessionStatus(clock.sec);
-  const visible = override || status.inSession;
-  const isDev   = process.env.NODE_ENV !== 'production';
+  const status     = getSessionStatus(clock.sec);
+  const marketOpen = override || isMarketOpen;             // weekend gate (dev override bypasses)
+  const visible    = override || (isMarketOpen && status.inSession);
+  const isDev      = process.env.NODE_ENV !== 'production';
 
   return (
     <div className="flex flex-col h-full bg-[#000000] text-[#c0c0c0] overflow-hidden">
 
       {/* Header — TradingView tickers + clock HUD */}
       <header className="flex items-center justify-between gap-6 px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+        {/* Live tickers — unmounted on weekends so no idle TradingView streams run */}
         <div className="flex items-center gap-4 min-w-0">
-          <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:ES1!" /></div>
-          <div className="h-12 w-px bg-[#1c1c1e] shrink-0" />
-          <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:NQ1!" /></div>
+          {marketOpen ? (
+            <>
+              <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:ES1!" /></div>
+              <div className="h-12 w-px bg-[#1c1c1e] shrink-0" />
+              <div className="w-64 shrink-0"><TickerWidget symbol="CME_MINI:NQ1!" /></div>
+            </>
+          ) : (
+            <MarketClosedHUD nextOpenLabel={nextOpenLabel} />
+          )}
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
@@ -104,7 +127,8 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
               עקוף סשן (פיתוח)
             </button>
           )}
-          <ClockHUD clock={clock.clock} status={status} />
+          {/* Live session countdown — replaced by the closed indicator on weekends */}
+          {marketOpen && <ClockHUD clock={clock.clock} status={status} />}
         </div>
       </header>
 

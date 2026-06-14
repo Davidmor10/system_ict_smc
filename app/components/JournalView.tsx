@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMarketStream } from '../hooks/useMarketStream';
-import type { Bias, SessionName, SMTState, ConfluenceState } from '../hooks/useMarketStream';
+import type { Bias, SessionName } from '../hooks/useMarketStream';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -75,9 +75,9 @@ const usd = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, signDisplay: 'always' })
     .format(Number.isFinite(n) ? n : 0);
 
-// ─── Performance stats bar ─────────────────────────────────────────────────────
-
-function StatsBar({ trades }: { trades: TradeEntry[] }) {
+// Aggregate realized performance across all closed trades — shared by the top
+// stats bar and the sidebar summary so the two can never disagree.
+function computeStats(trades: TradeEntry[]) {
   const closed  = trades.filter(t => t.result !== 'OPEN');
   const wins    = closed.filter(t => t.result === 'WIN').length;
   const losses  = closed.filter(t => t.result === 'LOSS').length;
@@ -90,21 +90,20 @@ function StatsBar({ trades }: { trades: TradeEntry[] }) {
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
   const totalPnL  = pnls.reduce((a, b) => a + b, 0);
 
-  const heroes: { label: string; val: string }[] = [
-    { label: 'Win Rate',      val: `${winRate.toFixed(1)}%` },
-    { label: 'Profit Factor', val: profitFactor === Infinity ? '∞' : profitFactor.toFixed(2) },
-    { label: 'Total PnL',     val: usd(totalPnL) },
-  ];
+  return { wins, losses, winRate, profitFactor, totalPnL };
+}
+
+const fmtWinRate      = (n: number) => `${n.toFixed(1)}%`;
+const fmtProfitFactor = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
+
+// ─── Top bar — trade volume only (performance lives in the sidebar) ─────────────
+
+function StatsBar({ trades }: { trades: TradeEntry[] }) {
+  const { wins, losses } = computeStats(trades);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
-      {heroes.map(s => (
-        <div key={s.label} className="bg-[#000000] px-5 py-4 flex flex-col gap-1.5">
-          <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.18em]">{s.label}</span>
-          <span className={`text-3xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>{s.val}</span>
-        </div>
-      ))}
-      <div className="bg-[#000000] px-5 py-4 flex flex-col gap-1.5">
+    <div className="flex items-center gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
+      <div className="bg-[#000000] px-6 py-4 flex flex-col gap-1.5">
         <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.18em]">Trades</span>
         <span className="text-3xl font-black font-mono tabular-nums text-white">
           {trades.length}
@@ -115,138 +114,106 @@ function StatsBar({ trades }: { trades: TradeEntry[] }) {
   );
 }
 
-// ─── Live Signal sidebar ──────────────────────────────────────────────────────
+// ─── Performance summary sidebar ───────────────────────────────────────────────
 
-function SignalSidebar({
-  smt, confluence,
-  esPrice, nqPrice,
-  esBias, nqBias,
-  esSessionHigh, esSessionLow,
-  nqSessionHigh, nqSessionLow,
-  esHighSwept, esLowSwept,
-  nqHighSwept, nqLowSwept,
-  sessionLabel,
-}: {
-  smt: SMTState; confluence: ConfluenceState;
-  esPrice: number; nqPrice: number;
-  esBias: Bias; nqBias: Bias;
-  esSessionHigh: number | null; esSessionLow: number | null;
-  nqSessionHigh: number | null; nqSessionLow: number | null;
-  esHighSwept: boolean; esLowSwept: boolean;
-  nqHighSwept: boolean; nqLowSwept: boolean;
-  sessionLabel: string;
-}) {
+function PerformanceSidebar({ trades }: { trades: TradeEntry[] }) {
+  const { winRate, profitFactor, totalPnL } = computeStats(trades);
+
+  const metrics: { label: string; val: string; accent: string }[] = [
+    { label: 'Win Rate',      val: fmtWinRate(winRate),           accent: GOLD_GLOW },
+    { label: 'Profit Factor', val: fmtProfitFactor(profitFactor), accent: GOLD_GLOW },
+    // Total PnL keeps the gold hero glow but flips to bearish red when negative.
+    { label: 'Total PnL',     val: usd(totalPnL),                 accent: totalPnL < 0 ? 'text-bearish' : GOLD_GLOW },
+  ];
+
   return (
-    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-5 px-5 py-5 overflow-y-auto bg-[#000000]">
+    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-6 px-6 py-8 overflow-y-auto bg-[#000000]">
 
-      {/* Bias snapshot */}
-      <div className="flex flex-col gap-2">
-        <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white border-b border-[#1c1c1e] pb-2">
-          Live Bias
-        </span>
-        {([['ES', esBias, esPrice], ['NQ', nqBias, nqPrice]] as [string, Bias, number][]).map(([sym, b, p]) => (
-          <div key={sym} className="flex items-center justify-between py-1.5 border-b border-[#1c1c1e] last:border-0">
-            <span className="text-sm font-bold font-mono text-white/70 uppercase tracking-wider w-7 shrink-0">{sym}</span>
-            <span className={`text-base font-bold font-mono ${biasCls(b as Bias)}`}>
-              {b === 'BULLISH' ? '▲' : b === 'BEARISH' ? '▼' : '◈'} {b}
-            </span>
-            <span className="text-base font-bold font-mono text-white tabular-nums">{(p as number).toFixed(2)}</span>
+      <span className="text-sm font-bold font-mono uppercase tracking-[0.22em] text-white border-b border-[#1c1c1e] pb-3">
+        Performance Summary
+      </span>
+
+      {/* Minimalist vertical stack — one compact indicator per metric */}
+      <div className="flex flex-col gap-3">
+        {metrics.map(m => (
+          <div
+            key={m.label}
+            className="flex flex-col gap-1.5 rounded-lg border border-[#1c1c1e] bg-[#0d0d0f] px-4 py-3.5"
+          >
+            <span className="text-xs font-bold font-mono text-white/55 uppercase tracking-[0.18em]">{m.label}</span>
+            <span className={`text-2xl font-black font-mono tabular-nums ${m.accent}`}>{m.val}</span>
           </div>
         ))}
-      </div>
-
-      {/* Confluence checklist */}
-      <div className={`flex flex-col gap-2 rounded border p-4 transition-all duration-700 ease-in-out ${confluence.active ? 'border-[#d4af37]/35 bg-[#d4af37]/5' : 'border-[#1c1c1e]'}`}>
-        <div className="flex items-center justify-between">
-          <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">Confluence</span>
-          <span className={`text-sm font-bold font-mono ${confluence.score === 3 ? 'text-[#d4af37]' : confluence.score === 2 ? 'text-[#d4af37]/70' : 'text-white/50'}`}>
-            {confluence.score}/3
-          </span>
-        </div>
-        {confluence.active && (
-          <span className="text-sm font-bold font-mono text-[#d4af37] tracking-[0.15em]">◈ ENTRY SIGNAL</span>
-        )}
-        {[
-          { label: 'HTF Zone Aligned', on: confluence.htfZoneAligned },
-          { label: 'Liquidity Sweep',  on: confluence.liquiditySweep },
-          { label: 'SMT Divergence',   on: confluence.smtDivergence  },
-        ].map(r => (
-          <div key={r.label} className="flex items-center gap-2">
-            <span className={`text-sm font-bold transition-all duration-700 ease-in-out ${r.on ? 'text-[#d4af37]' : 'text-white/25'}`}>{r.on ? '✓' : '○'}</span>
-            <span className={`text-sm font-bold font-mono tracking-wider transition-all duration-700 ease-in-out ${r.on ? 'text-white' : 'text-white/50'}`}>{r.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* SMT alert */}
-      {smt.active && smt.type && (
-        <div className="rounded border border-[#d4af37]/25 bg-[#d4af37]/5 p-4 flex flex-col gap-2">
-          <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">SMT Divergence</span>
-          <span className={`text-base font-bold font-mono ${smt.type === 'BULLISH_SMT' ? 'text-bullish' : 'text-bearish'}`}>
-            {smt.type.replace('_', ' ')}
-          </span>
-          <p className="text-sm font-bold font-mono text-[#c0c0c0] leading-relaxed tracking-wide">
-            {smt.type === 'BULLISH_SMT'
-              ? 'ES swept SSL; NQ held. Watch for bullish reversal.'
-              : 'ES swept BSL; NQ failed to confirm. Bearish div.'}
-          </p>
-        </div>
-      )}
-
-      {/* Active session liq */}
-      <div className="flex flex-col gap-2">
-        <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white border-b border-[#1c1c1e] pb-2">
-          {sessionLabel}
-        </span>
-        {esSessionHigh !== null ? (
-          <>
-            <div className="flex justify-between text-sm font-bold font-mono">
-              <span className="text-white/70">ES BSL</span>
-              <span className={`tabular-nums ${esHighSwept ? 'text-white/40 line-through' : 'text-bearish'}`}>
-                {esSessionHigh.toFixed(2)}{esHighSwept ? ' swept' : ''}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm font-bold font-mono">
-              <span className="text-white/70">ES SSL</span>
-              <span className={`tabular-nums ${esLowSwept ? 'text-white/40 line-through' : 'text-bullish'}`}>
-                {esSessionLow?.toFixed(2)}{esLowSwept ? ' swept' : ''}
-              </span>
-            </div>
-          </>
-        ) : (
-          <span className="text-sm font-bold font-mono text-white/50 tracking-wider">No session data</span>
-        )}
-        {nqSessionHigh !== null && (
-          <>
-            <div className="flex justify-between text-sm font-bold font-mono">
-              <span className="text-white/70">NQ BSL</span>
-              <span className={`tabular-nums ${nqHighSwept ? 'text-white/40 line-through' : 'text-bearish'}`}>
-                {nqSessionHigh.toFixed(2)}{nqHighSwept ? ' swept' : ''}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm font-bold font-mono">
-              <span className="text-white/70">NQ SSL</span>
-              <span className={`tabular-nums ${nqLowSwept ? 'text-white/40 line-through' : 'text-bullish'}`}>
-                {nqSessionLow?.toFixed(2)}{nqLowSwept ? ' swept' : ''}
-              </span>
-            </div>
-          </>
-        )}
       </div>
 
     </aside>
   );
 }
 
+// ─── Trade snapshot — drag-and-drop chart attachment (local preview only) ───────
+// UI placeholder: no server upload yet. Holds an in-memory object URL so the
+// user can attach/preview a chart screenshot per entry.
+
+function ChartUpload() {
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Revoke the object URL when it changes or the component unmounts (no leaks).
+  useEffect(() => {
+    return () => { if (preview) URL.revokeObjectURL(preview.url); };
+  }, [preview]);
+
+  const handleFile = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    setPreview({ url: URL.createObjectURL(file), name: file.name });
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">Chart</label>
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]); }}
+        className={`flex items-center gap-2 h-[38px] px-3 rounded border border-dashed cursor-pointer transition-all duration-300 ${
+          dragOver ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] bg-[#1c1c1e] hover:border-[#d4af37]/50'
+        }`}
+        title="Drag & drop an image, or click to browse"
+      >
+        {preview ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview.url} alt="chart preview" className="h-6 w-6 rounded-sm object-cover border border-[#d4af37]/30" />
+            <span className="text-sm font-bold font-mono text-white/80 max-w-[110px] truncate">{preview.name}</span>
+            <button
+              onClick={e => { e.stopPropagation(); setPreview(null); }}
+              className="ml-1 text-sm font-bold text-white/40 hover:text-bearish transition-colors"
+              aria-label="Remove chart"
+            >
+              ✕
+            </button>
+          </>
+        ) : (
+          <span className="text-sm font-bold font-mono text-[#d4af37]/70 tracking-wide whitespace-nowrap">⬆ Upload Chart</span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => handleFile(e.target.files?.[0])}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function JournalView() {
-  const {
-    esDailyBias, nqDailyBias,
-    esBiasFactors, nqBiasFactors,
-    smt, confluence,
-    currentPrice, nqCurrentPrice,
-  } = useMarketStream();
+  const { esDailyBias } = useMarketStream();
 
   const [trades, setTrades]   = useState<TradeEntry[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -267,9 +234,6 @@ export default function JournalView() {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   const nowStr = new Date().toTimeString().slice(0, 5);
-
-  const esLiq = session ? esBiasFactors.sessionLiq.find(s => s.session === session) : null;
-  const nqLiq = session ? nqBiasFactors.sessionLiq.find(s => s.session === session) : null;
 
   function setField(key: string, val: string) {
     setDraft(d => ({ ...d, [key]: val }));
@@ -322,24 +286,8 @@ export default function JournalView() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* Signal sidebar */}
-        <SignalSidebar
-          smt={smt}
-          confluence={confluence}
-          esPrice={currentPrice}
-          nqPrice={nqCurrentPrice}
-          esBias={esDailyBias.bias}
-          nqBias={nqDailyBias.bias}
-          esSessionHigh={esLiq?.high ?? null}
-          esSessionLow={esLiq?.low ?? null}
-          nqSessionHigh={nqLiq?.high ?? null}
-          nqSessionLow={nqLiq?.low ?? null}
-          esHighSwept={esLiq?.highSwept ?? false}
-          esLowSwept={esLiq?.lowSwept ?? false}
-          nqHighSwept={nqLiq?.highSwept ?? false}
-          nqLowSwept={nqLiq?.lowSwept ?? false}
-          sessionLabel={sessionLabel}
-        />
+        {/* Performance summary sidebar */}
+        <PerformanceSidebar trades={trades} />
 
         {/* Trade log */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -387,6 +335,10 @@ export default function JournalView() {
                   )}
                 </div>
               ))}
+
+              {/* Trade snapshot attachment (UI only — no upload yet) */}
+              <ChartUpload />
+
               <button
                 onClick={submitTrade}
                 className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-bullish/12 text-bullish border border-bullish/30 rounded hover:bg-bullish/20 transition-all duration-700 ease-in-out"

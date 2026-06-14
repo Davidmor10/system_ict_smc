@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, memo } from 'react';
 
+// Index CFD tickers (continuous, non-futures) — display as "SPX500" / "US100"
+// instead of the "ES1!" / "NQ1!" futures symbols.
 const SYMBOLS: Record<string, string> = {
-  ES: 'CAPITALCOM:US500',
+  ES: 'FOREXCOM:SPX500',
   NQ: 'CAPITALCOM:US100',
 };
 
@@ -70,7 +72,7 @@ function SmcChart({ symbol, interval = '5' }: Props) {
       gridColor: 'rgba(0,0,0,0)',
       hide_side_toolbar: true,
       hide_top_toolbar: true,
-      hide_legend: false,
+      hide_legend: true,    // hides the in-chart symbol legend ("ES1! S&P 500 E-MINI FUTURES")
       hide_volume: true,
       allow_symbol_change: false,
       save_image: false,
