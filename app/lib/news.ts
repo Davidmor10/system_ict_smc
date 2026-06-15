@@ -8,8 +8,10 @@
 // hardcoded at the call site — it is computed from the system clock each render.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { z } from 'zod';
 import type { DateRange } from './dateUtils';
 import { addIsoDays } from './dateUtils';
+import { logger } from './logger';
 
 export type Impact = 'High' | 'Medium' | 'Low';
 
@@ -101,105 +103,219 @@ function buildMockFeed(range: DateRange): EconomicEvent[] {
   }));
 }
 
-// ── External feed: shape + normalization ─────────────────────────────────────
-// Forex Factory has no public API, so this targets an intermediary that mirrors
-// the well-known weekly JSON (faireconomy / "FFCal"-style). Field names below
-// match that schema; if your provider differs, this is the ONE place to adjust.
-
-/** Raw row as the intermediary delivers it. Everything optional — feeds vary. */
-interface ForexFactoryEvent {
-  title?: string;
-  /** FF puts the currency code here, e.g. `"USD"`. */
-  country?: string;
-  /** ISO 8601 with a US-Eastern offset, e.g. `"2026-06-17T08:30:00-04:00"`. */
-  date?: string;
-  /** `"High" | "Medium" | "Low" | "Holiday"` (casing varies by provider). */
-  impact?: string;
-  forecast?: string;
-  previous?: string;
-  actual?: string;
-}
+// ── External feed: schema + normalization ───────────────────────────────────
+// Each Apify dataset item is a keyed object. We validate it at runtime with Zod
+// before trusting it, so an upstream schema change surfaces as a logged,
+// pinpointed mismatch instead of a silent `undefined` propagating downstream.
 
 const IMPACT_MAP: Record<string, Impact> = { high: 'High', medium: 'Medium', low: 'Low' };
-const KNOWN_CURRENCIES = new Set<string>(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY']);
+const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY'] as const;
 
-function emptyToNull(value: string | undefined): string | null {
-  const trimmed = (value ?? '').trim();
-  return trimmed === '' ? null : trimmed;
+/**
+ * Runtime schema for ONE Forex Factory dataset item from the actor.
+ *
+ * - Core fields (`date`, `currency`, `impact`, `title`) are required — an item
+ *   missing any of these is unusable and rejected.
+ * - Outcome fields (`actual`/`forecast`/`previous`) are `string | number | null`
+ *   and optional; feeds send `""`, `null`, or omit them interchangeably.
+ * - `eventId` may be a string or number depending on the actor.
+ * - Unknown keys ("…etc.") are stripped by `z.object`, not an error.
+ */
+const ForexFactoryItemSchema = z.object({
+  eventId: z.union([z.string(), z.number()]).optional(),
+  url: z.string().optional(),
+  date: z.string(),
+  time: z.string().optional(),
+  timestamp: z.union([z.string(), z.number()]).optional(),
+  currency: z.string(),
+  impact: z.string(),
+  title: z.string(),
+  actual: z.union([z.string(), z.number()]).nullish(),
+  forecast: z.union([z.string(), z.number()]).nullish(),
+  previous: z.union([z.string(), z.number()]).nullish(),
+});
+
+/** A single validated item (the shape `normalizeEvent` consumes). */
+export type ForexFactoryEvent = z.infer<typeof ForexFactoryItemSchema>;
+
+/** The full Apify response: an array of dataset items. */
+export type ForexFactoryApiResponse = ForexFactoryEvent[];
+
+/**
+ * Validate the unwrapped dataset items against the schema. Validates per-item so
+ * one malformed row doesn't discard the whole batch; every rejected row is
+ * logged with its array index and the exact Zod issues (path + message).
+ */
+function validateItems(items: unknown[]): ForexFactoryApiResponse {
+  const valid: ForexFactoryApiResponse = [];
+  for (let i = 0; i < items.length; i++) {
+    const result = ForexFactoryItemSchema.safeParse(items[i]);
+    if (result.success) {
+      valid.push(result.data);
+    } else {
+      logger.warn('apify.calendar.item_schema_mismatch', {
+        index: i,
+        issues: result.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          code: issue.code,
+          message: issue.message,
+        })),
+      });
+    }
+  }
+  return valid;
 }
 
-/** Split an Eastern-offset timestamp into `YYYY-MM-DD` + `HH:mm`, both in ET. */
-function splitEastern(d: Date): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(d);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  const hour = get('hour') === '24' ? '00' : get('hour'); // some runtimes emit "24"
-  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${hour}:${get('minute')}` };
+/** Trim a string/number outcome value; treat blanks and placeholders as null. */
+function cleanMetric(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  // Empty or pure placeholder dashes carry no data.
+  if (text === '' || /^[-–—]$/.test(text)) return null;
+  return text;
 }
 
 /**
- * Map one external row onto our `EconomicEvent`. Returns `null` for rows we
- * can't trust (missing fields, bad date, currency outside our coverage) so a
- * single malformed entry never poisons the feed.
+ * Map ONE Zod-validated item onto our `EconomicEvent`. The data is already
+ * shape-checked, so this is pure field mapping. Returns `null` only for a
+ * currency outside our coverage set (the `Currency` union must hold).
+ *
+ * Outcome values (`actual`/`forecast`/`previous`) are kept as display tokens
+ * (`"0.3%"`, `"224K"`, `"<5.50%"`) — see note on numeric handling below.
  */
 function normalizeEvent(raw: ForexFactoryEvent, index: number): EconomicEvent | null {
-  if (!raw.title || !raw.date || !raw.country) return null;
+  const currency = raw.currency.trim().toUpperCase();
+  if (!(KNOWN_CURRENCIES as readonly string[]).includes(currency)) return null;
 
-  const parsed = new Date(raw.date);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  const currency = raw.country.trim().toUpperCase();
-  if (!KNOWN_CURRENCIES.has(currency)) return null;
-
-  const { date, time } = splitEastern(parsed);
+  const date = raw.date.slice(0, 10); // tolerate "YYYY-MM-DD" or a full ISO timestamp
+  const time = (raw.time ?? '').trim() || 'All Day';
 
   return {
-    id: `ff-${date}-${index}`,
+    id: `ff-${raw.eventId ?? `${date}-${index}`}`,
     date,
-    time,
+    time, // as the actor reports it (FF display zone); no timezone math applied
     currency: currency as Currency,
-    impact: IMPACT_MAP[(raw.impact ?? '').toLowerCase()] ?? 'Low', // unknown → Low (filtered out)
+    impact: IMPACT_MAP[raw.impact.trim().toLowerCase()] ?? 'Low', // unknown → Low (filtered out)
     title: raw.title.trim(),
-    forecast: emptyToNull(raw.forecast),
-    previous: emptyToNull(raw.previous),
-    actual: emptyToNull(raw.actual),
+    forecast: cleanMetric(raw.forecast),
+    previous: cleanMetric(raw.previous),
+    actual: cleanMetric(raw.actual),
   };
 }
 
 // ── Data-fetching layer ──────────────────────────────────────────────────────
 
+/** How many times to re-attempt a failed request before giving up. */
+const FETCH_RETRIES = 1;
+/** ISR window: re-run the actor at most once an hour (seconds). */
+const REVALIDATE_SECONDS = 3600;
+
+/** Error carrying the upstream HTTP status, for structured logging. */
+class HttpError extends Error {
+  constructor(readonly status: number, readonly statusText: string) {
+    super(`Apify run-sync responded ${status} ${statusText}`);
+    this.name = 'HttpError';
+  }
+}
+
 /**
- * The single integration seam. Fetches the raw calendar for `range` from the
- * intermediary and normalizes it to `EconomicEvent[]`. Throws on a failed
+ * GET the URL with hourly ISR caching, retrying once on failure. A retry covers
+ * both a thrown network error and a non-2xx response. Throws if every attempt
+ * fails, so the caller can fall back to the "unavailable" state.
+ */
+async function fetchWithRetry(url: URL, retries = FETCH_RETRIES): Promise<Response> {
+  // ⚠️ TEMP DEBUG — log the exact URL with the token redacted (never print the
+  //    raw token; it can leak into terminal scrollback / log aggregators).
+  const safeUrl = new URL(url);
+  if (safeUrl.searchParams.has('token')) safeUrl.searchParams.set('token', '***REDACTED***');
+  console.log('[DEBUG fetchNews] requesting:', safeUrl.toString());
+
+  try {
+    // ⚠️ TEMP DEBUG — `cache: 'no-store'` forces a real network call on every
+    //    render. Restore `next: { revalidate: REVALIDATE_SECONDS, tags: [...] }`
+    //    when done debugging, or the cache will hide live changes.
+    const res = await fetch(url, { cache: 'no-store' });
+    // const res = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS, tags: ['macro-calendar'] } });
+
+    console.log('[DEBUG fetchNews] response status:', res.status, res.statusText); // ⚠️ TEMP DEBUG
+    if (!res.ok) throw new HttpError(res.status, res.statusText);
+    return res;
+  } catch (err) {
+    // ⚠️ TEMP DEBUG — full stack so the exact failure is visible in the terminal.
+    console.error('[DEBUG fetchNews] fetch failed:', err instanceof Error ? err.stack : err);
+    if (retries > 0) {
+      logger.warn('apify.calendar.fetch_retry', {
+        status: err instanceof HttpError ? err.status : null,
+        error: err instanceof Error ? err.message : String(err),
+        retriesLeft: retries - 1,
+      });
+      return fetchWithRetry(url, retries - 1);
+    }
+    throw err;
+  }
+}
+
+/** Pull the dataset-item array out of Apify's response, whatever the wrapping. */
+function extractItems(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === 'object') {
+    const obj = payload as { items?: unknown; data?: { items?: unknown } };
+    if (Array.isArray(obj.items)) return obj.items;
+    if (Array.isArray(obj.data?.items)) return obj.data!.items;
+  }
+  return [];
+}
+
+/**
+ * The single integration seam. Runs the Apify actor via the GET
+ * "Run Actor synchronously and get dataset items" endpoint, validates the
+ * response with Zod, then normalizes it to `EconomicEvent[]`. Throws on a failed
  * request so the caller can surface a "Data unavailable" state.
  *
  * Reads its config from server-only env (see .env.example). Never prefix these
- * with NEXT_PUBLIC_ — that would inline the key into the browser bundle. When
- * `FF_CALENDAR_URL` is unset (e.g. local dev before you wire the provider) it
- * falls back to the bundled mock so the dashboard still renders.
+ * with NEXT_PUBLIC_ — that would inline the token into the browser bundle. When
+ * `FF_CALENDAR_URL` is unset (e.g. local dev before you wire Apify) it falls
+ * back to the bundled mock so the dashboard still renders.
  */
 export async function fetchNews(range: DateRange): Promise<EconomicEvent[]> {
-  const calendarUrl = process.env.FF_CALENDAR_URL;
-  const calendarKey = process.env.FF_CALENDAR_KEY;
-  if (!calendarUrl) return buildMockFeed(range);
+  const endpoint = process.env.FF_CALENDAR_URL; // Apify run-sync-get-dataset-items URL
+  const token = process.env.FF_CALENDAR_KEY; // Apify API token (optional if embedded in URL)
 
-  const url = new URL(calendarUrl);
-  url.searchParams.set('from', range.startISO);
-  url.searchParams.set('to', range.endISO);
+  // ⚠️ TEMP DEBUG — environment audit. If this logs `false`, .env.local is not
+  //    being read by the server (wrong filename, wrong key, or no restart).
+  console.log('[DEBUG fetchNews] FF_CALENDAR_URL defined?', Boolean(endpoint), endpoint ? '' : '(UNDEFINED)');
 
-  const res = await fetch(url, {
-    headers: calendarKey ? { 'X-API-Key': calendarKey } : undefined,
-    // Calendars change slowly; revalidate hourly to stay fresh without hammering
-    // the upstream. Valid in this project's caching model (no `cacheComponents`).
-    next: { revalidate: 3600, tags: ['macro-calendar'] },
-  });
-  if (!res.ok) throw new Error(`Calendar upstream responded ${res.status} ${res.statusText}`);
+  // ⚠️ TEMP DEBUG — mock fallback disabled on purpose. Instead of silently
+  //    serving static data, fail loudly so the missing env is obvious.
+  //    Restore this line when done: `if (!endpoint) return buildMockFeed(range);`
+  if (!endpoint) throw new Error('[DEBUG] FF_CALENDAR_URL is undefined — .env.local not loaded or key misnamed.');
 
-  const raw = (await res.json()) as ForexFactoryEvent[];
-  return raw
+  const url = new URL(endpoint);
+  // Apify accepts the token embedded in the URL (?token=…, as copied from the
+  // console) or supplied here. Only append it if the URL doesn't already carry one.
+  if (token && !url.searchParams.has('token')) url.searchParams.set('token', token);
+
+  const res = await fetchWithRetry(url);
+
+  const payload = (await res.json()) as unknown;
+  const items = extractItems(payload);
+
+  // ⚠️ TEMP DEBUG — see the raw shape arriving before validation/normalization.
+  console.log('[DEBUG fetchNews] raw item count:', items.length);
+  console.log('[DEBUG fetchNews] first 2 raw items:', JSON.stringify(items.slice(0, 2), null, 2));
+
+  // ⚠️ TEMP DEBUG — fail loudly if nothing arrived at all.
+  if (items.length === 0) throw new Error('[DEBUG] Apify returned 0 items — check the actor/endpoint/response shape.');
+
+  const validated = validateItems(items);
+
+  // ⚠️ TEMP DEBUG — fail loudly if data arrived but NONE matched the Zod schema
+  //    (per-item mismatches are logged above as `item_schema_mismatch`).
+  if (validated.length === 0) {
+    throw new Error(`[DEBUG] All ${items.length} item(s) failed Zod validation — see item_schema_mismatch logs for the exact field paths.`);
+  }
+
+  return validated
     .map(normalizeEvent)
     .filter((event): event is EconomicEvent => event !== null);
 }
@@ -251,13 +367,21 @@ function formatDayLabel(isoDate: string): string {
  * dashboard degrades gracefully instead of crashing.
  */
 export async function getHighImpactUsdEvents(range: DateRange): Promise<MacroFeed> {
-  let feed: EconomicEvent[];
-  try {
-    feed = await fetchNews(range);
-  } catch (err) {
-    console.error('[news] calendar fetch failed — rendering "Data unavailable":', err);
-    return { status: 'unavailable', groups: [] };
-  }
+  // ⚠️ TEMP DEBUG — 'Data unavailable' fallback disabled so errors propagate and
+  //    stop rendering, surfacing the real failure in the terminal / error overlay.
+  //    Restore the try/catch below when done debugging.
+  const feed = await fetchNews(range);
+  // let feed: EconomicEvent[];
+  // try {
+  //   feed = await fetchNews(range);
+  // } catch (err) {
+  //   logger.error('apify.calendar.unavailable', {
+  //     status: err instanceof HttpError ? err.status : null,
+  //     error: err instanceof Error ? err.message : String(err),
+  //     range,
+  //   });
+  //   return { status: 'unavailable', groups: [] };
+  // }
 
   const filtered = feed
     .filter(isTradeable)
