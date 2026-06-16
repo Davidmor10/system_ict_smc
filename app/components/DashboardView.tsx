@@ -132,15 +132,16 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
         </div>
       </header>
 
-      {/* Scroll region: charts fill the first screen, calculator below the fold */}
+      {/* Single scroll context — charts fill viewport, calculator scrolls into view below */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex h-full min-h-0">
+
+        {/* Chart row: fixed viewport height so the calculator sits naturally below */}
+        <div className="flex" style={{ height: 'calc(100svh - 90px)' }}>
           {sidebar}
 
-          {/* Chart workspace — charts when active/override, gated overlay otherwise */}
-          <div className="relative flex-1 min-w-0 min-h-0">
+          <div className="relative flex-1 min-w-0">
             {visible ? (
-              <div className="flex flex-col md:flex-row h-full min-h-0">
+              <div className="flex flex-col md:flex-row h-full">
                 <ChartPanel className="flex-1 border-b md:border-b-0 md:border-r border-[#1c1c1e]">
                   <SmcChart symbol="ES" interval="5" />
                 </ChartPanel>
@@ -154,7 +155,8 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
           </div>
         </div>
 
-        <div id="risk-calculator" className="scroll-mt-16">
+        {/* Scroll anchor so the #risk-calculator hash-link lands with breathing room */}
+        <div id="risk-calculator" className="scroll-mt-4">
           <PositionCalculator live={live} />
         </div>
       </div>

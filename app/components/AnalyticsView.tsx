@@ -299,10 +299,14 @@ export default function AnalyticsView() {
     setAssets(prev => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
 
   return (
-    <div className="flex flex-col h-full bg-[#000000] text-white overflow-hidden">
+    /* Single scroll context — header sticks to top, everything else flows down */
+    <div className="h-full bg-[#000000] text-white overflow-y-auto">
 
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0" dir={en ? 'ltr' : 'rtl'}>
+      {/* Sticky header */}
+      <header
+        className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-[#000000]"
+        dir={en ? 'ltr' : 'rtl'}
+      >
         <span className="font-serif text-base md:text-xl font-bold tracking-[0.06em] md:tracking-[0.1em] text-white">{pick(STR.headerTitle, en)}</span>
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
@@ -310,11 +314,11 @@ export default function AnalyticsView() {
         </div>
       </header>
 
-      {/* Market Analysis Input Panel */}
+      {/* Input panel — scrolls away naturally */}
       <AnalysisPanel assets={assets} onChange={updateAsset} override={override} onToggleOverride={() => setOverride(o => !o)} en={en} />
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-12">
+      {/* Bias cards + footnote — scroll into view */}
+      <div className="px-4 md:px-6 py-10">
         {visible ? (
           <div className="max-w-5xl mx-auto">
             <div className="mb-8 text-center">
@@ -322,13 +326,12 @@ export default function AnalyticsView() {
                 {session ? pick(STR.activePfx, en) + pick(session, en) : pick(STR.banner, en)}
               </span>
             </div>
-            {/* dir=ltr locks ES (left) · NQ (right) regardless of language */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="ltr">
               {assets.map(s => <BiasCard key={s.short} state={s} en={en} />)}
             </div>
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center">
+          <div className="min-h-[40vh] flex items-center justify-center">
             <div className="max-w-xl text-center rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] p-10" dir={en ? 'ltr' : 'rtl'}>
               <span className="text-[#d4af37] text-4xl">◈</span>
               <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">{pick(STR.locked, en)}</p>
@@ -336,7 +339,6 @@ export default function AnalyticsView() {
           </div>
         )}
 
-        {/* Fixed advisory footnote */}
         <div className="max-w-5xl mx-auto mt-10" dir={en ? 'ltr' : 'rtl'}>
           <p className={`text-sm text-zinc-500 leading-relaxed tracking-wide ${en ? 'text-left' : 'text-right'}`}>{pick(STR.footnote, en)}</p>
         </div>
