@@ -281,14 +281,7 @@ export async function fetchNews(range: DateRange): Promise<EconomicEvent[]> {
   const endpoint = process.env.FF_CALENDAR_URL; // Apify run-sync-get-dataset-items URL
   const token = process.env.FF_CALENDAR_KEY; // Apify API token (optional if embedded in URL)
 
-  // ⚠️ TEMP DEBUG — environment audit. If this logs `false`, .env.local is not
-  //    being read by the server (wrong filename, wrong key, or no restart).
-  console.log('[DEBUG fetchNews] FF_CALENDAR_URL defined?', Boolean(endpoint), endpoint ? '' : '(UNDEFINED)');
-
-  // ⚠️ TEMP DEBUG — mock fallback disabled on purpose. Instead of silently
-  //    serving static data, fail loudly so the missing env is obvious.
-  //    Restore this line when done: `if (!endpoint) return buildMockFeed(range);`
-  if (!endpoint) throw new Error('[DEBUG] FF_CALENDAR_URL is undefined — .env.local not loaded or key misnamed.');
+  if (!endpoint) return buildMockFeed(range);
 
   const url = new URL(endpoint);
   // Apify accepts the token embedded in the URL (?token=…, as copied from the
@@ -300,20 +293,10 @@ export async function fetchNews(range: DateRange): Promise<EconomicEvent[]> {
   const payload = (await res.json()) as unknown;
   const items = extractItems(payload);
 
-  // ⚠️ TEMP DEBUG — see the raw shape arriving before validation/normalization.
-  console.log('[DEBUG fetchNews] raw item count:', items.length);
-  console.log('[DEBUG fetchNews] first 2 raw items:', JSON.stringify(items.slice(0, 2), null, 2));
-
-  // ⚠️ TEMP DEBUG — fail loudly if nothing arrived at all.
-  if (items.length === 0) throw new Error('[DEBUG] Apify returned 0 items — check the actor/endpoint/response shape.');
+  if (items.length === 0) return buildMockFeed(range);
 
   const validated = validateItems(items);
-
-  // ⚠️ TEMP DEBUG — fail loudly if data arrived but NONE matched the Zod schema
-  //    (per-item mismatches are logged above as `item_schema_mismatch`).
-  if (validated.length === 0) {
-    throw new Error(`[DEBUG] All ${items.length} item(s) failed Zod validation — see item_schema_mismatch logs for the exact field paths.`);
-  }
+  if (validated.length === 0) return buildMockFeed(range);
 
   return validated
     .map(normalizeEvent)
