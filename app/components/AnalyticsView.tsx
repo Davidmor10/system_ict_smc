@@ -4,14 +4,10 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Daily Bias — deterministic framework (H4/H1 trend + H4/H1 FVG respect).
-//
-//  BULLISH  : H4 UP  AND H1 UP  AND respects Bullish FVG AND violates Bearish FVG
-//  BEARISH  : H4 DOWN AND H1 DOWN AND respects Bearish FVG AND violates Bullish FVG
-//  NEUTRAL  : consolidation on H4/H1, or any mismatch / uncertainty
-//
-//  Bias is shown ONLY inside the active Israel-time (IDT) session windows.
-//  Fully localized (EN/HE) from the language toggle; inputs persist to storage.
+//  Daily Bias — deterministic framework (H4/H1 trend + FVG respect/violation).
+//  BULLISH : H4 UP  AND H1 UP  AND respects Bullish FVG AND violates Bearish FVG
+//  BEARISH : H4 DOWN AND H1 DOWN AND respects Bearish FVG AND violates Bullish FVG
+//  NEUTRAL : consolidation / any mismatch
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Trend = 'UP' | 'DOWN' | 'SIDEWAYS';
@@ -27,7 +23,6 @@ interface AssetState {
   bearishFVG: FVG;
 }
 
-// ES on the LEFT, NQ on the RIGHT (universal workspace order).
 const INITIAL_ASSETS: AssetState[] = [
   { symbol: 'ES1! · S&P 500', short: 'ES', h4: 'UP', h1: 'UP',       bullishFVG: 'RESPECTED', bearishFVG: 'VIOLATED'  },
   { symbol: 'NQ1! · Nasdaq',  short: 'NQ', h4: 'UP', h1: 'SIDEWAYS', bullishFVG: 'RESPECTED', bearishFVG: 'RESPECTED' },
@@ -39,10 +34,10 @@ function computeBias(s: AssetState): Bias {
   return bullish ? 'BULLISH' : bearish ? 'BEARISH' : 'NEUTRAL';
 }
 
-// ─── localStorage persistence ───────────────────────────────────────────────
+// ─── localStorage persistence ────────────────────────────────────────────────
 const STORAGE_KEY = 'onyx_analysis_inputs';
 const isTrend = (v: unknown): v is Trend => v === 'UP' || v === 'DOWN' || v === 'SIDEWAYS';
-const isFVG   = (v: unknown): v is FVG => v === 'RESPECTED' || v === 'VIOLATED';
+const isFVG   = (v: unknown): v is FVG   => v === 'RESPECTED' || v === 'VIOLATED';
 
 function loadAssets(): AssetState[] {
   if (typeof window === 'undefined') return INITIAL_ASSETS;
@@ -54,15 +49,13 @@ function loadAssets(): AssetState[] {
       const s = saved[a.short] ?? {};
       return {
         ...a,
-        h4:         isTrend(s.h4) ? s.h4 : a.h4,
-        h1:         isTrend(s.h1) ? s.h1 : a.h1,
+        h4:         isTrend(s.h4)       ? s.h4         : a.h4,
+        h1:         isTrend(s.h1)       ? s.h1         : a.h1,
         bullishFVG: isFVG(s.bullishFVG) ? s.bullishFVG : a.bullishFVG,
         bearishFVG: isFVG(s.bearishFVG) ? s.bearishFVG : a.bearishFVG,
       };
     });
-  } catch {
-    return INITIAL_ASSETS;
-  }
+  } catch { return INITIAL_ASSETS; }
 }
 
 function saveAssets(assets: AssetState[]) {
@@ -81,53 +74,56 @@ const TREND_LABEL: Record<Trend, Bi> = {
   DOWN:     { he: 'יורד',  en: 'Bearish'  },
   SIDEWAYS: { he: 'דשדוש', en: 'Sideways' },
 };
-const TREND_HINT: Record<Trend, Bi> = {
-  UP:       { he: 'שיאים ושפלים עולים',     en: 'Higher highs & higher lows' },
-  DOWN:     { he: 'שיאים ושפלים יורדים',    en: 'Lower highs & lower lows'   },
-  SIDEWAYS: { he: 'קונסולידציה / ללא כיוון', en: 'Consolidation / no direction' },
-};
-const TREND_META: Record<Trend, { icon: string; cls: string }> = {
-  UP:       { icon: '▲', cls: 'text-bullish' },
-  DOWN:     { icon: '▼', cls: 'text-bearish' },
-  SIDEWAYS: { icon: '◈', cls: 'text-[#d4af37]' },
-};
-const FVG_LABEL: Record<FVG, Bi & { cls: string }> = {
-  RESPECTED: { he: 'מכובדים', en: 'Respected', cls: 'text-bullish' },
-  VIOLATED:  { he: 'נשברים',  en: 'Violated',  cls: 'text-bearish' },
+const TREND_ICON: Record<Trend, string> = { UP: '▲', DOWN: '▼', SIDEWAYS: '◈' };
+
+const FVG_LABEL: Record<FVG, Bi> = {
+  RESPECTED: { he: 'מכובד', en: 'Respected' },
+  VIOLATED:  { he: 'נשבר',  en: 'Violated'  },
 };
 const BIAS_WORD: Record<Bias, Bi> = {
   BULLISH: { he: 'שורי',   en: 'BULLISH' },
   BEARISH: { he: 'דובי',   en: 'BEARISH' },
   NEUTRAL: { he: 'ניטרלי', en: 'NEUTRAL' },
 };
-const BIAS_CLS: Record<Bias, { text: string; border: string; bg: string; glow: string }> = {
-  BULLISH: { text: 'text-bullish',   border: 'border-bullish/40',   bg: 'bg-bullish/8',   glow: '[text-shadow:0_0_42px_rgba(74,124,89,0.55)]'  },
-  BEARISH: { text: 'text-bearish',   border: 'border-bearish/40',   bg: 'bg-bearish/8',   glow: '[text-shadow:0_0_42px_rgba(139,58,58,0.55)]'  },
-  NEUTRAL: { text: 'text-[#d4af37]', border: 'border-[#d4af37]/40', bg: 'bg-[#d4af37]/8', glow: '[text-shadow:0_0_42px_rgba(212,175,55,0.55)]' },
+const BIAS_CLS: Record<Bias, { text: string; border: string; glow: string; bar: string }> = {
+  BULLISH: { text: 'text-bullish',   border: 'border-bullish/40',   glow: '[text-shadow:0_0_42px_rgba(74,124,89,0.55)]',  bar: 'bg-bullish'   },
+  BEARISH: { text: 'text-bearish',   border: 'border-bearish/40',   glow: '[text-shadow:0_0_42px_rgba(139,58,58,0.55)]',  bar: 'bg-bearish'   },
+  NEUTRAL: { text: 'text-[#d4af37]', border: 'border-[#d4af37]/32', glow: '[text-shadow:0_0_42px_rgba(212,175,55,0.55)]', bar: 'bg-[#d4af37]' },
 };
 
 const STR = {
-  headerTitle: { he: 'ניתוח שוק · דיילי ביאס', en: 'Market Analytics · Daily Bias' },
-  noSession:   { he: 'אין סשן פעיל', en: 'No active session' },
-  activePfx:   { he: 'סשן פעיל: ', en: 'Active Session: ' },
-  panelTitle:  { he: 'לוח בקרה לניתוח סשן — הזן נתוני גרף', en: 'Session Analysis Control Board — Input Chart Data' },
-  override:    { he: 'עקוף שעון סשנים (למטרת בדיקה מחוץ לשעות המסחר)', en: 'Override session clock (for testing outside market hours)' },
-  marketTrend: { he: 'מגמת שוק', en: 'Market Trend' },
-  fvgStatus:   { he: 'סטטוס גאפים', en: 'FVG Status' },
-  h4Trend:     { he: 'מגמת H4', en: 'H4 Trend' },
-  h1Trend:     { he: 'מגמת H1', en: 'H1 Trend' },
-  bullFVG:     { he: 'גאפים שוריים', en: 'Bullish FVGs' },
-  bearFVG:     { he: 'גאפים דוביים', en: 'Bearish FVGs' },
-  banner:      { he: 'הצגה ידנית · מחוץ לשעות הסשן', en: 'Manual view · Outside session hours' },
-  locked:      { he: 'אין סשן מסחר פעיל כרגע - הביאס יתעדכן עם תחילת הסשן הבא.', en: 'No active trading session right now — the bias will update at the start of the next session.' },
-  footnote:    { he: 'הדיילי ביאס הוא רק עוד נקודת מבט של המערכת וכדאי ומומלץ להפעיל שיקול דעת משלך ומעצמך.', en: "The Daily Bias is only one of the system's perspectives — you should always apply your own independent judgment." },
-  neutral:     {
+  headerTitle:     { he: 'ניתוח שוק · דיילי ביאס',      en: 'Market Analytics · Daily Bias'  },
+  noSession:       { he: 'אין סשן פעיל',                 en: 'No active session'              },
+  activePfx:       { he: 'סשן פעיל: ',                   en: 'Active Session: '               },
+  override:        { he: 'עקוף שעון סשנים',              en: 'Override session clock'         },
+  locked:          { he: 'אין סשן מסחר פעיל כרגע — הביאס יתעדכן עם תחילת הסשן הבא.', en: 'No active trading session right now — the bias will update at the start of the next session.' },
+  sec01title:      { he: 'סשן מסחר',                     en: 'Trading Session'                },
+  sec01sub:        { he: 'ציר זמן · IDT · 24 שעות',      en: 'Timeline · IDT · 24 Hours'     },
+  sec02title:      { he: 'קונסולת ניתוח',                en: 'Analysis Console'              },
+  sec02sub:        { he: 'H4 · H1 · FVG · דיילי ביאס',  en: 'H4 · H1 · FVG · Daily Bias'   },
+  sec03title:      { he: 'הנחיית מערכת',                 en: 'System Guidance'               },
+  sec03sub:        { he: 'המלצת האלגוריתם להיום',         en: "Algorithm's recommendation"    },
+  colInput:        { he: 'קלט גרף',                      en: 'Chart Input'                   },
+  colConfluence:   { he: 'קונפלואנס',                    en: 'Confluence'                    },
+  colBias:         { he: 'פסיקת ביאס',                   en: 'Bias Verdict'                  },
+  marketStructure: { he: 'מבנה שוק',                     en: 'Market Structure'              },
+  fvgGroup:        { he: 'Fair Value Gaps',               en: 'Fair Value Gaps'               },
+  h4Trend:         { he: 'מגמת H4',                      en: 'H4 Trend'                      },
+  h1Trend:         { he: 'מגמת H1',                      en: 'H1 Trend'                      },
+  bullFVG:         { he: 'גאפ שורי',                     en: 'Bullish FVG'                   },
+  bearFVG:         { he: 'גאפ דובי',                     en: 'Bearish FVG'                   },
+  condMet:         { he: 'מתוך 4 תנאים התקיימו',         en: 'of 4 conditions met'           },
+  neutral: {
     he: 'הביאס ניטרלי. נחכה לפתיחת השוק ואז נראה אם אפשר להשיג יותר מידע לגבי הכיוון היום בעזרת עוד אינפורמציה מהגרף. אם עדיין לא הצלחנו למצוא מידע שתורם ועוזר, לא נקח עסקה להיום.',
     en: "Bias is neutral. We'll wait for the market open and then see whether the chart offers more information about today's direction. If we still can't find anything that genuinely helps, we won't take a trade today.",
   },
+  footnote: {
+    he: 'הדיילי ביאס הוא רק עוד נקודת מבט של המערכת וכדאי ומומלץ להפעיל שיקול דעת משלך ומעצמך.',
+    en: "The Daily Bias is only one of the system's perspectives — you should always apply your own independent judgment.",
+  },
 } as const;
 
-// ─── Israel-time (IDT) session windows ──────────────────────────────────────
+// ─── Sessions ────────────────────────────────────────────────────────────────
 interface Session { id: string; he: string; en: string; start: number; end: number }
 const SESSIONS: Session[] = [
   { id: 'ASIA',   he: 'אסיה',       en: 'Asia',        start: 2 * 60,       end: 7 * 60       },
@@ -148,128 +144,237 @@ function israelMinutes(): number {
 function activeSession(min: number): Session | null {
   return SESSIONS.find(s => min >= s.start && min < s.end) ?? null;
 }
+function fmtMin(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+}
 
-// ─── Metric row + bias card ─────────────────────────────────────────────────
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+// ─── Section header ───────────────────────────────────────────────────────────
+function SectionHeader({ num, title, subtitle }: { num: string; title: string; subtitle: string }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[#1c1c1e] last:border-0">
-      <span className="text-base font-bold font-mono text-white/70 uppercase tracking-wider">{label}</span>
-      <div className="flex flex-col items-start">{children}</div>
+    <div className="flex items-end justify-between mb-[26px] pb-5 border-b border-[#1c1c1e]">
+      <span className="font-mono text-[12px] tracking-[0.3em] text-[#52525b]">{num}</span>
+      <div className="text-right" dir="rtl">
+        <h2 className="font-serif text-[26px] font-bold text-white leading-none">{title}</h2>
+        <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-white/45 mt-2">{subtitle}</p>
+      </div>
     </div>
   );
 }
 
-function BiasCard({ state, en }: { state: AssetState; en: boolean }) {
-  const bias = computeBias(state);
-  const c = BIAS_CLS[bias];
-
-  const TrendValue = ({ tf }: { tf: Trend }) => (
-    <>
-      <span className={`text-lg font-bold font-mono ${TREND_META[tf].cls}`}>{pick(TREND_LABEL[tf], en)} {TREND_META[tf].icon}</span>
-      <span className="text-xs font-bold font-mono text-white/40 mt-0.5">{pick(TREND_HINT[tf], en)}</span>
-    </>
-  );
-
-  return (
-    <div className={`rounded-xl border ${c.border} ${c.bg} p-8 flex flex-col items-center text-center`} dir={en ? 'ltr' : 'rtl'}>
-      <span className="text-sm font-bold font-mono text-white/70 uppercase tracking-[0.25em]">{state.symbol}</span>
-
-      <div className="mt-6 mb-2">
-        <span className={`font-serif font-black leading-none ${c.text} ${c.glow}`} style={{ fontSize: 'clamp(2.6rem,7vw,4.5rem)' }}>
-          [{bias}]
-        </span>
-      </div>
-      <span className={`text-lg font-bold font-mono ${c.text} tracking-[0.2em]`}>{pick(BIAS_WORD[bias], en)}</span>
-
-      <div className="w-full mt-8 flex flex-col gap-7">
-        <div>
-          <span className="block text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em] mb-2 border-b border-[#1c1c1e] pb-2">{pick(STR.marketTrend, en)}</span>
-          <Row label="H4"><TrendValue tf={state.h4} /></Row>
-          <Row label="H1"><TrendValue tf={state.h1} /></Row>
-        </div>
-
-        <div>
-          <span className="block text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em] mb-2 border-b border-[#1c1c1e] pb-2">{pick(STR.fvgStatus, en)}</span>
-          <Row label={pick(STR.bullFVG, en)}><span className={`text-lg font-bold font-mono ${FVG_LABEL[state.bullishFVG].cls}`}>{pick(FVG_LABEL[state.bullishFVG], en)}</span></Row>
-          <Row label={pick(STR.bearFVG, en)}><span className={`text-lg font-bold font-mono ${FVG_LABEL[state.bearishFVG].cls}`}>{pick(FVG_LABEL[state.bearishFVG], en)}</span></Row>
-        </div>
-      </div>
-
-      {bias === 'NEUTRAL' && (
-        <div className="w-full mt-7 rounded-lg border border-[#d4af37]/40 bg-[#d4af37]/5 p-5 [box-shadow:0_0_40px_-12px_rgba(212,175,55,0.4)]">
-          <p className="text-base font-bold text-[#c0c0c0] leading-relaxed tracking-wide">{pick(STR.neutral, en)}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Segmented input control ────────────────────────────────────────────────
-function Field<T extends string>({ label, options, value, onSelect }: {
-  label: string; options: { v: T; label: string }[]; value: T; onSelect: (v: T) => void;
+// ─── Section 01 · Session Timeline ───────────────────────────────────────────
+function SessionTimeline({ nowMin, session, override, onToggleOverride, en }: {
+  nowMin: number; session: Session | null; override: boolean;
+  onToggleOverride: () => void; en: boolean;
 }) {
+  const nowPct = (nowMin / 1440) * 100;
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3">
-      <span className="text-xs sm:text-sm font-bold font-mono text-white/70 shrink-0">{label}</span>
-      <div className="flex flex-wrap gap-1">
-        {options.map(o => (
-          <button
-            key={o.v}
-            onClick={() => onSelect(o.v)}
-            className={`px-2.5 py-1.5 rounded-sm text-xs sm:text-sm font-bold font-mono transition-colors duration-300 border ${
-              value === o.v
-                ? 'bg-[#d4af37] text-black border-[#d4af37]'
-                : 'bg-[#1c1c1e] text-white/60 border-[#2a2a2d] hover:text-white'
-            }`}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-4">
+        {/* Track */}
+        <div className="relative flex-1 bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px]" style={{ height: 88 }}>
+          {SESSIONS.map(s => {
+            const isActive = !override ? session?.id === s.id : true;
+            const left  = (s.start / 1440) * 100;
+            const width = ((s.end - s.start) / 1440) * 100;
+            return (
+              <div
+                key={s.id}
+                className={`absolute top-[10px] bottom-[10px] rounded-[3px] flex flex-col items-center justify-center transition-all duration-500 ${
+                  isActive
+                    ? 'bg-[#d4af37]/12 border border-[#d4af37]/60 [box-shadow:0_0_18px_-4px_rgba(212,175,55,0.45)]'
+                    : 'bg-[#1a1a1d] border border-[#2a2a2d]'
+                }`}
+                style={{ left: `${left}%`, width: `${width}%` }}
+              >
+                <span className={`font-mono text-[10px] font-bold ${isActive ? 'text-[#d4af37]' : 'text-white/35'}`}>
+                  {en ? s.en : s.he}
+                </span>
+                <span className={`font-mono text-[9px] mt-0.5 ${isActive ? 'text-[#d4af37]/60' : 'text-white/20'}`}>
+                  {fmtMin(s.start)}–{fmtMin(s.end)}
+                </span>
+              </div>
+            );
+          })}
+          {/* Now line */}
+          <div
+            className="absolute top-0 bottom-0 w-px bg-[#d4af37] [box-shadow:0_0_6px_rgba(212,175,55,0.7)]"
+            style={{ left: `${nowPct}%` }}
           >
-            {o.label}
-          </button>
+            <span className="absolute -top-5 left-1/2 -translate-x-1/2 font-mono text-[10px] font-bold text-[#d4af37] whitespace-nowrap">
+              {fmtMin(nowMin)}
+            </span>
+          </div>
+        </div>
+
+        {/* Override button */}
+        <button
+          onClick={onToggleOverride}
+          dir="rtl"
+          className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-[5px] border font-mono text-[11px] font-bold transition-colors duration-300 ${
+            override ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] text-white/50 hover:text-white'
+          }`}
+        >
+          <span className={`h-2 w-2 rounded-full ${override ? 'bg-[#d4af37]' : 'bg-white/25'}`} />
+          {pick(STR.override, en)}
+        </button>
+      </div>
+
+      {/* Hour labels */}
+      <div className="flex justify-between">
+        {['00:00', '06:00', '12:00', '18:00', '24:00'].map(t => (
+          <span key={t} className="font-mono text-[10px] text-white/25">{t}</span>
         ))}
       </div>
     </div>
   );
 }
 
-// ─── Market Analysis Input Panel ────────────────────────────────────────────
-function AnalysisPanel({
-  assets, onChange, override, onToggleOverride, en,
-}: {
-  assets: AssetState[];
-  onChange: (i: number, patch: Partial<AssetState>) => void;
-  override: boolean;
-  onToggleOverride: () => void;
-  en: boolean;
+// ─── Section 02 · Asset Console ──────────────────────────────────────────────
+
+function trendBtnCls(v: Trend, sel: Trend): string {
+  if (v !== sel) return 'bg-[#101013] border-[#2a2a2d] text-white/50';
+  if (v === 'UP')       return 'bg-bullish/18 border-bullish/60 text-[#6fa580]';
+  if (v === 'DOWN')     return 'bg-bearish/18 border-bearish/60 text-[#c98080]';
+  return 'bg-[#d4af37]/15 border-[#d4af37]/50 text-[#d4af37]';
+}
+function fvgBtnCls(v: FVG, sel: FVG): string {
+  if (v !== sel) return 'bg-[#101013] border-[#2a2a2d] text-white/50';
+  return v === 'RESPECTED'
+    ? 'bg-bullish/18 border-bullish/60 text-[#6fa580]'
+    : 'bg-bearish/18 border-bearish/60 text-[#c98080]';
+}
+
+function AssetConsole({ a, i, onChange, en }: {
+  a: AssetState; i: number; onChange: (i: number, p: Partial<AssetState>) => void; en: boolean;
 }) {
-  const trendOpts = (['UP', 'DOWN', 'SIDEWAYS'] as Trend[]).map(v => ({ v, label: pick(TREND_LABEL[v], en) }));
-  const fvgOpts   = (['RESPECTED', 'VIOLATED'] as FVG[]).map(v => ({ v, label: pick(FVG_LABEL[v], en) }));
+  const bias  = computeBias(a);
+  const c     = BIAS_CLS[bias];
+
+  const bullPath = [
+    { ok: a.h4 === 'UP',                label: { he: 'מגמת H4 עולה',   en: 'H4 Bullish'           }, val: pick(TREND_LABEL[a.h4], en)       },
+    { ok: a.h1 === 'UP',                label: { he: 'מגמת H1 עולה',   en: 'H1 Bullish'           }, val: pick(TREND_LABEL[a.h1], en)       },
+    { ok: a.bullishFVG === 'RESPECTED', label: { he: 'גאפ שורי מכובד', en: 'Bullish FVG Respected'}, val: pick(FVG_LABEL[a.bullishFVG], en) },
+    { ok: a.bearishFVG === 'VIOLATED',  label: { he: 'גאפ דובי נשבר',  en: 'Bearish FVG Violated' }, val: pick(FVG_LABEL[a.bearishFVG], en) },
+  ];
+  const bearPath = [
+    { ok: a.h4 === 'DOWN',              label: { he: 'מגמת H4 יורד',   en: 'H4 Bearish'           }, val: pick(TREND_LABEL[a.h4], en)       },
+    { ok: a.h1 === 'DOWN',              label: { he: 'מגמת H1 יורד',   en: 'H1 Bearish'           }, val: pick(TREND_LABEL[a.h1], en)       },
+    { ok: a.bearishFVG === 'RESPECTED', label: { he: 'גאפ דובי מכובד', en: 'Bearish FVG Respected'}, val: pick(FVG_LABEL[a.bearishFVG], en) },
+    { ok: a.bullishFVG === 'VIOLATED',  label: { he: 'גאפ שורי נשבר',  en: 'Bullish FVG Violated' }, val: pick(FVG_LABEL[a.bullishFVG], en) },
+  ];
+  const path  = (bias === 'BEARISH' || (bias === 'NEUTRAL' && a.h4 === 'DOWN')) ? bearPath : bullPath;
+  const count = path.filter(p => p.ok).length;
+
+  const tagCls    = bias === 'BULLISH' ? 'text-bullish' : bias === 'BEARISH' ? 'text-bearish' : 'text-[#d4af37]';
 
   return (
-    <div className="border-b border-[#1c1c1e] bg-[#0d0d0f] px-4 md:px-6 py-4 md:py-5" dir={en ? 'ltr' : 'rtl'}>
-      <div className="max-w-5xl mx-auto flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <span className="text-xs md:text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.14em] md:tracking-[0.18em]">{pick(STR.panelTitle, en)}</span>
-          <button
-            onClick={onToggleOverride}
-            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm border text-sm font-bold font-mono transition-colors duration-300 ${
-              override ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] text-white/60 hover:text-white'
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${override ? 'bg-[#d4af37]' : 'bg-white/30'}`} />
-            {pick(STR.override, en)}
-          </button>
+    <div className={`bg-[#0d0d0f] border ${c.border} rounded-[6px] overflow-hidden`}>
+      {/* Header */}
+      <div className="flex items-center justify-between bg-black border-b border-[#1c1c1e]" style={{ padding: '16px 22px' }}>
+        <span className="font-mono text-[16px] font-bold text-white">{a.symbol}</span>
+        <span className={`font-mono text-[11px] font-bold ${tagCls}`}>● {count}/4 Confluence</span>
+      </div>
+
+      {/* 3-column body */}
+      <div className="grid" style={{ gridTemplateColumns: '1.2fr 1fr 1fr' }}>
+
+        {/* Col 1 — Chart Input */}
+        <div className="p-6 flex flex-col gap-5" dir="rtl">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#d4af37]">
+            {pick(STR.colInput, en)}
+          </span>
+
+          {/* Market Structure group */}
+          <div className="flex flex-col gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35 border-b border-[#1c1c1e] pb-1.5">
+              {pick(STR.marketStructure, en)}
+            </span>
+            {([['h4Trend', 'h4'], ['h1Trend', 'h1']] as const).map(([lk, field]) => (
+              <div key={field} className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-white/55 shrink-0">{pick(STR[lk], en)}</span>
+                <div className="flex gap-1">
+                  {(['UP', 'DOWN', 'SIDEWAYS'] as Trend[]).map(v => (
+                    <button key={v} onClick={() => onChange(i, { [field]: v })}
+                      className={`px-3 py-[7px] rounded-sm border font-mono text-[11px] font-bold transition-colors duration-200 ${trendBtnCls(v, a[field])}`}>
+                      {TREND_ICON[v]} {pick(TREND_LABEL[v], en)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* FVG group */}
+          <div className="flex flex-col gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35 border-b border-[#1c1c1e] pb-1.5">
+              {pick(STR.fvgGroup, en)}
+            </span>
+            {([['bullFVG', 'bullishFVG'], ['bearFVG', 'bearishFVG']] as const).map(([lk, field]) => (
+              <div key={field} className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-white/55 shrink-0">{pick(STR[lk], en)}</span>
+                <div className="flex gap-1">
+                  {(['RESPECTED', 'VIOLATED'] as FVG[]).map(v => (
+                    <button key={v} onClick={() => onChange(i, { [field]: v })}
+                      className={`px-3 py-[7px] rounded-sm border font-mono text-[11px] font-bold transition-colors duration-200 ${fvgBtnCls(v, a[field])}`}>
+                      {pick(FVG_LABEL[v], en)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* dir=ltr locks ES (left) · NQ (right) regardless of language */}
-        <div className="grid md:grid-cols-2 gap-5" dir="ltr">
-          {assets.map((a, i) => (
-            <div key={a.short} className="rounded-lg border border-[#1c1c1e] bg-[#000000] p-5 flex flex-col gap-3.5" dir={en ? 'ltr' : 'rtl'}>
-              <span className="text-base font-bold font-serif text-white border-b border-[#1c1c1e] pb-2.5">{a.symbol}</span>
-              <Field label={pick(STR.h4Trend, en)} options={trendOpts} value={a.h4} onSelect={v => onChange(i, { h4: v })} />
-              <Field label={pick(STR.h1Trend, en)} options={trendOpts} value={a.h1} onSelect={v => onChange(i, { h1: v })} />
-              <Field label={pick(STR.bullFVG, en)} options={fvgOpts} value={a.bullishFVG} onSelect={v => onChange(i, { bullishFVG: v })} />
-              <Field label={pick(STR.bearFVG, en)} options={fvgOpts} value={a.bearishFVG} onSelect={v => onChange(i, { bearishFVG: v })} />
+        {/* Col 2 — Confluence Checklist */}
+        <div className="border-l border-[#1c1c1e] p-6 flex flex-col" dir="rtl">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#d4af37] mb-4">
+            {pick(STR.colConfluence, en)}
+          </span>
+          <div className="flex flex-col flex-1">
+            {path.map((cond, idx) => (
+              <div key={idx} className="flex items-center gap-3 py-3 border-b border-[#1c1c1e] last:border-0">
+                <div className={`shrink-0 flex items-center justify-center rounded-sm border font-mono text-[12px] font-bold ${
+                  cond.ok
+                    ? 'bg-bullish/16 border-bullish/50 text-[#6fa580]'
+                    : 'bg-bearish/16 border-bearish/50 text-[#c98080]'
+                }`} style={{ width: 24, height: 24 }}>
+                  {cond.ok ? '✓' : '✕'}
+                </div>
+                <span className="flex-1 font-mono text-[11px] text-white/78 leading-snug">
+                  {pick(cond.label, en)}
+                </span>
+                <span className={`font-mono text-[10px] font-bold shrink-0 ${cond.ok ? 'text-[#6fa580]' : 'text-[#c98080]'}`}>
+                  {cond.val}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Col 3 — Bias Verdict */}
+        <div className="border-l border-[#1c1c1e] p-6 flex flex-col items-center justify-center gap-5" dir="rtl">
+          <div className="text-center">
+            <div className={`font-serif font-black ${c.text} ${c.glow}`}
+              style={{ fontSize: 'clamp(28px,2.4vw,46px)', whiteSpace: 'nowrap' }}>
+              [{bias}]
             </div>
-          ))}
+            <div className={`font-mono text-[13px] font-bold tracking-[0.22em] mt-2 ${c.text}`}>
+              {pick(BIAS_WORD[bias], en)}
+            </div>
+          </div>
+          {/* Confluence meter */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex gap-1.5">
+              {[0, 1, 2, 3].map(idx => (
+                <div key={idx} className={`rounded ${idx < count ? c.bar : 'bg-[#2a2a2d]'}`}
+                  style={{ width: 34, height: 6 }} />
+              ))}
+            </div>
+            <span className="font-mono text-[10px] text-white/40 text-center">
+              {count} {pick(STR.condMet, en)}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -293,55 +398,80 @@ export default function AnalyticsView() {
 
   const session = activeSession(nowMin);
   const visible = override || session !== null;
-  const sessionLabel = session ? pick(STR.activePfx, en) + pick(session, en) : pick(STR.noSession, en);
+  const sessionLabel = session
+    ? pick(STR.activePfx, en) + pick(session, en)
+    : pick(STR.noSession, en);
 
   const updateAsset = (i: number, patch: Partial<AssetState>) =>
     setAssets(prev => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
 
+  const hasNeutral = assets.some(a => computeBias(a) === 'NEUTRAL');
+
   return (
-    /* Single scroll context — header sticks to top, everything else flows down */
     <div className="flex-1 min-h-0 bg-[#000000] text-white overflow-y-auto">
 
-      {/* Sticky header */}
-      <header
-        className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-[#000000]"
-        dir={en ? 'ltr' : 'rtl'}
-      >
-        <span className="font-serif text-base md:text-xl font-bold tracking-[0.06em] md:tracking-[0.1em] text-white">{pick(STR.headerTitle, en)}</span>
+      {/* Sticky status bar */}
+      <div className="sticky top-0 z-50 flex items-center justify-between px-10 h-[58px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e]">
+        <div className="flex items-center gap-3" dir="rtl">
+          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">PRO</span>
+          <span className="font-serif text-[18px] font-bold text-white">{pick(STR.headerTitle, en)}</span>
+        </div>
         <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
-          <span className={`text-xs md:text-base font-bold font-mono tracking-[0.14em] md:tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>{sessionLabel}</span>
+          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
+          <span className={`font-mono text-xs font-bold tracking-[0.14em] ${session ? 'text-[#d4af37]' : 'text-white/50'}`}>
+            {sessionLabel}
+          </span>
         </div>
-      </header>
+      </div>
 
-      {/* Input panel — scrolls away naturally */}
-      <AnalysisPanel assets={assets} onChange={updateAsset} override={override} onToggleOverride={() => setOverride(o => !o)} en={en} />
+      {/* Body */}
+      <div className="px-10 pb-20">
 
-      {/* Bias cards + footnote — scroll into view */}
-      <div className="px-4 md:px-6 py-10">
-        {visible ? (
-          <div className="max-w-5xl mx-auto">
-            <div className="mb-8 text-center">
-              <span className="inline-block px-5 py-2 rounded-sm border border-[#d4af37]/40 bg-[#d4af37]/8 text-base font-bold font-mono text-[#d4af37] tracking-[0.18em]">
-                {session ? pick(STR.activePfx, en) + pick(session, en) : pick(STR.banner, en)}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="ltr">
-              {assets.map(s => <BiasCard key={s.short} state={s} en={en} />)}
-            </div>
-          </div>
-        ) : (
-          <div className="min-h-[40vh] flex items-center justify-center">
-            <div className="max-w-xl text-center rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] p-10" dir={en ? 'ltr' : 'rtl'}>
-              <span className="text-[#d4af37] text-4xl">◈</span>
-              <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">{pick(STR.locked, en)}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="max-w-5xl mx-auto mt-10" dir={en ? 'ltr' : 'rtl'}>
-          <p className={`text-sm text-zinc-500 leading-relaxed tracking-wide ${en ? 'text-left' : 'text-right'}`}>{pick(STR.footnote, en)}</p>
+        {/* 01 · Session Timeline */}
+        <div className="py-11 border-b border-[#1c1c1e]">
+          <SectionHeader num="01" title={pick(STR.sec01title, en)} subtitle={pick(STR.sec01sub, en)} />
+          <SessionTimeline nowMin={nowMin} session={session} override={override}
+            onToggleOverride={() => setOverride(o => !o)} en={en} />
         </div>
+
+        {/* 02 · Analysis Console */}
+        <div className="py-11 border-b border-[#1c1c1e]">
+          <SectionHeader num="02" title={pick(STR.sec02title, en)} subtitle={pick(STR.sec02sub, en)} />
+          {visible ? (
+            <div className="flex flex-col gap-[18px]">
+              {assets.map((a, i) => (
+                <AssetConsole key={a.short} a={a} i={i} onChange={updateAsset} en={en} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-16">
+              <div className="max-w-xl text-center rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] p-10" dir={en ? 'ltr' : 'rtl'}>
+                <span className="text-[#d4af37] text-4xl">◈</span>
+                <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">
+                  {pick(STR.locked, en)}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 03 · System Guidance */}
+        <div className="py-11">
+          <SectionHeader num="03" title={pick(STR.sec03title, en)} subtitle={pick(STR.sec03sub, en)} />
+          {hasNeutral && (
+            <div className="bg-[#0d0d0f] border border-[#d4af37]/30 rounded-[6px] p-[26px] mb-6 [box-shadow:0_0_50px_-18px_rgba(212,175,55,0.4)]"
+              dir={en ? 'ltr' : 'rtl'}>
+              <div className="flex items-start gap-3">
+                <span className="text-[#d4af37] text-2xl shrink-0">◈</span>
+                <p className="font-mono text-sm text-white/80 leading-relaxed">{pick(STR.neutral, en)}</p>
+              </div>
+            </div>
+          )}
+          <p className="font-mono text-[11px] text-[#52525b] leading-relaxed" dir="rtl">
+            {pick(STR.footnote, en)}
+          </p>
+        </div>
+
       </div>
     </div>
   );

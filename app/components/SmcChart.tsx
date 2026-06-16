@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, memo } from 'react';
 
-// Index CFD tickers (continuous, non-futures) — display as "SPX500" / "US100"
-// instead of the "ES1!" / "NQ1!" futures symbols.
 const SYMBOLS: Record<string, string> = {
   ES: 'FOREXCOM:SPX500',
   NQ: 'CAPITALCOM:US100',
@@ -14,25 +12,21 @@ interface Props {
   interval?: string;
 }
 
-// ─── Immutable Monochrome Charting Protocol (system default) ────────────────
-// Hard-coded black & white candle scheme — no green/red coloring is ever used.
-// Bullish: white fill, white border, white wick.
-// Bearish: black fill, white border, white wick.
 const OVERRIDES = {
   'paneProperties.background': '#000000',
   'paneProperties.backgroundType': 'solid',
   'paneProperties.vertGridProperties.color': 'rgba(0,0,0,0)',
   'paneProperties.horzGridProperties.color': 'rgba(0,0,0,0)',
 
-  // Bullish — white body, white border + wick
-  'mainSeriesProperties.candleStyle.upColor':       '#FFFFFF',
-  'mainSeriesProperties.candleStyle.borderUpColor': '#FFFFFF',
-  'mainSeriesProperties.candleStyle.wickUpColor':   '#FFFFFF',
+  // Bullish — green
+  'mainSeriesProperties.candleStyle.upColor':       '#4a7c59',
+  'mainSeriesProperties.candleStyle.borderUpColor': '#6fa580',
+  'mainSeriesProperties.candleStyle.wickUpColor':   '#6fa580',
 
-  // Bearish — black body, white border + wick (legible against pitch-black bg)
-  'mainSeriesProperties.candleStyle.downColor':       '#000000',
-  'mainSeriesProperties.candleStyle.borderDownColor': '#FFFFFF',
-  'mainSeriesProperties.candleStyle.wickDownColor':   '#FFFFFF',
+  // Bearish — red/burgundy
+  'mainSeriesProperties.candleStyle.downColor':       '#7c3a3a',
+  'mainSeriesProperties.candleStyle.borderDownColor': '#c98080',
+  'mainSeriesProperties.candleStyle.wickDownColor':   '#c98080',
 
   'mainSeriesProperties.candleStyle.drawBorder': true,
   'mainSeriesProperties.candleStyle.drawWick':   true,
@@ -47,8 +41,6 @@ function SmcChart({ symbol, interval = '5' }: Props) {
 
     const tvSymbol = SYMBOLS[symbol] ?? symbol;
 
-    // Build the widget host imperatively so React never owns these nodes
-    // (keeps hydration clean — SSR only renders the empty ref container).
     container.innerHTML = '';
     const widget = document.createElement('div');
     widget.className = 'tradingview-widget-container__widget';
@@ -66,13 +58,13 @@ function SmcChart({ symbol, interval = '5' }: Props) {
       interval,
       timezone: 'Etc/UTC',
       theme: 'dark',
-      style: '1',                  // candlesticks
+      style: '1',
       locale: 'en',
       backgroundColor: '#000000',
       gridColor: 'rgba(0,0,0,0)',
       hide_side_toolbar: true,
       hide_top_toolbar: true,
-      hide_legend: true,    // hides the in-chart symbol legend ("ES1! S&P 500 E-MINI FUTURES")
+      hide_legend: true,
       hide_volume: true,
       allow_symbol_change: false,
       save_image: false,
@@ -83,12 +75,9 @@ function SmcChart({ symbol, interval = '5' }: Props) {
     });
     container.appendChild(script);
 
-    return () => {
-      container.innerHTML = '';
-    };
+    return () => { container.innerHTML = ''; };
   }, [symbol, interval]);
 
-  // dir="ltr" guard: prevents the chart from inverting inside Hebrew/RTL layouts.
   return (
     <div
       ref={containerRef}
