@@ -103,68 +103,12 @@ function buildMockFeed(range: DateRange): EconomicEvent[] {
   }));
 }
 
-// ── External feed: schema + normalization ───────────────────────────────────
-// Each Apify dataset item is a keyed object. We validate it at runtime with Zod
-// before trusting it, so an upstream schema change surfaces as a logged,
-// pinpointed mismatch instead of a silent `undefined` propagating downstream.
+// ── Shared normalization helpers ─────────────────────────────────────────────
+// Lookup tables and value-cleaning used when mapping a raw calendar item onto
+// our internal `EconomicEvent`.
 
 const IMPACT_MAP: Record<string, Impact> = { high: 'High', medium: 'Medium', low: 'Low' };
 const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY'] as const;
-
-/**
- * Runtime schema for ONE Forex Factory dataset item from the actor.
- *
- * - Core fields (`date`, `currency`, `impact`, `title`) are required — an item
- *   missing any of these is unusable and rejected.
- * - Outcome fields (`actual`/`forecast`/`previous`) are `string | number | null`
- *   and optional; feeds send `""`, `null`, or omit them interchangeably.
- * - `eventId` may be a string or number depending on the actor.
- * - Unknown keys ("…etc.") are stripped by `z.object`, not an error.
- */
-const ForexFactoryItemSchema = z.object({
-  eventId: z.union([z.string(), z.number()]).optional(),
-  url: z.string().optional(),
-  date: z.string(),
-  time: z.string().optional(),
-  timestamp: z.union([z.string(), z.number()]).optional(),
-  currency: z.string(),
-  impact: z.string(),
-  title: z.string(),
-  actual: z.union([z.string(), z.number()]).nullish(),
-  forecast: z.union([z.string(), z.number()]).nullish(),
-  previous: z.union([z.string(), z.number()]).nullish(),
-});
-
-/** A single validated item (the shape `normalizeEvent` consumes). */
-export type ForexFactoryEvent = z.infer<typeof ForexFactoryItemSchema>;
-
-/** The full Apify response: an array of dataset items. */
-export type ForexFactoryApiResponse = ForexFactoryEvent[];
-
-/**
- * Validate the unwrapped dataset items against the schema. Validates per-item so
- * one malformed row doesn't discard the whole batch; every rejected row is
- * logged with its array index and the exact Zod issues (path + message).
- */
-function validateItems(items: unknown[]): ForexFactoryApiResponse {
-  const valid: ForexFactoryApiResponse = [];
-  for (let i = 0; i < items.length; i++) {
-    const result = ForexFactoryItemSchema.safeParse(items[i]);
-    if (result.success) {
-      valid.push(result.data);
-    } else {
-      logger.warn('apify.calendar.item_schema_mismatch', {
-        index: i,
-        issues: result.error.issues.map((issue) => ({
-          path: issue.path.join('.'),
-          code: issue.code,
-          message: issue.message,
-        })),
-      });
-    }
-  }
-  return valid;
-}
 
 /** Trim a string/number outcome value; treat blanks and placeholders as null. */
 function cleanMetric(value: string | number | null | undefined): string | null {
@@ -173,34 +117,6 @@ function cleanMetric(value: string | number | null | undefined): string | null {
   // Empty or pure placeholder dashes carry no data.
   if (text === '' || /^[-–—]$/.test(text)) return null;
   return text;
-}
-
-/**
- * Map ONE Zod-validated item onto our `EconomicEvent`. The data is already
- * shape-checked, so this is pure field mapping. Returns `null` only for a
- * currency outside our coverage set (the `Currency` union must hold).
- *
- * Outcome values (`actual`/`forecast`/`previous`) are kept as display tokens
- * (`"0.3%"`, `"224K"`, `"<5.50%"`) — see note on numeric handling below.
- */
-function normalizeEvent(raw: ForexFactoryEvent, index: number): EconomicEvent | null {
-  const currency = raw.currency.trim().toUpperCase();
-  if (!(KNOWN_CURRENCIES as readonly string[]).includes(currency)) return null;
-
-  const date = raw.date.slice(0, 10); // tolerate "YYYY-MM-DD" or a full ISO timestamp
-  const time = (raw.time ?? '').trim() || 'All Day';
-
-  return {
-    id: `ff-${raw.eventId ?? `${date}-${index}`}`,
-    date,
-    time, // as the actor reports it (FF display zone); no timezone math applied
-    currency: currency as Currency,
-    impact: IMPACT_MAP[raw.impact.trim().toLowerCase()] ?? 'Low', // unknown → Low (filtered out)
-    title: raw.title.trim(),
-    forecast: cleanMetric(raw.forecast),
-    previous: cleanMetric(raw.previous),
-    actual: cleanMetric(raw.actual),
-  };
 }
 
 // ── ForexFactory public calendar ─────────────────────────────────────────────
