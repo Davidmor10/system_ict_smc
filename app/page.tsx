@@ -283,7 +283,7 @@ export default function LandingPage() {
             <Reveal key={c.k} delay={(i % 2) * 90} className="h-full">
               <Link
                 href={c.href}
-                className="flex h-full flex-col bg-[#000000] p-6 hover:bg-[#0d0d0f] transition-colors duration-500 group"
+                className="lift flex h-full flex-col bg-[#000000] p-6 hover:bg-[#0d0d0f] transition-colors duration-500 group"
               >
                 <span className="block font-mono text-sm font-bold text-[#d4af37] tracking-[0.3em] mb-4">{c.k}</span>
                 <h4 className="font-mono text-xl font-bold uppercase tracking-[0.06em] text-white mb-3 leading-tight group-hover:text-[#d4af37] transition-colors duration-500">{t(c.titleKey)}</h4>

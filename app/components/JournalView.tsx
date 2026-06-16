@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useCountUp } from '../hooks/useCountUp';
 import { useMarketStream } from '../hooks/useMarketStream';
 import type { Bias, SessionName } from '../hooks/useMarketStream';
 
@@ -100,12 +101,15 @@ const fmtProfitFactor = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
 
 function MobilePerformanceBar({ trades }: { trades: TradeEntry[] }) {
   const { winRate, profitFactor, totalPnL } = computeStats(trades);
+  const animWinRate = useCountUp(winRate, 500);
+  const animPnL     = useCountUp(totalPnL, 600);
+
   return (
     <div className="md:hidden flex items-center gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
       {[
-        { label: 'Win Rate', val: fmtWinRate(winRate) },
-        { label: 'PF', val: fmtProfitFactor(profitFactor) },
-        { label: 'PnL', val: usd(totalPnL) },
+        { label: 'Win Rate', val: fmtWinRate(animWinRate) },
+        { label: 'PF',       val: fmtProfitFactor(profitFactor) },
+        { label: 'PnL',      val: usd(animPnL) },
       ].map(m => (
         <div key={m.label} className="flex-1 bg-[#000000] px-3 py-2 flex flex-col gap-0.5">
           <span className="text-[10px] font-bold font-mono text-white/50 uppercase tracking-[0.14em]">{m.label}</span>
@@ -139,33 +143,36 @@ function StatsBar({ trades }: { trades: TradeEntry[] }) {
 function PerformanceSidebar({ trades }: { trades: TradeEntry[] }) {
   const { winRate, profitFactor, totalPnL } = computeStats(trades);
 
-  const metrics: { label: string; val: string; accent: string }[] = [
-    { label: 'Win Rate',      val: fmtWinRate(winRate),           accent: GOLD_GLOW },
-    { label: 'Profit Factor', val: fmtProfitFactor(profitFactor), accent: GOLD_GLOW },
-    // Total PnL keeps the gold hero glow but flips to bearish red when negative.
-    { label: 'Total PnL',     val: usd(totalPnL),                 accent: totalPnL < 0 ? 'text-bearish' : GOLD_GLOW },
+  const animWinRate      = useCountUp(winRate,      500);
+  const animProfitFactor = useCountUp(profitFactor === Infinity ? 0 : profitFactor, 500);
+  const animPnL          = useCountUp(totalPnL,     600);
+
+  const metrics = [
+    { label: 'Win Rate',      val: fmtWinRate(animWinRate),
+      accent: GOLD_GLOW },
+    { label: 'Profit Factor', val: profitFactor === Infinity ? '∞' : animProfitFactor.toFixed(2),
+      accent: GOLD_GLOW },
+    { label: 'Total PnL',     val: usd(animPnL),
+      accent: animPnL < 0 ? 'text-bearish' : GOLD_GLOW },
   ];
 
   return (
     <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-6 px-6 py-8 overflow-y-auto bg-[#000000]">
-
       <span className="text-sm font-bold font-mono uppercase tracking-[0.22em] text-white border-b border-[#1c1c1e] pb-3">
         Performance Summary
       </span>
-
-      {/* Minimalist vertical stack — one compact indicator per metric */}
       <div className="flex flex-col gap-3">
-        {metrics.map(m => (
+        {metrics.map((m, i) => (
           <div
             key={m.label}
-            className="flex flex-col gap-1.5 rounded-lg border border-[#1c1c1e] bg-[#0d0d0f] px-4 py-3.5"
+            className="lift flex flex-col gap-1.5 rounded-lg border border-[#1c1c1e] bg-[#0d0d0f] px-4 py-3.5"
+            style={{ transitionDelay: `${i * 40}ms` }}
           >
             <span className="text-xs font-bold font-mono text-white/55 uppercase tracking-[0.18em]">{m.label}</span>
             <span className={`text-2xl font-black font-mono tabular-nums ${m.accent}`}>{m.val}</span>
           </div>
         ))}
       </div>
-
     </aside>
   );
 }

@@ -43,19 +43,25 @@ export default function Sidebar() {
               key={href}
               href={href}
               dir={rtl ? 'rtl' : 'ltr'}
+              style={{ transition: 'color 250ms cubic-bezier(0.16,1,0.3,1), background-color 250ms cubic-bezier(0.16,1,0.3,1), border-color 250ms cubic-bezier(0.16,1,0.3,1)' }}
               className={[
                 'flex items-center gap-3 px-3 py-2.5 rounded-sm',
                 'text-sm font-bold font-mono tracking-[0.12em] uppercase',
-                'transition-all duration-700 ease-in-out',
                 rtl ? 'pr-[10px] pl-3 border-r-2 border-l-0' : 'pl-[10px] pr-3 border-l-2',
                 active
-                  ? `border-[#d4af37] bg-[#d4af37]/8 text-white`
-                  : `border-transparent text-white/55 hover:text-white hover:border-[#1c1c1e]`,
+                  ? 'border-[#d4af37] bg-[#d4af37]/8 text-white'
+                  : 'border-transparent text-white/50 hover:text-white/90 hover:bg-white/[0.03] hover:border-white/10',
               ].join(' ')}
             >
-              {active && (
-                <span className={`w-1.5 h-1.5 rounded-full bg-[#d4af37] shrink-0 ${rtl ? 'order-last' : ''}`} />
-              )}
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{
+                  background: active ? '#d4af37' : 'transparent',
+                  boxShadow: active ? '0 0 8px rgba(212,175,55,0.7)' : 'none',
+                  transition: 'background 300ms cubic-bezier(0.16,1,0.3,1), box-shadow 300ms cubic-bezier(0.16,1,0.3,1)',
+                  order: rtl ? 1 : 0,
+                }}
+              />
               <span>{t(key)}</span>
             </Link>
           );

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import type { LivePrices } from '../hooks/useLivePrices';
+import { useCountUp } from '../hooks/useCountUp';
 
 // ─── CME contract specifications (official point values) ────────────────────
 type AssetKey = 'ES' | 'NQ';
@@ -57,6 +58,16 @@ export default function PositionCalculator({ live }: { live: LivePrices }) {
   const riskPerMicro   = stopNum * spec.ptMicro;
   const stdContracts   = riskPerStd   > 0 ? Math.floor(cashAtRisk / riskPerStd)   : 0;
   const microContracts = riskPerMicro > 0 ? Math.floor(cashAtRisk / riskPerMicro) : 0;
+
+  // Value-flash key: triggers CSS animation when contract count changes.
+  const flashKeyRef = useRef(0);
+  const prevStd = useRef(0);
+  if (stdContracts !== prevStd.current) { flashKeyRef.current++; prevStd.current = stdContracts; }
+
+  // Animated output values (expo-out easing).
+  const animatedCash  = useCountUp(cashAtRisk,    400);
+  const animatedStd   = useCountUp(stdContracts,   350);
+  const animatedMicro = useCountUp(microContracts, 350);
   const stopLevel      = entry > 0 && stopNum > 0 ? entry - stopNum : 0;
 
   // Actual risk taken once contracts are rounded down (≤ the risk budget).
@@ -85,7 +96,7 @@ export default function PositionCalculator({ live }: { live: LivePrices }) {
           <p className="text-sm font-bold font-mono text-white/55 uppercase tracking-[0.2em] mt-3">{t('calc_subtitle')}</p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden">
+        <div className="grid lg:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden lift">
 
           {/* ── Inputs ───────────────────────────────────────────────────── */}
           <div className="bg-[#000000] p-6 flex flex-col gap-5">
@@ -204,26 +215,32 @@ export default function PositionCalculator({ live }: { live: LivePrices }) {
             {/* Cash at risk — hero metric */}
             <div className="mb-6">
               <span className="text-sm font-bold font-mono text-white/70 uppercase tracking-[0.18em] block mb-1.5">{t('calc_cash_risk')}</span>
-              <span className={`text-5xl font-black font-mono tabular-nums tracking-tight ${GOLD_GLOW}`}>{usd(cashAtRisk)}</span>
+              <span key={`cash-${flashKeyRef.current}`} className={`text-5xl font-black font-mono tabular-nums tracking-tight value-flash ${GOLD_GLOW}`}>
+                {usd(animatedCash)}
+              </span>
             </div>
 
             {/* Contract counts — hero metrics, with actual risk beneath each */}
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4">
+              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4 lift">
                 <span className="text-xs font-bold font-mono text-white/60 uppercase tracking-[0.16em] block mb-2">
                   {t('calc_std')} · {spec.std}
                 </span>
-                <span className={`text-4xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>{stdContracts}</span>
+                <span className={`text-4xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>
+                  {Math.round(animatedStd)}
+                </span>
                 <span className="block text-xs font-bold font-mono text-white/55 mt-2.5 leading-snug">
                   {t('calc_actual_risk')}:{' '}
                   <span dir="ltr" className="text-[#d4af37] tabular-nums">{actualLine(actualStd, pctStd)}</span>
                 </span>
               </div>
-              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4">
+              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4 lift">
                 <span className="text-xs font-bold font-mono text-white/60 uppercase tracking-[0.16em] block mb-2">
                   {t('calc_micro')} · {spec.micro}
                 </span>
-                <span className={`text-4xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>{microContracts}</span>
+                <span className={`text-4xl font-black font-mono tabular-nums ${GOLD_GLOW}`}>
+                  {Math.round(animatedMicro)}
+                </span>
                 <span className="block text-xs font-bold font-mono text-white/55 mt-2.5 leading-snug">
                   {t('calc_actual_risk')}:{' '}
                   <span dir="ltr" className="text-[#d4af37] tabular-nums">{actualLine(actualMicro, pctMicro)}</span>

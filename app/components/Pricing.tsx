@@ -57,7 +57,7 @@ export function PricingCards({
             key={tier.id}
             onClick={onSelect ? () => onSelect(tier.id) : undefined}
             className={[
-              'relative rounded-xl p-7 flex flex-col bg-[#0d0d0f] transition-all duration-500',
+              'lift relative rounded-xl p-7 flex flex-col bg-[#0d0d0f]',
               tier.featured
                 ? 'border border-[#d4af37] [box-shadow:0_0_60px_-12px_rgba(212,175,55,0.45)]'
                 : 'border border-zinc-800',
