@@ -203,104 +203,89 @@ function normalizeEvent(raw: ForexFactoryEvent, index: number): EconomicEvent | 
   };
 }
 
-// ── Data-fetching layer ──────────────────────────────────────────────────────
+// ── ForexFactory public calendar ─────────────────────────────────────────────
 
-/** How many times to re-attempt a failed request before giving up. */
-const FETCH_RETRIES = 1;
-/** ISR window: re-run the actor at most once an hour (seconds). */
+const FF_PUBLIC_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
 const REVALIDATE_SECONDS = 3600;
 
-/** Error carrying the upstream HTTP status, for structured logging. */
-class HttpError extends Error {
-  constructor(readonly status: number, readonly statusText: string) {
-    super(`Apify run-sync responded ${status} ${statusText}`);
-    this.name = 'HttpError';
-  }
-}
-
 /**
- * GET the URL with hourly ISR caching, retrying once on failure. A retry covers
- * both a thrown network error and a non-2xx response. Throws if every attempt
- * fails, so the caller can fall back to the "unavailable" state.
+ * Schema for a single ForexFactory public calendar event.
+ * The public JSON uses `country` (not `currency`) and embeds time inside `date`.
  */
-async function fetchWithRetry(url: URL, retries = FETCH_RETRIES): Promise<Response> {
-  // ⚠️ TEMP DEBUG — log the exact URL with the token redacted (never print the
-  //    raw token; it can leak into terminal scrollback / log aggregators).
-  const safeUrl = new URL(url);
-  if (safeUrl.searchParams.has('token')) safeUrl.searchParams.set('token', '***REDACTED***');
-  console.log('[DEBUG fetchNews] requesting:', safeUrl.toString());
+const FfPublicItemSchema = z.object({
+  title:    z.string(),
+  country:  z.string(),
+  date:     z.string(), // ISO 8601 e.g. "2026-06-10T12:30:00-04:00"
+  impact:   z.string(), // "High" | "Medium" | "Low" | "Holiday"
+  forecast: z.string().nullable().optional(),
+  previous: z.string().nullable().optional(),
+});
+type FfPublicItem = z.infer<typeof FfPublicItemSchema>;
 
-  try {
-    // ⚠️ TEMP DEBUG — `cache: 'no-store'` forces a real network call on every
-    //    render. Restore `next: { revalidate: REVALIDATE_SECONDS, tags: [...] }`
-    //    when done debugging, or the cache will hide live changes.
-    const res = await fetch(url, { cache: 'no-store' });
-    // const res = await fetch(url, { next: { revalidate: REVALIDATE_SECONDS, tags: ['macro-calendar'] } });
+/** Convert one validated FF public item to our internal `EconomicEvent`. */
+function normalizeFfPublicItem(raw: FfPublicItem, index: number): EconomicEvent | null {
+  const currency = raw.country.trim().toUpperCase();
+  if (!(KNOWN_CURRENCIES as readonly string[]).includes(currency)) return null;
 
-    console.log('[DEBUG fetchNews] response status:', res.status, res.statusText); // ⚠️ TEMP DEBUG
-    if (!res.ok) throw new HttpError(res.status, res.statusText);
-    return res;
-  } catch (err) {
-    // ⚠️ TEMP DEBUG — full stack so the exact failure is visible in the terminal.
-    console.error('[DEBUG fetchNews] fetch failed:', err instanceof Error ? err.stack : err);
-    if (retries > 0) {
-      logger.warn('apify.calendar.fetch_retry', {
-        status: err instanceof HttpError ? err.status : null,
-        error: err instanceof Error ? err.message : String(err),
-        retriesLeft: retries - 1,
-      });
-      return fetchWithRetry(url, retries - 1);
-    }
-    throw err;
-  }
-}
+  // Parse the ISO datetime → local date (YYYY-MM-DD) + ET time (HH:mm)
+  const dt = new Date(raw.date);
+  if (isNaN(dt.getTime())) return null;
 
-/** Pull the dataset-item array out of Apify's response, whatever the wrapping. */
-function extractItems(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === 'object') {
-    const obj = payload as { items?: unknown; data?: { items?: unknown } };
-    if (Array.isArray(obj.items)) return obj.items;
-    if (Array.isArray(obj.data?.items)) return obj.data!.items;
-  }
-  return [];
+  const dateISO = raw.date.slice(0, 10);
+  const time = `${String(dt.getUTCHours()).padStart(2, '0')}:${String(dt.getUTCMinutes()).padStart(2, '0')}`;
+
+  return {
+    id:       `ff-pub-${dateISO}-${index}`,
+    date:     dateISO,
+    time,
+    currency: currency as Currency,
+    impact:   IMPACT_MAP[raw.impact.trim().toLowerCase()] ?? 'Low',
+    title:    raw.title.trim(),
+    forecast: cleanMetric(raw.forecast),
+    previous: cleanMetric(raw.previous),
+    actual:   null,
+  };
 }
 
 /**
- * The single integration seam. Runs the Apify actor via the GET
- * "Run Actor synchronously and get dataset items" endpoint, validates the
- * response with Zod, then normalizes it to `EconomicEvent[]`. Throws on a failed
- * request so the caller can surface a "Data unavailable" state.
- *
- * Reads its config from server-only env (see .env.example). Never prefix these
- * with NEXT_PUBLIC_ — that would inline the token into the browser bundle. When
- * `FF_CALENDAR_URL` is unset (e.g. local dev before you wire Apify) it falls
- * back to the bundled mock so the dashboard still renders.
+ * Fetch the current week's calendar from ForexFactory's public JSON endpoint.
+ * Caches for 1 hour via Next.js ISR. Falls back to mock on any error.
+ */
+async function fetchForexFactory(): Promise<EconomicEvent[]> {
+  try {
+    const res = await fetch(FF_PUBLIC_URL, {
+      next: { revalidate: REVALIDATE_SECONDS },
+    });
+    if (!res.ok) throw new Error(`FF calendar responded ${res.status}`);
+
+    const items = (await res.json()) as unknown[];
+    if (!Array.isArray(items) || items.length === 0) return [];
+
+    const events: EconomicEvent[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const parsed = FfPublicItemSchema.safeParse(items[i]);
+      if (!parsed.success) continue;
+      const event = normalizeFfPublicItem(parsed.data, i);
+      if (event) events.push(event);
+    }
+    return events;
+  } catch (err) {
+    logger.warn('ff_calendar.fetch_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
+/**
+ * Primary data seam. Fetches this week's calendar from ForexFactory's public
+ * JSON endpoint (no API key required). Falls back to the bundled mock feed when
+ * the fetch fails or returns no events — the dashboard always has data to render.
  */
 export async function fetchNews(range: DateRange): Promise<EconomicEvent[]> {
-  const endpoint = process.env.FF_CALENDAR_URL; // Apify run-sync-get-dataset-items URL
-  const token = process.env.FF_CALENDAR_KEY; // Apify API token (optional if embedded in URL)
-
-  if (!endpoint) return buildMockFeed(range);
-
-  const url = new URL(endpoint);
-  // Apify accepts the token embedded in the URL (?token=…, as copied from the
-  // console) or supplied here. Only append it if the URL doesn't already carry one.
-  if (token && !url.searchParams.has('token')) url.searchParams.set('token', token);
-
-  const res = await fetchWithRetry(url);
-
-  const payload = (await res.json()) as unknown;
-  const items = extractItems(payload);
-
-  if (items.length === 0) return buildMockFeed(range);
-
-  const validated = validateItems(items);
-  if (validated.length === 0) return buildMockFeed(range);
-
-  return validated
-    .map(normalizeEvent)
-    .filter((event): event is EconomicEvent => event !== null);
+  const events = await fetchForexFactory();
+  if (events.length > 0) return events;
+  return buildMockFeed(range);
 }
 
 // ── Filtering ────────────────────────────────────────────────────────────────
@@ -350,21 +335,16 @@ function formatDayLabel(isoDate: string): string {
  * dashboard degrades gracefully instead of crashing.
  */
 export async function getHighImpactUsdEvents(range: DateRange): Promise<MacroFeed> {
-  // ⚠️ TEMP DEBUG — 'Data unavailable' fallback disabled so errors propagate and
-  //    stop rendering, surfacing the real failure in the terminal / error overlay.
-  //    Restore the try/catch below when done debugging.
-  const feed = await fetchNews(range);
-  // let feed: EconomicEvent[];
-  // try {
-  //   feed = await fetchNews(range);
-  // } catch (err) {
-  //   logger.error('apify.calendar.unavailable', {
-  //     status: err instanceof HttpError ? err.status : null,
-  //     error: err instanceof Error ? err.message : String(err),
-  //     range,
-  //   });
-  //   return { status: 'unavailable', groups: [] };
-  // }
+  let feed: EconomicEvent[];
+  try {
+    feed = await fetchNews(range);
+  } catch (err) {
+    logger.error('ff_calendar.unavailable', {
+      error: err instanceof Error ? err.message : String(err),
+      range,
+    });
+    return { status: 'unavailable', groups: [] };
+  }
 
   const filtered = feed
     .filter(isTradeable)

@@ -118,6 +118,14 @@ button:not(:disabled):active,
 }
 .laser-run { animation: laser-sweep 1.9s cubic-bezier(0.45, 0, 0.2, 1) 0.2s both; }
 
+/* ── Scroll-strip dot — glides down the track and loops ──── */
+@keyframes scrollDot {
+  0%   { transform: translateY(0);    opacity: 0.3; }
+  20%  { opacity: 1; }
+  80%  { opacity: 0.8; }
+  100% { transform: translateY(56px); opacity: 0; }
+}
+
 /* ── Scrollbars — obsidian, 4px, near-invisible ──────────── */
 * {
   scrollbar-width: thin;

@@ -76,6 +76,49 @@ function SessionGate() {
   );
 }
 
+// ─── Scroll strip ────────────────────────────────────────────────────────────
+
+function ScrollStrip() {
+  return (
+    <button
+      type="button"
+      aria-label="Scroll to Position Calculator"
+      onClick={() => document.getElementById('risk-calculator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      className="hidden md:flex shrink-0 flex-col items-center justify-between py-5 border-l border-[#1c1c1e] bg-[#0a0a0b] hover:bg-[#0d0d0f] transition-colors duration-300 group cursor-pointer select-none"
+      style={{ width: '44px' }}
+    >
+      {/* Top label */}
+      <span
+        className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] text-white/20 group-hover:text-[#d4af37]/60 transition-colors duration-300"
+        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+      >
+        SCROLL
+      </span>
+
+      {/* Center track — narrow gold line with a gliding dot */}
+      <div className="flex-1 flex flex-col items-center py-4 gap-0 relative">
+        {/* Track line */}
+        <div className="absolute inset-x-0 mx-auto w-px bg-[#1c1c1e] group-hover:bg-[#d4af37]/20 transition-colors duration-500" style={{ top: 0, bottom: 0 }} />
+        {/* Animated dot */}
+        <div
+          className="relative z-10 h-3 w-3 rounded-full border border-[#d4af37]/30 bg-[#0a0a0b] group-hover:border-[#d4af37]/80 group-hover:shadow-[0_0_8px_rgba(212,175,55,0.4)] transition-all duration-300"
+          style={{ animation: 'scrollDot 2.4s cubic-bezier(0.45,0,0.55,1) infinite' }}
+        />
+      </div>
+
+      {/* Down arrow */}
+      <svg
+        viewBox="0 0 10 14"
+        className="w-2.5 h-3.5 text-white/20 group-hover:text-[#d4af37]/70 transition-colors duration-300"
+        fill="currentColor"
+        aria-hidden
+      >
+        <path d="M5 0v11M1 7l4 5 4-5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 // `sidebar` is a Server Component (NewsWidget) passed in from the server page,
@@ -136,8 +179,8 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
       <div className="flex-1 min-h-0 overflow-y-auto">
 
         {/* Chart row — fixed height so PositionCalculator is reachable by scrolling.
-            Charts are iframes that swallow scroll events; the scroll container
-            on the right edge (outside the chart iframes) lets the user scroll. */}
+            Charts are iframes that swallow scroll events; the scroll strip on the
+            right sits outside all iframes and gives the user a clear scroll surface. */}
         <div className="flex" style={{ height: 'clamp(340px, 65vh, 780px)' }}>
           {/* Macro feed sidebar */}
           <div className="hidden md:block shrink-0 overflow-y-auto" style={{ width: '288px' }}>
@@ -158,6 +201,11 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
               <SessionGate />
             )}
           </div>
+
+          {/* Scroll strip — sits outside chart iframes so mouse-wheel events
+              reach the outer scroll container. Clicking scrolls down to the
+              Position Calculator. */}
+          <ScrollStrip />
         </div>
 
         {/* Scroll anchor so the #risk-calculator hash-link lands with breathing room */}
