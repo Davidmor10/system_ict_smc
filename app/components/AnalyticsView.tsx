@@ -300,7 +300,7 @@ export default function AnalyticsView() {
 
   return (
     /* Single scroll context — header sticks to top, everything else flows down */
-    <div className="h-full bg-[#000000] text-white overflow-y-auto">
+    <div className="flex-1 min-h-0 bg-[#000000] text-white overflow-y-auto">
 
       {/* Sticky header */}
       <header

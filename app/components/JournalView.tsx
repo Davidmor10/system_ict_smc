@@ -289,7 +289,7 @@ export default function JournalView() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#000000] text-foreground overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-foreground">
 
       {/* Header */}
       <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
@@ -313,13 +313,13 @@ export default function JournalView() {
       {/* Mobile performance metrics (inline, hidden on desktop) */}
       <MobilePerformanceBar trades={trades} />
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
 
         {/* Performance summary sidebar — desktop only */}
         <div className="hidden md:block"><PerformanceSidebar trades={trades} /></div>
 
         {/* Trade log */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0">
 
           {/* Log header + add button */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">

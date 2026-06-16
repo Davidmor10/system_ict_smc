@@ -99,7 +99,7 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
   const isDev      = process.env.NODE_ENV !== 'production';
 
   return (
-    <div className="flex flex-col h-full bg-[#000000] text-[#c0c0c0] overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-[#c0c0c0]">
 
       {/* Header — TradingView tickers + clock HUD */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-4 md:px-6 py-2 md:py-3 border-b border-[#1c1c1e] bg-surface shrink-0">

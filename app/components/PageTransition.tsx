@@ -30,7 +30,7 @@ export default function PageTransition({ children }: { children: React.ReactNode
 
   return (
     <div
-      className="flex flex-col flex-1 min-w-0 overflow-hidden pb-14 md:pb-0"
+      className="flex flex-col flex-1 min-w-0 min-h-0 pb-14 md:pb-0"
       style={
         phase === 'out'
           ? {
