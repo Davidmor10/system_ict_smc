@@ -1,216 +1,290 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useLivePrices } from '../hooks/useLivePrices';
+import Link from 'next/link';
+import { useLivePrices, type LiveQuote } from '../hooks/useLivePrices';
 import SmcChart from './SmcChart';
-import TickerWidget from './TickerWidget';
 import PositionCalculator from './PositionCalculator';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
 import { useMarketStatus } from '../hooks/useMarketStatus';
 
-// ─── Market-closed fallback (weekend) — mirrors ClockHUD's design tokens ─────
+// ─── Section header ───────────────────────────────────────────────────────────
 
-function MarketClosedHUD({ nextOpenLabel }: { nextOpenLabel: string }) {
+function SectionHeader({ num, title, subtitle }: { num: string; title: string; subtitle: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5 shrink-0">
-      <span className="h-2 w-2 rounded-full bg-white/40" />
-      <span className="text-sm font-bold font-mono text-white/80 uppercase tracking-[0.18em]">Market Closed</span>
-      <span className="h-3 w-px bg-[#d4af37]/20" />
-      <span className="text-sm font-black font-mono text-[#d4af37] uppercase tracking-[0.14em] tabular-nums">{nextOpenLabel}</span>
+    <div className="flex items-end justify-between mb-[30px] pb-5 border-b border-[#1c1c1e]">
+      <span className="font-mono text-[12px] tracking-[0.3em] text-[#52525b]">{num}</span>
+      <div className="text-right" dir="rtl">
+        <h2 className="font-serif text-[26px] font-bold text-white leading-none">{title}</h2>
+        <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-white/45 mt-2">{subtitle}</p>
+      </div>
     </div>
   );
 }
 
-// ─── Institutional clock + session countdown HUD ────────────────────────────
+// ─── Sticky status bar ────────────────────────────────────────────────────────
 
-function ClockHUD({ clock, status }: { clock: string; status: SessionStatus }) {
-  return (
-    <div className="flex flex-col items-end gap-1 shrink-0" dir="rtl">
-      {/* Clock — hidden on smallest screens to save space */}
-      <div className="hidden sm:flex items-center gap-2">
-        <span className="text-xl font-black font-mono text-white tabular-nums tracking-tight [text-shadow:0_0_20px_rgba(212,175,55,0.25)]">
-          {clock}
-        </span>
-        <span className="text-xs font-bold font-mono text-[#d4af37] uppercase tracking-[0.2em]">IDT</span>
-      </div>
-      <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${status.inSession ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
-        <span className="text-xs font-bold font-mono text-white/80 hidden sm:inline">
-          {status.inSession ? 'מסתיים בעוד:' : 'מתחיל בעוד:'}
-        </span>
-        <span className="text-xs font-black font-mono text-[#d4af37] tabular-nums">{fmtHMS(status.remaining)}</span>
-      </div>
-      <span className="hidden sm:block text-[10px] font-bold font-mono text-white/50 tracking-wide">
-        {status.session.label}
-      </span>
-    </div>
-  );
-}
-
-// ─── Chart panel wrapper ────────────────────────────────────────────────────
-
-function ChartPanel({ className = '', children }: {
-  className?: string; children: React.ReactNode;
+function StatusBar({
+  role, clock, status, isMarketOpen, override, setOverride, isDev, nextOpenLabel,
+}: {
+  role: 'free' | 'pro';
+  clock: string;
+  status: SessionStatus;
+  isMarketOpen: boolean;
+  override: boolean;
+  setOverride: React.Dispatch<React.SetStateAction<boolean>>;
+  isDev: boolean;
+  nextOpenLabel: string;
 }) {
-  // Symbol header bar (ES1! / NQ1!) intentionally removed — the bare chart
-  // fills the panel for a clean, header-free monochrome surface.
+  const marketOpen = override || isMarketOpen;
+
   return (
-    <div className={`flex flex-col min-w-0 min-h-0 ${className}`}>
-      <div className="flex-1 min-h-0 bg-[#000000]">{children}</div>
+    <div className="sticky top-0 z-50 flex items-center justify-between px-10 h-[58px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e] shrink-0">
+
+      {/* Right: role badge / upgrade CTA */}
+      <div className="flex items-center gap-3" dir="rtl">
+        {role === 'pro' ? (
+          <>
+            <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">
+              PRO
+            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] animate-pulse" />
+            <span className="font-mono text-xs text-white/50 hidden sm:block">גישת PRO פעילה</span>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/checkout"
+              className="shrink-0 px-4 py-1.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.6)] transition-shadow duration-500"
+            >
+              שדרוג ל-PRO ←
+            </Link>
+            <span className="font-mono text-xs text-white/40 hidden sm:block">חשבון חינמי</span>
+          </>
+        )}
+      </div>
+
+      {/* Left: clock + session countdown + dev override */}
+      <div className="flex items-center gap-4">
+        {isDev && (
+          <button
+            onClick={() => setOverride(o => !o)}
+            className={`px-2.5 py-1 rounded-sm border text-xs font-bold font-mono transition-colors duration-300 ${
+              override
+                ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10'
+                : 'border-[#2a2a2d] text-white/60 hover:text-white'
+            }`}
+            dir="rtl"
+          >
+            עקוף סשן
+          </button>
+        )}
+
+        {marketOpen ? (
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[20px] font-black text-white tabular-nums [text-shadow:0_0_20px_rgba(212,175,55,0.25)]">
+              {clock}
+            </span>
+            <span className="font-mono text-xs font-bold text-[#d4af37] uppercase tracking-[0.2em]">IDT</span>
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
+              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${status.inSession ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
+              <span className="font-mono text-xs font-bold text-white/60 hidden sm:inline">
+                {status.inSession ? 'מסתיים בעוד:' : 'מתחיל בעוד:'}
+              </span>
+              <span className="font-mono text-xs font-black text-[#d4af37] tabular-nums">{fmtHMS(status.remaining)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
+            <span className="h-2 w-2 rounded-full bg-white/40" />
+            <span className="font-mono text-sm font-bold text-white/80 uppercase tracking-[0.18em]">Market Closed</span>
+            <span className="h-3 w-px bg-[#d4af37]/20" />
+            <span className="font-mono text-sm font-black text-[#d4af37] uppercase tracking-[0.14em] tabular-nums">{nextOpenLabel}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─── Session gating box ──────────────────────────────────────────────────────
+// ─── Live quote card ──────────────────────────────────────────────────────────
+
+function QuoteCard({ symbol, name, quote }: { symbol: string; name: string; quote: LiveQuote }) {
+  const bullish = quote.change >= 0;
+  const hasData  = quote.price > 0;
+  const hasRange = quote.high > 0 && quote.low > 0 && quote.high > quote.low;
+  const rangePos = hasRange
+    ? Math.min(100, Math.max(0, ((quote.price - quote.low) / (quote.high - quote.low)) * 100))
+    : 50;
+
+  return (
+    <div className="bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px] p-6 lift">
+      {/* Symbol row */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <div className="font-mono text-[24px] font-bold text-white leading-none">{symbol}</div>
+          <div className="font-mono text-[11px] tracking-[0.18em] uppercase text-white/40 mt-1">{name}</div>
+        </div>
+        <span className="font-mono text-[10px] text-white/20 tracking-[0.15em] uppercase mt-1">TradingView</span>
+      </div>
+
+      {/* Price + change pill */}
+      <div className="flex items-end gap-3 mb-5">
+        <span className={`font-mono text-[42px] font-black tabular-nums leading-none transition-colors duration-300 ${
+          quote.flash === 'up'   ? 'text-emerald-400' :
+          quote.flash === 'down' ? 'text-[#cf8d8d]'   : 'text-white'
+        }`}>
+          {hasData ? quote.price.toFixed(2) : '—'}
+        </span>
+        {hasData && (
+          <span className={`mb-1 px-2.5 py-1 rounded-sm font-mono text-[12px] font-bold tabular-nums ${
+            bullish
+              ? 'bg-emerald-950/60 text-emerald-400'
+              : 'bg-[rgba(139,58,58,.16)] text-[#cf8d8d]'
+          }`}>
+            {bullish ? '+' : ''}{quote.change.toFixed(2)} ({bullish ? '+' : ''}{quote.pct.toFixed(2)}%)
+          </span>
+        )}
+      </div>
+
+      {/* Day range bar */}
+      {hasRange ? (
+        <div>
+          <div className="flex justify-between font-mono text-[10px] text-white/35 mb-2">
+            <span>L {quote.low.toFixed(2)}</span>
+            <span>H {quote.high.toFixed(2)}</span>
+          </div>
+          <div className="relative h-px bg-[#1c1c1e]">
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-[#d4af37] [box-shadow:0_0_8px_rgba(212,175,55,0.6)] transition-all duration-500"
+              style={{ left: `clamp(0%, ${rangePos}%, 100%)` }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="h-px bg-[#1c1c1e] opacity-40" />
+      )}
+    </div>
+  );
+}
+
+// ─── Chart panel ─────────────────────────────────────────────────────────────
+
+function ChartPanel({ symbol, name, interval }: { symbol: 'ES' | 'NQ'; name: string; interval: string }) {
+  return (
+    <div className="bg-black border border-[#1c1c1e] rounded-[5px] overflow-hidden">
+      {/* Panel header */}
+      <div className="flex items-center justify-between px-[18px] py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f]">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[14px] font-bold text-white">{symbol}1!</span>
+          <span className="font-mono text-[10px] text-white/40 tracking-[0.15em] uppercase">{name}</span>
+        </div>
+        <span className="px-2 py-0.5 rounded-sm border border-[#d4af37]/40 font-mono text-[10px] text-[#d4af37] font-bold tracking-[0.14em]">
+          {interval}M
+        </span>
+      </div>
+      {/* Chart body */}
+      <div className="h-[440px]">
+        <SmcChart symbol={symbol} interval={interval} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Session gate (spans 2 columns) ──────────────────────────────────────────
 
 function SessionGate() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-8 bg-[#000000]">
+    <div className="col-span-2 flex items-center justify-center p-16 bg-[#000000] border border-[#1c1c1e] rounded-[5px]">
       <div className="max-w-lg text-center rounded-xl border border-[#d4af37]/50 bg-[#0d0d0f] p-10 [box-shadow:0_0_60px_-15px_rgba(212,175,55,0.4)]" dir="rtl">
         <span className="text-[#d4af37] text-4xl">◈</span>
         <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">
-          אין סשן מסחר פעיל כרגע — הגרפים ומערכת הציטוטים יתעדכנו עם תחילת הסשן הבא.
+          אין סשן מסחר פעיל כרגע — הגרפים יתעדכנו עם תחילת הסשן הבא.
         </p>
       </div>
     </div>
   );
 }
 
-// ─── Scroll strip ────────────────────────────────────────────────────────────
-
-function ScrollStrip() {
-  return (
-    <button
-      type="button"
-      aria-label="Scroll to Position Calculator"
-      onClick={() => document.getElementById('risk-calculator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-      className="hidden md:flex shrink-0 flex-col items-center justify-between py-5 border-l border-[#1c1c1e] bg-[#0a0a0b] hover:bg-[#0d0d0f] transition-colors duration-300 group cursor-pointer select-none"
-      style={{ width: '44px' }}
-    >
-      {/* Top label */}
-      <span
-        className="font-mono text-[9px] font-bold uppercase tracking-[0.28em] text-white/20 group-hover:text-[#d4af37]/60 transition-colors duration-300"
-        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-      >
-        SCROLL
-      </span>
-
-      {/* Center track — narrow gold line with a gliding dot */}
-      <div className="flex-1 flex flex-col items-center py-4 gap-0 relative">
-        {/* Track line */}
-        <div className="absolute inset-x-0 mx-auto w-px bg-[#1c1c1e] group-hover:bg-[#d4af37]/20 transition-colors duration-500" style={{ top: 0, bottom: 0 }} />
-        {/* Animated dot */}
-        <div
-          className="relative z-10 h-3 w-3 rounded-full border border-[#d4af37]/30 bg-[#0a0a0b] group-hover:border-[#d4af37]/80 group-hover:shadow-[0_0_8px_rgba(212,175,55,0.4)] transition-all duration-300"
-          style={{ animation: 'scrollDot 2.4s cubic-bezier(0.45,0,0.55,1) infinite' }}
-        />
-      </div>
-
-      {/* Down arrow */}
-      <svg
-        viewBox="0 0 10 14"
-        className="w-2.5 h-3.5 text-white/20 group-hover:text-[#d4af37]/70 transition-colors duration-300"
-        fill="currentColor"
-        aria-hidden
-      >
-        <path d="M5 0v11M1 7l4 5 4-5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
-// `sidebar` is a Server Component (NewsWidget) passed in from the server page,
-// so the macro feed renders server-side even though this view is client-only.
-export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }) {
+export default function DashboardView({
+  role = 'free',
+  macroBoard,
+}: {
+  role?: 'free' | 'pro';
+  macroBoard?: React.ReactNode;
+}) {
   const live = useLivePrices();
   const { isMarketOpen, nextOpenLabel } = useMarketStatus();
 
   const [clock, setClock] = useState(() => israelClock());
   const [override, setOverride] = useState(false);
 
-  // Live IDT clock + session countdown (1s tick). Client-only (ssr:false route).
   useEffect(() => {
     const id = setInterval(() => setClock(israelClock()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const status     = getSessionStatus(clock.sec);
-  const marketOpen = override || isMarketOpen;             // weekend gate (dev override bypasses)
-  const visible    = override || (isMarketOpen && status.inSession);
-  const isDev      = process.env.NODE_ENV !== 'production';
+  const status    = getSessionStatus(clock.sec);
+  const visible   = override || (isMarketOpen && status.inSession);
+  const isDev     = process.env.NODE_ENV !== 'production';
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-[#c0c0c0]">
 
-      {/* Header — TradingView tickers + clock HUD */}
-      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-4 md:px-6 py-2 md:py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
-        {/* Live tickers */}
-        <div className="flex items-center gap-3 min-w-0 overflow-x-auto">
-          {marketOpen ? (
-            <>
-              <div className="w-48 md:w-64 shrink-0"><TickerWidget symbol="CME_MINI:ES1!" /></div>
-              <div className="h-10 w-px bg-[#1c1c1e] shrink-0" />
-              <div className="w-48 md:w-64 shrink-0"><TickerWidget symbol="CME_MINI:NQ1!" /></div>
-            </>
-          ) : (
-            <MarketClosedHUD nextOpenLabel={nextOpenLabel} />
-          )}
-        </div>
+      {/* Sticky status bar */}
+      <StatusBar
+        role={role}
+        clock={clock.clock}
+        status={status}
+        isMarketOpen={isMarketOpen}
+        override={override}
+        setOverride={setOverride}
+        isDev={isDev}
+        nextOpenLabel={nextOpenLabel}
+      />
 
-        <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
-          {isDev && (
-            <button
-              onClick={() => setOverride(o => !o)}
-              className={`px-2.5 py-1 rounded-sm border text-xs font-bold font-mono transition-colors duration-300 ${
-                override ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] text-white/60 hover:text-white'
-              }`}
-              dir="rtl"
-            >
-              עקוף סשן
-            </button>
-          )}
-          {marketOpen && <ClockHUD clock={clock.clock} status={status} />}
-        </div>
-      </header>
-
-      {/* Single scroll context — charts fill viewport, calculator scrolls into view below */}
+      {/* Scrollable body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-10 pb-20">
 
-        {/* Chart row — fixed height so PositionCalculator is reachable by scrolling.
-            Charts are iframes that swallow scroll events; the scroll strip on the
-            right sits outside all iframes and gives the user a clear scroll surface. */}
-        <div className="flex" style={{ height: 'clamp(340px, 65vh, 780px)' }}>
-          {/* Macro feed sidebar */}
-          <div className="hidden md:block shrink-0 overflow-y-auto" style={{ width: '288px' }}>
-            {sidebar}
+          {/* ── 01 · Live Quotes ─────────────────────────────── */}
+          <div className="py-12 border-b border-[#1c1c1e]">
+            <SectionHeader num="01" title="סקירת שוק" subtitle="Live Quotes · ES & NQ Futures" />
+            <div className="grid grid-cols-2 gap-[18px]">
+              <QuoteCard symbol="ES1!" name="S&P 500 Futures · CME" quote={live.es} />
+              <QuoteCard symbol="NQ1!" name="Nasdaq 100 Futures · CME" quote={live.nq} />
+            </div>
           </div>
 
-          <div className="relative flex-1 min-w-0">
-            {visible ? (
-              <div className="flex flex-col md:flex-row h-full">
-                <ChartPanel className="flex-1 border-b md:border-b-0 md:border-r border-[#1c1c1e]">
-                  <SmcChart symbol="ES" interval="5" />
-                </ChartPanel>
-                <ChartPanel className="flex-1">
-                  <SmcChart symbol="NQ" interval="5" />
-                </ChartPanel>
-              </div>
-            ) : (
-              <SessionGate />
-            )}
+          {/* ── 02 · Live Charts ─────────────────────────────── */}
+          <div className="py-12 border-b border-[#1c1c1e]">
+            <SectionHeader num="02" title="גרפים חיים" subtitle="TradingView · 5-Minute · ICT/SMC" />
+            <div className="grid grid-cols-2 gap-[18px]">
+              {visible ? (
+                <>
+                  <ChartPanel symbol="ES" name="S&P 500" interval="5" />
+                  <ChartPanel symbol="NQ" name="Nasdaq 100" interval="5" />
+                </>
+              ) : (
+                <SessionGate />
+              )}
+            </div>
           </div>
 
-          {/* Scroll strip — sits outside chart iframes so mouse-wheel events
-              reach the outer scroll container. Clicking scrolls down to the
-              Position Calculator. */}
-          <ScrollStrip />
-        </div>
+          {/* ── 03 · Macro Journal ───────────────────────────── */}
+          <div className="py-12 border-b border-[#1c1c1e]">
+            <SectionHeader num="03" title="יומן מאקרו" subtitle="ForexFactory · USD High Impact · This Week" />
+            {macroBoard}
+          </div>
 
-        {/* Scroll anchor so the #risk-calculator hash-link lands with breathing room */}
-        <div id="risk-calculator" className="scroll-mt-4">
-          <PositionCalculator live={live} />
+          {/* ── 04 · Position Calculator ─────────────────────── */}
+          <div className="py-12">
+            <SectionHeader num="04" title="מחשבון פוזיציה" subtitle="CME Spec · ES & NQ Risk Engine" />
+            <PositionCalculator live={live} />
+          </div>
+
         </div>
       </div>
     </div>

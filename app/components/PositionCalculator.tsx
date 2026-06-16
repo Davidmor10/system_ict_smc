@@ -86,15 +86,9 @@ export default function PositionCalculator({ live }: { live: LivePrices }) {
   return (
     <section
       dir={rtl ? 'rtl' : 'ltr'}
-      className="w-full bg-[#000000] border-t border-[#1c1c1e] px-6 py-12"
+      className="w-full"
     >
-      <div className="mx-auto max-w-5xl">
-
-        {/* Header */}
-        <div className={`mb-9 ${align}`}>
-          <h2 className="font-serif text-3xl font-bold tracking-[0.03em] text-white leading-none">{t('calc_title')}</h2>
-          <p className="text-sm font-bold font-mono text-white/55 uppercase tracking-[0.2em] mt-3">{t('calc_subtitle')}</p>
-        </div>
+      <div className="w-full">
 
         <div className="grid lg:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden lift">
 
