@@ -3,33 +3,27 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useCountUp } from '../hooks/useCountUp';
 import { useMarketStream } from '../hooks/useMarketStream';
-import type { Bias, SessionName } from '../hooks/useMarketStream';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type TradeResult = 'OPEN' | 'WIN' | 'LOSS' | 'BE';
-
-interface TradeEntry {
-  id: number;
-  time: string;
-  symbol: 'ES' | 'NQ';
-  direction: 'LONG' | 'SHORT';
-  entry: number;
-  stop: number;
-  target: number;
-  session: string;
-  bias: Bias;
-  result: TradeResult;
-  notes: string;
-}
+import type { SessionName } from '../hooks/useMarketStream';
+import {
+  type TradeEntry,
+  type TradeResult,
+  type Bias,
+  type LockoutConfig,
+  type LockoutState,
+  computeStats,
+  todayISO,
+  loadTrades,
+  saveTrades,
+  loadLockoutConfig,
+  saveLockoutConfig,
+  DEFAULT_LOCKOUT,
+  evaluateLockout,
+} from '../lib/journal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // Institutional-gold hero metric: heavy weight + soft glow (matches calculator).
 const GOLD_GLOW = 'text-[#d4af37] [text-shadow:0_0_22px_rgba(212,175,55,0.5)]';
-
-// CME standard point values — used for realized PnL (1 standard contract).
-const PT_VALUE: Record<TradeEntry['symbol'], number> = { ES: 50, NQ: 20 };
 
 const SESSION_LABELS: Record<SessionName, string> = {
   ASIA:  'Asia · 00:00–08:00 ET',
@@ -52,15 +46,6 @@ function getCurrentSession(): SessionName | null {
   return null;
 }
 
-// Realized PnL in USD for one standard contract; null for still-open trades.
-function tradePnL(t: TradeEntry): number | null {
-  if (t.result === 'OPEN') return null;
-  if (t.result === 'BE')   return 0;
-  const dir  = t.direction === 'LONG' ? 1 : -1;
-  const exit = t.result === 'WIN' ? t.target : t.stop;
-  return (exit - t.entry) * dir * PT_VALUE[t.symbol];
-}
-
 function resultCls(r: TradeResult): string {
   if (r === 'WIN')  return 'text-bullish';
   if (r === 'LOSS') return 'text-bearish';
@@ -75,24 +60,6 @@ function biasCls(b: Bias): string {
 const usd = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, signDisplay: 'always' })
     .format(Number.isFinite(n) ? n : 0);
-
-// Aggregate realized performance across all closed trades — shared by the top
-// stats bar and the sidebar summary so the two can never disagree.
-function computeStats(trades: TradeEntry[]) {
-  const closed  = trades.filter(t => t.result !== 'OPEN');
-  const wins    = closed.filter(t => t.result === 'WIN').length;
-  const losses  = closed.filter(t => t.result === 'LOSS').length;
-  const decided = wins + losses;
-  const winRate = decided > 0 ? (wins / decided) * 100 : 0;
-
-  const pnls      = closed.map(tradePnL).filter((n): n is number => n !== null);
-  const grossWin  = pnls.filter(n => n > 0).reduce((a, b) => a + b, 0);
-  const grossLoss = Math.abs(pnls.filter(n => n < 0).reduce((a, b) => a + b, 0));
-  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
-  const totalPnL  = pnls.reduce((a, b) => a + b, 0);
-
-  return { wins, losses, winRate, profitFactor, totalPnL };
-}
 
 const fmtWinRate      = (n: number) => `${n.toFixed(1)}%`;
 const fmtProfitFactor = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
@@ -245,15 +212,31 @@ export default function JournalView() {
   const [trades, setTrades]   = useState<TradeEntry[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft]     = useState<Partial<TradeEntry>>({
-    symbol: 'ES', direction: 'LONG', result: 'OPEN',
+    symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '',
   });
 
+  // Daily Loss Lockout — config (persisted) + its settings-panel toggle.
+  const [lockoutCfg, setLockoutCfg]   = useState<LockoutConfig>(DEFAULT_LOCKOUT);
+  const [lockoutOpen, setLockoutOpen] = useState(false);
+
   useEffect(() => {
-    const saved = localStorage.getItem('fractal_engine_journal');
-    if (saved) {
-      try { setTrades(JSON.parse(saved)); } catch { /* malformed data */ }
-    }
+    setTrades(loadTrades());
+    setLockoutCfg(loadLockoutConfig());
   }, []);
+
+  // Re-evaluate the lockout whenever today's trades or the config change.
+  const lockout: LockoutState = useMemo(
+    () => evaluateLockout(trades, lockoutCfg),
+    [trades, lockoutCfg],
+  );
+
+  function updateLockoutCfg(patch: Partial<LockoutConfig>) {
+    setLockoutCfg(prev => {
+      const next = { ...prev, ...patch };
+      saveLockoutConfig(next);
+      return next;
+    });
+  }
 
   const session     = getCurrentSession();
   const sessionLabel = session ? SESSION_LABELS[session] : 'Between Sessions';
@@ -270,22 +253,25 @@ export default function JournalView() {
     const e = Number(draft.entry), s = Number(draft.stop), t = Number(draft.target);
     if (!e || !s || !t) return;
     const newTrade: TradeEntry = {
-      id: Date.now(), time: nowStr,
+      id: Date.now(),
+      dateISO: todayISO(),
+      time: nowStr,
       symbol: draft.symbol ?? 'ES',
       direction: draft.direction ?? 'LONG',
       entry: e, stop: s, target: t,
       session: session ?? 'NONE',
       bias: esDailyBias.bias,
+      model: (draft.model ?? '').trim() || 'Unspecified',
       result: draft.result ?? 'OPEN',
       notes: draft.notes ?? '',
     };
     setTrades(prev => {
       const updated = [newTrade, ...prev];
-      localStorage.setItem('fractal_engine_journal', JSON.stringify(updated));
+      saveTrades(updated);
       return updated;
     });
     setAddOpen(false);
-    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN' });
+    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '' });
   }
 
   return (
@@ -313,6 +299,31 @@ export default function JournalView() {
       {/* Mobile performance metrics (inline, hidden on desktop) */}
       <MobilePerformanceBar trades={trades} />
 
+      {/* Daily Loss Lockout banner — breaks the revenge-trading loop */}
+      {lockout.locked && (
+        <div
+          className="shrink-0 px-4 md:px-6 py-3 border-b border-bearish/40 bg-bearish/10 flex items-center justify-between gap-3"
+          dir="rtl"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="h-2.5 w-2.5 rounded-full bg-bearish animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <span className="block text-sm md:text-base font-black font-mono text-bearish tracking-wide">
+                עצור להיום — נעילת הגנה הופעלה
+              </span>
+              <span className="block text-xs font-bold font-mono text-white/60 mt-0.5">
+                {lockout.reasons.includes('losses') && `${lockout.lossesToday} הפסדים היום`}
+                {lockout.reasons.includes('losses') && lockout.reasons.includes('dailyLoss') && ' · '}
+                {lockout.reasons.includes('dailyLoss') && `PnL יומי ${usd(lockout.pnlToday)}`}
+              </span>
+            </div>
+          </div>
+          <span className="shrink-0 px-3 py-1 rounded-sm border border-bearish/50 bg-bearish/10 text-bearish font-serif text-xs font-bold tracking-[0.2em] uppercase">
+            Locked
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-1 min-h-0">
 
         {/* Performance summary sidebar — desktop only */}
@@ -324,13 +335,66 @@ export default function JournalView() {
           {/* Log header + add button */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
             <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">Trade Log</span>
-            <button
-              onClick={() => setAddOpen(o => !o)}
-              className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 rounded hover:bg-[#d4af37]/20 hover:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
-            >
-              + Add Entry
-            </button>
+            <div className="flex items-center gap-2">
+              {lockoutCfg.enabled && lockoutCfg.maxLosses > 0 && (
+                <span className={`hidden md:inline text-xs font-bold font-mono tracking-wider ${lockout.locked ? 'text-bearish' : 'text-white/50'}`}>
+                  Losses {lockout.lossesToday}/{lockoutCfg.maxLosses}
+                </span>
+              )}
+              <button
+                onClick={() => setLockoutOpen(o => !o)}
+                title="Daily loss lockout settings"
+                className="px-2.5 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#1c1c1e] text-white/60 border border-[#2a2a2d] rounded hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-300"
+              >
+                ⚙ Lockout
+              </button>
+              <button
+                onClick={() => { if (!lockout.locked) setAddOpen(o => !o); }}
+                disabled={lockout.locked}
+                className={`px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] border rounded transition-all duration-700 ease-in-out ${
+                  lockout.locked
+                    ? 'bg-bearish/10 text-bearish/60 border-bearish/30 cursor-not-allowed'
+                    : 'bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/30 hover:bg-[#d4af37]/20 hover:border-[#d4af37]/50'
+                }`}
+              >
+                {lockout.locked ? '🔒 Locked' : '+ Add Entry'}
+              </button>
+            </div>
           </div>
+
+          {/* Lockout settings panel */}
+          {lockoutOpen && (
+            <div className="px-4 md:px-5 py-4 border-b border-[#1c1c1e] bg-[#0d0d0f] flex flex-wrap gap-5 items-end shrink-0" dir="ltr">
+              <label className="flex items-center gap-2 text-sm font-bold font-mono text-white/80 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={lockoutCfg.enabled}
+                  onChange={e => updateLockoutCfg({ enabled: e.target.checked })}
+                  className="accent-[#d4af37]"
+                />
+                Enable lockout
+              </label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold font-mono uppercase tracking-[0.18em] text-white/70">Max losses / day</label>
+                <input
+                  type="number" min={0} value={lockoutCfg.maxLosses}
+                  onChange={e => updateLockoutCfg({ maxLosses: Math.max(0, Math.floor(Number(e.target.value))) })}
+                  className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-24 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-300"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold font-mono uppercase tracking-[0.18em] text-white/70">Max daily loss ($)</label>
+                <input
+                  type="number" min={0} step={50} value={lockoutCfg.maxDailyLossUsd}
+                  onChange={e => updateLockoutCfg({ maxDailyLossUsd: Math.max(0, Math.floor(Number(e.target.value))) })}
+                  className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-28 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-300"
+                />
+              </div>
+              <span className="text-xs font-bold font-mono text-white/40 max-w-xs leading-relaxed">
+                0 disables that trigger. The lockout resets automatically at the next calendar day.
+              </span>
+            </div>
+          )}
 
           {/* Add entry form */}
           {addOpen && (
@@ -342,6 +406,7 @@ export default function JournalView() {
                 { key: 'stop',      label: 'Stop',      type: 'number' },
                 { key: 'target',    label: 'Target',    type: 'number' },
                 { key: 'result',    label: 'Result',    type: 'select', opts: ['OPEN','WIN','LOSS','BE'] },
+                { key: 'model',     label: 'Model',     type: 'text' },
                 { key: 'notes',     label: 'Notes',     type: 'text' },
               ] as { key: string; label: string; type: string; opts?: string[] }[]).map(f => (
                 <div key={f.key} className="flex flex-col gap-1.5">
@@ -403,6 +468,7 @@ export default function JournalView() {
                     ))}
                     <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Session</th>
                     <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Bias</th>
+                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Model</th>
                     <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Notes</th>
                   </tr>
                 </thead>
@@ -424,6 +490,7 @@ export default function JournalView() {
                         <td className={`px-2 md:px-3 py-2.5 font-bold ${resultCls(t.result)}`}>{t.result}</td>
                         <td className="hidden md:table-cell px-3 py-2.5 text-[#c0c0c0] font-bold whitespace-nowrap">{t.session}</td>
                         <td className={`hidden md:table-cell px-3 py-2.5 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
+                        <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">{t.model}</td>
                         <td className="hidden md:table-cell px-3 py-2.5 text-white/70 font-medium max-w-[160px] truncate">{t.notes || '—'}</td>
                       </tr>
                     );
