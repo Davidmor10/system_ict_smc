@@ -132,18 +132,21 @@ function LivePreview() {
         </div>
 
         {/* Ticker */}
-        <div className="flex items-center gap-6 px-5 py-3 border-b border-[#1c1c1e] bg-[#0d0d0f]">
-          {[{ s: 'ES · S&P 500', p: '7,549.50', c: '+12.25' }, { s: 'NQ · Nasdaq', p: '20,078.50', c: '+48.75' }].map(q => (
-            <div key={q.s} className="flex items-baseline gap-2.5">
-              <span className="text-[10px] font-bold font-mono text-white/60 uppercase tracking-[0.2em]">{q.s}</span>
-              <span className="text-lg font-bold font-mono text-white tabular-nums">{q.p}</span>
+        <div className="flex items-center gap-3 md:gap-6 px-3 md:px-5 py-2.5 border-b border-[#1c1c1e] bg-[#0d0d0f]">
+          {[{ s: 'ES', sfull: 'ES · S&P 500', p: '7,549.50', c: '+12.25' }, { s: 'NQ', sfull: 'NQ · Nasdaq', p: '20,078.50', c: '+48.75' }].map(q => (
+            <div key={q.s} className="flex items-baseline gap-1.5 md:gap-2.5">
+              <span className="text-[9px] md:text-[10px] font-bold font-mono text-white/60 uppercase tracking-[0.2em]">
+                <span className="hidden md:inline">{q.sfull}</span>
+                <span className="md:hidden">{q.s}</span>
+              </span>
+              <span className="text-sm md:text-lg font-bold font-mono text-white tabular-nums">{q.p}</span>
               <span className="text-xs font-bold font-mono text-bullish tabular-nums">{q.c}</span>
             </div>
           ))}
         </div>
 
         {/* Workspace body: macro rail + dual charts */}
-        <div className="grid grid-cols-[130px_1fr_1fr] h-[clamp(240px,38vh,360px)]">
+        <div className="grid grid-cols-[90px_1fr_1fr] md:grid-cols-[130px_1fr_1fr] h-[clamp(180px,38vh,360px)]">
           <div className="border-r border-[#1c1c1e] bg-[#0d0d0f] p-3 flex flex-col gap-2.5" dir={lang === 'he' ? 'rtl' : 'ltr'}>
             <span className="text-[10px] font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em]">{t('today_news')}</span>
             {PREVIEW_NEWS.map((n, i) => (

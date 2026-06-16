@@ -45,24 +45,22 @@ export default function Header() {
           <span className="font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase">Trading</span>
         </Link>
 
-        {/* Language toggle + auth entry (auth slot empty while Clerk resolves) */}
-        <nav className="flex items-center gap-3">
+        {/* Language toggle + auth entry */}
+        <nav className="flex items-center gap-2">
           <button
             onClick={toggle}
             aria-label="Toggle language"
-            className="px-3 py-2 rounded-sm border border-[#1c1c1e] text-white/60 font-mono text-xs font-bold uppercase tracking-[0.18em] hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-500"
+            className="px-2.5 py-1.5 rounded-sm border border-[#1c1c1e] text-white/60 font-mono text-xs font-bold uppercase tracking-[0.18em] hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-500"
           >
             {t('lang_other')}
           </button>
           {!isLoaded ? null : isSignedIn ? (
             <Link href="/dashboard" className={solid}>
-              {t('hdr_workspace')} ←
+              <span className="hidden sm:inline">{t('hdr_workspace')} </span>←
             </Link>
           ) : (
             <>
-              {/* Direct redirects to the hosted Clerk auth pages (which then
-                  forward to /dashboard on success) — no modal popup. */}
-              <Link href="/sign-in" className={ghost}>
+              <Link href="/sign-in" className={`${ghost} hidden sm:inline-flex`}>
                 {t('hdr_signin')}
               </Link>
               <Link href="/sign-up" className={solid}>

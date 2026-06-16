@@ -27,6 +27,12 @@ export const metadata: Metadata = {
   description: "Institutional-grade SMC / ICT futures analytics for ES and NQ",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

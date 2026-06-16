@@ -209,14 +209,14 @@ function Field<T extends string>({ label, options, value, onSelect }: {
   label: string; options: { v: T; label: string }[]; value: T; onSelect: (v: T) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm font-bold font-mono text-white/70 shrink-0">{label}</span>
-      <div className="flex gap-1">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3">
+      <span className="text-xs sm:text-sm font-bold font-mono text-white/70 shrink-0">{label}</span>
+      <div className="flex flex-wrap gap-1">
         {options.map(o => (
           <button
             key={o.v}
             onClick={() => onSelect(o.v)}
-            className={`px-3 py-1.5 rounded-sm text-sm font-bold font-mono transition-colors duration-300 border ${
+            className={`px-2.5 py-1.5 rounded-sm text-xs sm:text-sm font-bold font-mono transition-colors duration-300 border ${
               value === o.v
                 ? 'bg-[#d4af37] text-black border-[#d4af37]'
                 : 'bg-[#1c1c1e] text-white/60 border-[#2a2a2d] hover:text-white'
@@ -244,10 +244,10 @@ function AnalysisPanel({
   const fvgOpts   = (['RESPECTED', 'VIOLATED'] as FVG[]).map(v => ({ v, label: pick(FVG_LABEL[v], en) }));
 
   return (
-    <div className="border-b border-[#1c1c1e] bg-[#0d0d0f] px-6 py-5" dir={en ? 'ltr' : 'rtl'}>
-      <div className="max-w-5xl mx-auto flex flex-col gap-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <span className="text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.18em]">{pick(STR.panelTitle, en)}</span>
+    <div className="border-b border-[#1c1c1e] bg-[#0d0d0f] px-4 md:px-6 py-4 md:py-5" dir={en ? 'ltr' : 'rtl'}>
+      <div className="max-w-5xl mx-auto flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-xs md:text-base font-bold font-mono text-[#d4af37] uppercase tracking-[0.14em] md:tracking-[0.18em]">{pick(STR.panelTitle, en)}</span>
           <button
             onClick={onToggleOverride}
             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm border text-sm font-bold font-mono transition-colors duration-300 ${
@@ -302,11 +302,11 @@ export default function AnalyticsView() {
     <div className="flex flex-col h-full bg-[#000000] text-white overflow-hidden">
 
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0" dir={en ? 'ltr' : 'rtl'}>
-        <span className="font-serif text-xl font-bold tracking-[0.1em] text-white">{pick(STR.headerTitle, en)}</span>
-        <div className="flex items-center gap-2.5">
-          <span className={`h-2.5 w-2.5 rounded-full ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
-          <span className={`text-base font-bold font-mono tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>{sessionLabel}</span>
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0" dir={en ? 'ltr' : 'rtl'}>
+        <span className="font-serif text-base md:text-xl font-bold tracking-[0.06em] md:tracking-[0.1em] text-white">{pick(STR.headerTitle, en)}</span>
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
+          <span className={`text-xs md:text-base font-bold font-mono tracking-[0.14em] md:tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>{sessionLabel}</span>
         </div>
       </header>
 

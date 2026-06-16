@@ -96,6 +96,26 @@ function computeStats(trades: TradeEntry[]) {
 const fmtWinRate      = (n: number) => `${n.toFixed(1)}%`;
 const fmtProfitFactor = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
 
+// ─── Mobile performance bar (inline, shown only on small screens) ────────────
+
+function MobilePerformanceBar({ trades }: { trades: TradeEntry[] }) {
+  const { winRate, profitFactor, totalPnL } = computeStats(trades);
+  return (
+    <div className="md:hidden flex items-center gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
+      {[
+        { label: 'Win Rate', val: fmtWinRate(winRate) },
+        { label: 'PF', val: fmtProfitFactor(profitFactor) },
+        { label: 'PnL', val: usd(totalPnL) },
+      ].map(m => (
+        <div key={m.label} className="flex-1 bg-[#000000] px-3 py-2 flex flex-col gap-0.5">
+          <span className="text-[10px] font-bold font-mono text-white/50 uppercase tracking-[0.14em]">{m.label}</span>
+          <span className={`text-base font-black font-mono tabular-nums ${GOLD_GLOW}`}>{m.val}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Top bar — trade volume only (performance lives in the sidebar) ─────────────
 
 function StatsBar({ trades }: { trades: TradeEntry[] }) {
@@ -265,18 +285,17 @@ export default function JournalView() {
     <div className="flex flex-col h-full bg-[#000000] text-foreground overflow-hidden">
 
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
         <div>
-          <span className="font-serif text-xl font-bold tracking-[0.1em] text-white uppercase block">
+          <span className="font-serif text-lg md:text-xl font-bold tracking-[0.1em] text-white uppercase block">
             Trading Journal
           </span>
-          <span className="text-sm font-bold font-mono text-white/60 tracking-wider mt-1 block">{dateStr}</span>
+          <span className="hidden md:block text-sm font-bold font-mono text-white/60 tracking-wider mt-1">{dateStr}</span>
         </div>
-        <div className="flex items-center gap-2.5">
-          {session && <span className="h-2.5 w-2.5 rounded-full bg-[#d4af37] shrink-0" />}
-          {!session && <span className="h-2.5 w-2.5 rounded-full bg-white/40 shrink-0" />}
-          <span className={`text-base font-bold font-mono uppercase tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>
-            {sessionLabel}
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
+          <span className={`text-xs md:text-base font-bold font-mono uppercase tracking-[0.14em] md:tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>
+            {session ?? 'No Session'}
           </span>
         </div>
       </header>
@@ -284,10 +303,13 @@ export default function JournalView() {
       {/* Performance stats */}
       <StatsBar trades={trades} />
 
+      {/* Mobile performance metrics (inline, hidden on desktop) */}
+      <MobilePerformanceBar trades={trades} />
+
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* Performance summary sidebar */}
-        <PerformanceSidebar trades={trades} />
+        {/* Performance summary sidebar — desktop only */}
+        <div className="hidden md:block"><PerformanceSidebar trades={trades} /></div>
 
         {/* Trade log */}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -305,7 +327,7 @@ export default function JournalView() {
 
           {/* Add entry form */}
           {addOpen && (
-            <div className="px-5 py-4 border-b border-[#1c1c1e] bg-surface flex flex-wrap gap-4 items-end shrink-0">
+            <div className="px-4 md:px-5 py-4 border-b border-[#1c1c1e] bg-surface grid grid-cols-2 md:flex md:flex-wrap gap-3 items-end shrink-0">
               {([
                 { key: 'symbol',    label: 'Symbol',    type: 'select', opts: ['ES','NQ'] },
                 { key: 'direction', label: 'Dir',       type: 'select', opts: ['LONG','SHORT'] },
@@ -364,14 +386,17 @@ export default function JournalView() {
                 </span>
               </div>
             ) : (
-              <table className="w-full text-sm font-mono">
+              <table className="w-full text-xs md:text-sm font-mono">
                 <thead className="sticky top-0 bg-surface border-b border-[#1c1c1e] z-10">
                   <tr>
-                    {['Time','Sym','Dir','Entry','Stop','Target','Session','Bias','R:R','Result','Notes'].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-sm font-bold uppercase tracking-[0.16em] text-white whitespace-nowrap">
+                    {['Time','Sym','Dir','Entry','Stop','Tgt','R:R','Result'].map(h => (
+                      <th key={h} className="px-2 md:px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
                         {h}
                       </th>
                     ))}
+                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Session</th>
+                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Bias</th>
+                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,20 +404,20 @@ export default function JournalView() {
                     const rrRaw = (t.target - t.entry) / Math.abs(t.entry - t.stop);
                     const rr = isNaN(rrRaw) ? '—' : rrRaw.toFixed(2);
                     return (
-                      <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-surface transition-all duration-700 ease-in-out">
-                        <td className="px-3 py-3 text-[#c0c0c0] font-bold tabular-nums whitespace-nowrap">{t.time}</td>
-                        <td className="px-3 py-3 text-white font-bold">{t.symbol}</td>
-                        <td className={`px-3 py-3 font-bold ${t.direction === 'LONG' ? 'text-bullish' : 'text-bearish'}`}>
-                          {t.direction}
+                      <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-surface transition-colors duration-300">
+                        <td className="px-2 md:px-3 py-2.5 text-[#c0c0c0] font-bold tabular-nums whitespace-nowrap">{t.time}</td>
+                        <td className="px-2 md:px-3 py-2.5 text-white font-bold">{t.symbol}</td>
+                        <td className={`px-2 md:px-3 py-2.5 font-bold ${t.direction === 'LONG' ? 'text-bullish' : 'text-bearish'}`}>
+                          {t.direction === 'LONG' ? 'L' : 'S'}<span className="hidden md:inline">{t.direction === 'LONG' ? 'ONG' : 'HORT'}</span>
                         </td>
-                        <td className="px-3 py-3 tabular-nums text-white font-bold">{t.entry.toFixed(2)}</td>
-                        <td className="px-3 py-3 tabular-nums text-bearish font-bold">{t.stop.toFixed(2)}</td>
-                        <td className="px-3 py-3 tabular-nums text-bullish font-bold">{t.target.toFixed(2)}</td>
-                        <td className="px-3 py-3 text-[#c0c0c0] font-bold whitespace-nowrap">{t.session}</td>
-                        <td className={`px-3 py-3 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
-                        <td className="px-3 py-3 tabular-nums text-[#d4af37] font-bold">{rr}</td>
-                        <td className={`px-3 py-3 font-bold ${resultCls(t.result)}`}>{t.result}</td>
-                        <td className="px-3 py-3 text-white/70 font-medium max-w-[160px] truncate">{t.notes || '—'}</td>
+                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-white font-bold">{t.entry.toFixed(2)}</td>
+                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-bearish font-bold">{t.stop.toFixed(2)}</td>
+                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-bullish font-bold">{t.target.toFixed(2)}</td>
+                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-[#d4af37] font-bold">{rr}</td>
+                        <td className={`px-2 md:px-3 py-2.5 font-bold ${resultCls(t.result)}`}>{t.result}</td>
+                        <td className="hidden md:table-cell px-3 py-2.5 text-[#c0c0c0] font-bold whitespace-nowrap">{t.session}</td>
+                        <td className={`hidden md:table-cell px-3 py-2.5 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
+                        <td className="hidden md:table-cell px-3 py-2.5 text-white/70 font-medium max-w-[160px] truncate">{t.notes || '—'}</td>
                       </tr>
                     );
                   })}

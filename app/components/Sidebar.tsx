@@ -19,7 +19,7 @@ export default function Sidebar() {
   const rtl = lang === 'he';
 
   return (
-    <aside className="w-[200px] shrink-0 flex flex-col border-r border-[#1c1c1e] bg-[#0d0d0f]">
+    <aside className="hidden md:flex w-[200px] shrink-0 flex-col border-r border-[#1c1c1e] bg-[#0d0d0f]">
 
       {/* ── Branding ─────────────────────────────────────────── */}
       <div className="px-5 py-5 border-b border-[#1c1c1e]">
