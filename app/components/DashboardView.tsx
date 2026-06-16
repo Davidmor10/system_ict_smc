@@ -135,9 +135,14 @@ export default function DashboardView({ sidebar }: { sidebar?: React.ReactNode }
       {/* Single scroll context — charts fill viewport, calculator scrolls into view below */}
       <div className="flex-1 min-h-0 overflow-y-auto">
 
-        {/* Chart row: fixed viewport height so the calculator sits naturally below */}
-        <div className="flex" style={{ height: 'calc(100svh - 90px)' }}>
-          {sidebar}
+        {/* Chart row — fixed height so PositionCalculator is reachable by scrolling.
+            Charts are iframes that swallow scroll events; the scroll container
+            on the right edge (outside the chart iframes) lets the user scroll. */}
+        <div className="flex" style={{ height: 'clamp(340px, 65vh, 780px)' }}>
+          {/* Macro feed sidebar */}
+          <div className="hidden md:block shrink-0 overflow-y-auto" style={{ width: '288px' }}>
+            {sidebar}
+          </div>
 
           <div className="relative flex-1 min-w-0">
             {visible ? (
