@@ -276,6 +276,14 @@ export default function DashboardView({
                 <SessionGate />
               )}
             </div>
+            <p
+              className="mt-[18px] font-mono text-[11px] font-semibold text-white/35 leading-relaxed tracking-[0.1em]"
+              dir="rtl"
+              style={{ textAlign: 'right' }}
+            >
+              ◈ הגרפים המוצגים כאן הם גרפי המדדים הכלליים (S&amp;P 500 ו-Nasdaq 100) — ולא גרפי החוזים העתידיים (ES1! / NQ1!) שנסחרים ב-CME.
+              {' '}ניתן להשתמש בהם כאינדיקציה כללית ולראייה רחבה של שוק המדדים בלבד, ולא כתחליף לגרפי החוזים לצורך קבלת החלטות מסחר.
+            </p>
           </div>
 
           {/* ── 03 · Macro Journal ───────────────────────────── */}
