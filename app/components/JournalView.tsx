@@ -197,9 +197,10 @@ export default function JournalView() {
   const [trash, setTrash]         = useState<DeletedTradeEntry[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
 
-  const [draft, setDraft] = useState<Partial<TradeEntry>>({
+  const [draft, setDraft] = useState<Partial<TradeEntry & { manualTime?: string }>>({
     symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '',
     setup: 'REVERSAL', confirmation: 'IFVG_2M',
+    dateISO: todayISO(),
   });
 
   useEffect(() => {
@@ -282,8 +283,8 @@ export default function JournalView() {
 
     const newTrade: TradeEntry = {
       id: Date.now(),
-      dateISO: todayISO(),
-      time: nowStr,
+      dateISO: draft.dateISO ?? todayISO(),
+      time: session ? nowStr : ((draft as { manualTime?: string }).manualTime ?? nowStr),
       symbol: sym,
       direction: dir,
       entry: e, stop: s, target: t,
@@ -305,7 +306,7 @@ export default function JournalView() {
       return updated;
     });
     setAddOpen(false);
-    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '', setup: 'REVERSAL', confirmation: 'IFVG_2M' });
+    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '', setup: 'REVERSAL', confirmation: 'IFVG_2M', dateISO: todayISO() });
   }
 
   const inputCls =
@@ -548,6 +549,30 @@ export default function JournalView() {
             {/* Section: פרטי עסקה */}
             <FormSection label="פרטי עסקה" />
             <div className="grid grid-cols-2 md:grid-cols-5 gap-[14px] mb-4">
+              {/* תאריך */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">{pick({ he: 'תאריך', en: 'Date' }, en)}</label>
+                <input
+                  type="date"
+                  value={(draft as { dateISO?: string }).dateISO ?? todayISO()}
+                  onChange={e => setField('dateISO', e.target.value)}
+                  dir="ltr"
+                  className="bg-[#101013] border border-[#2a2a2d] rounded px-3 py-2 font-mono text-sm text-white focus:outline-none focus:border-[#d4af37]/50"
+                />
+              </div>
+              {/* שעת כניסה ידנית — רק כשאין סשן */}
+              {!session && (
+                <div className="flex flex-col gap-2">
+                  <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">{pick({ he: 'שעת כניסה', en: 'Entry Time' }, en)}</label>
+                  <input
+                    type="time"
+                    value={(draft as { manualTime?: string }).manualTime ?? nowStr}
+                    onChange={e => setField('manualTime', e.target.value)}
+                    dir="ltr"
+                    className="bg-[#101013] border border-[#2a2a2d] rounded px-3 py-2 font-mono text-sm text-white focus:outline-none focus:border-[#d4af37]/50"
+                  />
+                </div>
+              )}
               {/* נכס */}
               <div className="flex flex-col gap-2">
                 <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">נכס</label>
@@ -687,7 +712,7 @@ export default function JournalView() {
               <thead className="sticky top-0 bg-[#0d0d0f] border-b border-[#1c1c1e] z-10">
                 <tr>
                   <th className="w-10"></th>
-                  {['שעה','נכס','כיוון','כניסה','סטופ','טארגט','R:R','תוצאה'].map(h => (
+                  {[pick({he:'תאריך',en:'Date'},en),'שעה','נכס','כיוון','כניסה','סטופ','טארגט','R:R','תוצאה'].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
                       {h}
                     </th>
@@ -714,6 +739,9 @@ export default function JournalView() {
                         >
                           🗑
                         </button>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-white/45 tabular-nums whitespace-nowrap">
+                        {new Date(t.dateISO).toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'2-digit' })}
                       </td>
                       <td className="px-3 py-2.5 text-white/50 tabular-nums whitespace-nowrap">{t.time}</td>
                       <td className="px-3 py-2.5 text-white font-bold">{t.symbol}</td>
