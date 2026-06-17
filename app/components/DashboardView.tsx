@@ -26,7 +26,7 @@ function SectionHeader({ num, title, subtitle }: { num: string; title: string; s
 // ─── Sticky status bar ────────────────────────────────────────────────────────
 
 function StatusBar({
-  role, clock, status, isMarketOpen, override, setOverride, isDev, nextOpenLabel,
+  role, clock, status, isMarketOpen, override, setOverride, isDev, isOwner, nextOpenLabel,
 }: {
   role: 'free' | 'pro';
   clock: string;
@@ -35,6 +35,7 @@ function StatusBar({
   override: boolean;
   setOverride: React.Dispatch<React.SetStateAction<boolean>>;
   isDev: boolean;
+  isOwner: boolean;
   nextOpenLabel: string;
 }) {
   const marketOpen = override || isMarketOpen;
@@ -245,6 +246,7 @@ export default function DashboardView({
         override={override}
         setOverride={setOverride}
         isDev={isDev}
+        isOwner={isOwner}
         nextOpenLabel={nextOpenLabel}
       />
 
