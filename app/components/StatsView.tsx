@@ -116,25 +116,25 @@ export default function StatsView() {
 
   const overall = useMemo(() => statsByGroup(trades), [trades]);
 
-  const bySession = useMemo(() =>
-    groupByKey(trades, t => t.session), [trades]);
+  const bySession   = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => t.session) as Map<string, GroupStats>, [trades]);
 
-  const byDow = useMemo(() =>
-    groupByKey(trades, t => String(new Date(t.dateISO + 'T12:00:00Z').getUTCDay())), [trades]);
+  const byDow       = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => String(new Date(t.dateISO + 'T12:00:00Z').getUTCDay())) as Map<string, GroupStats>, [trades]);
 
-  const bySetup = useMemo(() =>
-    groupByKey(trades, t => t.setup ?? 'REVERSAL'), [trades]);
+  const bySetup     = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => t.setup ?? 'REVERSAL') as Map<string, GroupStats>, [trades]);
 
-  const byIFVG = useMemo(() =>
-    groupByKey(trades, t => t.confirmation ?? 'IFVG_2M'), [trades]);
+  const byIFVG      = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => t.confirmation ?? 'IFVG_2M') as Map<string, GroupStats>, [trades]);
 
-  const byAlignment = useMemo(() =>
-    groupByKey(trades, t => t.biasAlignment ?? 'COUNTER'), [trades]);
+  const byAlignment = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => t.biasAlignment ?? 'COUNTER') as Map<string, GroupStats>, [trades]);
 
   const rDist = useMemo(() => rDistribution(trades), [trades]);
 
-  const byHour = useMemo(() =>
-    groupByKey(trades, t => t.time.slice(0, 2)), [trades]);
+  const byHour = useMemo<Map<string, GroupStats>>(() =>
+    groupByKey(trades, t => t.time.slice(0, 2)) as Map<string, GroupStats>, [trades]);
 
   // Find best session by winRate
   const bestSession = useMemo(() => {
