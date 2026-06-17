@@ -66,7 +66,7 @@ function StatusBar({
 
       {/* Left: clock + session countdown + dev override */}
       <div className="flex items-center gap-4">
-        {isDev && (
+        {(isDev || isOwner) && (
           <button
             onClick={() => setOverride(o => !o)}
             className={`px-2.5 py-1 rounded-sm border text-xs font-bold font-mono transition-colors duration-300 ${
@@ -210,9 +210,11 @@ function SessionGate() {
 
 export default function DashboardView({
   role = 'free',
+  isOwner = false,
   macroBoard,
 }: {
   role?: 'free' | 'pro';
+  isOwner?: boolean;
   macroBoard?: React.ReactNode;
 }) {
   const live = useLivePrices();
