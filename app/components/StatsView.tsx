@@ -10,6 +10,7 @@ import {
   rDistribution,
   type TradeEntry,
   type GroupStats,
+  type IFVGConfirmation,
 } from '../lib/journal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -148,10 +149,10 @@ export default function StatsView() {
 
   // Find best IFVG
   const bestIFVG = useMemo(() => {
-    const keys = ['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'];
+    const keys: string[] = ['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'];
     let best = ''; let bestWr = -1;
     for (const k of keys) {
-      const g = byIFVG.get(k);
+      const g = byIFVG.get(k as IFVGConfirmation);
       if (g && g.winRate > bestWr) { bestWr = g.winRate; best = k; }
     }
     return best;
