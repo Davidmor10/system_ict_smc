@@ -1,8 +1,8 @@
 import DashboardWorkspace from '../components/DashboardWorkspace';
 import MacroBoard from '../components/NewsWidget';
-import { getUserContext } from '../lib/getUserRole';
+import { getUserRole } from '../lib/getUserRole';
 
 export default async function DashboardPage() {
-  const { role, isOwner } = await getUserContext();
-  return <DashboardWorkspace role={role} isOwner={isOwner} macroBoard={<MacroBoard />} />;
+  const role = await getUserRole();
+  return <DashboardWorkspace role={role} macroBoard={<MacroBoard />} />;
 }
