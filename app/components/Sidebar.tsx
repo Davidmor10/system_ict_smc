@@ -11,6 +11,7 @@ const NAV_KEYS = [
   { href: '/dashboard',           key: 'nav_workspace' },
   { href: '/dashboard/analytics', key: 'nav_analytics' },
   { href: '/dashboard/journal',   key: 'nav_journal'   },
+  { href: '/dashboard/stats',     key: 'nav_stats'     },
 ] as const;
 
 export default function Sidebar() {

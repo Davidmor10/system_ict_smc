@@ -19,6 +19,9 @@ export type { Bias };
 export type TradeResult = 'OPEN' | 'WIN' | 'LOSS' | 'BE';
 export type Symbol = 'ES' | 'NQ';
 export type Direction = 'LONG' | 'SHORT';
+export type Setup = 'REVERSAL' | 'CONTINUATION';
+export type IFVGConfirmation = 'IFVG_1M' | 'IFVG_2M' | 'IFVG_3M' | 'IFVG_5M';
+export type BiasAlignment = 'ALIGNED' | 'COUNTER';
 
 /** Free-text setup/model tag the trader assigns to a trade (their own naming). */
 export type IctModel = string;
@@ -43,6 +46,16 @@ export interface TradeEntry {
   notes: string;
   /** Prop-firm account this trade belongs to (Prop Firm Mode). */
   accountId?: string;
+  /** Setup type: reversal (liquidity sweep + flip) or continuation (gap entry). */
+  setup?: Setup;
+  /** IFVG timeframe used for confirmation (1M / 2M / 3M / 5M). */
+  confirmation?: IFVGConfirmation;
+  /** Whether direction aligns with the day's bias. Auto-computed on submit. */
+  biasAlignment?: BiasAlignment;
+  /** Realized R multiple: WIN=planned R, LOSS=−1, BE=0, OPEN=0. */
+  tradeR?: number;
+  /** Realized PnL in USD for 1 standard contract. */
+  pnlUsd?: number;
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────
@@ -86,21 +99,56 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
       ? r.dateISO
       : toLocalISO(new Date(id));
 
+  const symbol: Symbol    = r.symbol === 'NQ' ? 'NQ' : 'ES';
+  const direction: Direction = r.direction === 'SHORT' ? 'SHORT' : 'LONG';
+  const bias: Bias        = (r.bias as Bias) ?? 'INDECISIVE';
+
+  // Backward-compat: compute derived fields if missing.
+  const setupVal: Setup = (r.setup === 'REVERSAL' || r.setup === 'CONTINUATION')
+    ? r.setup : 'REVERSAL';
+  const confirmVal: IFVGConfirmation =
+    (['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).includes(r.confirmation as IFVGConfirmation)
+    ? r.confirmation as IFVGConfirmation : 'IFVG_2M';
+
+  const isBullBias = bias === 'BULLISH';
+  const isBearBias = bias === 'BEARISH';
+  const alignment: BiasAlignment =
+    (isBullBias && direction === 'LONG') || (isBearBias && direction === 'SHORT')
+      ? 'ALIGNED' : 'COUNTER';
+
+  const risk = Math.abs(entry - stop);
+  const dir  = direction === 'LONG' ? 1 : -1;
+  const ptVal = symbol === 'NQ' ? 20 : 50;
+  const plannedR = risk > 0 ? ((target - entry) * dir) / risk : 0;
+  const tradeR: number =
+    result === 'WIN'  ? plannedR :
+    result === 'LOSS' ? -1 :
+    0;
+  const pnlUsd: number =
+    result === 'WIN'  ? tradeR * ptVal :
+    result === 'LOSS' ? -risk * ptVal :
+    0;
+
   return {
     id,
     dateISO,
     time: typeof r.time === 'string' ? r.time : '',
-    symbol: r.symbol === 'NQ' ? 'NQ' : 'ES',
-    direction: r.direction === 'SHORT' ? 'SHORT' : 'LONG',
+    symbol,
+    direction,
     entry,
     stop,
     target,
     session: typeof r.session === 'string' ? r.session : 'NONE',
-    bias: (r.bias as Bias) ?? 'INDECISIVE',
+    bias,
     model,
     result,
     notes: typeof r.notes === 'string' ? r.notes : '',
     accountId: typeof r.accountId === 'string' ? r.accountId : undefined,
+    setup: setupVal,
+    confirmation: confirmVal,
+    biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : alignment,
+    tradeR: typeof r.tradeR === 'number' ? r.tradeR : tradeR,
+    pnlUsd: typeof r.pnlUsd === 'number' ? r.pnlUsd : pnlUsd,
   };
 }
 
@@ -178,6 +226,75 @@ export function computeStats(trades: TradeEntry[]): TradeStats {
   const avgR = rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
 
   return { count: trades.length, wins, losses, winRate, profitFactor, totalPnL, avgR };
+}
+
+// ── Stats helpers for StatsView ─────────────────────────────────────────────
+
+export interface GroupStats {
+  winRate: number;
+  tradeCount: number;
+  totalPnl: number;
+  avgR: number;
+  wins: number;
+  losses: number;
+}
+
+export function statsByGroup(trades: TradeEntry[]): GroupStats {
+  const closed = trades.filter(t => t.result !== 'OPEN');
+  const wins   = closed.filter(t => t.result === 'WIN').length;
+  const losses = closed.filter(t => t.result === 'LOSS').length;
+  const decided = wins + losses;
+  const winRate = decided > 0 ? (wins / decided) * 100 : 0;
+  const totalPnl = closed.reduce((sum, t) => sum + (tradePnL(t) ?? 0), 0);
+  const rs = closed
+    .map(t => { const r = Math.abs(t.entry - t.stop); const dir = t.direction === 'LONG' ? 1 : -1; return r > 0 ? ((t.target - t.entry) * dir) / r : null; })
+    .filter((r): r is number => r !== null);
+  const avgR = rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
+  return { winRate, tradeCount: trades.length, totalPnl, avgR, wins, losses };
+}
+
+export function groupByKey<K extends string>(
+  trades: TradeEntry[],
+  keyOf: (t: TradeEntry) => K,
+): Map<K, GroupStats> {
+  const buckets = new Map<K, TradeEntry[]>();
+  for (const t of trades) {
+    const k = keyOf(t);
+    const b = buckets.get(k);
+    if (b) b.push(t); else buckets.set(k, [t]);
+  }
+  const result = new Map<K, GroupStats>();
+  for (const [k, ts] of buckets) result.set(k, statsByGroup(ts));
+  return result;
+}
+
+export interface RBucket { bucket: string; count: number; isWin: boolean }
+
+export function rDistribution(trades: TradeEntry[]): RBucket[] {
+  const BUCKETS: { label: string; min: number; max: number; isWin: boolean }[] = [
+    { label: '<-1R',   min: -Infinity, max: -1,    isWin: false },
+    { label: '-1R',    min: -1,        max: 0,     isWin: false },
+    { label: '0–0.5R', min: 0,         max: 0.5,   isWin: false },
+    { label: '0.5–1R', min: 0.5,       max: 1,     isWin: true  },
+    { label: '1–2R',   min: 1,         max: 2,     isWin: true  },
+    { label: '2–3R',   min: 2,         max: 3,     isWin: true  },
+    { label: '>3R',    min: 3,         max: Infinity, isWin: true },
+  ];
+  const counts = new Map<string, number>(BUCKETS.map(b => [b.label, 0]));
+  for (const t of trades) {
+    if (t.result === 'OPEN') continue;
+    const r = typeof t.tradeR === 'number' ? t.tradeR : (t.result === 'LOSS' ? -1 : 0);
+    const bucket = BUCKETS.find(b => r >= b.min && r < b.max);
+    if (bucket) counts.set(bucket.label, (counts.get(bucket.label) ?? 0) + 1);
+  }
+  return BUCKETS.map(b => ({ bucket: b.label, count: counts.get(b.label) ?? 0, isWin: b.isWin }));
+}
+
+export function statsByHour(trades: TradeEntry[]): Map<number, GroupStats> {
+  return groupByKey(trades, t => {
+    const h = parseInt(t.time.slice(0, 2), 10);
+    return String(Number.isFinite(h) ? h : 0) as string;
+  }) as unknown as Map<number, GroupStats>;
 }
 
 /** Group trades by an arbitrary key, e.g. session, model, or day of week. */

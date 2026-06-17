@@ -8,6 +8,7 @@ export const DICT = {
   nav_workspace:        { en: 'Main Workspace',         he: 'סביבת עבודה'                    },
   nav_analytics:        { en: 'Market Analytics',       he: 'ניתוח שוק'                      },
   nav_journal:          { en: 'Trading Journal',        he: 'יומן מסחר'                      },
+  nav_stats:            { en: 'Statistics',             he: 'סטטיסטיקה'                      },
   sys_live:             { en: 'System Live',            he: 'מערכת פעילה'                    },
   sys_account:          { en: 'Account',                he: 'חשבון'                          },
   brand_sub:            { en: 'Trading',                he: 'מסחר'                           },

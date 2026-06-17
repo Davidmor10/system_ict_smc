@@ -8,6 +8,9 @@ import {
   type TradeEntry,
   type TradeResult,
   type Bias,
+  type Setup,
+  type IFVGConfirmation,
+  type BiasAlignment,
   type LockoutConfig,
   type LockoutState,
   computeStats,
@@ -18,6 +21,7 @@ import {
   saveLockoutConfig,
   DEFAULT_LOCKOUT,
   evaluateLockout,
+  PT_VALUE,
 } from '../lib/journal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -213,6 +217,7 @@ export default function JournalView() {
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft]     = useState<Partial<TradeEntry>>({
     symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '',
+    setup: 'REVERSAL', confirmation: 'IFVG_2M',
   });
 
   // Daily Loss Lockout — config (persisted) + its settings-panel toggle.
@@ -252,18 +257,36 @@ export default function JournalView() {
   function submitTrade() {
     const e = Number(draft.entry), s = Number(draft.stop), t = Number(draft.target);
     if (!e || !s || !t) return;
+    const sym    = draft.symbol    ?? 'ES';
+    const dir    = draft.direction ?? 'LONG';
+    const result = draft.result    ?? 'OPEN';
+    const bias   = esDailyBias.bias;
+    const ptVal  = PT_VALUE[sym];
+    const risk   = Math.abs(e - s);
+    const dirNum = dir === 'LONG' ? 1 : -1;
+    const plannedR = risk > 0 ? ((t - e) * dirNum) / risk : 0;
+    const tradeR: number = result === 'WIN' ? plannedR : result === 'LOSS' ? -1 : 0;
+    const pnlUsd: number = result === 'WIN' ? tradeR * ptVal : result === 'LOSS' ? -risk * ptVal : 0;
+    const biasAlignment: BiasAlignment =
+      ((bias === 'BULLISH' && dir === 'LONG') || (bias === 'BEARISH' && dir === 'SHORT'))
+        ? 'ALIGNED' : 'COUNTER';
     const newTrade: TradeEntry = {
       id: Date.now(),
       dateISO: todayISO(),
       time: nowStr,
-      symbol: draft.symbol ?? 'ES',
-      direction: draft.direction ?? 'LONG',
+      symbol: sym,
+      direction: dir,
       entry: e, stop: s, target: t,
       session: session ?? 'NONE',
-      bias: esDailyBias.bias,
+      bias,
       model: (draft.model ?? '').trim() || 'Unspecified',
-      result: draft.result ?? 'OPEN',
+      result,
       notes: draft.notes ?? '',
+      setup: draft.setup ?? 'REVERSAL',
+      confirmation: draft.confirmation ?? 'IFVG_2M',
+      biasAlignment,
+      tradeR,
+      pnlUsd,
     };
     setTrades(prev => {
       const updated = [newTrade, ...prev];
@@ -429,6 +452,36 @@ export default function JournalView() {
                   )}
                 </div>
               ))}
+
+              {/* Setup type */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">סוג סטאפ</label>
+                <div className="flex gap-1">
+                  {([['REVERSAL','ריברסל'],['CONTINUATION','המשכיות']] as [Setup, string][]).map(([v, lbl]) => (
+                    <button key={v} type="button"
+                      onClick={() => setDraft(d => ({ ...d, setup: v }))}
+                      className={`px-3 py-1.5 text-xs font-bold font-mono rounded border transition-colors duration-200 ${
+                        draft.setup === v ? 'bg-[#d4af37]/15 border-[#d4af37]/60 text-[#d4af37]' : 'bg-[#1c1c1e] border-[#2a2a2d] text-white/60'
+                      }`}
+                    >{lbl}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* IFVG Confirmation */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">IFVG Confirm</label>
+                <div className="flex gap-1">
+                  {(['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).map(v => (
+                    <button key={v} type="button"
+                      onClick={() => setDraft(d => ({ ...d, confirmation: v }))}
+                      className={`px-3 py-1.5 text-xs font-bold font-mono rounded border transition-colors duration-200 ${
+                        draft.confirmation === v ? 'bg-[#d4af37]/15 border-[#d4af37]/60 text-[#d4af37]' : 'bg-[#1c1c1e] border-[#2a2a2d] text-white/60'
+                      }`}
+                    >{v.replace('IFVG_','')}</button>
+                  ))}
+                </div>
+              </div>
 
               {/* Trade snapshot attachment (UI only — no upload yet) */}
               <ChartUpload />
