@@ -72,6 +72,10 @@ function SmcChart({ symbol, interval = '5' }: Props) {
       enable_publishing: false,
       support_host: 'https://www.tradingview.com',
       overrides: OVERRIDES,
+      studies_overrides: {
+        'volume.volume.color.0': '#7c3a3a',
+        'volume.volume.color.1': '#4a7c59',
+      },
     });
     container.appendChild(script);
 
