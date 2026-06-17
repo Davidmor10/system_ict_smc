@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useLanguage } from '../hooks/useLanguage';
 import { useCountUp } from '../hooks/useCountUp';
 import { useMarketStream } from '../hooks/useMarketStream';
 import type { SessionName } from '../hooks/useMarketStream';
@@ -13,6 +14,7 @@ import {
   type BiasAlignment,
   type LockoutConfig,
   type LockoutState,
+  type DeletedTradeEntry,
   computeStats,
   todayISO,
   loadTrades,
@@ -22,30 +24,37 @@ import {
   DEFAULT_LOCKOUT,
   evaluateLockout,
   PT_VALUE,
+  loadTrash,
+  softDelete,
+  restoreTrade,
+  daysUntilExpiry,
 } from '../lib/journal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+type Bi = { he: string; en: string };
+const pick = (b: Bi, en: boolean) => (en ? b.en : b.he);
+
 const GOLD_GLOW = 'text-[#d4af37] [text-shadow:0_0_22px_rgba(212,175,55,0.5)]';
 
 const SESSION_LABELS: Record<SessionName, string> = {
-  ASIA:   'Asia · 00:00–08:00 ET',
-  LONDON: 'London · 09:00–12:00 ET',
-  NY_AM:  'NY AM · 16:00–18:00 ET',
-  NY_PM:  'NY PM · 20:00–23:59 ET',
+  ASIA:   'אסיה · 02:00–07:00',
+  LONDON: 'לונדון · 09:00–12:00',
+  NY_AM:  'ניו יורק AM · 16:00–18:00',
+  NY_PM:  'ניו יורק PM · 19:50–22:00',
 };
 
 function getCurrentSession(): SessionName | null {
-  const h = parseInt(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York', hour: 'numeric', hour12: false,
-    }).format(new Date()),
-    10,
-  );
-  if (h >= 0  && h < 8)  return 'ASIA';
-  if (h >= 9  && h < 12) return 'LONDON';
-  if (h >= 16 && h < 18) return 'NY_AM';
-  if (h >= 20)           return 'NY_PM';
+  const now = new Date();
+  const idt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', hour: 'numeric', minute: 'numeric', hour12: false,
+  }).format(now);
+  const [h, m] = idt.split(':').map(Number);
+  const mins = h * 60 + m;
+  if (mins >= 2*60  && mins < 7*60)  return 'ASIA';
+  if (mins >= 9*60  && mins < 12*60) return 'LONDON';
+  if (mins >= 16*60 && mins < 18*60) return 'NY_AM';
+  if (mins >= 20*60 && mins < 22*60) return 'NY_PM';
   return null;
 }
 
@@ -177,12 +186,16 @@ function SetupTag({ s }: { s: Setup | undefined }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function JournalView() {
+  const { lang } = useLanguage();
+  const en = lang === 'en';
   const { esDailyBias } = useMarketStream();
 
   const [trades, setTrades]       = useState<TradeEntry[]>([]);
   const [addOpen, setAddOpen]     = useState(false);
   const [lockoutCfg, setLockoutCfg]   = useState<LockoutConfig>(DEFAULT_LOCKOUT);
   const [lockoutOpen, setLockoutOpen] = useState(false);
+  const [trash, setTrash]         = useState<DeletedTradeEntry[]>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   const [draft, setDraft] = useState<Partial<TradeEntry>>({
     symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '',
@@ -192,12 +205,19 @@ export default function JournalView() {
   useEffect(() => {
     setTrades(loadTrades());
     setLockoutCfg(loadLockoutConfig());
+    setTrash(loadTrash());
   }, []);
 
   const lockout: LockoutState = useMemo(
     () => evaluateLockout(trades, lockoutCfg),
     [trades, lockoutCfg],
   );
+
+  function handleDelete(id: number) {
+    const { updatedTrades, updatedTrash } = softDelete(trades, id);
+    setTrades(updatedTrades);
+    setTrash(updatedTrash);
+  }
 
   function updateLockoutCfg(patch: Partial<LockoutConfig>) {
     setLockoutCfg(prev => {
@@ -423,6 +443,15 @@ export default function JournalView() {
                 Losses {lockout.lossesToday}/{lockoutCfg.maxLosses}
               </span>
             )}
+            <button onClick={() => setTrashOpen(o => !o)}
+              className="flex items-center gap-2 px-3 py-1.5 border border-[#2a2a2d] rounded text-xs font-bold font-mono tracking-wider text-white/50 hover:text-white/80 transition-colors">
+              🗑 <span>{pick({ he: 'סל מחזור', en: 'Trash' }, en)}</span>
+              {trash.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-[#7c3a3a]/25 text-[#c98080] text-[9px] font-black flex items-center justify-center">
+                  {trash.length}
+                </span>
+              )}
+            </button>
             <button onClick={() => setLockoutOpen(o => !o)}
               className="px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] bg-[#0d0d0f] border border-[#2a2a2d] text-white/50 rounded hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-300">
               ⚙ Lockout
@@ -440,6 +469,61 @@ export default function JournalView() {
             </button>
           </div>
         </div>
+
+        {/* ── Trash Panel ────────────────────────────────────────── */}
+        {trashOpen && (
+          <div className="border-b border-[#7c3a3a]/30 bg-[#7c3a3a]/5 shrink-0">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#7c3a3a]/20">
+              <span className="text-xs font-bold font-mono uppercase tracking-[0.18em] text-[#c98080]/80">
+                {pick({ he: 'סל מחזור', en: 'Recycle Bin' }, en)}
+              </span>
+              <span className="text-xs font-mono text-white/35">
+                {pick({ he: 'נמחק אוטומטית לאחר 30 יום', en: 'Auto-deleted after 30 days' }, en)}
+              </span>
+            </div>
+            {trash.length === 0 ? (
+              <div className="px-5 py-6 text-center font-mono text-sm text-white/30">
+                {pick({ he: 'הסל ריק', en: 'Trash is empty' }, en)}
+              </div>
+            ) : (
+              <div className="divide-y divide-[#7c3a3a]/10 max-h-64 overflow-y-auto">
+                {trash.map(({ trade: t, deletedAt }) => (
+                  <div key={t.id} className="flex items-center justify-between px-5 py-3 gap-4">
+                    <div className="flex items-center gap-4 min-w-0 font-mono text-xs">
+                      <span className="text-white/40 tabular-nums">{t.time}</span>
+                      <span className="text-white font-bold">{t.symbol}</span>
+                      <span className={t.direction === 'LONG' ? 'text-[#6fa580] font-bold' : 'text-[#c98080] font-bold'}>
+                        {t.direction}
+                      </span>
+                      <span className="text-white/60 tabular-nums">{t.entry.toFixed(2)}</span>
+                      <span className={`font-bold ${
+                        t.result === 'WIN'  ? 'text-[#6fa580]' :
+                        t.result === 'LOSS' ? 'text-[#c98080]' :
+                        t.result === 'BE'   ? 'text-[#d4af37]' : 'text-white/50'
+                      }`}>{t.result}</span>
+                      <span className="text-white/30">{t.session}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[10px] font-mono text-white/30 tabular-nums">
+                        {pick({ he: `נמחק בעוד ${daysUntilExpiry(deletedAt)} יום`, en: `expires in ${daysUntilExpiry(deletedAt)}d` }, en)}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const { updatedTrades, updatedTrash } = restoreTrade(trades, trash, t.id);
+                          setTrades(updatedTrades);
+                          setTrash(updatedTrash);
+                        }}
+                        className="px-3 py-1 text-[11px] font-bold font-mono tracking-wider uppercase border border-[#d4af37]/40 text-[#d4af37] rounded hover:bg-[#d4af37]/10 transition-colors"
+                      >
+                        {pick({ he: '↩ שחזר', en: '↩ Restore' }, en)}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Add Entry Form ─────────────────────────────────────── */}
         {addOpen && (
@@ -602,6 +686,7 @@ export default function JournalView() {
             <table className="w-full text-xs font-mono">
               <thead className="sticky top-0 bg-[#0d0d0f] border-b border-[#1c1c1e] z-10">
                 <tr>
+                  <th className="w-10"></th>
                   {['שעה','נכס','כיוון','כניסה','סטופ','טארגט','R:R','תוצאה'].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
                       {h}
@@ -620,7 +705,16 @@ export default function JournalView() {
                     ? ((t.target - t.entry) * (t.direction === 'LONG' ? 1 : -1)) / Math.abs(t.entry - t.stop)
                     : 0;
                   return (
-                    <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-[#0d0d0f] transition-colors duration-200">
+                    <tr key={t.id} className="group border-b border-[#1c1c1e] hover:bg-[#0d0d0f] transition-colors duration-200">
+                      <td className="w-10 px-2 py-2">
+                        <button
+                          onClick={() => handleDelete(t.id)}
+                          title="העבר לסל מחזור"
+                          className="w-8 h-8 rounded border border-[#7c3a3a]/30 bg-[#7c3a3a]/8 text-[#c98080]/40 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#7c3a3a]/25 hover:border-[#7c3a3a]/60 hover:text-[#c98080] transition-all duration-200 text-sm"
+                        >
+                          🗑
+                        </button>
+                      </td>
                       <td className="px-3 py-2.5 text-white/50 tabular-nums whitespace-nowrap">{t.time}</td>
                       <td className="px-3 py-2.5 text-white font-bold">{t.symbol}</td>
                       <td className={`px-3 py-2.5 font-bold ${t.direction === 'LONG' ? 'text-[#6fa580]' : 'text-[#c98080]'}`}>

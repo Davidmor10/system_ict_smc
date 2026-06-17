@@ -58,6 +58,70 @@ export interface TradeEntry {
   pnlUsd?: number;
 }
 
+// ── Trash / Soft-delete ──────────────────────────────────────────────────────
+
+export interface DeletedTradeEntry {
+  trade: TradeEntry;
+  deletedAt: string;
+}
+
+const TRASH_KEY = 'onyx_journal_trash';
+
+export function loadTrash(): DeletedTradeEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(TRASH_KEY);
+    if (!raw) return [];
+    const items: DeletedTradeEntry[] = JSON.parse(raw);
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return items.filter(i => new Date(i.deletedAt).getTime() > cutoff);
+  } catch {
+    return [];
+  }
+}
+
+export function saveTrash(items: DeletedTradeEntry[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(TRASH_KEY, JSON.stringify(items));
+  } catch { /* non-fatal */ }
+}
+
+export function softDelete(trades: TradeEntry[], id: number): {
+  updatedTrades: TradeEntry[];
+  updatedTrash: DeletedTradeEntry[];
+} {
+  const trade = trades.find(t => t.id === id);
+  if (!trade) return { updatedTrades: trades, updatedTrash: loadTrash() };
+  const updatedTrades = trades.filter(t => t.id !== id);
+  const updatedTrash = [{ trade, deletedAt: new Date().toISOString() }, ...loadTrash()];
+  saveTrades(updatedTrades);
+  saveTrash(updatedTrash);
+  return { updatedTrades, updatedTrash };
+}
+
+export function restoreTrade(trades: TradeEntry[], trash: DeletedTradeEntry[], id: number): {
+  updatedTrades: TradeEntry[];
+  updatedTrash: DeletedTradeEntry[];
+} {
+  const item = trash.find(i => i.trade.id === id);
+  if (!item) return { updatedTrades: trades, updatedTrash: trash };
+  const updatedTrades = [item.trade, ...trades].sort((a, b) => b.id - a.id);
+  const updatedTrash = trash.filter(i => i.trade.id !== id);
+  saveTrades(updatedTrades);
+  saveTrash(updatedTrash);
+  return { updatedTrades, updatedTrash };
+}
+
+export function emptyTrash(): void {
+  saveTrash([]);
+}
+
+export function daysUntilExpiry(deletedAt: string): number {
+  const ms = 30 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(deletedAt).getTime());
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
+
 // ── Persistence ──────────────────────────────────────────────────────────────
 
 export const JOURNAL_KEY = 'fractal_engine_journal';
