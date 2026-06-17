@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
 import { useLivePrices, type LiveQuote } from '../hooks/useLivePrices';
 import SmcChart from './SmcChart';
 import PositionCalculator from './PositionCalculator';
@@ -210,15 +211,14 @@ function SessionGate() {
 
 export default function DashboardView({
   role = 'free',
-  isOwner = false,
   macroBoard,
 }: {
   role?: 'free' | 'pro';
-  isOwner?: boolean;
   macroBoard?: React.ReactNode;
 }) {
   const live = useLivePrices();
   const { isMarketOpen, nextOpenLabel } = useMarketStatus();
+  const { user } = useUser();
 
   const [clock, setClock] = useState(() => israelClock());
   const [override, setOverride] = useState(false);
@@ -231,6 +231,7 @@ export default function DashboardView({
   const status    = getSessionStatus(clock.sec);
   const visible   = override || (isMarketOpen && status.inSession);
   const isDev     = process.env.NODE_ENV !== 'production';
+  const isOwner   = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'davidmor030908@gmail.com';
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-[#c0c0c0]">
