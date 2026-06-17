@@ -412,7 +412,7 @@ export default function JournalView() {
       )}
 
       {/* ── Log Area ───────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
 
         {/* Log Header */}
         <div className="flex items-center justify-between px-9 py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0">
@@ -590,7 +590,7 @@ export default function JournalView() {
         )}
 
         {/* ── Table ──────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1">
           {trades.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
               <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">No Trades Recorded</span>
