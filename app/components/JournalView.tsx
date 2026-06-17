@@ -26,11 +26,10 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Institutional-gold hero metric: heavy weight + soft glow (matches calculator).
 const GOLD_GLOW = 'text-[#d4af37] [text-shadow:0_0_22px_rgba(212,175,55,0.5)]';
 
 const SESSION_LABELS: Record<SessionName, string> = {
-  ASIA:  'Asia · 00:00–08:00 ET',
+  ASIA:   'Asia · 00:00–08:00 ET',
   LONDON: 'London · 09:00–12:00 ET',
   NY_AM:  'NY AM · 16:00–18:00 ET',
   NY_PM:  'NY PM · 20:00–23:59 ET',
@@ -50,114 +49,57 @@ function getCurrentSession(): SessionName | null {
   return null;
 }
 
-function resultCls(r: TradeResult): string {
-  if (r === 'WIN')  return 'text-bullish';
-  if (r === 'LOSS') return 'text-bearish';
-  if (r === 'BE')   return 'text-[#d4af37]';
-  return 'text-white/50';
-}
-
 function biasCls(b: Bias): string {
-  return b === 'BULLISH' ? 'text-bullish' : b === 'BEARISH' ? 'text-bearish' : 'text-white/60';
+  return b === 'BULLISH' ? 'text-[#6fa580]' : b === 'BEARISH' ? 'text-[#c98080]' : 'text-white/50';
 }
 
 const usd = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0, signDisplay: 'always' })
-    .format(Number.isFinite(n) ? n : 0);
+  new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    maximumFractionDigits: 0, signDisplay: 'always',
+  }).format(Number.isFinite(n) ? n : 0);
 
-const fmtWinRate      = (n: number) => `${n.toFixed(1)}%`;
-const fmtProfitFactor = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
+const fmtPF = (n: number) => (n === Infinity ? '∞' : n.toFixed(2));
 
-// ─── Mobile performance bar (inline, shown only on small screens) ────────────
+// ─── Segmented control ────────────────────────────────────────────────────────
 
-function MobilePerformanceBar({ trades }: { trades: TradeEntry[] }) {
-  const { winRate, profitFactor, totalPnL } = computeStats(trades);
-  const animWinRate = useCountUp(winRate, 500);
-  const animPnL     = useCountUp(totalPnL, 600);
-
+function Seg<T extends string>({
+  value, options, onChange, size = 'sm',
+}: {
+  value: T;
+  options: { val: T; label: string; activeCls?: string }[];
+  onChange: (v: T) => void;
+  size?: 'sm' | 'lg';
+}) {
   return (
-    <div className="md:hidden flex items-center gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
-      {[
-        { label: 'Win Rate', val: fmtWinRate(animWinRate) },
-        { label: 'PF',       val: fmtProfitFactor(profitFactor) },
-        { label: 'PnL',      val: usd(animPnL) },
-      ].map(m => (
-        <div key={m.label} className="flex-1 bg-[#000000] px-3 py-2 flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold font-mono text-white/50 uppercase tracking-[0.14em]">{m.label}</span>
-          <span className={`text-base font-black font-mono tabular-nums ${GOLD_GLOW}`}>{m.val}</span>
-        </div>
+    <div className="flex gap-1">
+      {options.map(o => (
+        <button
+          key={o.val}
+          type="button"
+          onClick={() => onChange(o.val)}
+          className={`flex-1 border font-mono font-bold transition-colors duration-200 rounded-sm ${
+            size === 'lg' ? 'px-4 py-[11px] text-[12px]' : 'px-3 py-[8px] text-[11px]'
+          } ${
+            value === o.val
+              ? (o.activeCls ?? 'bg-[#d4af37]/15 border-[#d4af37]/60 text-[#d4af37]')
+              : 'bg-[#0d0d0f] border-[#2a2a2d] text-white/45 hover:text-white/70'
+          }`}
+        >
+          {o.label}
+        </button>
       ))}
     </div>
   );
 }
 
-// ─── Top bar — trade volume only (performance lives in the sidebar) ─────────────
-
-function StatsBar({ trades }: { trades: TradeEntry[] }) {
-  const { wins, losses } = computeStats(trades);
-
-  return (
-    <div className="flex items-center gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
-      <div className="bg-[#000000] px-6 py-4 flex flex-col gap-1.5">
-        <span className="text-sm font-bold font-mono text-white/60 uppercase tracking-[0.18em]">Trades</span>
-        <span className="text-3xl font-black font-mono tabular-nums text-white">
-          {trades.length}
-          <span className="text-base font-bold text-white/50 ml-2">{wins}W · {losses}L</span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ─── Performance summary sidebar ───────────────────────────────────────────────
-
-function PerformanceSidebar({ trades }: { trades: TradeEntry[] }) {
-  const { winRate, profitFactor, totalPnL } = computeStats(trades);
-
-  const animWinRate      = useCountUp(winRate,      500);
-  const animProfitFactor = useCountUp(profitFactor === Infinity ? 0 : profitFactor, 500);
-  const animPnL          = useCountUp(totalPnL,     600);
-
-  const metrics = [
-    { label: 'Win Rate',      val: fmtWinRate(animWinRate),
-      accent: GOLD_GLOW },
-    { label: 'Profit Factor', val: profitFactor === Infinity ? '∞' : animProfitFactor.toFixed(2),
-      accent: GOLD_GLOW },
-    { label: 'Total PnL',     val: usd(animPnL),
-      accent: animPnL < 0 ? 'text-bearish' : GOLD_GLOW },
-  ];
-
-  return (
-    <aside className="w-72 shrink-0 border-r border-[#1c1c1e] flex flex-col gap-6 px-6 py-8 overflow-y-auto bg-[#000000]">
-      <span className="text-sm font-bold font-mono uppercase tracking-[0.22em] text-white border-b border-[#1c1c1e] pb-3">
-        Performance Summary
-      </span>
-      <div className="flex flex-col gap-3">
-        {metrics.map((m, i) => (
-          <div
-            key={m.label}
-            className="lift flex flex-col gap-1.5 rounded-lg border border-[#1c1c1e] bg-[#0d0d0f] px-4 py-3.5"
-            style={{ transitionDelay: `${i * 40}ms` }}
-          >
-            <span className="text-xs font-bold font-mono text-white/55 uppercase tracking-[0.18em]">{m.label}</span>
-            <span className={`text-2xl font-black font-mono tabular-nums ${m.accent}`}>{m.val}</span>
-          </div>
-        ))}
-      </div>
-    </aside>
-  );
-}
-
-// ─── Trade snapshot — drag-and-drop chart attachment (local preview only) ───────
-// UI placeholder: no server upload yet. Holds an in-memory object URL so the
-// user can attach/preview a chart screenshot per entry.
+// ─── Chart upload ─────────────────────────────────────────────────────────────
 
 function ChartUpload() {
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Revoke the object URL when it changes or the component unmounts (no leaks).
   useEffect(() => {
     return () => { if (preview) URL.revokeObjectURL(preview.url); };
   }, [preview]);
@@ -168,68 +110,90 @@ function ChartUpload() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">Chart</label>
+    <div className="flex flex-col gap-2">
+      <label className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+        Chart
+      </label>
       <div
         onClick={() => inputRef.current?.click()}
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]); }}
-        className={`flex items-center gap-2 h-[38px] px-3 rounded border border-dashed cursor-pointer transition-all duration-300 ${
-          dragOver ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] bg-[#1c1c1e] hover:border-[#d4af37]/50'
+        className={`flex items-center gap-2 h-[42px] px-3 rounded border border-dashed cursor-pointer transition-all duration-300 ${
+          dragOver ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] bg-[#0d0d0f] hover:border-[#d4af37]/40'
         }`}
-        title="Drag & drop an image, or click to browse"
       >
         {preview ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview.url} alt="chart preview" className="h-6 w-6 rounded-sm object-cover border border-[#d4af37]/30" />
-            <span className="text-sm font-bold font-mono text-white/80 max-w-[110px] truncate">{preview.name}</span>
-            <button
-              onClick={e => { e.stopPropagation(); setPreview(null); }}
-              className="ml-1 text-sm font-bold text-white/40 hover:text-bearish transition-colors"
-              aria-label="Remove chart"
-            >
-              ✕
-            </button>
+            <img src={preview.url} alt="chart" className="h-6 w-6 rounded object-cover border border-[#d4af37]/30" />
+            <span className="font-mono text-[11px] text-white/70 truncate max-w-[120px]">{preview.name}</span>
+            <button onClick={e => { e.stopPropagation(); setPreview(null); }}
+              className="ml-auto font-mono text-[11px] text-white/30 hover:text-[#c98080]">✕</button>
           </>
         ) : (
-          <span className="text-sm font-bold font-mono text-[#d4af37]/70 tracking-wide whitespace-nowrap">⬆ Upload Chart</span>
+          <span className="font-mono text-[11px] text-[#d4af37]/60">⬆ העלה גרף</span>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={e => handleFile(e.target.files?.[0])}
-        />
+        <input ref={inputRef} type="file" accept="image/*" className="hidden"
+          onChange={e => handleFile(e.target.files?.[0])} />
       </div>
     </div>
   );
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// ─── Label for form sections ──────────────────────────────────────────────────
+
+function FormSection({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 pb-2 mb-3 border-b border-[#1c1c1e]">
+      <span className="font-mono text-[10px] font-bold uppercase tracking-[0.26em] text-[#d4af37]">{label}</span>
+    </div>
+  );
+}
+
+// ─── Result tag in table ──────────────────────────────────────────────────────
+
+function ResultTag({ r }: { r: TradeResult }) {
+  const cls = r === 'WIN'  ? 'border-[#4a7c59]/60 text-[#6fa580] bg-[#4a7c59]/10' :
+              r === 'LOSS' ? 'border-[#7c3a3a]/60 text-[#c98080] bg-[#7c3a3a]/10' :
+              r === 'BE'   ? 'border-[#d4af37]/50 text-[#d4af37] bg-[#d4af37]/8'  :
+                             'border-[#2a2a2d] text-white/50';
+  return (
+    <span className={`px-2 py-0.5 rounded border font-mono text-[10px] font-bold`+` ${cls}`}>{r}</span>
+  );
+}
+
+// ─── Setup tag in table ───────────────────────────────────────────────────────
+
+function SetupTag({ s }: { s: Setup | undefined }) {
+  if (!s) return <span className="text-white/25 font-mono text-[10px]">—</span>;
+  const cls = s === 'REVERSAL'
+    ? 'border-[#4a7c59]/50 text-[#6fa580] bg-[#4a7c59]/10'
+    : 'border-[#d4af37]/40 text-[#d4af37] bg-[#d4af37]/8';
+  const label = s === 'REVERSAL' ? 'ריברסל' : 'המשכיות';
+  return <span className={`px-2 py-0.5 rounded border font-mono text-[10px] font-bold ${cls}`}>{label}</span>;
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function JournalView() {
   const { esDailyBias } = useMarketStream();
 
-  const [trades, setTrades]   = useState<TradeEntry[]>([]);
-  const [addOpen, setAddOpen] = useState(false);
-  const [draft, setDraft]     = useState<Partial<TradeEntry>>({
+  const [trades, setTrades]       = useState<TradeEntry[]>([]);
+  const [addOpen, setAddOpen]     = useState(false);
+  const [lockoutCfg, setLockoutCfg]   = useState<LockoutConfig>(DEFAULT_LOCKOUT);
+  const [lockoutOpen, setLockoutOpen] = useState(false);
+
+  const [draft, setDraft] = useState<Partial<TradeEntry>>({
     symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '',
     setup: 'REVERSAL', confirmation: 'IFVG_2M',
   });
-
-  // Daily Loss Lockout — config (persisted) + its settings-panel toggle.
-  const [lockoutCfg, setLockoutCfg]   = useState<LockoutConfig>(DEFAULT_LOCKOUT);
-  const [lockoutOpen, setLockoutOpen] = useState(false);
 
   useEffect(() => {
     setTrades(loadTrades());
     setLockoutCfg(loadLockoutConfig());
   }, []);
 
-  // Re-evaluate the lockout whenever today's trades or the config change.
   const lockout: LockoutState = useMemo(
     () => evaluateLockout(trades, lockoutCfg),
     [trades, lockoutCfg],
@@ -243,14 +207,39 @@ export default function JournalView() {
     });
   }
 
-  const session     = getCurrentSession();
+  const session      = getCurrentSession();
   const sessionLabel = session ? SESSION_LABELS[session] : 'Between Sessions';
-  const dateStr     = new Date().toLocaleDateString('en-US', {
+  const dateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   const nowStr = new Date().toTimeString().slice(0, 5);
 
-  function setField(key: string, val: string) {
+  // ── Stats ─────────────────────────────────────────────────────────────
+  const allStats   = useMemo(() => computeStats(trades), [trades]);
+  const todayTrades = useMemo(
+    () => trades.filter(t => t.dateISO === todayISO()),
+    [trades],
+  );
+  const todayStats  = useMemo(() => computeStats(todayTrades), [todayTrades]);
+  const avgTrade    = allStats.count > 0 ? allStats.totalPnL / allStats.count : 0;
+
+  const animWinRate = useCountUp(allStats.winRate, 500);
+  const animPnL     = useCountUp(allStats.totalPnL, 600);
+  const animPF      = useCountUp(allStats.profitFactor === Infinity ? 0 : allStats.profitFactor, 500);
+
+  // ── Live R preview ────────────────────────────────────────────────────
+  const liveE    = Number(draft.entry)  || 0;
+  const liveS    = Number(draft.stop)   || 0;
+  const liveT    = Number(draft.target) || 0;
+  const liveSym  = draft.symbol ?? 'ES';
+  const livePtV  = PT_VALUE[liveSym];
+  const liveRisk = liveE && liveS ? Math.abs(liveE - liveS) : 0;
+  const liveDirN = draft.direction === 'SHORT' ? -1 : 1;
+  const liveRR   = liveRisk > 0 && liveT ? ((liveT - liveE) * liveDirN) / liveRisk : 0;
+  const liveRiskUsd  = liveRisk * livePtV;
+  const livePotUsd   = liveRR * liveRiskUsd;
+
+  function setField(key: string, val: string | number) {
     setDraft(d => ({ ...d, [key]: val }));
   }
 
@@ -270,6 +259,7 @@ export default function JournalView() {
     const biasAlignment: BiasAlignment =
       ((bias === 'BULLISH' && dir === 'LONG') || (bias === 'BEARISH' && dir === 'SHORT'))
         ? 'ALIGNED' : 'COUNTER';
+
     const newTrade: TradeEntry = {
       id: Date.now(),
       dateISO: todayISO(),
@@ -288,270 +278,374 @@ export default function JournalView() {
       tradeR,
       pnlUsd,
     };
+
     setTrades(prev => {
       const updated = [newTrade, ...prev];
       saveTrades(updated);
       return updated;
     });
     setAddOpen(false);
-    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '' });
+    setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '', setup: 'REVERSAL', confirmation: 'IFVG_2M' });
   }
 
-  return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-foreground">
+  const inputCls =
+    'w-full bg-[#0d0d0f] border border-[#2a2a2d] rounded-sm px-3 py-[9px] text-[13px] font-bold font-mono text-white ' +
+    'tabular-nums tracking-wide outline-none transition-colors duration-200 focus:border-[#d4af37]/60 placeholder:text-white/20';
 
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
-        <div>
-          <span className="font-serif text-lg md:text-xl font-bold tracking-[0.1em] text-white uppercase block">
-            Trading Journal
+  return (
+    <div className="flex flex-col flex-1 min-h-0 bg-black text-white">
+
+      {/* ── Topbar ─────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-50 h-[58px] flex items-center justify-between px-9 bg-[rgba(8,8,9,.92)] backdrop-blur border-b border-[#1c1c1e] shrink-0">
+        <div className="flex items-center gap-3" dir="rtl">
+          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_18px_rgba(212,175,55,0.22)]">
+            PRO
           </span>
-          <span className="hidden md:block text-sm font-bold font-mono text-white/60 tracking-wider mt-1">{dateStr}</span>
+          <h1 className="font-serif text-[20px] font-bold text-white leading-none">יומן מסחר</h1>
+          <span className="font-mono text-[11px] text-white/40 hidden sm:block">{dateStr}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37]' : 'bg-white/40'}`} />
-          <span className={`text-xs md:text-base font-bold font-mono uppercase tracking-[0.14em] md:tracking-[0.18em] ${session ? 'text-[#d4af37]' : 'text-white/55'}`}>
-            {session ?? 'No Session'}
+          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37] animate-pulse' : 'bg-white/30'}`} />
+          <span className={`font-mono text-[12px] font-bold tracking-[0.14em] uppercase ${session ? 'text-[#d4af37]' : 'text-white/40'}`}>
+            {sessionLabel}
           </span>
         </div>
-      </header>
+      </div>
 
-      {/* Performance stats */}
-      <StatsBar trades={trades} />
+      {/* ── PerfStrip ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-5 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
+        {/* 1 · עסקאות היום */}
+        <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">עסקאות היום</span>
+          <span className="font-mono text-[28px] font-black tabular-nums text-white">
+            {todayStats.count}
+            <span className="text-[13px] font-bold text-white/40 ml-2">{todayStats.wins}W · {todayStats.losses}L</span>
+          </span>
+          <span className="font-mono text-[10px] text-white/30">סה״כ: {allStats.count} עסקאות</span>
+        </div>
 
-      {/* Mobile performance metrics (inline, hidden on desktop) */}
-      <MobilePerformanceBar trades={trades} />
+        {/* 2 · Win Rate */}
+        <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">Win Rate</span>
+          <span className={`font-mono text-[28px] font-black tabular-nums ${GOLD_GLOW}`}>
+            {animWinRate.toFixed(1)}%
+          </span>
+          <span className="font-mono text-[10px] text-white/30">{allStats.wins} ניצחונות · {allStats.losses} הפסדים</span>
+        </div>
 
-      {/* Daily Loss Lockout banner — breaks the revenge-trading loop */}
+        {/* 3 · Profit Factor */}
+        <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">Profit Factor</span>
+          <span className={`font-mono text-[28px] font-black tabular-nums ${GOLD_GLOW}`}>
+            {allStats.profitFactor === Infinity ? '∞' : animPF.toFixed(2)}
+          </span>
+          <span className="font-mono text-[10px] text-white/30">רווחים / הפסדים</span>
+        </div>
+
+        {/* 4 · P&L */}
+        <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">סה״כ P&L</span>
+          <span className={`font-mono text-[28px] font-black tabular-nums ${animPnL >= 0 ? 'text-[#6fa580]' : 'text-[#c98080]'}`}>
+            {usd(animPnL)}
+          </span>
+          <span className="font-mono text-[10px] text-white/30">ממוצע עסקה {usd(avgTrade)}</span>
+        </div>
+
+        {/* 5 · הפסדים היום */}
+        <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">הפסדים היום</span>
+          <span className="font-mono text-[28px] font-black tabular-nums text-white">
+            {lockout.lossesToday}
+            <span className="text-[13px] font-bold text-white/40">/{lockoutCfg.maxLosses || '∞'}</span>
+          </span>
+          <span className={`font-mono text-[10px] ${GOLD_GLOW}`}>⚙ Lockout: {lockoutCfg.maxLosses} הפסדים מקס׳</span>
+        </div>
+      </div>
+
+      {/* ── Lockout Banner ─────────────────────────────────────── */}
       {lockout.locked && (
-        <div
-          className="shrink-0 px-4 md:px-6 py-3 border-b border-bearish/40 bg-bearish/10 flex items-center justify-between gap-3"
-          dir="rtl"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="h-2.5 w-2.5 rounded-full bg-bearish animate-pulse shrink-0" />
-            <div className="min-w-0">
-              <span className="block text-sm md:text-base font-black font-mono text-bearish tracking-wide">
+        <div className="flex items-center justify-between px-9 py-[11px] border-b border-[#7c3a3a]/40 bg-[#7c3a3a]/8 shrink-0">
+          <div className="flex items-center gap-2.5" dir="rtl">
+            <span className="h-2 w-2 rounded-full bg-[#c98080] animate-pulse shrink-0" />
+            <div>
+              <span className="block font-mono text-[13px] font-black text-[#c98080] tracking-wide">
                 עצור להיום — נעילת הגנה הופעלה
               </span>
-              <span className="block text-xs font-bold font-mono text-white/60 mt-0.5">
+              <span className="block font-mono text-[10px] text-white/50 mt-0.5">
                 {lockout.reasons.includes('losses') && `${lockout.lossesToday} הפסדים היום`}
                 {lockout.reasons.includes('losses') && lockout.reasons.includes('dailyLoss') && ' · '}
                 {lockout.reasons.includes('dailyLoss') && `PnL יומי ${usd(lockout.pnlToday)}`}
               </span>
             </div>
           </div>
-          <span className="shrink-0 px-3 py-1 rounded-sm border border-bearish/50 bg-bearish/10 text-bearish font-serif text-xs font-bold tracking-[0.2em] uppercase">
+          <span className="px-3 py-1 rounded-sm border border-[#c98080]/50 bg-[#c98080]/10 text-[#c98080] font-serif text-[11px] font-bold tracking-[0.2em] uppercase">
             Locked
           </span>
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0">
-
-        {/* Performance summary sidebar — desktop only */}
-        <div className="hidden md:block"><PerformanceSidebar trades={trades} /></div>
-
-        {/* Trade log */}
-        <div className="flex flex-col flex-1 min-w-0">
-
-          {/* Log header + add button */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#1c1c1e] bg-surface shrink-0">
-            <span className="text-base font-bold font-mono uppercase tracking-[0.14em] text-white">Trade Log</span>
-            <div className="flex items-center gap-2">
-              {lockoutCfg.enabled && lockoutCfg.maxLosses > 0 && (
-                <span className={`hidden md:inline text-xs font-bold font-mono tracking-wider ${lockout.locked ? 'text-bearish' : 'text-white/50'}`}>
-                  Losses {lockout.lossesToday}/{lockoutCfg.maxLosses}
-                </span>
-              )}
-              <button
-                onClick={() => setLockoutOpen(o => !o)}
-                title="Daily loss lockout settings"
-                className="px-2.5 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#1c1c1e] text-white/60 border border-[#2a2a2d] rounded hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-300"
-              >
-                ⚙ Lockout
-              </button>
-              <button
-                onClick={() => { if (!lockout.locked) setAddOpen(o => !o); }}
-                disabled={lockout.locked}
-                className={`px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] border rounded transition-all duration-700 ease-in-out ${
-                  lockout.locked
-                    ? 'bg-bearish/10 text-bearish/60 border-bearish/30 cursor-not-allowed'
-                    : 'bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/30 hover:bg-[#d4af37]/20 hover:border-[#d4af37]/50'
-                }`}
-              >
-                {lockout.locked ? '🔒 Locked' : '+ Add Entry'}
-              </button>
-            </div>
+      {/* ── Lockout Settings ───────────────────────────────────── */}
+      {lockoutOpen && (
+        <div className="flex items-center gap-[18px] flex-wrap px-9 py-[13px] border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0" dir="ltr">
+          <label className="flex items-center gap-2 font-mono text-[12px] font-bold text-white/80 cursor-pointer">
+            <input type="checkbox" checked={lockoutCfg.enabled}
+              onChange={e => updateLockoutCfg({ enabled: e.target.checked })}
+              className="accent-[#d4af37]" />
+            Enable Lockout
+          </label>
+          <div className="flex flex-col gap-1">
+            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">מקס׳ הפסדים / יום</label>
+            <input type="number" min={0} value={lockoutCfg.maxLosses}
+              onChange={e => updateLockoutCfg({ maxLosses: Math.max(0, Math.floor(Number(e.target.value))) })}
+              className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 font-mono text-[13px] font-bold text-white w-20 outline-none focus:border-[#d4af37]/50" />
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">מקס׳ הפסד יומי ($)</label>
+            <input type="number" min={0} step={50} value={lockoutCfg.maxDailyLossUsd}
+              onChange={e => updateLockoutCfg({ maxDailyLossUsd: Math.max(0, Math.floor(Number(e.target.value))) })}
+              className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 font-mono text-[13px] font-bold text-white w-24 outline-none focus:border-[#d4af37]/50" />
+          </div>
+          <span className="font-mono text-[10px] text-white/35 max-w-xs leading-relaxed">
+            0 מבטל את הטריגר. הנעילה מתאפסת אוטומטית ביום הבא.
+          </span>
+        </div>
+      )}
 
-          {/* Lockout settings panel */}
-          {lockoutOpen && (
-            <div className="px-4 md:px-5 py-4 border-b border-[#1c1c1e] bg-[#0d0d0f] flex flex-wrap gap-5 items-end shrink-0" dir="ltr">
-              <label className="flex items-center gap-2 text-sm font-bold font-mono text-white/80 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={lockoutCfg.enabled}
-                  onChange={e => updateLockoutCfg({ enabled: e.target.checked })}
-                  className="accent-[#d4af37]"
-                />
-                Enable lockout
-              </label>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold font-mono uppercase tracking-[0.18em] text-white/70">Max losses / day</label>
-                <input
-                  type="number" min={0} value={lockoutCfg.maxLosses}
-                  onChange={e => updateLockoutCfg({ maxLosses: Math.max(0, Math.floor(Number(e.target.value))) })}
-                  className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-24 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-300"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold font-mono uppercase tracking-[0.18em] text-white/70">Max daily loss ($)</label>
-                <input
-                  type="number" min={0} step={50} value={lockoutCfg.maxDailyLossUsd}
-                  onChange={e => updateLockoutCfg({ maxDailyLossUsd: Math.max(0, Math.floor(Number(e.target.value))) })}
-                  className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-28 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-300"
-                />
-              </div>
-              <span className="text-xs font-bold font-mono text-white/40 max-w-xs leading-relaxed">
-                0 disables that trigger. The lockout resets automatically at the next calendar day.
+      {/* ── Log Area ───────────────────────────────────────────── */}
+      <div className="flex flex-col flex-1 min-h-0">
+
+        {/* Log Header */}
+        <div className="flex items-center justify-between px-9 py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0">
+          <span className="font-mono text-[13px] font-bold uppercase tracking-[0.18em] text-white">Trade Log</span>
+          <div className="flex items-center gap-2">
+            {lockoutCfg.enabled && lockoutCfg.maxLosses > 0 && (
+              <span className={`font-mono text-[11px] font-bold ${lockout.locked ? 'text-[#c98080]' : 'text-white/45'}`}>
+                Losses {lockout.lossesToday}/{lockoutCfg.maxLosses}
               </span>
-            </div>
-          )}
+            )}
+            <button onClick={() => setLockoutOpen(o => !o)}
+              className="px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] bg-[#0d0d0f] border border-[#2a2a2d] text-white/50 rounded hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-300">
+              ⚙ Lockout
+            </button>
+            <button
+              onClick={() => { if (!lockout.locked) setAddOpen(o => !o); }}
+              disabled={lockout.locked}
+              className={`px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.16em] border rounded transition-all duration-300 ${
+                lockout.locked
+                  ? 'bg-[#c98080]/10 text-[#c98080]/50 border-[#c98080]/25 cursor-not-allowed'
+                  : 'bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/35 hover:bg-[#d4af37]/18 hover:border-[#d4af37]/60'
+              }`}
+            >
+              {lockout.locked ? '🔒 Locked' : '+ הוסף עסקה'}
+            </button>
+          </div>
+        </div>
 
-          {/* Add entry form */}
-          {addOpen && (
-            <div className="px-4 md:px-5 py-4 border-b border-[#1c1c1e] bg-surface grid grid-cols-2 md:flex md:flex-wrap gap-3 items-end shrink-0">
-              {([
-                { key: 'symbol',    label: 'Symbol',    type: 'select', opts: ['ES','NQ'] },
-                { key: 'direction', label: 'Dir',       type: 'select', opts: ['LONG','SHORT'] },
-                { key: 'entry',     label: 'Entry',     type: 'number' },
-                { key: 'stop',      label: 'Stop',      type: 'number' },
-                { key: 'target',    label: 'Target',    type: 'number' },
-                { key: 'result',    label: 'Result',    type: 'select', opts: ['OPEN','WIN','LOSS','BE'] },
-                { key: 'model',     label: 'Model',     type: 'text' },
-                { key: 'notes',     label: 'Notes',     type: 'text' },
-              ] as { key: string; label: string; type: string; opts?: string[] }[]).map(f => (
-                <div key={f.key} className="flex flex-col gap-1.5">
-                  <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">{f.label}</label>
-                  {f.type === 'select' ? (
-                    <select
-                      className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white focus:outline-none focus:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
-                      value={(draft as Record<string, unknown>)[f.key] as string ?? ''}
-                      onChange={e => setField(f.key, e.target.value)}
-                    >
-                      {f.opts?.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input
-                      type={f.type === 'number' ? 'number' : 'text'}
-                      className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 text-base font-bold font-mono text-white w-28 focus:outline-none focus:border-[#d4af37]/50 transition-all duration-700 ease-in-out"
-                      value={(draft as Record<string, unknown>)[f.key] as string ?? ''}
-                      onChange={e => setField(f.key, e.target.value)}
-                    />
-                  )}
+        {/* ── Add Entry Form ─────────────────────────────────────── */}
+        {addOpen && (
+          <div className="border-b border-[#1c1c1e] bg-black px-9 py-[22px] shrink-0">
+
+            {/* Auto-stamp strip */}
+            <div className="flex items-center gap-6 p-[11px_16px] bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px] mb-5">
+              {[
+                { label: 'סשן',      val: session ?? 'None'         },
+                { label: 'ביאס ES',  val: esDailyBias.bias          },
+                { label: 'שעה ET',   val: nowStr                    },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] animate-pulse" />
+                  <span className="font-mono text-[10px] text-white/40 uppercase tracking-[0.16em]">{item.label}</span>
+                  <span className={`font-mono text-[11px] font-bold ${GOLD_GLOW}`}>{item.val}</span>
                 </div>
               ))}
-
-              {/* Setup type */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">סוג סטאפ</label>
-                <div className="flex gap-1">
-                  {([['REVERSAL','ריברסל'],['CONTINUATION','המשכיות']] as [Setup, string][]).map(([v, lbl]) => (
-                    <button key={v} type="button"
-                      onClick={() => setDraft(d => ({ ...d, setup: v }))}
-                      className={`px-3 py-1.5 text-xs font-bold font-mono rounded border transition-colors duration-200 ${
-                        draft.setup === v ? 'bg-[#d4af37]/15 border-[#d4af37]/60 text-[#d4af37]' : 'bg-[#1c1c1e] border-[#2a2a2d] text-white/60'
-                      }`}
-                    >{lbl}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* IFVG Confirmation */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-bold font-mono uppercase tracking-[0.18em] text-white/70">IFVG Confirm</label>
-                <div className="flex gap-1">
-                  {(['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).map(v => (
-                    <button key={v} type="button"
-                      onClick={() => setDraft(d => ({ ...d, confirmation: v }))}
-                      className={`px-3 py-1.5 text-xs font-bold font-mono rounded border transition-colors duration-200 ${
-                        draft.confirmation === v ? 'bg-[#d4af37]/15 border-[#d4af37]/60 text-[#d4af37]' : 'bg-[#1c1c1e] border-[#2a2a2d] text-white/60'
-                      }`}
-                    >{v.replace('IFVG_','')}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Trade snapshot attachment (UI only — no upload yet) */}
-              <ChartUpload />
-
-              <button
-                onClick={submitTrade}
-                className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-bullish/12 text-bullish border border-bullish/30 rounded hover:bg-bullish/20 transition-all duration-700 ease-in-out"
-              >
-                Record
-              </button>
-              <button
-                onClick={() => setAddOpen(false)}
-                className="px-3 py-1.5 text-sm font-bold font-mono uppercase tracking-[0.18em] bg-[#000000] text-white/60 border border-[#2a2a2d] rounded hover:text-white transition-all duration-700 ease-in-out"
-              >
-                Cancel
-              </button>
+              <span className="ml-auto font-mono text-[10px] text-white/25">← מוחתם אוטומטית</span>
             </div>
-          )}
 
-          {/* Table */}
-          <div className="flex-1 overflow-auto">
-            {trades.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
-                <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">No Trades Recorded</span>
-                <span className="text-base font-bold font-mono text-white/50 leading-relaxed tracking-wider max-w-md">
-                  Use + Add Entry to log a setup. Bias and session context are auto-stamped from live data.
+            {/* Section: פרטי עסקה */}
+            <FormSection label="פרטי עסקה" />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-[14px] mb-4">
+              {/* נכס */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">נכס</label>
+                <Seg value={draft.symbol ?? 'ES'} onChange={v => setField('symbol', v)}
+                  options={[{ val: 'ES', label: 'ES' }, { val: 'NQ', label: 'NQ' }]} />
+              </div>
+              {/* כיוון */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">כיוון</label>
+                <Seg value={draft.direction ?? 'LONG'} onChange={v => setField('direction', v)}
+                  options={[
+                    { val: 'LONG',  label: '▲ לונג',  activeCls: 'bg-[#4a7c59]/18 border-[#4a7c59]/60 text-[#6fa580]' },
+                    { val: 'SHORT', label: '▼ שורט', activeCls: 'bg-[#7c3a3a]/18 border-[#7c3a3a]/60 text-[#c98080]' },
+                  ]} />
+              </div>
+              {/* כניסה */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">כניסה</label>
+                <input type="number" inputMode="decimal" placeholder="0.00"
+                  value={draft.entry ?? ''} onChange={e => setField('entry', e.target.value)}
+                  className={inputCls} />
+              </div>
+              {/* סטופ */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">סטופ</label>
+                <input type="number" inputMode="decimal" placeholder="0.00"
+                  value={draft.stop ?? ''} onChange={e => setField('stop', e.target.value)}
+                  className={inputCls} />
+              </div>
+              {/* טארגט */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">טארגט</label>
+                <input type="number" inputMode="decimal" placeholder="0.00"
+                  value={draft.target ?? ''} onChange={e => setField('target', e.target.value)}
+                  className={inputCls} />
+              </div>
+            </div>
+
+            {/* R preview bar */}
+            <div className="flex items-center gap-4 flex-wrap p-[12px_16px] bg-[#0d0d0f] border border-[#d4af37]/22 rounded-[5px] mb-4">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[10px] text-white/35 uppercase tracking-[0.16em]">R:R מתוכנן</span>
+                <span className={`font-mono text-[18px] font-black tabular-nums ${GOLD_GLOW}`}>
+                  {liveRR > 0 ? liveRR.toFixed(2) : '—'}
                 </span>
               </div>
-            ) : (
-              <table className="w-full text-xs md:text-sm font-mono">
-                <thead className="sticky top-0 bg-surface border-b border-[#1c1c1e] z-10">
-                  <tr>
-                    {['Time','Sym','Dir','Entry','Stop','Tgt','R:R','Result'].map(h => (
-                      <th key={h} className="px-2 md:px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Session</th>
-                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Bias</th>
-                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Model</th>
-                    <th className="hidden md:table-cell px-3 py-2.5 text-left text-xs font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trades.map(t => {
-                    const rrRaw = (t.target - t.entry) / Math.abs(t.entry - t.stop);
-                    const rr = isNaN(rrRaw) ? '—' : rrRaw.toFixed(2);
-                    return (
-                      <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-surface transition-colors duration-300">
-                        <td className="px-2 md:px-3 py-2.5 text-[#c0c0c0] font-bold tabular-nums whitespace-nowrap">{t.time}</td>
-                        <td className="px-2 md:px-3 py-2.5 text-white font-bold">{t.symbol}</td>
-                        <td className={`px-2 md:px-3 py-2.5 font-bold ${t.direction === 'LONG' ? 'text-bullish' : 'text-bearish'}`}>
-                          {t.direction === 'LONG' ? 'L' : 'S'}<span className="hidden md:inline">{t.direction === 'LONG' ? 'ONG' : 'HORT'}</span>
-                        </td>
-                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-white font-bold">{t.entry.toFixed(2)}</td>
-                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-bearish font-bold">{t.stop.toFixed(2)}</td>
-                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-bullish font-bold">{t.target.toFixed(2)}</td>
-                        <td className="px-2 md:px-3 py-2.5 tabular-nums text-[#d4af37] font-bold">{rr}</td>
-                        <td className={`px-2 md:px-3 py-2.5 font-bold ${resultCls(t.result)}`}>{t.result}</td>
-                        <td className="hidden md:table-cell px-3 py-2.5 text-[#c0c0c0] font-bold whitespace-nowrap">{t.session}</td>
-                        <td className={`hidden md:table-cell px-3 py-2.5 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
-                        <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">{t.model}</td>
-                        <td className="hidden md:table-cell px-3 py-2.5 text-white/70 font-medium max-w-[160px] truncate">{t.notes || '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+              <div className="h-5 w-px bg-[#1c1c1e]" />
+              <span className="font-mono text-[11px] font-bold text-white/45">
+                סיכון <span className="text-[#c98080]">{liveRiskUsd > 0 ? usd(-liveRiskUsd).replace('+','') : '—'}</span>
+                {' · '}{liveSym}
+              </span>
+              <div className="h-5 w-px bg-[#1c1c1e]" />
+              <span className="font-mono text-[11px] font-bold text-white/45">
+                פוטנציאל <span className="text-[#6fa580]">{livePotUsd > 0 ? usd(livePotUsd) : '—'}</span>
+              </span>
+              <div className="ml-auto">
+                <Seg<TradeResult> value={draft.result ?? 'OPEN'} onChange={v => setField('result', v)}
+                  options={[
+                    { val: 'WIN',  label: 'WIN',  activeCls: 'bg-[#4a7c59]/18 border-[#4a7c59]/60 text-[#6fa580]' },
+                    { val: 'LOSS', label: 'LOSS', activeCls: 'bg-[#7c3a3a]/18 border-[#7c3a3a]/60 text-[#c98080]' },
+                    { val: 'BE',   label: 'BE',   activeCls: 'bg-[#d4af37]/15 border-[#d4af37]/50 text-[#d4af37]' },
+                    { val: 'OPEN', label: 'OPEN', activeCls: 'bg-white/8 border-white/30 text-white' },
+                  ]} />
+              </div>
+            </div>
+
+            {/* Section: סיווג סטאפ */}
+            <FormSection label="סיווג סטאפ · נדרש לניתוח ביצועים" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px] mb-4">
+              {/* סוג סטאפ */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">סוג סטאפ</label>
+                <Seg<Setup> value={draft.setup ?? 'REVERSAL'} onChange={v => setField('setup', v)} size="lg"
+                  options={[
+                    {
+                      val: 'REVERSAL',
+                      label: 'ריברסל — לקיחת נזילות + היפוך',
+                      activeCls: 'bg-[#4a7c59]/15 border-[#4a7c59]/55 text-[#6fa580]',
+                    },
+                    {
+                      val: 'CONTINUATION',
+                      label: 'המשכיות — כניסה לגאפ 15M / 5M',
+                      activeCls: 'bg-[#d4af37]/12 border-[#d4af37]/50 text-[#d4af37]',
+                    },
+                  ]} />
+              </div>
+              {/* IFVG */}
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">אישור · IFVG רגל מניפולציה</label>
+                <Seg<IFVGConfirmation> value={draft.confirmation ?? 'IFVG_2M'} onChange={v => setField('confirmation', v)} size="lg"
+                  options={[
+                    { val: 'IFVG_1M', label: '1M' },
+                    { val: 'IFVG_2M', label: '2M' },
+                    { val: 'IFVG_3M', label: '3M' },
+                    { val: 'IFVG_5M', label: '5M' },
+                  ]} />
+              </div>
+            </div>
+
+            {/* Section: הערות */}
+            <FormSection label="הערות" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
+              <div className="flex flex-col gap-2">
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">הערות חופשיות</label>
+                <input type="text" dir="rtl" placeholder="תיאור הסטאפ..."
+                  value={draft.notes ?? ''} onChange={e => setField('notes', e.target.value)}
+                  className={inputCls} />
+              </div>
+              <ChartUpload />
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-[10px] pt-5 border-t border-[#1c1c1e] mt-5">
+              <button onClick={submitTrade}
+                className="flex-1 py-[11px] font-mono text-[12px] font-bold uppercase tracking-[0.18em] bg-[#4a7c59]/15 text-[#6fa580] border border-[#4a7c59]/50 rounded hover:bg-[#4a7c59]/25 transition-all duration-300">
+                ✓ שמור עסקה
+              </button>
+              <button onClick={() => setAddOpen(false)}
+                className="px-6 py-[11px] font-mono text-[12px] font-bold uppercase tracking-[0.18em] text-white/45 border border-[#2a2a2d] rounded hover:text-white transition-all duration-300">
+                ביטול
+              </button>
+            </div>
           </div>
+        )}
+
+        {/* ── Table ──────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-auto">
+          {trades.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
+              <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">No Trades Recorded</span>
+              <span className="text-base font-bold font-mono text-white/40 leading-relaxed max-w-md">
+                Use + הוסף עסקה to log a setup. Session, bias &amp; time are auto-stamped.
+              </span>
+            </div>
+          ) : (
+            <table className="w-full text-xs font-mono">
+              <thead className="sticky top-0 bg-[#0d0d0f] border-b border-[#1c1c1e] z-10">
+                <tr>
+                  {['שעה','נכס','כיוון','כניסה','סטופ','טארגט','R:R','תוצאה'].map(h => (
+                    <th key={h} className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">סשן</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">ביאס</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37] whitespace-nowrap">סטאפ ✦</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37] whitespace-nowrap">IFVG ✦</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">הערות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map(t => {
+                  const rrRaw = Math.abs(t.entry - t.stop) > 0
+                    ? ((t.target - t.entry) * (t.direction === 'LONG' ? 1 : -1)) / Math.abs(t.entry - t.stop)
+                    : 0;
+                  return (
+                    <tr key={t.id} className="border-b border-[#1c1c1e] hover:bg-[#0d0d0f] transition-colors duration-200">
+                      <td className="px-3 py-2.5 text-white/50 tabular-nums whitespace-nowrap">{t.time}</td>
+                      <td className="px-3 py-2.5 text-white font-bold">{t.symbol}</td>
+                      <td className={`px-3 py-2.5 font-bold ${t.direction === 'LONG' ? 'text-[#6fa580]' : 'text-[#c98080]'}`}>
+                        {t.direction}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-white font-bold">{t.entry.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-[#c98080] font-bold">{t.stop.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-[#6fa580] font-bold">{t.target.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-[#d4af37] font-bold">
+                        {rrRaw !== 0 ? rrRaw.toFixed(2) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5"><ResultTag r={t.result} /></td>
+                      <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">{t.session}</td>
+                      <td className={`hidden md:table-cell px-3 py-2.5 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
+                      <td className="hidden md:table-cell px-3 py-2.5"><SetupTag s={t.setup} /></td>
+                      <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">
+                        {t.confirmation ? t.confirmation.replace('IFVG_', 'IFVG ') : '—'}
+                      </td>
+                      <td className="hidden md:table-cell px-3 py-2.5 text-white/45 max-w-[150px] truncate">{t.notes || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
