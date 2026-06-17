@@ -296,7 +296,7 @@ export default function StatsView() {
 
             {/* IFVG Confirmation */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-[14px] mb-8">
-              {(['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M']).map(key => {
+              {(['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).map(key => {
                 const meta = IFVG_META[key];
                 const g: GroupStats = byIFVG.get(key) ?? { winRate: 0, tradeCount: 0, totalPnl: 0, avgR: 0, wins: 0, losses: 0 };
                 const isBest = key === bestIFVG && g.tradeCount > 0;
