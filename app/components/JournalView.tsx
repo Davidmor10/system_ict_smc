@@ -37,11 +37,11 @@ const pick = (b: Bi, en: boolean) => (en ? b.en : b.he);
 
 const GOLD_GLOW = 'text-[#d4af37] [text-shadow:0_0_22px_rgba(212,175,55,0.5)]';
 
-const SESSION_LABELS: Record<SessionName, string> = {
-  ASIA:   'אסיה · 02:00–07:00',
-  LONDON: 'לונדון · 09:00–12:00',
-  NY_AM:  'ניו יורק AM · 16:00–18:00',
-  NY_PM:  'ניו יורק PM · 19:50–22:00',
+const SESSION_LABELS: Record<SessionName, { he: string; en: string }> = {
+  ASIA:   { he: 'אסיה · 02:00–07:00',           en: 'Asia · 02:00–07:00'         },
+  LONDON: { he: 'לונדון · 09:00–12:00',          en: 'London · 09:00–12:00'       },
+  NY_AM:  { he: 'ניו יורק AM · 16:00–18:00',     en: 'New York AM · 16:00–18:00'  },
+  NY_PM:  { he: 'ניו יורק PM · 19:50–22:00',     en: 'New York PM · 19:50–22:00'  },
 };
 
 function getCurrentSession(): SessionName | null {
@@ -141,7 +141,7 @@ function ChartUpload() {
               className="ml-auto font-mono text-[11px] text-white/30 hover:text-[#c98080]">✕</button>
           </>
         ) : (
-          <span className="font-mono text-[11px] text-[#d4af37]/60">⬆ העלה גרף</span>
+          <span className="font-mono text-[11px] text-[#d4af37]/60">⬆ Upload Chart</span>
         )}
         <input ref={inputRef} type="file" accept="image/*" className="hidden"
           onChange={e => handleFile(e.target.files?.[0])} />
@@ -174,12 +174,14 @@ function ResultTag({ r }: { r: TradeResult }) {
 
 // ─── Setup tag in table ───────────────────────────────────────────────────────
 
-function SetupTag({ s }: { s: Setup | undefined }) {
+function SetupTag({ s, en }: { s: Setup | undefined; en: boolean }) {
   if (!s) return <span className="text-white/25 font-mono text-[10px]">—</span>;
   const cls = s === 'REVERSAL'
     ? 'border-[#4a7c59]/50 text-[#6fa580] bg-[#4a7c59]/10'
     : 'border-[#d4af37]/40 text-[#d4af37] bg-[#d4af37]/8';
-  const label = s === 'REVERSAL' ? 'ריברסל' : 'המשכיות';
+  const label = s === 'REVERSAL'
+    ? pick({ he: 'ריברסל', en: 'Reversal' }, en)
+    : pick({ he: 'המשכיות', en: 'Continuation' }, en);
   return <span className={`px-2 py-0.5 rounded border font-mono text-[10px] font-bold ${cls}`}>{label}</span>;
 }
 
@@ -228,9 +230,12 @@ export default function JournalView() {
     });
   }
 
+  const dir = en ? 'ltr' : 'rtl';
   const session      = getCurrentSession();
-  const sessionLabel = session ? SESSION_LABELS[session] : 'Between Sessions';
-  const dateStr = new Date().toLocaleDateString('en-US', {
+  const sessionLabel = session
+    ? pick(SESSION_LABELS[session], en)
+    : pick({ he: 'בין סשנים', en: 'Between Sessions' }, en);
+  const dateStr = new Date().toLocaleDateString(en ? 'en-US' : 'he-IL', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   const nowStr = new Date().toTimeString().slice(0, 5);
@@ -314,15 +319,17 @@ export default function JournalView() {
     'tabular-nums tracking-wide outline-none transition-colors duration-200 focus:border-[#d4af37]/60 placeholder:text-white/20';
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-black text-white">
+    <div className="flex flex-col flex-1 min-h-0 bg-black text-white" dir={dir}>
 
       {/* ── Topbar ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 h-[58px] flex items-center justify-between px-9 bg-[rgba(8,8,9,.92)] backdrop-blur border-b border-[#1c1c1e] shrink-0">
-        <div className="flex items-center gap-3" dir="rtl">
+        <div className="flex items-center gap-3" dir={dir}>
           <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_18px_rgba(212,175,55,0.22)]">
             PRO
           </span>
-          <h1 className="font-serif text-[20px] font-bold text-white leading-none">יומן מסחר</h1>
+          <h1 className="font-serif text-[20px] font-bold text-white leading-none">
+            {pick({ he: 'יומן מסחר', en: 'Trade Journal' }, en)}
+          </h1>
           <span className="font-mono text-[11px] text-white/40 hidden sm:block">{dateStr}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -335,14 +342,18 @@ export default function JournalView() {
 
       {/* ── PerfStrip ──────────────────────────────────────────── */}
       <div className="grid grid-cols-5 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
-        {/* 1 · עסקאות היום */}
+        {/* 1 · Trades Today */}
         <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
-          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">עסקאות היום</span>
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">
+            {pick({ he: 'עסקאות היום', en: 'Trades Today' }, en)}
+          </span>
           <span className="font-mono text-[28px] font-black tabular-nums text-white">
             {todayStats.count}
             <span className="text-[13px] font-bold text-white/40 ml-2">{todayStats.wins}W · {todayStats.losses}L</span>
           </span>
-          <span className="font-mono text-[10px] text-white/30">סה״כ: {allStats.count} עסקאות</span>
+          <span className="font-mono text-[10px] text-white/30">
+            {pick({ he: `סה״כ: ${allStats.count} עסקאות`, en: `Total: ${allStats.count} trades` }, en)}
+          </span>
         </div>
 
         {/* 2 · Win Rate */}
@@ -351,7 +362,9 @@ export default function JournalView() {
           <span className={`font-mono text-[28px] font-black tabular-nums ${GOLD_GLOW}`}>
             {animWinRate.toFixed(1)}%
           </span>
-          <span className="font-mono text-[10px] text-white/30">{allStats.wins} ניצחונות · {allStats.losses} הפסדים</span>
+          <span className="font-mono text-[10px] text-white/30">
+            {pick({ he: `${allStats.wins} ניצחונות · ${allStats.losses} הפסדים`, en: `${allStats.wins} wins · ${allStats.losses} losses` }, en)}
+          </span>
         </div>
 
         {/* 3 · Profit Factor */}
@@ -360,42 +373,52 @@ export default function JournalView() {
           <span className={`font-mono text-[28px] font-black tabular-nums ${GOLD_GLOW}`}>
             {allStats.profitFactor === Infinity ? '∞' : animPF.toFixed(2)}
           </span>
-          <span className="font-mono text-[10px] text-white/30">רווחים / הפסדים</span>
+          <span className="font-mono text-[10px] text-white/30">
+            {pick({ he: 'רווחים / הפסדים', en: 'Wins / Losses' }, en)}
+          </span>
         </div>
 
         {/* 4 · P&L */}
         <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
-          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">סה״כ P&L</span>
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">
+            {pick({ he: 'סה״כ P&L', en: 'Total P&L' }, en)}
+          </span>
           <span className={`font-mono text-[28px] font-black tabular-nums ${animPnL >= 0 ? 'text-[#6fa580]' : 'text-[#c98080]'}`}>
             {usd(animPnL)}
           </span>
-          <span className="font-mono text-[10px] text-white/30">ממוצע עסקה {usd(avgTrade)}</span>
+          <span className="font-mono text-[10px] text-white/30">
+            {pick({ he: `ממוצע עסקה ${usd(avgTrade)}`, en: `Avg trade ${usd(avgTrade)}` }, en)}
+          </span>
         </div>
 
-        {/* 5 · הפסדים היום */}
+        {/* 5 · Losses Today */}
         <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
-          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">הפסדים היום</span>
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">
+            {pick({ he: 'הפסדים היום', en: 'Losses Today' }, en)}
+          </span>
           <span className="font-mono text-[28px] font-black tabular-nums text-white">
             {lockout.lossesToday}
             <span className="text-[13px] font-bold text-white/40">/{lockoutCfg.maxLosses || '∞'}</span>
           </span>
-          <span className={`font-mono text-[10px] ${GOLD_GLOW}`}>⚙ Lockout: {lockoutCfg.maxLosses} הפסדים מקס׳</span>
+          <span className={`font-mono text-[10px] ${GOLD_GLOW}`}>
+            {pick({ he: `⚙ Lockout: ${lockoutCfg.maxLosses} הפסדים מקס׳`, en: `⚙ Lockout: ${lockoutCfg.maxLosses} max losses` }, en)}
+          </span>
         </div>
       </div>
 
       {/* ── Lockout Banner ─────────────────────────────────────── */}
       {lockout.locked && (
         <div className="flex items-center justify-between px-9 py-[11px] border-b border-[#7c3a3a]/40 bg-[#7c3a3a]/8 shrink-0">
-          <div className="flex items-center gap-2.5" dir="rtl">
+          <div className="flex items-center gap-2.5" dir={dir}>
             <span className="h-2 w-2 rounded-full bg-[#c98080] animate-pulse shrink-0" />
             <div>
               <span className="block font-mono text-[13px] font-black text-[#c98080] tracking-wide">
-                עצור להיום — נעילת הגנה הופעלה
+                {pick({ he: 'עצור להיום — נעילת הגנה הופעלה', en: 'Stop for today — protection lock activated' }, en)}
               </span>
               <span className="block font-mono text-[10px] text-white/50 mt-0.5">
-                {lockout.reasons.includes('losses') && `${lockout.lossesToday} הפסדים היום`}
+                {lockout.reasons.includes('losses') && pick({ he: `${lockout.lossesToday} הפסדים היום`, en: `${lockout.lossesToday} losses today` }, en)}
                 {lockout.reasons.includes('losses') && lockout.reasons.includes('dailyLoss') && ' · '}
-                {lockout.reasons.includes('dailyLoss') && `PnL יומי ${usd(lockout.pnlToday)}`}
+                {lockout.reasons.includes('dailyLoss') && pick({ he: `PnL יומי ${usd(lockout.pnlToday)}`, en: `Daily PnL ${usd(lockout.pnlToday)}` }, en)}
               </span>
             </div>
           </div>
@@ -412,22 +435,26 @@ export default function JournalView() {
             <input type="checkbox" checked={lockoutCfg.enabled}
               onChange={e => updateLockoutCfg({ enabled: e.target.checked })}
               className="accent-[#d4af37]" />
-            Enable Lockout
+            {pick({ he: 'הפעל נעילה', en: 'Enable Lockout' }, en)}
           </label>
           <div className="flex flex-col gap-1">
-            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">מקס׳ הפסדים / יום</label>
+            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">
+              {pick({ he: 'מקס׳ הפסדים / יום', en: 'Max Losses / Day' }, en)}
+            </label>
             <input type="number" min={0} value={lockoutCfg.maxLosses}
               onChange={e => updateLockoutCfg({ maxLosses: Math.max(0, Math.floor(Number(e.target.value))) })}
               className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 font-mono text-[13px] font-bold text-white w-20 outline-none focus:border-[#d4af37]/50" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">מקס׳ הפסד יומי ($)</label>
+            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/50">
+              {pick({ he: 'מקס׳ הפסד יומי ($)', en: 'Max Daily Loss ($)' }, en)}
+            </label>
             <input type="number" min={0} step={50} value={lockoutCfg.maxDailyLossUsd}
               onChange={e => updateLockoutCfg({ maxDailyLossUsd: Math.max(0, Math.floor(Number(e.target.value))) })}
               className="bg-[#1c1c1e] border border-[#2a2a2d] rounded px-2.5 py-1.5 font-mono text-[13px] font-bold text-white w-24 outline-none focus:border-[#d4af37]/50" />
           </div>
           <span className="font-mono text-[10px] text-white/35 max-w-xs leading-relaxed">
-            0 מבטל את הטריגר. הנעילה מתאפסת אוטומטית ביום הבא.
+            {pick({ he: '0 מבטל את הטריגר. הנעילה מתאפסת אוטומטית ביום הבא.', en: '0 disables the trigger. Lock resets automatically the next day.' }, en)}
           </span>
         </div>
       )}
@@ -466,7 +493,7 @@ export default function JournalView() {
                   : 'bg-[#d4af37]/10 text-[#d4af37] border-[#d4af37]/35 hover:bg-[#d4af37]/18 hover:border-[#d4af37]/60'
               }`}
             >
-              {lockout.locked ? '🔒 Locked' : '+ הוסף עסקה'}
+              {lockout.locked ? pick({ he: '🔒 נעול', en: '🔒 Locked' }, en) : pick({ he: '+ הוסף עסקה', en: '+ Add Trade' }, en)}
             </button>
           </div>
         </div>
@@ -533,9 +560,9 @@ export default function JournalView() {
             {/* Auto-stamp strip */}
             <div className="flex items-center gap-6 p-[11px_16px] bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px] mb-5">
               {[
-                { label: 'סשן',      val: session ?? 'None'         },
-                { label: 'ביאס ES',  val: esDailyBias.bias          },
-                { label: 'שעה ET',   val: nowStr                    },
+                { label: pick({ he: 'סשן', en: 'Session' }, en),    val: session ?? pick({ he: 'אין', en: 'None' }, en) },
+                { label: pick({ he: 'ביאס ES', en: 'ES Bias' }, en), val: esDailyBias.bias                              },
+                { label: pick({ he: 'שעה IDT', en: 'IDT Time' }, en), val: nowStr                                       },
               ].map(item => (
                 <div key={item.label} className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] animate-pulse" />
@@ -543,11 +570,13 @@ export default function JournalView() {
                   <span className={`font-mono text-[11px] font-bold ${GOLD_GLOW}`}>{item.val}</span>
                 </div>
               ))}
-              <span className="ml-auto font-mono text-[10px] text-white/25">← מוחתם אוטומטית</span>
+              <span className="ml-auto font-mono text-[10px] text-white/25">
+                {pick({ he: '← מוחתם אוטומטית', en: 'Auto-stamped →' }, en)}
+              </span>
             </div>
 
-            {/* Section: פרטי עסקה */}
-            <FormSection label="פרטי עסקה" />
+            {/* Section: Trade Details */}
+            <FormSection label={pick({ he: 'פרטי עסקה', en: 'Trade Details' }, en)} />
             <div className="grid grid-cols-2 md:grid-cols-5 gap-[14px] mb-4">
               {/* תאריך */}
               <div className="flex flex-col gap-2">
@@ -573,60 +602,72 @@ export default function JournalView() {
                   />
                 </div>
               )}
-              {/* נכס */}
+              {/* Asset */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">נכס</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'נכס', en: 'Asset' }, en)}
+                </label>
                 <Seg value={draft.symbol ?? 'ES'} onChange={v => setField('symbol', v)}
                   options={[{ val: 'ES', label: 'ES' }, { val: 'NQ', label: 'NQ' }]} />
               </div>
-              {/* כיוון */}
+              {/* Direction */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">כיוון</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'כיוון', en: 'Direction' }, en)}
+                </label>
                 <Seg value={draft.direction ?? 'LONG'} onChange={v => setField('direction', v)}
                   options={[
-                    { val: 'LONG',  label: '▲ לונג',  activeCls: 'bg-[#4a7c59]/18 border-[#4a7c59]/60 text-[#6fa580]' },
-                    { val: 'SHORT', label: '▼ שורט', activeCls: 'bg-[#7c3a3a]/18 border-[#7c3a3a]/60 text-[#c98080]' },
+                    { val: 'LONG',  label: pick({ he: '▲ לונג', en: '▲ Long' }, en),  activeCls: 'bg-[#4a7c59]/18 border-[#4a7c59]/60 text-[#6fa580]' },
+                    { val: 'SHORT', label: pick({ he: '▼ שורט', en: '▼ Short' }, en), activeCls: 'bg-[#7c3a3a]/18 border-[#7c3a3a]/60 text-[#c98080]' },
                   ]} />
               </div>
-              {/* כניסה */}
+              {/* Entry */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">כניסה</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'כניסה', en: 'Entry' }, en)}
+                </label>
                 <input type="number" inputMode="decimal" placeholder="0.00"
                   value={draft.entry ?? ''} onChange={e => setField('entry', e.target.value)}
-                  className={inputCls} />
+                  className={inputCls} dir="ltr" />
               </div>
-              {/* סטופ */}
+              {/* Stop */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">סטופ</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'סטופ', en: 'Stop' }, en)}
+                </label>
                 <input type="number" inputMode="decimal" placeholder="0.00"
                   value={draft.stop ?? ''} onChange={e => setField('stop', e.target.value)}
-                  className={inputCls} />
+                  className={inputCls} dir="ltr" />
               </div>
-              {/* טארגט */}
+              {/* Target */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">טארגט</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'טארגט', en: 'Target' }, en)}
+                </label>
                 <input type="number" inputMode="decimal" placeholder="0.00"
                   value={draft.target ?? ''} onChange={e => setField('target', e.target.value)}
-                  className={inputCls} />
+                  className={inputCls} dir="ltr" />
               </div>
             </div>
 
             {/* R preview bar */}
             <div className="flex items-center gap-4 flex-wrap p-[12px_16px] bg-[#0d0d0f] border border-[#d4af37]/22 rounded-[5px] mb-4">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-[10px] text-white/35 uppercase tracking-[0.16em]">R:R מתוכנן</span>
+                <span className="font-mono text-[10px] text-white/35 uppercase tracking-[0.16em]">
+                  {pick({ he: 'R:R מתוכנן', en: 'Planned R:R' }, en)}
+                </span>
                 <span className={`font-mono text-[18px] font-black tabular-nums ${GOLD_GLOW}`}>
                   {liveRR > 0 ? liveRR.toFixed(2) : '—'}
                 </span>
               </div>
               <div className="h-5 w-px bg-[#1c1c1e]" />
               <span className="font-mono text-[11px] font-bold text-white/45">
-                סיכון <span className="text-[#c98080]">{liveRiskUsd > 0 ? usd(-liveRiskUsd).replace('+','') : '—'}</span>
+                {pick({ he: 'סיכון', en: 'Risk' }, en)} <span className="text-[#c98080]">{liveRiskUsd > 0 ? usd(-liveRiskUsd).replace('+','') : '—'}</span>
                 {' · '}{liveSym}
               </span>
               <div className="h-5 w-px bg-[#1c1c1e]" />
               <span className="font-mono text-[11px] font-bold text-white/45">
-                פוטנציאל <span className="text-[#6fa580]">{livePotUsd > 0 ? usd(livePotUsd) : '—'}</span>
+                {pick({ he: 'פוטנציאל', en: 'Potential' }, en)} <span className="text-[#6fa580]">{livePotUsd > 0 ? usd(livePotUsd) : '—'}</span>
               </span>
               <div className="ml-auto">
                 <Seg<TradeResult> value={draft.result ?? 'OPEN'} onChange={v => setField('result', v)}
@@ -639,29 +680,33 @@ export default function JournalView() {
               </div>
             </div>
 
-            {/* Section: סיווג סטאפ */}
-            <FormSection label="סיווג סטאפ · נדרש לניתוח ביצועים" />
+            {/* Section: Setup Classification */}
+            <FormSection label={pick({ he: 'סיווג סטאפ · נדרש לניתוח ביצועים', en: 'Setup Classification · Required for Analysis' }, en)} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px] mb-4">
-              {/* סוג סטאפ */}
+              {/* Setup type */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">סוג סטאפ</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'סוג סטאפ', en: 'Setup Type' }, en)}
+                </label>
                 <Seg<Setup> value={draft.setup ?? 'REVERSAL'} onChange={v => setField('setup', v)} size="lg"
                   options={[
                     {
                       val: 'REVERSAL',
-                      label: 'ריברסל — לקיחת נזילות + היפוך',
+                      label: pick({ he: 'ריברסל — לקיחת נזילות + היפוך', en: 'Reversal — Liquidity sweep + flip' }, en),
                       activeCls: 'bg-[#4a7c59]/15 border-[#4a7c59]/55 text-[#6fa580]',
                     },
                     {
                       val: 'CONTINUATION',
-                      label: 'המשכיות — כניסה לגאפ 15M / 5M',
+                      label: pick({ he: 'המשכיות — כניסה לגאפ 15M / 5M', en: 'Continuation — Entry into 15M / 5M gap' }, en),
                       activeCls: 'bg-[#d4af37]/12 border-[#d4af37]/50 text-[#d4af37]',
                     },
                   ]} />
               </div>
               {/* IFVG */}
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">אישור · IFVG רגל מניפולציה</label>
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'אישור · IFVG רגל מניפולציה', en: 'Confirmation · IFVG Manipulation Leg' }, en)}
+                </label>
                 <Seg<IFVGConfirmation> value={draft.confirmation ?? 'IFVG_2M'} onChange={v => setField('confirmation', v)} size="lg"
                   options={[
                     { val: 'IFVG_1M', label: '1M' },
@@ -672,12 +717,14 @@ export default function JournalView() {
               </div>
             </div>
 
-            {/* Section: הערות */}
-            <FormSection label="הערות" />
+            {/* Section: Notes */}
+            <FormSection label={pick({ he: 'הערות', en: 'Notes' }, en)} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">הערות חופשיות</label>
-                <input type="text" dir="rtl" placeholder="תיאור הסטאפ..."
+                <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/45">
+                  {pick({ he: 'הערות חופשיות', en: 'Free Notes' }, en)}
+                </label>
+                <input type="text" dir={dir} placeholder={pick({ he: 'תיאור הסטאפ...', en: 'Describe the setup...' }, en)}
                   value={draft.notes ?? ''} onChange={e => setField('notes', e.target.value)}
                   className={inputCls} />
               </div>
@@ -688,11 +735,11 @@ export default function JournalView() {
             <div className="flex gap-[10px] pt-5 border-t border-[#1c1c1e] mt-5">
               <button onClick={submitTrade}
                 className="flex-1 py-[11px] font-mono text-[12px] font-bold uppercase tracking-[0.18em] bg-[#4a7c59]/15 text-[#6fa580] border border-[#4a7c59]/50 rounded hover:bg-[#4a7c59]/25 transition-all duration-300">
-                ✓ שמור עסקה
+                {pick({ he: '✓ שמור עסקה', en: '✓ Save Trade' }, en)}
               </button>
               <button onClick={() => setAddOpen(false)}
                 className="px-6 py-[11px] font-mono text-[12px] font-bold uppercase tracking-[0.18em] text-white/45 border border-[#2a2a2d] rounded hover:text-white transition-all duration-300">
-                ביטול
+                {pick({ he: 'ביטול', en: 'Cancel' }, en)}
               </button>
             </div>
           </div>
@@ -702,9 +749,11 @@ export default function JournalView() {
         <div className="flex-1">
           {trades.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
-              <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">No Trades Recorded</span>
+              <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">
+                {pick({ he: 'אין עסקאות מוקלטות', en: 'No Trades Recorded' }, en)}
+              </span>
               <span className="text-base font-bold font-mono text-white/40 leading-relaxed max-w-md">
-                Use + הוסף עסקה to log a setup. Session, bias &amp; time are auto-stamped.
+                {pick({ he: 'השתמש ב-+ הוסף עסקה כדי לרשום סטאפ. סשן, ביאס ושעה מוחתמים אוטומטית.', en: 'Use + Add Trade to log a setup. Session, bias & time are auto-stamped.' }, en)}
               </span>
             </div>
           ) : (
@@ -712,16 +761,34 @@ export default function JournalView() {
               <thead className="sticky top-0 bg-[#0d0d0f] border-b border-[#1c1c1e] z-10">
                 <tr>
                   <th className="w-10"></th>
-                  {[pick({he:'תאריך',en:'Date'},en),'שעה','נכס','כיוון','כניסה','סטופ','טארגט','R:R','תוצאה'].map(h => (
+                  {[
+                    pick({ he: 'תאריך', en: 'Date' }, en),
+                    pick({ he: 'שעה', en: 'Time' }, en),
+                    pick({ he: 'נכס', en: 'Asset' }, en),
+                    pick({ he: 'כיוון', en: 'Dir' }, en),
+                    pick({ he: 'כניסה', en: 'Entry' }, en),
+                    pick({ he: 'סטופ', en: 'Stop' }, en),
+                    pick({ he: 'טארגט', en: 'Target' }, en),
+                    'R:R',
+                    pick({ he: 'תוצאה', en: 'Result' }, en),
+                  ].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
                       {h}
                     </th>
                   ))}
-                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">סשן</th>
-                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">ביאס</th>
-                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37] whitespace-nowrap">סטאפ ✦</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
+                    {pick({ he: 'סשן', en: 'Session' }, en)}
+                  </th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
+                    {pick({ he: 'ביאס', en: 'Bias' }, en)}
+                  </th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37] whitespace-nowrap">
+                    {pick({ he: 'סטאפ ✦', en: 'Setup ✦' }, en)}
+                  </th>
                   <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#d4af37] whitespace-nowrap">IFVG ✦</th>
-                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">הערות</th>
+                  <th className="hidden md:table-cell px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-white whitespace-nowrap">
+                    {pick({ he: 'הערות', en: 'Notes' }, en)}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -734,14 +801,14 @@ export default function JournalView() {
                       <td className="w-10 px-2 py-2">
                         <button
                           onClick={() => handleDelete(t.id)}
-                          title="העבר לסל מחזור"
+                          title={pick({ he: 'העבר לסל מחזור', en: 'Move to trash' }, en)}
                           className="w-8 h-8 rounded border border-[#7c3a3a]/30 bg-[#7c3a3a]/8 text-[#c98080]/40 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#7c3a3a]/25 hover:border-[#7c3a3a]/60 hover:text-[#c98080] transition-all duration-200 text-sm"
                         >
                           🗑
                         </button>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-white/45 tabular-nums whitespace-nowrap">
-                        {new Date(t.dateISO).toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'2-digit' })}
+                        {new Date(t.dateISO).toLocaleDateString(en ? 'en-US' : 'he-IL', { day:'2-digit', month:'2-digit', year:'2-digit' })}
                       </td>
                       <td className="px-3 py-2.5 text-white/50 tabular-nums whitespace-nowrap">{t.time}</td>
                       <td className="px-3 py-2.5 text-white font-bold">{t.symbol}</td>
@@ -757,7 +824,7 @@ export default function JournalView() {
                       <td className="px-3 py-2.5"><ResultTag r={t.result} /></td>
                       <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">{t.session}</td>
                       <td className={`hidden md:table-cell px-3 py-2.5 font-bold ${biasCls(t.bias)}`}>{t.bias}</td>
-                      <td className="hidden md:table-cell px-3 py-2.5"><SetupTag s={t.setup} /></td>
+                      <td className="hidden md:table-cell px-3 py-2.5"><SetupTag s={t.setup} en={en} /></td>
                       <td className="hidden md:table-cell px-3 py-2.5 text-[#d4af37] font-bold whitespace-nowrap">
                         {t.confirmation ? t.confirmation.replace('IFVG_', 'IFVG ') : '—'}
                       </td>

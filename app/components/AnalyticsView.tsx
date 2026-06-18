@@ -149,11 +149,11 @@ function fmtMin(min: number): string {
 }
 
 // ─── Section header ───────────────────────────────────────────────────────────
-function SectionHeader({ num, title, subtitle }: { num: string; title: string; subtitle: string }) {
+function SectionHeader({ num, title, subtitle, dir }: { num: string; title: string; subtitle: string; dir?: 'rtl' | 'ltr' }) {
   return (
     <div className="flex items-end justify-between mb-[26px] pb-5 border-b border-[#1c1c1e]">
       <span className="font-mono text-[12px] tracking-[0.3em] text-[#52525b]">{num}</span>
-      <div className="text-right" dir="rtl">
+      <div className={dir === 'ltr' ? 'text-left' : 'text-right'} dir={dir ?? 'rtl'}>
         <h2 className="font-serif text-[26px] font-bold text-white leading-none">{title}</h2>
         <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-white/45 mt-2">{subtitle}</p>
       </div>
@@ -429,14 +429,14 @@ export default function AnalyticsView() {
 
         {/* 01 · Session Timeline */}
         <div className="py-11 border-b border-[#1c1c1e]">
-          <SectionHeader num="01" title={pick(STR.sec01title, en)} subtitle={pick(STR.sec01sub, en)} />
+          <SectionHeader num="01" title={pick(STR.sec01title, en)} subtitle={pick(STR.sec01sub, en)} dir={en ? 'ltr' : 'rtl'} />
           <SessionTimeline nowMin={nowMin} session={session} override={override}
             onToggleOverride={() => setOverride(o => !o)} en={en} />
         </div>
 
         {/* 02 · Analysis Console */}
         <div className="py-11 border-b border-[#1c1c1e]">
-          <SectionHeader num="02" title={pick(STR.sec02title, en)} subtitle={pick(STR.sec02sub, en)} />
+          <SectionHeader num="02" title={pick(STR.sec02title, en)} subtitle={pick(STR.sec02sub, en)} dir={en ? 'ltr' : 'rtl'} />
           {visible ? (
             <div className="flex flex-col gap-[18px]">
               {assets.map((a, i) => (
@@ -457,7 +457,7 @@ export default function AnalyticsView() {
 
         {/* 03 · System Guidance */}
         <div className="py-11">
-          <SectionHeader num="03" title={pick(STR.sec03title, en)} subtitle={pick(STR.sec03sub, en)} />
+          <SectionHeader num="03" title={pick(STR.sec03title, en)} subtitle={pick(STR.sec03sub, en)} dir={en ? 'ltr' : 'rtl'} />
           {hasNeutral && (
             <div className="bg-[#0d0d0f] border border-[#d4af37]/30 rounded-[6px] p-[26px] mb-6 [box-shadow:0_0_50px_-18px_rgba(212,175,55,0.4)]"
               dir={en ? 'ltr' : 'rtl'}>

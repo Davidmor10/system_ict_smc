@@ -47,11 +47,11 @@ function ProgressBar({ pct: p, color = 'bg-[#d4af37]' }: { pct: number; color?: 
 
 // ─── Section header ───────────────────────────────────────────────────────────
 
-function SectionHeader({ num, title, subtitle }: { num: string; title: string; subtitle: string }) {
+function SectionHeader({ num, title, subtitle, dir }: { num: string; title: string; subtitle: string; dir?: 'rtl' | 'ltr' }) {
   return (
     <div className="flex items-end justify-between mb-[26px] pb-5 border-b border-[#1c1c1e]">
       <span className="font-mono text-[12px] tracking-[0.3em] text-[#52525b]">{num}</span>
-      <div className="text-right" dir="rtl">
+      <div className={dir === 'ltr' ? 'text-left' : 'text-right'} dir={dir ?? 'rtl'}>
         <h2 className="font-serif text-[26px] font-bold text-white leading-none">{title}</h2>
         <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-white/45 mt-2">{subtitle}</p>
       </div>
@@ -81,25 +81,27 @@ const SETUP_META = {
   CONTINUATION: { bi: { he: 'המשכיות',  en: 'Continuation' }, sub: '15M / 5M Gap Entry'      },
 } as const;
 
-const IFVG_META: Record<string, { bi: Bi; sub: string }> = {
-  IFVG_1M: { bi: { he: 'IFVG · 1M', en: 'IFVG · 1M' }, sub: 'רגל מניפולציה 1 דקה'  },
-  IFVG_2M: { bi: { he: 'IFVG · 2M', en: 'IFVG · 2M' }, sub: 'רגל מניפולציה 2 דקות' },
-  IFVG_3M: { bi: { he: 'IFVG · 3M', en: 'IFVG · 3M' }, sub: 'רגל מניפולציה 3 דקות' },
-  IFVG_5M: { bi: { he: 'IFVG · 5M', en: 'IFVG · 5M' }, sub: 'רגל מניפולציה 5 דקות' },
+const IFVG_META: Record<string, { bi: Bi; sub: Bi }> = {
+  IFVG_1M: { bi: { he: 'IFVG · 1M', en: 'IFVG · 1M' }, sub: { he: 'רגל מניפולציה 1 דקה',   en: '1-minute manipulation leg'  } },
+  IFVG_2M: { bi: { he: 'IFVG · 2M', en: 'IFVG · 2M' }, sub: { he: 'רגל מניפולציה 2 דקות',  en: '2-minute manipulation leg'  } },
+  IFVG_3M: { bi: { he: 'IFVG · 3M', en: 'IFVG · 3M' }, sub: { he: 'רגל מניפולציה 3 דקות',  en: '3-minute manipulation leg'  } },
+  IFVG_5M: { bi: { he: 'IFVG · 5M', en: 'IFVG · 5M' }, sub: { he: 'רגל מניפולציה 5 דקות',  en: '5-minute manipulation leg'  } },
 };
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ en }: { en: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center h-[60vh] gap-5 text-center">
-      <span className="font-serif text-2xl font-bold text-white/40 tracking-[0.1em]">אין עסקאות עדיין</span>
+      <span className="font-serif text-2xl font-bold text-white/40 tracking-[0.1em]">
+        {pick({ he: 'אין עסקאות עדיין', en: 'No Trades Yet' }, en)}
+      </span>
       <span className="font-mono text-sm text-white/30 leading-relaxed max-w-sm">
-        הוסף עסקאות ביומן המסחר — הנתונים יופיעו כאן אוטומטית.
+        {pick({ he: 'הוסף עסקאות ביומן המסחר — הנתונים יופיעו כאן אוטומטית.', en: 'Add trades in the trade journal — data will appear here automatically.' }, en)}
       </span>
       <a href="/dashboard/journal"
         className="px-4 py-2 border border-[#d4af37]/40 text-[#d4af37] font-mono text-sm font-bold rounded">
-        → יומן מסחר
+        {pick({ he: '→ יומן מסחר', en: '→ Trade Journal' }, en)}
       </a>
     </div>
   );
@@ -191,14 +193,15 @@ export default function StatsView() {
         </div>
       </div>
 
-      {trades.length === 0 ? <EmptyState /> : (
+      {trades.length === 0 ? <EmptyState en={en} /> : (
         <div className="px-10 pb-20">
 
           {/* ── 01 · Session + Day ─────────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
             <SectionHeader num="01"
               title={pick({ he: 'ביצועי מודל', en: 'Model Performance' }, en)}
-              subtitle={pick({ he: 'לפי סשן ויום שבוע', en: 'By Session & Day of Week' }, en)} />
+              subtitle={pick({ he: 'לפי סשן ויום שבוע', en: 'By Session & Day of Week' }, en)}
+              dir={en ? 'ltr' : 'rtl'} />
 
             {/* Session cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-[16px] mb-8">
@@ -253,7 +256,8 @@ export default function StatsView() {
           <div className="py-12 border-b border-[#1c1c1e]">
             <SectionHeader num="02"
               title={pick({ he: 'ניתוח קצה', en: 'Edge Analytics' }, en)}
-              subtitle="Setup · IFVG · Bias Alignment · R Distribution" />
+              subtitle="Setup · IFVG · Bias Alignment · R Distribution"
+              dir={en ? 'ltr' : 'rtl'} />
 
             {/* Setup comparison */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-[16px] mb-8">
@@ -304,7 +308,7 @@ export default function StatsView() {
                   <div key={key} className={`bg-[#0d0d0f] border rounded-[5px] p-[18px] flex flex-col gap-3 ${isBest ? 'border-[#d4af37]/35' : 'border-[#1c1c1e]'}`}>
                     <div>
                       <div className="font-mono text-[11px] font-bold text-[#d4af37] tracking-[0.16em]">{pick(meta.bi, en)}</div>
-                      <div className="font-mono text-[10px] text-white/35 mt-0.5" dir="rtl">{meta.sub}</div>
+                      <div className="font-mono text-[10px] text-white/35 mt-0.5">{pick(meta.sub, en)}</div>
                     </div>
                     <div className={`font-mono text-[38px] font-black tabular-nums leading-none ${g.tradeCount > 0 ? wrTextColor(g.winRate) : 'text-white/25'}`}>
                       {g.tradeCount > 0 ? pct(g.winRate) : '—'}
@@ -382,7 +386,8 @@ export default function StatsView() {
           <div className="py-12">
             <SectionHeader num="03"
               title={pick({ he: 'הטמפ ביצועים', en: 'Performance Heatmap' }, en)}
-              subtitle={pick({ he: 'לפי שעה · IDT · 16:30–23:00', en: 'By Hour · IDT · 16:30–23:00' }, en)} />
+              subtitle={pick({ he: 'לפי שעה · IDT · 16:30–23:00', en: 'By Hour · IDT · 16:30–23:00' }, en)}
+              dir={en ? 'ltr' : 'rtl'} />
 
             <div className="bg-[#0d0d0f] border border-[#1c1c1e] rounded-[6px] p-[24px]">
               <div className="flex gap-4 flex-wrap">
