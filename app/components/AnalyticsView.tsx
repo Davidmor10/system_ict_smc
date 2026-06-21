@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
+import { useMarketStatus } from '../hooks/useMarketStatus';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Daily Bias — deterministic framework (H4/H1 trend + FVG respect/violation).
@@ -96,6 +97,7 @@ const STR = {
   noSession:       { he: 'אין סשן פעיל',                 en: 'No active session'              },
   activePfx:       { he: 'סשן פעיל: ',                   en: 'Active Session: '               },
   override:        { he: 'עקוף שעון סשנים',              en: 'Override session clock'         },
+  marketClosed:    { he: 'שוק סגור · נפתח ביום שני',     en: 'Market closed · Opens Monday'   },
   locked:          { he: 'אין סשן מסחר פעיל כרגע — הביאס יתעדכן עם תחילת הסשן הבא.', en: 'No active trading session right now — the bias will update at the start of the next session.' },
   sec01title:      { he: 'סשן מסחר',                     en: 'Trading Session'                },
   sec01sub:        { he: 'ציר זמן · IDT · 24 שעות',      en: 'Timeline · IDT · 24 Hours'     },
@@ -385,6 +387,7 @@ function AssetConsole({ a, i, onChange, en }: {
 export default function AnalyticsView() {
   const { lang } = useLanguage();
   const en = lang === 'en';
+  const { isMarketOpen } = useMarketStatus();
 
   const [assets, setAssets] = useState<AssetState[]>(loadAssets);
   const [override, setOverride] = useState(false);
@@ -397,10 +400,12 @@ export default function AnalyticsView() {
   }, []);
 
   const session = activeSession(nowMin);
-  const visible = override || session !== null;
-  const sessionLabel = session
-    ? pick(STR.activePfx, en) + pick(session, en)
-    : pick(STR.noSession, en);
+  const visible = override || (isMarketOpen && session !== null);
+  const sessionLabel = !isMarketOpen
+    ? pick(STR.marketClosed, en)
+    : session
+      ? pick(STR.activePfx, en) + pick(session, en)
+      : pick(STR.noSession, en);
 
   const updateAsset = (i: number, patch: Partial<AssetState>) =>
     setAssets(prev => prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a)));
@@ -417,8 +422,8 @@ export default function AnalyticsView() {
           <span className="font-serif text-[18px] font-bold text-white">{pick(STR.headerTitle, en)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
-          <span className={`font-mono text-xs font-bold tracking-[0.14em] ${session ? 'text-[#d4af37]' : 'text-white/50'}`}>
+          <span className={`h-2 w-2 rounded-full shrink-0 ${visible ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
+          <span className={`font-mono text-xs font-bold tracking-[0.14em] ${visible ? 'text-[#d4af37]' : 'text-white/50'}`}>
             {sessionLabel}
           </span>
         </div>
