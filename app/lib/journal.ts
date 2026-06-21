@@ -73,8 +73,7 @@ export function loadTrash(): DeletedTradeEntry[] {
     const raw = localStorage.getItem(TRASH_KEY);
     if (!raw) return [];
     const items: DeletedTradeEntry[] = JSON.parse(raw);
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    return items.filter(i => new Date(i.deletedAt).getTime() > cutoff);
+    return items;
   } catch {
     return [];
   }
@@ -117,9 +116,9 @@ export function emptyTrash(): void {
   saveTrash([]);
 }
 
-export function daysUntilExpiry(deletedAt: string): number {
-  const ms = 30 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(deletedAt).getTime());
-  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+/** @deprecated Trash entries no longer expire — kept for API compatibility. */
+export function daysUntilExpiry(_deletedAt: string): number {
+  return Infinity;
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────

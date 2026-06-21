@@ -506,7 +506,7 @@ export default function JournalView() {
                 {pick({ he: 'סל מחזור', en: 'Recycle Bin' }, en)}
               </span>
               <span className="text-xs font-mono text-white/35">
-                {pick({ he: 'נמחק אוטומטית לאחר 30 יום', en: 'Auto-deleted after 30 days' }, en)}
+                {pick({ he: 'נשמר עד למחיקה ידנית', en: 'Kept until manually deleted' }, en)}
               </span>
             </div>
             {trash.length === 0 ? (
@@ -533,7 +533,7 @@ export default function JournalView() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-[10px] font-mono text-white/30 tabular-nums">
-                        {pick({ he: `נמחק בעוד ${daysUntilExpiry(deletedAt)} יום`, en: `expires in ${daysUntilExpiry(deletedAt)}d` }, en)}
+                        {new Date(deletedAt).toLocaleDateString(en ? 'en-US' : 'he-IL', { day: '2-digit', month: '2-digit' })}
                       </span>
                       <button
                         onClick={() => {

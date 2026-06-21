@@ -3,7 +3,7 @@
 import { useUser } from '@clerk/nextjs';
 
 // Emails that are always granted Deluxe, regardless of billing metadata.
-const DELUXE_EMAILS = ['davidmor030908@gmail.com'];
+const DELUXE_EMAILS = ['davidmor030908@gmail.com', 'davidmor030909@gmail.com'];
 
 /**
  * Deluxe-privilege check. Returns true when the signed-in user is either an

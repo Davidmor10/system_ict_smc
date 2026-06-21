@@ -6,7 +6,7 @@ export interface UserContext { role: Role; isOwner: boolean; }
 
 // Emails always granted Pro server-side, regardless of Supabase/billing state.
 // Mirrors the client-side override in app/hooks/usePlan.ts.
-const PRO_OVERRIDE_EMAILS = ['davidmor030908@gmail.com'];
+const PRO_OVERRIDE_EMAILS = ['davidmor030908@gmail.com', 'davidmor030909@gmail.com'];
 
 // Resolve the current user's role from the `profiles` table (keyed by Clerk ID).
 // Defensive by design: if Clerk/Supabase aren't configured or the user isn't
