@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { Geist, Geist_Mono, Playfair_Display, Frank_Ruhl_Libre, Heebo } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { clerkAppearance } from "./lib/clerkAppearance";
 import { LanguageProvider } from "./hooks/useLanguage";
@@ -18,8 +18,20 @@ const geistMono = Geist_Mono({
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["600", "700", "800", "900"],
   style: ["normal", "italic"],
+});
+
+const frankRuhl = Frank_Ruhl_Libre({
+  variable: "--font-frank",
+  subsets: ["hebrew", "latin"],
+  weight: ["500", "700", "900"],
+});
+
+const heebo = Heebo({
+  variable: "--font-heebo",
+  subsets: ["hebrew", "latin"],
+  weight: ["400", "500", "700"],
 });
 
 export const metadata: Metadata = {
@@ -43,7 +55,7 @@ export default function RootLayout({
   const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${frankRuhl.variable} ${heebo.variable} antialiased`}>
       <body className="flex flex-col bg-[#050505]">
         {/* One language context for the whole app, so the Header toggle and the
             Sidebar toggle drive the same state across every route. */}
