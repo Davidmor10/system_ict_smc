@@ -183,20 +183,78 @@ function QuoteCard({ symbol, name, quote }: { symbol: string; name: string; quot
   );
 }
 
+// ─── Timeframe selector constants ────────────────────────────────────────────
+
+const TF_BUTTONS = [
+  { label: '1m',  tv: '1'   },
+  { label: '2m',  tv: '2'   },
+  { label: '3m',  tv: '3'   },
+  { label: '5m',  tv: '5'   },
+  { label: '15m', tv: '15'  },
+  { label: '1H',  tv: '60'  },
+  { label: '4H',  tv: '240' },
+  { label: '1D',  tv: 'D'   },
+] as const;
+
+export const TF_LABEL: Record<string, string> = {
+  '1':   '1-Minute',
+  '2':   '2-Minute',
+  '3':   '3-Minute',
+  '5':   '5-Minute',
+  '15':  '15-Minute',
+  '60':  '1-Hour',
+  '240': '4-Hour',
+  'D':   'Daily',
+};
+
 // ─── Chart panel ─────────────────────────────────────────────────────────────
 
-function ChartPanel({ symbol, name, interval }: { symbol: 'ES' | 'NQ'; name: string; interval: string }) {
+function ChartPanel({
+  symbol, name, interval, onIntervalChange,
+}: {
+  symbol: 'ES' | 'NQ';
+  name: string;
+  interval: string;
+  onIntervalChange: (tv: string) => void;
+}) {
   return (
     <div className="bg-black border border-[#1c1c1e] rounded-[5px] overflow-hidden">
       {/* Panel header */}
-      <div className="flex items-center justify-between px-[18px] py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f]">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-[18px] py-[11px] border-b border-[#1c1c1e] bg-[#0d0d0f]">
+        {/* Symbol + name */}
+        <div className="flex items-center gap-3 shrink-0">
           <span className="font-mono text-[14px] font-bold text-white">{symbol}1!</span>
           <span className="font-mono text-[10px] text-white/40 tracking-[0.15em] uppercase">{name}</span>
         </div>
-        <span className="px-2 py-0.5 rounded-sm border border-[#d4af37]/40 font-mono text-[10px] text-[#d4af37] font-bold tracking-[0.14em]">
-          {interval}M
-        </span>
+        {/* Segmented TF control */}
+        <div
+          className="flex items-stretch rounded-[4px] border overflow-hidden"
+          style={{ borderColor: 'rgba(255,255,255,.1)', background: '#000' }}
+        >
+          {TF_BUTTONS.map(({ label, tv }) => {
+            const active = tv === interval;
+            return (
+              <button
+                key={tv}
+                onClick={() => onIntervalChange(tv)}
+                className={[
+                  'font-mono text-[10px] font-semibold px-[7px] py-[5px] leading-none',
+                  'transition-[color,background,box-shadow] duration-150 cursor-pointer border-none',
+                  active
+                    ? 'text-[#d4af37]'
+                    : 'text-white/[.38] hover:text-white/85 hover:bg-white/[.06]',
+                ].join(' ')}
+                style={active ? {
+                  background:  'rgba(212,175,55,.12)',
+                  boxShadow:   'inset 0 0 0 1px rgba(212,175,55,.4)',
+                  letterSpacing: '.06em',
+                } : { letterSpacing: '.06em' }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
       {/* Chart body */}
       <div className="h-[440px]">
@@ -239,6 +297,23 @@ export default function DashboardView({
 
   const [clock, setClock] = useState(() => israelClock());
   const [override, setOverride] = useState(false);
+
+  const [esInterval, setEsInterval] = useState<string>(() => {
+    if (typeof window === 'undefined') return '5';
+    return localStorage.getItem('onyx_chart_tf_ES') ?? '5';
+  });
+  const [nqInterval, setNqInterval] = useState<string>(() => {
+    if (typeof window === 'undefined') return '5';
+    return localStorage.getItem('onyx_chart_tf_NQ') ?? '5';
+  });
+  const handleEsInterval = (tv: string) => {
+    setEsInterval(tv);
+    try { localStorage.setItem('onyx_chart_tf_ES', tv); } catch {}
+  };
+  const handleNqInterval = (tv: string) => {
+    setNqInterval(tv);
+    try { localStorage.setItem('onyx_chart_tf_NQ', tv); } catch {}
+  };
 
   useEffect(() => {
     const id = setInterval(() => setClock(israelClock()), 1000);
@@ -287,13 +362,13 @@ export default function DashboardView({
           <div className="py-12 border-b border-[#1c1c1e]">
             <SectionHeader num="02"
               title={pick({ he: 'גרפים חיים', en: 'Live Charts' }, en)}
-              subtitle="TradingView · 5-Minute · ICT/SMC"
+              subtitle={`Monochrome · ${TF_LABEL[esInterval] ?? '5-Minute'} Candles`}
               dir={dir} />
             <div className="grid grid-cols-2 gap-[18px]">
               {visible ? (
                 <>
-                  <ChartPanel symbol="ES" name="S&P 500" interval="5" />
-                  <ChartPanel symbol="NQ" name="Nasdaq 100" interval="5" />
+                  <ChartPanel symbol="ES" name="S&P 500"    interval={esInterval} onIntervalChange={handleEsInterval} />
+                  <ChartPanel symbol="NQ" name="Nasdaq 100" interval={nqInterval} onIntervalChange={handleNqInterval} />
                 </>
               ) : (
                 <SessionGate en={en} />
