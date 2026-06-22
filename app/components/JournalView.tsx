@@ -25,6 +25,7 @@ import {
   evaluateLockout,
   PT_VALUE,
   loadTrash,
+  saveTrash,
   softDelete,
   restoreTrade,
   daysUntilExpiry,
@@ -209,6 +210,68 @@ export default function JournalView() {
     setTrades(loadTrades());
     setLockoutCfg(loadLockoutConfig());
     setTrash(loadTrash());
+
+    // Sync lockout config from preferences API
+    fetch('/api/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { prefs: { lockout_config?: unknown } | null } | null) => {
+        const cfg = data?.prefs?.lockout_config;
+        if (cfg && typeof cfg === 'object') {
+          const c = cfg as { enabled?: boolean; maxLosses?: number; maxDailyLossUsd?: number };
+          const next = {
+            enabled: typeof c.enabled === 'boolean' ? c.enabled : DEFAULT_LOCKOUT.enabled,
+            maxLosses: typeof c.maxLosses === 'number' ? c.maxLosses : DEFAULT_LOCKOUT.maxLosses,
+            maxDailyLossUsd: typeof c.maxDailyLossUsd === 'number' ? c.maxDailyLossUsd : DEFAULT_LOCKOUT.maxDailyLossUsd,
+          };
+          setLockoutCfg(next);
+          saveLockoutConfig(next);
+        }
+      })
+      .catch(() => {});
+
+    // Sync from cloud: fetch all trades and overwrite local state + localStorage.
+    // Also uploads any existing localStorage trades that aren't in the cloud yet.
+    fetch('/api/journal')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { trades: (TradeEntry & { deletedAt: string | null })[] } | null) => {
+        if (!data?.trades) return;
+        const active = data.trades.filter(t => !t.deletedAt);
+        const trashItems = data.trades
+          .filter(t => !!t.deletedAt)
+          .map(t => ({ trade: t, deletedAt: t.deletedAt! }));
+
+        if (active.length > 0 || trashItems.length > 0) {
+          setTrades(active);
+          setTrash(trashItems);
+          saveTrades(active);
+          saveTrash(trashItems);
+        } else {
+          // Cloud is empty — upload whatever is in localStorage
+          const local = loadTrades();
+          const localTrash = loadTrash();
+          if (local.length > 0) {
+            fetch('/api/journal', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ trades: local }),
+            }).catch(() => {});
+          }
+          if (localTrash.length > 0) {
+            localTrash.forEach(({ trade, deletedAt }) => {
+              fetch('/api/journal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(trade),
+              })
+                .then(() => fetch(`/api/journal/${trade.id}`, {
+                  method: 'DELETE',
+                }))
+                .catch(() => {});
+            });
+          }
+        }
+      })
+      .catch(() => {}); // offline / unauthenticated — stay with localStorage
   }, []);
 
   const lockout: LockoutState = useMemo(
@@ -220,12 +283,18 @@ export default function JournalView() {
     const { updatedTrades, updatedTrash } = softDelete(trades, id);
     setTrades(updatedTrades);
     setTrash(updatedTrash);
+    fetch(`/api/journal/${id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   function updateLockoutCfg(patch: Partial<LockoutConfig>) {
     setLockoutCfg(prev => {
       const next = { ...prev, ...patch };
       saveLockoutConfig(next);
+      fetch('/api/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lockout_config: next }),
+      }).catch(() => {});
       return next;
     });
   }
@@ -310,6 +379,11 @@ export default function JournalView() {
       saveTrades(updated);
       return updated;
     });
+    fetch('/api/journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTrade),
+    }).catch(() => {});
     setAddOpen(false);
     setDraft({ symbol: 'ES', direction: 'LONG', result: 'OPEN', model: '', setup: 'REVERSAL', confirmation: 'IFVG_2M', dateISO: todayISO() });
   }
@@ -540,6 +614,7 @@ export default function JournalView() {
                           const { updatedTrades, updatedTrash } = restoreTrade(trades, trash, t.id);
                           setTrades(updatedTrades);
                           setTrash(updatedTrash);
+                          fetch(`/api/journal/${t.id}`, { method: 'PATCH' }).catch(() => {});
                         }}
                         className="px-3 py-1 text-[11px] font-bold font-mono tracking-wider uppercase border border-[#d4af37]/40 text-[#d4af37] rounded hover:bg-[#d4af37]/10 transition-colors"
                       >

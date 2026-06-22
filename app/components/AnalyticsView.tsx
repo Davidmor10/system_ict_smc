@@ -393,7 +393,36 @@ export default function AnalyticsView() {
   const [override, setOverride] = useState(false);
   const [nowMin, setNowMin] = useState<number>(() => israelMinutes());
 
-  useEffect(() => { saveAssets(assets); }, [assets]);
+  useEffect(() => {
+    saveAssets(assets);
+    const payload: Record<string, Pick<AssetState, 'h4' | 'h1' | 'bullishFVG' | 'bearishFVG'>> = {};
+    assets.forEach(a => { payload[a.short] = { h4: a.h4, h1: a.h1, bullishFVG: a.bullishFVG, bearishFVG: a.bearishFVG }; });
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysis_state: payload }),
+    }).catch(() => {});
+  }, [assets]);
+  useEffect(() => {
+    fetch('/api/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { prefs: { analysis_state?: Record<string, unknown> } | null } | null) => {
+        const saved = data?.prefs?.analysis_state;
+        if (!saved || typeof saved !== 'object') return;
+        setAssets(prev => prev.map(a => {
+          const s = (saved as Record<string, Partial<AssetState>>)[a.short] ?? {};
+          return {
+            ...a,
+            h4:         isTrend(s.h4)       ? s.h4         : a.h4,
+            h1:         isTrend(s.h1)       ? s.h1         : a.h1,
+            bullishFVG: isFVG(s.bullishFVG) ? s.bullishFVG : a.bullishFVG,
+            bearishFVG: isFVG(s.bearishFVG) ? s.bearishFVG : a.bearishFVG,
+          };
+        }));
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const id = setInterval(() => setNowMin(israelMinutes()), 20_000);
     return () => clearInterval(id);

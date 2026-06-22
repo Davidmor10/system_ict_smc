@@ -309,11 +309,40 @@ export default function DashboardView({
   const handleEsInterval = (tv: string) => {
     setEsInterval(tv);
     try { localStorage.setItem('onyx_chart_tf_ES', tv); } catch {}
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chart_tf_es: tv }),
+    }).catch(() => {});
   };
   const handleNqInterval = (tv: string) => {
     setNqInterval(tv);
     try { localStorage.setItem('onyx_chart_tf_NQ', tv); } catch {}
+    fetch('/api/preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chart_tf_nq: tv }),
+    }).catch(() => {});
   };
+
+  useEffect(() => {
+    // Load chart TF preferences from cloud on mount
+    fetch('/api/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { prefs: { chart_tf_es?: string; chart_tf_nq?: string } | null } | null) => {
+        const p = data?.prefs;
+        if (!p) return;
+        if (p.chart_tf_es) {
+          setEsInterval(p.chart_tf_es);
+          try { localStorage.setItem('onyx_chart_tf_ES', p.chart_tf_es); } catch {}
+        }
+        if (p.chart_tf_nq) {
+          setNqInterval(p.chart_tf_nq);
+          try { localStorage.setItem('onyx_chart_tf_NQ', p.chart_tf_nq); } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setClock(israelClock()), 1000);
