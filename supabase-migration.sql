@@ -38,5 +38,9 @@ create table if not exists user_preferences (
   chart_tf_nq     text        not null default '5',
   analysis_state  jsonb,
   lockout_config  jsonb,
+  news_filters    jsonb,
   updated_at      timestamptz default now()
 );
+
+-- If the table already exists, add the new column (idempotent)
+alter table user_preferences add column if not exists news_filters jsonb;

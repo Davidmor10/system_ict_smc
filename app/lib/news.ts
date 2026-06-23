@@ -15,7 +15,28 @@ import { logger } from './logger';
 
 export type Impact = 'High' | 'Medium' | 'Low';
 
-export type Currency = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF' | 'CNY';
+export type Currency = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF' | 'CNY' | 'NZD';
+
+// ── Client-facing filter model ────────────────────────────────────────────────
+
+export type Imp = 'high' | 'med' | 'low' | 'holiday';
+
+export type EventType =
+  | 'growth' | 'inflation' | 'employment' | 'central' | 'bonds'
+  | 'housing' | 'consumer' | 'business' | 'speeches' | 'misc';
+
+/** Flat event model consumed by the client filter/render layer. */
+export interface MacroEvent {
+  /** Day offset from Monday: 0=Mon … 4=Fri. */
+  d: number;
+  t: string;
+  cur: string;
+  imp: Imp;
+  type: EventType;
+  title: string;
+  f?: string;
+  p?: string;
+}
 
 /** A single scheduled macro event, as a calendar feed would deliver it. */
 export interface EconomicEvent {
@@ -108,7 +129,7 @@ function buildMockFeed(range: DateRange): EconomicEvent[] {
 // our internal `EconomicEvent`.
 
 const IMPACT_MAP: Record<string, Impact> = { high: 'High', medium: 'Medium', low: 'Low' };
-const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY'] as const;
+const KNOWN_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'NZD'] as const;
 
 /** Trim a string/number outcome value; treat blanks and placeholders as null. */
 function cleanMetric(value: string | number | null | undefined): string | null {
@@ -283,4 +304,66 @@ export async function getHighImpactUsdEvents(range: DateRange): Promise<MacroFee
     }));
 
   return { status: 'ok', groups };
+}
+
+// ── Client filter layer ───────────────────────────────────────────────────────
+
+function toImp(impact: string, title: string): Imp {
+  if (/holiday|bank holiday/i.test(title)) return 'holiday';
+  if (impact === 'High')   return 'high';
+  if (impact === 'Medium') return 'med';
+  return 'low';
+}
+
+function detectType(title: string): EventType {
+  const t = title.toLowerCase();
+  if (/gdp|retail sales|industrial production|manufacturing pmi|services pmi|composite pmi/.test(t)) return 'growth';
+  if (/\bcpi\b|\bpce\b|\bppi\b|inflation|deflator/.test(t)) return 'inflation';
+  if (/nonfarm|unemployment|jobless|payroll|\badp\b|employment change/.test(t)) return 'employment';
+  if (/fomc|federal funds|rate decision|policy rate|boj |rba |ecb |boe |central bank|press conference/.test(t)) return 'central';
+  if (/\bbond\b|treasury|auction|bund|gilt/.test(t)) return 'bonds';
+  if (/housing|home sales|building permits|housing starts|case-shiller/.test(t)) return 'housing';
+  if (/consumer confidence|consumer sentiment|\buom\b|michigan/.test(t)) return 'consumer';
+  if (/\bism\b|factory orders|durable goods|inventories|empire state|philly fed|crude oil/.test(t)) return 'business';
+  if (/speaks|speech|testimony|hearing|minutes/.test(t)) return 'speeches';
+  return 'misc';
+}
+
+/**
+ * Fetch the full week calendar (all currencies + impact levels) and convert to
+ * the flat `MacroEvent` model used by the client filter layer.
+ */
+export async function fetchAllMacroEvents(range: DateRange): Promise<{
+  status: 'ok' | 'unavailable';
+  events: MacroEvent[];
+}> {
+  let raw: EconomicEvent[];
+  try {
+    raw = await fetchNews(range);
+  } catch {
+    return { status: 'unavailable', events: [] };
+  }
+
+  const mondayMs = new Date(`${range.startISO}T12:00:00Z`).getTime();
+  const events: MacroEvent[] = [];
+
+  for (const ev of raw) {
+    if (ev.date < range.startISO || ev.date > range.endISO) continue;
+    const d = Math.round(
+      (new Date(`${ev.date}T12:00:00Z`).getTime() - mondayMs) / 86_400_000,
+    );
+    if (d < 0 || d > 4) continue;
+    events.push({
+      d,
+      t:    ev.time,
+      cur:  ev.currency,
+      imp:  toImp(ev.impact, ev.title),
+      type: detectType(ev.title),
+      title: ev.title,
+      f:    ev.forecast  ?? undefined,
+      p:    ev.previous  ?? undefined,
+    });
+  }
+
+  return { status: 'ok', events };
 }

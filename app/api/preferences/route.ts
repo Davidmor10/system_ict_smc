@@ -7,6 +7,7 @@ export type UserPrefs = {
   chart_tf_nq: string;
   analysis_state: Record<string, unknown> | null;
   lockout_config: Record<string, unknown> | null;
+  news_filters: Record<string, unknown> | null;
 };
 
 /** GET /api/preferences — returns stored preferences for the current user. */
@@ -18,7 +19,7 @@ export async function GET() {
   const supabase = createServerSupabaseClient();
   const { data } = await supabase
     .from('user_preferences')
-    .select('chart_tf_es, chart_tf_nq, analysis_state, lockout_config')
+    .select('chart_tf_es, chart_tf_nq, analysis_state, lockout_config, news_filters')
     .eq('clerk_id', userId)
     .maybeSingle();
 

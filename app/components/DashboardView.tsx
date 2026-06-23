@@ -422,10 +422,6 @@ export default function DashboardView({
 
           {/* ── 03 · Macro Journal ───────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
-            <SectionHeader num="03"
-              title={pick({ he: 'יומן מאקרו', en: 'Macro Journal' }, en)}
-              subtitle="ForexFactory · USD High Impact · This Week"
-              dir={dir} />
             {macroBoard}
           </div>
 
