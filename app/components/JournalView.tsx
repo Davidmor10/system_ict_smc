@@ -396,9 +396,9 @@ export default function JournalView() {
     <div className="flex flex-col flex-1 min-h-0 bg-black text-white" dir={dir}>
 
       {/* ── Topbar ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-50 h-[58px] flex items-center justify-between px-9 bg-[rgba(8,8,9,.92)] backdrop-blur border-b border-[#1c1c1e] shrink-0">
+      <div className="sticky top-0 max-[880px]:top-[54px] z-50 h-[58px] max-[880px]:h-[45px] flex items-center justify-between px-9 max-[880px]:px-4 bg-[rgba(8,8,9,.92)] backdrop-blur border-b border-[#1c1c1e] shrink-0">
         <div className="flex items-center gap-3" dir={dir}>
-          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_18px_rgba(212,175,55,0.22)]">
+          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_18px_rgba(212,175,55,0.22)] max-[880px]:hidden">
             PRO
           </span>
           <h1 className="font-serif text-[20px] font-bold text-white leading-none">
@@ -406,7 +406,7 @@ export default function JournalView() {
           </h1>
           <span className="font-mono text-[11px] text-white/40 hidden sm:block">{dateStr}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-[880px]:hidden">
           <span className={`h-2 w-2 rounded-full shrink-0 ${session ? 'bg-[#d4af37] animate-pulse' : 'bg-white/30'}`} />
           <span className={`font-mono text-[12px] font-bold tracking-[0.14em] uppercase ${session ? 'text-[#d4af37]' : 'text-white/40'}`}>
             {sessionLabel}
@@ -415,7 +415,7 @@ export default function JournalView() {
       </div>
 
       {/* ── PerfStrip ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-5 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
+      <div className="grid grid-cols-5 max-[880px]:grid-cols-2 gap-px bg-[#1c1c1e] border-b border-[#1c1c1e] shrink-0">
         {/* 1 · Trades Today */}
         <div className="bg-black px-6 py-[18px] flex flex-col gap-[7px]">
           <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-white/45">
@@ -537,9 +537,9 @@ export default function JournalView() {
       <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
 
         {/* Log Header */}
-        <div className="flex items-center justify-between px-9 py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0">
+        <div className="flex items-center justify-between flex-wrap gap-2 px-9 max-[880px]:px-4 py-[14px] border-b border-[#1c1c1e] bg-[#0d0d0f] shrink-0">
           <span className="font-mono text-[13px] font-bold uppercase tracking-[0.18em] text-white">Trade Log</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {lockoutCfg.enabled && lockoutCfg.maxLosses > 0 && (
               <span className={`font-mono text-[11px] font-bold ${lockout.locked ? 'text-[#c98080]' : 'text-white/45'}`}>
                 Losses {lockout.lossesToday}/{lockoutCfg.maxLosses}
@@ -821,7 +821,7 @@ export default function JournalView() {
         )}
 
         {/* ── Table ──────────────────────────────────────────────── */}
-        <div className="flex-1">
+        <div className="flex-1 max-[880px]:overflow-x-auto max-[880px]:max-w-full" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
           {trades.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
               <span className="font-serif text-xl font-bold text-white/50 tracking-[0.12em] uppercase">
@@ -832,7 +832,7 @@ export default function JournalView() {
               </span>
             </div>
           ) : (
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-xs max-[880px]:text-[11px] font-mono">
               <thead className="sticky top-0 bg-[#0d0d0f] border-b border-[#1c1c1e] z-10">
                 <tr>
                   <th className="w-10"></th>

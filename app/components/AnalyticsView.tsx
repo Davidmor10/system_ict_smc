@@ -172,7 +172,7 @@ function SessionTimeline({ nowMin, session, override, onToggleOverride, en }: {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 max-[880px]:flex-col max-[880px]:items-stretch">
         {/* Track */}
         <div className="relative flex-1 bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px]" style={{ height: 88 }}>
           {SESSIONS.map(s => {
@@ -213,7 +213,7 @@ function SessionTimeline({ nowMin, session, override, onToggleOverride, en }: {
         <button
           onClick={onToggleOverride}
           dir="rtl"
-          className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-[5px] border font-mono text-[11px] font-bold transition-colors duration-300 ${
+          className={`shrink-0 max-[880px]:w-full flex items-center gap-2 px-3 py-2 rounded-[5px] border font-mono text-[11px] font-bold transition-colors duration-300 ${
             override ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10' : 'border-[#2a2a2d] text-white/50 hover:text-white'
           }`}
         >
@@ -279,7 +279,7 @@ function AssetConsole({ a, i, onChange, en }: {
       </div>
 
       {/* 3-column body */}
-      <div className="grid" style={{ gridTemplateColumns: '1.2fr 1fr 1fr' }}>
+      <div className="grid max-[880px]:grid-cols-1" style={{ gridTemplateColumns: '1.2fr 1fr 1fr' }}>
 
         {/* Col 1 — Chart Input */}
         <div className="p-6 flex flex-col gap-5" dir="rtl">
@@ -329,7 +329,7 @@ function AssetConsole({ a, i, onChange, en }: {
         </div>
 
         {/* Col 2 — Confluence Checklist */}
-        <div className="border-l border-[#1c1c1e] p-6 flex flex-col" dir="rtl">
+        <div className="border-l max-[880px]:border-l-0 max-[880px]:border-t border-[#1c1c1e] p-6 flex flex-col" dir="rtl">
           <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#d4af37] mb-4">
             {pick(STR.colConfluence, en)}
           </span>
@@ -355,7 +355,7 @@ function AssetConsole({ a, i, onChange, en }: {
         </div>
 
         {/* Col 3 — Bias Verdict */}
-        <div className="border-l border-[#1c1c1e] p-6 flex flex-col items-center justify-center gap-5" dir="rtl">
+        <div className="border-l max-[880px]:border-l-0 max-[880px]:border-t border-[#1c1c1e] p-6 flex flex-col items-center justify-center gap-5" dir="rtl">
           <div className="text-center">
             <div className={`font-serif font-black ${c.text} ${c.glow}`}
               style={{ fontSize: 'clamp(28px,2.4vw,46px)', whiteSpace: 'nowrap' }}>
@@ -445,12 +445,12 @@ export default function AnalyticsView() {
     <div className="flex-1 min-h-0 bg-[#000000] text-white overflow-y-auto">
 
       {/* Sticky status bar */}
-      <div className="sticky top-0 z-50 flex items-center justify-between px-10 h-[58px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e]">
+      <div className="sticky top-0 max-[880px]:top-[54px] z-50 flex items-center justify-between px-10 max-[880px]:px-4 h-[58px] max-[880px]:h-[45px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e]">
         <div className="flex items-center gap-3" dir="rtl">
-          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">PRO</span>
+          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)] max-[880px]:hidden">PRO</span>
           <span className="font-serif text-[18px] font-bold text-white">{pick(STR.headerTitle, en)}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-[880px]:hidden">
           <span className={`h-2 w-2 rounded-full shrink-0 ${visible ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
           <span className={`font-mono text-xs font-bold tracking-[0.14em] ${visible ? 'text-[#d4af37]' : 'text-white/50'}`}>
             {sessionLabel}
@@ -459,7 +459,7 @@ export default function AnalyticsView() {
       </div>
 
       {/* Body */}
-      <div className="px-10 pb-20">
+      <div className="px-10 max-[880px]:px-4 pb-20">
 
         {/* 01 · Session Timeline */}
         <div className="py-11 border-b border-[#1c1c1e]">

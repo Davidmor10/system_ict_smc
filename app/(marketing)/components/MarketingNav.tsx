@@ -21,13 +21,15 @@ export default function MarketingNav() {
       dir={rtl ? 'rtl' : 'ltr'}
       className="sticky top-0 z-50 border-b border-[var(--border)]"
       style={{
-        height: 68,
         background: 'rgba(5,5,5,.82)',
         backdropFilter: 'blur(14px)',
         WebkitBackdropFilter: 'blur(14px)',
       }}
     >
-      <div className="wrap flex items-center justify-between relative" style={{ height: 68 }}>
+      <div
+        className="wrap flex items-center justify-between relative max-[900px]:flex-wrap max-[900px]:justify-center max-[900px]:gap-y-[13px] max-[900px]:px-5 max-[900px]:py-[14px] max-[900px]:h-auto"
+        style={{ height: 68 }}
+      >
 
         {/* ── Logo → home ──────────────────────────────────────── */}
         <Link href="/" className="flex flex-col leading-none shrink-0" style={{ gap: 3 }}>
@@ -59,7 +61,7 @@ export default function MarketingNav() {
         </div>
 
         {/* ── Controls ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-[10px] shrink-0 max-[900px]:basis-full max-[900px]:justify-center max-[900px]:flex-wrap">
 
           {/* Language toggle pill */}
           <div
@@ -70,7 +72,7 @@ export default function MarketingNav() {
               <button
                 key={l}
                 onClick={() => setLang(l)}
-                className="px-3 py-1 uppercase tracking-[.12em] transition-colors duration-200"
+                className="px-[15px] max-[900px]:py-[7px] py-1 uppercase tracking-[.12em] transition-colors duration-200"
                 style={{
                   background: lang === l ? 'var(--gold)' : 'transparent',
                   color:      lang === l ? '#000'        : 'rgba(255,255,255,.55)',
@@ -81,13 +83,20 @@ export default function MarketingNav() {
             ))}
           </div>
 
-          {/* Sign in */}
-          <Link href="/sign-in" className="btn-ghost hidden min-[900px]:inline-flex">
+          {/* Sign in — visible on all screen sizes */}
+          <Link
+            href="/sign-in"
+            className="btn-ghost"
+            style={{ padding: '8px 14px' } as React.CSSProperties}
+          >
             {lang === 'he' ? 'התחברות' : 'Sign In'}
           </Link>
 
           {/* Subscribe CTA */}
-          <Link href="/pricing" className="btn-gold">
+          <Link
+            href="/pricing"
+            className="btn-gold max-[900px]:px-5 max-[900px]:py-[9px]"
+          >
             {lang === 'he' ? 'לרכישת מנוי' : 'Subscribe'}
           </Link>
         </div>

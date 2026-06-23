@@ -47,10 +47,10 @@ function StatusBar({
   const dir = en ? 'ltr' : 'rtl';
 
   return (
-    <div className="sticky top-0 z-50 flex items-center justify-between px-10 h-[58px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e] shrink-0">
+    <div className="sticky top-0 max-[880px]:top-[54px] z-50 flex items-center justify-between px-10 max-[880px]:px-4 h-[58px] max-[880px]:h-[45px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e] shrink-0">
 
       {/* Right: role badge / upgrade CTA */}
-      <div className={`flex items-center gap-3`} dir={dir}>
+      <div className={`flex items-center gap-3 max-[880px]:hidden`} dir={dir}>
         {role === 'pro' ? (
           <>
             <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">
@@ -145,7 +145,7 @@ function QuoteCard({ symbol, name, quote }: { symbol: string; name: string; quot
 
       {/* Price + change pill */}
       <div className="flex items-end gap-3 mb-5">
-        <span className={`font-mono text-[42px] font-black tabular-nums leading-none transition-colors duration-300 ${
+        <span className={`font-mono text-[42px] max-[880px]:text-[32px] font-black tabular-nums leading-none transition-colors duration-300 ${
           quote.flash === 'up'   ? 'text-emerald-400' :
           quote.flash === 'down' ? 'text-[#cf8d8d]'   : 'text-white'
         }`}>
@@ -228,8 +228,13 @@ function ChartPanel({
         </div>
         {/* Segmented TF control */}
         <div
-          className="flex items-stretch rounded-[4px] border overflow-hidden"
-          style={{ borderColor: 'rgba(255,255,255,.1)', background: '#000' }}
+          className="flex items-stretch rounded-[4px] border max-[880px]:max-w-[200px] max-[880px]:overflow-x-auto"
+          style={{
+            borderColor: 'rgba(255,255,255,.1)',
+            background: '#000',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
+          } as React.CSSProperties}
         >
           {TF_BUTTONS.map(({ label, tv }) => {
             const active = tv === interval;
@@ -238,7 +243,7 @@ function ChartPanel({
                 key={tv}
                 onClick={() => onIntervalChange(tv)}
                 className={[
-                  'font-mono text-[10px] font-semibold px-[7px] py-[5px] leading-none',
+                  'font-mono text-[10px] font-semibold px-[7px] py-[5px] leading-none shrink-0',
                   'transition-[color,background,box-shadow] duration-150 cursor-pointer border-none',
                   active
                     ? 'text-[#d4af37]'
@@ -257,7 +262,7 @@ function ChartPanel({
         </div>
       </div>
       {/* Chart body */}
-      <div className="h-[440px]">
+      <div className="h-[440px] max-[880px]:h-[300px]">
         <SmcChart symbol={symbol} interval={interval} />
       </div>
     </div>
@@ -268,7 +273,7 @@ function ChartPanel({
 
 function SessionGate({ en }: { en: boolean }) {
   return (
-    <div className="col-span-2 flex items-center justify-center p-16 bg-[#000000] border border-[#1c1c1e] rounded-[5px]">
+    <div className="col-span-2 max-[880px]:col-span-1 flex items-center justify-center p-16 max-[880px]:p-8 bg-[#000000] border border-[#1c1c1e] rounded-[5px]">
       <div className="max-w-lg text-center rounded-xl border border-[#d4af37]/50 bg-[#0d0d0f] p-10 [box-shadow:0_0_60px_-15px_rgba(212,175,55,0.4)]" dir={en ? 'ltr' : 'rtl'}>
         <span className="text-[#d4af37] text-4xl">◈</span>
         <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">
@@ -373,7 +378,7 @@ export default function DashboardView({
 
       {/* Scrollable body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-10 pb-20">
+        <div className="px-10 max-[880px]:px-4 pb-20">
 
           {/* ── 01 · Live Quotes ─────────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
@@ -381,7 +386,7 @@ export default function DashboardView({
               title={pick({ he: 'סקירת שוק', en: 'Market Overview' }, en)}
               subtitle="Live Quotes · ES & NQ Futures"
               dir={dir} />
-            <div className="grid grid-cols-2 gap-[18px]">
+            <div className="grid grid-cols-2 max-[880px]:grid-cols-1 gap-[18px]">
               <QuoteCard symbol="ES1!" name="S&P 500 Futures · CME" quote={live.es} />
               <QuoteCard symbol="NQ1!" name="Nasdaq 100 Futures · CME" quote={live.nq} />
             </div>
@@ -393,7 +398,7 @@ export default function DashboardView({
               title={pick({ he: 'גרפים חיים', en: 'Live Charts' }, en)}
               subtitle={`Monochrome · ${TF_LABEL[esInterval] ?? '5-Minute'} Candles`}
               dir={dir} />
-            <div className="grid grid-cols-2 gap-[18px]">
+            <div className="grid grid-cols-2 max-[880px]:grid-cols-1 gap-[18px]">
               {visible ? (
                 <>
                   <ChartPanel symbol="ES" name="S&P 500"    interval={esInterval} onIntervalChange={handleEsInterval} />

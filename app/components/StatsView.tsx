@@ -173,14 +173,14 @@ export default function StatsView() {
     <div className="flex-1 min-h-0 bg-[#000000] text-white overflow-y-auto">
 
       {/* Sticky topbar */}
-      <div className="sticky top-0 z-50 flex items-center justify-between px-10 h-[58px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e]">
+      <div className="sticky top-0 max-[880px]:top-[54px] z-50 flex items-center justify-between px-10 max-[880px]:px-4 h-[58px] max-[880px]:h-[45px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e]">
         <div className="flex items-center gap-3" dir="rtl">
-          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">PRO</span>
+          <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)] max-[880px]:hidden">PRO</span>
           <span className="font-serif text-[18px] font-bold text-white">
-            {pick({ he: 'יומן מסחר · ניתוח ביצועים', en: 'Trading Journal · Performance Analysis' }, en)}
+            {pick({ he: 'ניתוח ביצועים', en: 'Performance' }, en)}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 max-[880px]:hidden">
           <span className="px-3 py-1 rounded-sm border border-[#1c1c1e] bg-[#0d0d0f] font-mono text-[11px] text-white/60">
             {pick({ he: `סה״כ ${overall.tradeCount} עסקאות`, en: `${overall.tradeCount} Trades` }, en)}
           </span>
@@ -194,7 +194,7 @@ export default function StatsView() {
       </div>
 
       {trades.length === 0 ? <EmptyState en={en} /> : (
-        <div className="px-10 pb-20">
+        <div className="px-10 max-[880px]:px-4 pb-20">
 
           {/* ── 01 · Session + Day ─────────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
@@ -204,7 +204,7 @@ export default function StatsView() {
               dir={en ? 'ltr' : 'rtl'} />
 
             {/* Session cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-[16px] mb-8">
+            <div className="grid grid-cols-2 max-[880px]:grid-cols-1 min-[881px]:grid-cols-4 gap-[16px] mb-8">
               {SESSIONS.map(s => {
                 const g: GroupStats = bySession.get(s.id) ?? { winRate: 0, tradeCount: 0, totalPnl: 0, avgR: 0, wins: 0, losses: 0 };
                 const isBest = s.id === bestSession && g.tradeCount > 0;
@@ -218,7 +218,7 @@ export default function StatsView() {
                     {isBest && (
                       <span className="self-start font-mono text-[9px] font-bold text-[#d4af37] border border-[#d4af37]/40 px-2 py-0.5 rounded">✦ BEST</span>
                     )}
-                    <div className={`font-mono text-[48px] font-black tabular-nums leading-none ${isBest ? 'text-[#d4af37] [text-shadow:0_0_30px_rgba(212,175,55,0.4)]' : 'text-white'}`}>
+                    <div className={`font-mono text-[48px] max-[880px]:text-[40px] font-black tabular-nums leading-none ${isBest ? 'text-[#d4af37] [text-shadow:0_0_30px_rgba(212,175,55,0.4)]' : 'text-white'}`}>
                       {g.tradeCount > 0 ? pct(g.winRate) : '—'}
                     </div>
                     <ProgressBar pct={g.winRate} color={isBest ? 'bg-[#d4af37]' : 'bg-white/30'} />
@@ -243,7 +243,7 @@ export default function StatsView() {
                       {g.tradeCount > 0 ? pct(g.winRate) : '—'}
                     </div>
                     <ProgressBar pct={g.winRate} color={g.tradeCount > 0 ? wrColor(g.winRate) : 'bg-[#1c1c1e]'} />
-                    <div className="font-mono text-[10px] text-white/40 mt-1">
+                    <div className="font-mono text-[10px] text-white/40 mt-1 max-[880px]:hidden">
                       {g.tradeCount} {pick({ he: 'עסקאות', en: 'trades' }, en)} · {usd(g.totalPnl)}
                     </div>
                   </div>
@@ -331,8 +331,8 @@ export default function StatsView() {
               ]).map(({ key, border, wrCls, bi: lbl }) => {
                 const g: GroupStats = byAlignment.get(key) ?? { winRate: 0, tradeCount: 0, totalPnl: 0, avgR: 0, wins: 0, losses: 0 };
                 return (
-                  <div key={key} className={`bg-[#0d0d0f] border ${border} rounded-[6px] p-6 flex items-center justify-between gap-6`}>
-                    <div className="flex flex-col gap-2">
+                  <div key={key} className={`bg-[#0d0d0f] border ${border} rounded-[6px] p-6 max-[880px]:p-[16px_18px] flex items-center justify-between gap-6 max-[880px]:gap-[12px]`}>
+                    <div className="flex flex-col gap-2 min-w-0">
                       <div className="font-serif text-[18px] font-bold text-white">{pick(lbl, en)}</div>
                       <div className="flex flex-col gap-0.5">
                         <StatRow label={pick({ he: 'עסקאות', en: 'Trades' }, en)} value={String(g.tradeCount)} />
@@ -340,7 +340,7 @@ export default function StatsView() {
                         <StatRow label={pick({ he: 'ממוצע R', en: 'Avg R' }, en)} value={g.tradeCount > 0 ? g.avgR.toFixed(2) : '—'} green={g.avgR >= 0} />
                       </div>
                     </div>
-                    <div className={`font-mono text-[56px] font-black tabular-nums leading-none shrink-0 ${g.tradeCount > 0 ? wrCls : 'text-white/20'}`}>
+                    <div className={`font-mono text-[56px] max-[880px]:text-[34px] font-black tabular-nums leading-none shrink-0 ${g.tradeCount > 0 ? wrCls : 'text-white/20'}`}>
                       {g.tradeCount > 0 ? pct(g.winRate) : '—'}
                     </div>
                   </div>
@@ -390,7 +390,7 @@ export default function StatsView() {
               dir={en ? 'ltr' : 'rtl'} />
 
             <div className="bg-[#0d0d0f] border border-[#1c1c1e] rounded-[6px] p-[24px]">
-              <div className="flex gap-4 flex-wrap">
+              <div className="flex gap-4 flex-wrap max-[880px]:grid max-[880px]:grid-cols-[repeat(7,1fr)] max-[880px]:gap-2 max-[880px]:overflow-visible">
                 {HEATMAP_HOURS.map(h => {
                   const key = String(h).padStart(2, '0');
                   const g: GroupStats | undefined = byHour.get(key);
@@ -407,7 +407,7 @@ export default function StatsView() {
 
                   return (
                     <div key={h} className="flex flex-col items-center gap-1.5">
-                      <div className={`w-[38px] h-[38px] rounded border border-[#1c1c1e] flex items-center justify-center ${bg}`}>
+                      <div className={`w-[38px] h-[38px] max-[880px]:w-full max-[880px]:h-auto max-[880px]:aspect-square rounded border border-[#1c1c1e] flex items-center justify-center ${bg}`}>
                         <span className={`font-mono text-[11px] font-bold tabular-nums ${textCls}`}>
                           {isEmpty ? '—' : pct(wr)}
                         </span>

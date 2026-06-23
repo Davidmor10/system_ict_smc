@@ -39,6 +39,11 @@
   --font-serif:  var(--font-playfair);
 }
 
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 html {
   scroll-behavior: smooth;
 }

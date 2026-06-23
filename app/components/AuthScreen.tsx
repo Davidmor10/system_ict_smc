@@ -54,11 +54,11 @@ export default function AuthScreen({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
   return (
     <main
-      className="min-h-screen bg-[#050505] grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr]"
+      className="min-h-screen bg-[#050505] grid grid-cols-1 min-[881px]:grid-cols-[1.05fr_0.95fr]"
       dir={dir}
     >
       {/* ── LEFT · brand panel (hidden on mobile) ── */}
-      <section className="relative hidden lg:flex flex-col justify-between overflow-hidden border-e border-[#1c1c1e] px-[72px] pt-16 pb-11 bg-[linear-gradient(155deg,#0b0b0c_0%,#070708_60%,#050505_100%)]">
+      <section className="relative hidden min-[881px]:flex flex-col justify-between overflow-hidden border-e border-[#1c1c1e] px-[72px] pt-16 pb-11 bg-[linear-gradient(155deg,#0b0b0c_0%,#070708_60%,#050505_100%)]">
         {/* gold radial glow */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -122,18 +122,18 @@ export default function AuthScreen({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       </section>
 
       {/* ── RIGHT · auth card ── */}
-      <section className="flex items-center justify-center px-6 py-16 sm:px-20 bg-[#050505]">
+      <section className="flex items-center justify-center px-6 py-16 sm:px-20 bg-[#050505] max-[880px]:pb-[calc(56px+env(safe-area-inset-bottom,0px))]">
         <div className="w-full max-w-[392px]">
           {/* mobile-only wordmark */}
-          <Link href="/" className="lg:hidden mb-10 flex items-baseline justify-center gap-[11px]">
-            <span className="font-serif text-2xl font-extrabold tracking-[0.04em] text-white">Onyx</span>
+          <Link href="/" className="min-[881px]:hidden mb-10 flex items-baseline justify-center gap-[11px]">
+            <span className="font-serif text-[25px] font-extrabold tracking-[0.04em] text-white">Onyx</span>
             <span className="font-mono text-[11px] font-bold uppercase tracking-[0.34em] text-[#d4af37]">Trading</span>
           </Link>
 
           {/* custom bilingual heading (Clerk's own header is hidden via appearance) */}
           <div className="mb-[34px] text-center">
-            <h2 className="font-serif text-[30px] font-bold tracking-[0.02em] text-white">{heading}</h2>
-            <p className="font-mono text-[12px] font-medium tracking-[0.04em] text-white/45 mt-[11px]">{subheading}</p>
+            <h2 className="font-serif text-[30px] max-[880px]:text-[26px] font-bold tracking-[0.02em] text-white">{heading}</h2>
+            <p className="font-mono text-[12px] max-[880px]:text-[12.5px] font-medium tracking-[0.04em] text-white/45 mt-[11px]">{subheading}</p>
           </div>
 
           {ENABLED ? (
