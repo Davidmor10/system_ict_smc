@@ -33,22 +33,23 @@ function IconBook() {
     </svg>
   );
 }
-function IconUser() {
+function IconBarChart() {
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="7" r="4" />
-      <path d="M3 20c0-4.418 3.582-8 8-8s8 3.582 8 8" />
+      <rect x="2"  y="12" width="4" height="8" rx="1" />
+      <rect x="9"  y="7"  width="4" height="13" rx="1" />
+      <rect x="16" y="3"  width="4" height="17" rx="1" />
     </svg>
   );
 }
 
 // Active tab detection: check in order Journal → Analytics → Dashboard
 // to prevent /dashboard/journal being matched by /dashboard/analytics check.
-function getActiveTab(pathname: string): 'workspace' | 'analytics' | 'journal' | 'account' {
+function getActiveTab(pathname: string): 'workspace' | 'analytics' | 'journal' | 'stats' {
   if (pathname.startsWith('/dashboard/journal')) return 'journal';
+  if (pathname.startsWith('/dashboard/stats'))   return 'stats';
   if (pathname.startsWith('/dashboard/analytics')) return 'analytics';
-  if (pathname.startsWith('/dashboard/stats'))    return 'journal'; // stats is part of journal flow
-  if (pathname.startsWith('/dashboard'))          return 'workspace';
+  if (pathname.startsWith('/dashboard'))         return 'workspace';
   return 'workspace';
 }
 
@@ -61,7 +62,7 @@ export default function MobileNav() {
     { id: 'workspace' as const, href: '/dashboard',            Icon: IconGrid,  label: t('nav_workspace')  },
     { id: 'analytics' as const, href: '/dashboard/analytics',  Icon: IconChart, label: t('nav_analytics')  },
     { id: 'journal'   as const, href: '/dashboard/journal',    Icon: IconBook,  label: t('nav_journal')    },
-    { id: 'account'   as const, href: '#',                     Icon: IconUser,  label: t('sys_account')    },
+    { id: 'stats'     as const, href: '/dashboard/stats',      Icon: IconBarChart, label: t('nav_stats')   },
   ];
 
   return (
