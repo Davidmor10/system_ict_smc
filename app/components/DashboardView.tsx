@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { useLivePrices, type LiveQuote } from '../hooks/useLivePrices';
 import SmcChart from './SmcChart';
+import DecisionDashboard from './DecisionDashboard';
 import PositionCalculator from './PositionCalculator';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
 import { useMarketStatus } from '../hooks/useMarketStatus';
@@ -392,32 +393,9 @@ export default function DashboardView({
             </div>
           </div>
 
-          {/* ── 02 · Live Charts ─────────────────────────────── */}
+          {/* ── 02 · Decision Engine ─────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
-            <SectionHeader num="02"
-              title={pick({ he: 'גרפים חיים', en: 'Live Charts' }, en)}
-              subtitle={`Monochrome · ${TF_LABEL[esInterval] ?? '5-Minute'} Candles`}
-              dir={dir} />
-            <div className="grid grid-cols-2 max-[880px]:grid-cols-1 gap-[18px]">
-              {visible ? (
-                <>
-                  <ChartPanel symbol="ES" name="S&P 500"    interval={esInterval} onIntervalChange={handleEsInterval} />
-                  <ChartPanel symbol="NQ" name="Nasdaq 100" interval={nqInterval} onIntervalChange={handleNqInterval} />
-                </>
-              ) : (
-                <SessionGate en={en} />
-              )}
-            </div>
-            <p
-              className="mt-[18px] font-mono text-[11px] font-semibold text-white/35 leading-relaxed tracking-[0.1em]"
-              dir={dir}
-              style={{ textAlign: en ? 'left' : 'right' }}
-            >
-              {pick({
-                he: '◈ הגרפים המוצגים כאן הם גרפי המדדים הכלליים (S&P 500 ו-Nasdaq 100) — ולא גרפי החוזים העתידיים (ES1! / NQ1!) שנסחרים ב-CME. ניתן להשתמש בהם כאינדיקציה כללית ולראייה רחבה של שוק המדדים בלבד, ולא כתחליף לגרפי החוזים לצורך קבלת החלטות מסחר.',
-                en: '◈ The charts shown here are general index charts (S&P 500 & Nasdaq 100) — not the futures contracts (ES1! / NQ1!) traded on CME. Use them as a general indication and broad view of the index market only, not as a substitute for futures charts when making trading decisions.',
-              }, en)}
-            </p>
+            <DecisionDashboard />
           </div>
 
           {/* ── 03 · Macro Journal ───────────────────────────── */}
