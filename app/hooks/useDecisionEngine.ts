@@ -5,7 +5,22 @@ import { engineEmitter, getEngine } from '../lib/engine';
 import { israelClock, getSessionStatus, type Session } from '../lib/sessions';
 import type { Phase, Direction, Mode, Signal } from '../lib/engine/types';
 
-const SIGNAL_MAX = 20;
+const SIGNAL_MAX  = 20;
+const BIAS_LS_KEY = 'onyx.engine.bias';
+
+function loadBias(): { bias: Direction; mode: Mode } | null {
+  try {
+    const raw = localStorage.getItem(BIAS_LS_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { bias: Direction; mode: Mode };
+    if (!p.bias || !p.mode) return null;
+    return p;
+  } catch { return null; }
+}
+
+function saveBias(bias: Direction, mode: Mode) {
+  try { localStorage.setItem(BIAS_LS_KEY, JSON.stringify({ bias, mode })); } catch {}
+}
 
 export interface SessionInfo {
   inSession: boolean;
@@ -44,11 +59,17 @@ export function useDecisionEngine(esPrice: number): EngineHook {
       engineEmitter.emit('signal', sig);
     });
 
-    // Restore bias + mode from persisted SM state (survives navigation)
-    const saved = engineRef.current.getState();
-    if (saved.bias) setBiasS(saved.bias);
-    if (saved.mode) setModeS(saved.mode);
-    if (saved.phase) setPhase(saved.phase);
+    // Restore bias + mode from dedicated localStorage key — reliable across navigation
+    const saved = loadBias();
+    if (saved) {
+      setBiasS(saved.bias);
+      setModeS(saved.mode);
+      engineRef.current.setBias(saved.bias, saved.mode);
+    }
+
+    // Restore SM phase
+    const smState = engineRef.current.getState();
+    if (smState.phase) setPhase(smState.phase);
 
     const unsubs = [
       engineEmitter.on('phase_change', setPhase),
@@ -95,7 +116,7 @@ export function useDecisionEngine(esPrice: number): EngineHook {
   const setBias = useCallback((b: Direction, m: Mode) => {
     setBiasS(b);
     setModeS(m);
-    // Allow bias to be set even outside sessions (prepares for next session)
+    saveBias(b, m);                    // ← שמירה מיידית ב-localStorage
     engineRef.current?.setBias(b, m);
   }, []);
 
