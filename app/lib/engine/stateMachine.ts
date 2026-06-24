@@ -44,6 +44,8 @@ export class StateMachine {
 
   getState(): MachineState { return { ...this.s }; }
 
+  reset(): void { this.resetToIdle(); this.persist(); }
+
   // ── Batch ordering ────────────────────────────────────────────────────────
 
   private orderBatch(events: SMEvent[]): SMEvent[] {

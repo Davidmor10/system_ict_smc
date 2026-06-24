@@ -1,8 +1,10 @@
 'use client';
 
-import { useDecisionEngine } from '../hooks/useDecisionEngine';
-import { useLivePrices }     from '../hooks/useLivePrices';
+import { useDecisionEngine }         from '../hooks/useDecisionEngine';
+import { useLivePrices }             from '../hooks/useLivePrices';
+import { fmtHMS }                    from '../lib/sessions';
 import type { Phase, Direction, Mode, Signal, YesSignal } from '../lib/engine/types';
+import type { SessionInfo }          from '../hooks/useDecisionEngine';
 
 // ── Phase LED config ──────────────────────────────────────────────────────────
 
@@ -12,6 +14,49 @@ const PHASE_CFG: Record<Phase, { dot: string; glow: string; label: string; pulse
   MANIP_WATCH:  { dot: '#3b82f6', glow: '0 0 10px rgba(59,130,246,.6)', label: 'MANIP WATCH',  pulse: false },
   CONFIRMATION: { dot: '#f97316', glow: '0 0 16px rgba(249,115,22,.8)', label: 'CONFIRMATION', pulse: true  },
 };
+
+// ── Session bar ───────────────────────────────────────────────────────────────
+
+const SESSION_COLOR: Record<string, string> = {
+  ASIA:   '#5b7a99',
+  LONDON: '#6fa580',
+  NY_AM:  '#d4af37',
+  NY_PM:  '#c98080',
+};
+
+function SessionBar({ info }: { info: SessionInfo }) {
+  const color = SESSION_COLOR[info.session.id] ?? '#52525b';
+  return (
+    <div
+      className="flex items-center justify-between rounded-[4px] border px-3 py-2"
+      style={{
+        borderColor: info.inSession ? `${color}55` : '#2a2a2d',
+        background:  info.inSession ? `${color}0f` : 'transparent',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={info.inSession ? 'animate-pulse' : ''}
+          style={{ display:'block', width:6, height:6, borderRadius:'50%',
+                   background: info.inSession ? color : '#3a3a3e' }}
+        />
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: info.inSession ? color : '#52525b' }}>
+          {info.session.label}
+        </span>
+        {!info.inSession && (
+          <span className="font-mono text-[9px] text-white/25 uppercase tracking-[0.1em]">
+            — Next
+          </span>
+        )}
+      </div>
+      <span className="font-mono text-[10px] tabular-nums"
+            style={{ color: info.inSession ? color : '#52525b' }}>
+        {info.inSession ? fmtHMS(info.remaining) : `in ${fmtHMS(info.remaining)}`}
+      </span>
+    </div>
+  );
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -137,7 +182,7 @@ function LogRow({ sig, i }: { sig: Signal; i: number }) {
 
 export default function DecisionDashboard() {
   const live = useLivePrices();
-  const { phase, bias, mode, signals, last, setBias } = useDecisionEngine(live.es.price);
+  const { phase, bias, mode, signals, last, sessionInfo, setBias } = useDecisionEngine(live.es.price);
 
   const latestYes = last?.result === 'YES' ? (last as YesSignal) : null;
 
@@ -212,8 +257,25 @@ export default function DecisionDashboard() {
         </div>
       </div>
 
+      {/* ── Session indicator ──────────────────────────────────────────────── */}
+      <SessionBar info={sessionInfo} />
+
+      {/* ── Out-of-session lock ─────────────────────────────────────────────── */}
+      {!sessionInfo.inSession && (
+        <div className="flex flex-col items-center justify-center py-8 gap-2
+                        rounded-[6px] border border-[#1c1c1e] bg-[#0d0d0f]">
+          <span className="font-mono text-[22px] text-white/10">⏸</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-white/25">
+            Engine Inactive
+          </span>
+          <span className="font-mono text-[10px] text-white/15">
+            המנוע פועל רק בזמן סשנים
+          </span>
+        </div>
+      )}
+
       {/* ── Latest YES signal ───────────────────────────────────────────────── */}
-      {latestYes && <YesCard sig={latestYes} />}
+      {latestYes && sessionInfo.inSession && <YesCard sig={latestYes} />}
 
       {/* ── Signal log ──────────────────────────────────────────────────────── */}
       {signals.length > 0 ? (

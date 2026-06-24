@@ -22,9 +22,10 @@ export const liquidityStore = {
 // ── Engine singleton ──────────────────────────────────────────────────────────
 
 export interface Engine {
-  onTick:     (tick: Tick) => void;
-  setBias:    (bias: Direction, mode: Mode) => void;
-  getState:   () => ReturnType<StateMachine['getState']>;
+  onTick:   (tick: Tick) => void;
+  setBias:  (bias: Direction, mode: Mode) => void;
+  getState: () => ReturnType<StateMachine['getState']>;
+  reset:    () => void;
 }
 
 let _engine: Engine | null = null;
@@ -55,6 +56,7 @@ export function getEngine(onSignal: (sig: Signal) => void): Engine {
     onTick:   (tick) => aggregator.onTick(tick),
     setBias:  (bias, mode) => sm.processBatch([{ type: 'BIAS_SET', bias, mode }]),
     getState: () => sm.getState(),
+    reset:    () => sm.reset(),
   };
 
   return _engine;
