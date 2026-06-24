@@ -44,6 +44,12 @@ export function useDecisionEngine(esPrice: number): EngineHook {
       engineEmitter.emit('signal', sig);
     });
 
+    // Restore bias + mode from persisted SM state (survives navigation)
+    const saved = engineRef.current.getState();
+    if (saved.bias) setBiasS(saved.bias);
+    if (saved.mode) setModeS(saved.mode);
+    if (saved.phase) setPhase(saved.phase);
+
     const unsubs = [
       engineEmitter.on('phase_change', setPhase),
       engineEmitter.on('signal', (sig) =>
