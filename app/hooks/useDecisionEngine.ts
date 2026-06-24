@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { engineEmitter, getEngine }    from '../lib/engine';
-import { useTvCandles }                from './useTvCandles';
+import { useMarketCandles, type FeedStatus } from './useMarketCandles';
 import { israelClock, getSessionStatus, type Session } from '../lib/sessions';
 import type { Phase, Direction, Mode, Signal, SMEvent } from '../lib/engine/types';
-import type { TvStatus }               from './useTvCandles';
 
-export type { TvStatus };
+export type { FeedStatus };
 
 const SIGNAL_MAX  = 20;
 const BIAS_LS_KEY = 'onyx.engine.bias';
@@ -39,7 +38,7 @@ export interface EngineHook {
   signals:      Signal[];
   last:         Signal    | null;
   sessionInfo:  SessionInfo;
-  tvStatus:     TvStatus;
+  feedStatus:   FeedStatus;
   setBias:      (bias: Direction, mode: Mode) => void;
   injectEvent:  (event: SMEvent) => void;
   resetEngine:  () => void;
@@ -93,8 +92,8 @@ export function useDecisionEngine(esPrice: number): EngineHook {
 
   useEffect(() => {
     const check = () => {
-      const { sec }          = israelClock();
-      const info             = getSessionStatus(sec) as SessionInfo;
+      const { sec }  = israelClock();
+      const info     = getSessionStatus(sec) as SessionInfo;
       setSession(info);
       if (wasInSession.current && !info.inSession) engineRef.current?.reset();
       wasInSession.current = info.inSession;
@@ -104,19 +103,19 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     return () => clearInterval(id);
   }, []);
 
-  // ── Yahoo Finance price → CandleAggregator (price display only) ───────────
-  //    Real candles come from TradingView webhooks below.
+  // ── Yahoo Finance price → price display only ──────────────────────────────
 
   useEffect(() => {
     if (!sessionInfo.inSession) return;
     if (!esPrice || esPrice === prevPrice.current) return;
     prevPrice.current = esPrice;
+    // onTick feeds CandleAggregator — kept as lightweight price heartbeat
     engineRef.current?.onTick({ price: esPrice, timestamp: Date.now() });
   }, [esPrice, sessionInfo.inSession]);
 
-  // ── TradingView webhook candles → engine (primary data source) ────────────
+  // ── Real OHLCV candles from Yahoo Finance → engine (primary) ─────────────
 
-  const { status: tvStatus } = useTvCandles(useCallback((candles) => {
+  const feedStatus = useMarketCandles(useCallback((candles) => {
     if (!sessionInfoRef.current.inSession) return;
     engineRef.current?.processClosedCandles(candles);
   }, []));
@@ -143,7 +142,7 @@ export function useDecisionEngine(esPrice: number): EngineHook {
   const getSmState = useCallback(() => engineRef.current!.getState(), []);
 
   return {
-    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, tvStatus,
+    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, feedStatus,
     setBias, injectEvent, resetEngine, getSmState,
   };
 }
