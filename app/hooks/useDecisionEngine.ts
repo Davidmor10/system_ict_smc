@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { engineEmitter, getEngine }    from '../lib/engine';
 import { useMarketCandles, type FeedStatus } from './useMarketCandles';
+import { useLiquidityLevels }          from './useLiquidityLevels';
 import { israelClock, getSessionStatus, type Session } from '../lib/sessions';
 import type { Phase, Direction, Mode, Signal, SMEvent } from '../lib/engine/types';
 
@@ -32,17 +33,18 @@ export interface SessionInfo {
 }
 
 export interface EngineHook {
-  phase:        Phase;
-  bias:         Direction | null;
-  mode:         Mode      | null;
-  signals:      Signal[];
-  last:         Signal    | null;
-  sessionInfo:  SessionInfo;
-  feedStatus:   FeedStatus;
-  setBias:      (bias: Direction, mode: Mode) => void;
-  injectEvent:  (event: SMEvent) => void;
-  resetEngine:  () => void;
-  getSmState:   () => ReturnType<ReturnType<typeof getEngine>['getState']>;
+  phase:         Phase;
+  bias:          Direction | null;
+  mode:          Mode      | null;
+  signals:       Signal[];
+  last:          Signal    | null;
+  sessionInfo:   SessionInfo;
+  feedStatus:    FeedStatus;
+  levelsCount:   number;
+  setBias:       (bias: Direction, mode: Mode) => void;
+  injectEvent:   (event: SMEvent) => void;
+  resetEngine:   () => void;
+  getSmState:    () => ReturnType<ReturnType<typeof getEngine>['getState']>;
 }
 
 export function useDecisionEngine(esPrice: number): EngineHook {
@@ -120,6 +122,10 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     engineRef.current?.processClosedCandles(candles);
   }, []));
 
+  // ── Liquidity levels — auto-fetched, auto-populates liquidityStore ─────────
+
+  const { levels } = useLiquidityLevels();
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   const setBias = useCallback((b: Direction, m: Mode) => {
@@ -143,6 +149,7 @@ export function useDecisionEngine(esPrice: number): EngineHook {
 
   return {
     phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, feedStatus,
+    levelsCount: levels.length,
     setBias, injectEvent, resetEngine, getSmState,
   };
 }

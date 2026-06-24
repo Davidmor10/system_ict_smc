@@ -56,14 +56,25 @@ export interface ManipLeg {
 
 export type LiqSide = 'high' | 'low';
 
+export type LiqType =
+  | 'swing'
+  | 'asia_high'     | 'asia_low'
+  | 'london_high'   | 'london_low'
+  | 'ny_am_high'    | 'ny_am_low'
+  | 'ny_pm_high'    | 'ny_pm_low'
+  | '4h_high'       | '4h_low'
+  | '1h_high'       | '1h_low'
+  | '15m_high'      | '15m_low'
+  | 'prev_day_high' | 'prev_day_low'
+  | 'prev_week_high'| 'prev_week_low'
+  | 'macro';
+
 export interface LiquidityLevel {
   price: number;
   side:  LiqSide;
-  type:  'swing' | 'session_high' | 'session_low'
-        | 'prev_day_high' | 'prev_day_low'
-        | 'prev_week_high' | 'prev_week_low'
-        | 'macro';
+  type:  LiqType;
   swept: boolean;
+  label?: string;
 }
 
 // ─── State machine ────────────────────────────────────────────────────────────

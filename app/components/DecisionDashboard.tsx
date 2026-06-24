@@ -184,7 +184,7 @@ function LogRow({ sig, i }: { sig: Signal; i: number }) {
 
 export default function DecisionDashboard() {
   const live = useLivePrices();
-  const { phase, bias, mode, signals, last, sessionInfo, feedStatus, setBias, injectEvent, resetEngine, getSmState } =
+  const { phase, bias, mode, signals, last, sessionInfo, feedStatus, levelsCount, setBias, injectEvent, resetEngine, getSmState } =
     useDecisionEngine(live.es.price);
   const [showTest, setShowTest] = useState(false);
 
@@ -263,6 +263,22 @@ export default function DecisionDashboard() {
 
       {/* ── Session indicator ──────────────────────────────────────────────── */}
       <SessionBar info={sessionInfo} />
+
+      {/* ── Liquidity levels status ────────────────────────────────────────── */}
+      <div className="flex items-center justify-between rounded-[4px] border border-[#1c1c1e] px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span style={{ display:'block', width:6, height:6, borderRadius:'50%',
+                         background: levelsCount > 0 ? '#d4af37' : '#3a3a3e' }} />
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em]"
+                style={{ color: levelsCount > 0 ? '#d4af37' : '#52525b' }}>
+            Liquidity Levels
+          </span>
+        </div>
+        <span className="font-mono text-[9px] tabular-nums"
+              style={{ color: levelsCount > 0 ? '#d4af37' : '#3a3a3e' }}>
+          {levelsCount > 0 ? `${levelsCount} active` : 'Loading...'}
+        </span>
+      </div>
 
       {/* ── Market data feed status ────────────────────────────────────────── */}
       <div
