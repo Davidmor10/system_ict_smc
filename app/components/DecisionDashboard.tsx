@@ -184,7 +184,7 @@ function LogRow({ sig, i }: { sig: Signal; i: number }) {
 
 export default function DecisionDashboard() {
   const live = useLivePrices();
-  const { phase, bias, mode, signals, last, sessionInfo, setBias, injectEvent, resetEngine, getSmState } =
+  const { phase, bias, mode, signals, last, sessionInfo, tvStatus, setBias, injectEvent, resetEngine, getSmState } =
     useDecisionEngine(live.es.price);
   const [showTest, setShowTest] = useState(false);
 
@@ -263,6 +263,33 @@ export default function DecisionDashboard() {
 
       {/* ── Session indicator ──────────────────────────────────────────────── */}
       <SessionBar info={sessionInfo} />
+
+      {/* ── TradingView data feed status ───────────────────────────────────── */}
+      <div
+        className="flex items-center justify-between rounded-[4px] border px-3 py-2"
+        style={{
+          borderColor: tvStatus === 'receiving' ? '#4a7c5955' : '#2a2a2d',
+          background:  tvStatus === 'receiving' ? '#4a7c590a' : 'transparent',
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            style={{
+              display: 'block', width: 6, height: 6, borderRadius: '50%',
+              background: tvStatus === 'receiving' ? '#6fa580'
+                        : tvStatus === 'error'     ? '#c98080' : '#3a3a3e',
+            }}
+          />
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em]"
+                style={{ color: tvStatus === 'receiving' ? '#6fa580' : '#52525b' }}>
+            TradingView Feed
+          </span>
+        </div>
+        <span className="font-mono text-[9px] uppercase tracking-[0.14em]"
+              style={{ color: tvStatus === 'receiving' ? '#6fa580' : '#3a3a3e' }}>
+          {tvStatus === 'receiving' ? 'Live' : tvStatus === 'error' ? 'Error' : 'Waiting'}
+        </span>
+      </div>
 
       {/* ── Out-of-session lock ─────────────────────────────────────────────── */}
       {!sessionInfo.inSession && (

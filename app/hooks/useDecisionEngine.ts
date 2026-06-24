@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { engineEmitter, getEngine } from '../lib/engine';
+import { engineEmitter, getEngine }    from '../lib/engine';
+import { useTvCandles }                from './useTvCandles';
 import { israelClock, getSessionStatus, type Session } from '../lib/sessions';
 import type { Phase, Direction, Mode, Signal, SMEvent } from '../lib/engine/types';
+import type { TvStatus }               from './useTvCandles';
+
+export type { TvStatus };
 
 const SIGNAL_MAX  = 20;
 const BIAS_LS_KEY = 'onyx.engine.bias';
@@ -25,7 +29,7 @@ function saveBias(bias: Direction, mode: Mode) {
 export interface SessionInfo {
   inSession: boolean;
   session:   Session;
-  remaining: number;   // seconds
+  remaining: number;
 }
 
 export interface EngineHook {
@@ -35,6 +39,7 @@ export interface EngineHook {
   signals:      Signal[];
   last:         Signal    | null;
   sessionInfo:  SessionInfo;
+  tvStatus:     TvStatus;
   setBias:      (bias: Direction, mode: Mode) => void;
   injectEvent:  (event: SMEvent) => void;
   resetEngine:  () => void;
@@ -51,9 +56,11 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     return getSessionStatus(sec) as SessionInfo;
   });
 
-  const engineRef    = useRef<ReturnType<typeof getEngine> | null>(null);
-  const prevPrice    = useRef(0);
-  const wasInSession = useRef(false);
+  const engineRef      = useRef<ReturnType<typeof getEngine> | null>(null);
+  const prevPrice      = useRef(0);
+  const wasInSession   = useRef(false);
+  const sessionInfoRef = useRef(sessionInfo);
+  sessionInfoRef.current = sessionInfo;
 
   // ── Boot engine ───────────────────────────────────────────────────────────
 
@@ -62,7 +69,6 @@ export function useDecisionEngine(esPrice: number): EngineHook {
       engineEmitter.emit('signal', sig);
     });
 
-    // Restore bias + mode from dedicated localStorage key — reliable across navigation
     const saved = loadBias();
     if (saved) {
       setBiasS(saved.bias);
@@ -70,7 +76,6 @@ export function useDecisionEngine(esPrice: number): EngineHook {
       engineRef.current.setBias(saved.bias, saved.mode);
     }
 
-    // Restore SM phase
     const smState = engineRef.current.getState();
     if (smState.phase) setPhase(smState.phase);
 
@@ -84,28 +89,23 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     return () => unsubs.forEach(u => u());
   }, []);
 
-  // ── Session watchdog — checks every second ────────────────────────────────
+  // ── Session watchdog ──────────────────────────────────────────────────────
 
   useEffect(() => {
     const check = () => {
-      const { sec }                   = israelClock();
-      const status                    = getSessionStatus(sec);
-      const info: SessionInfo         = status as SessionInfo;
+      const { sec }          = israelClock();
+      const info             = getSessionStatus(sec) as SessionInfo;
       setSession(info);
-
-      // Transition: in-session → out-of-session → reset SM
-      if (wasInSession.current && !info.inSession) {
-        engineRef.current?.reset();
-      }
+      if (wasInSession.current && !info.inSession) engineRef.current?.reset();
       wasInSession.current = info.inSession;
     };
-
     check();
     const id = setInterval(check, 1_000);
     return () => clearInterval(id);
   }, []);
 
-  // ── Feed price ticks — ONLY when in a session ─────────────────────────────
+  // ── Yahoo Finance price → CandleAggregator (price display only) ───────────
+  //    Real candles come from TradingView webhooks below.
 
   useEffect(() => {
     if (!sessionInfo.inSession) return;
@@ -114,12 +114,19 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     engineRef.current?.onTick({ price: esPrice, timestamp: Date.now() });
   }, [esPrice, sessionInfo.inSession]);
 
+  // ── TradingView webhook candles → engine (primary data source) ────────────
+
+  const { status: tvStatus } = useTvCandles(useCallback((candles) => {
+    if (!sessionInfoRef.current.inSession) return;
+    engineRef.current?.processClosedCandles(candles);
+  }, []));
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   const setBias = useCallback((b: Direction, m: Mode) => {
     setBiasS(b);
     setModeS(m);
-    saveBias(b, m);                    // ← שמירה מיידית ב-localStorage
+    saveBias(b, m);
     engineRef.current?.setBias(b, m);
   }, []);
 
@@ -136,7 +143,7 @@ export function useDecisionEngine(esPrice: number): EngineHook {
   const getSmState = useCallback(() => engineRef.current!.getState(), []);
 
   return {
-    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo,
+    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, tvStatus,
     setBias, injectEvent, resetEngine, getSmState,
   };
 }

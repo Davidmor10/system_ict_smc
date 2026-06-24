@@ -2,7 +2,7 @@ import { CandleAggregator }  from './candleAggregator';
 import { DetectorPipeline }  from './detectors';
 import { StateMachine }      from './stateMachine';
 import { engineEmitter }     from './emitter';
-import type { Tick, Direction, Mode, LiquidityLevel, Signal, SMEvent } from './types';
+import type { Tick, Direction, Mode, LiquidityLevel, Signal, SMEvent, Candle } from './types';
 
 export type { Signal, Direction, Mode } from './types';
 export { engineEmitter } from './emitter';
@@ -22,11 +22,12 @@ export const liquidityStore = {
 // ── Engine singleton ──────────────────────────────────────────────────────────
 
 export interface Engine {
-  onTick:       (tick: Tick) => void;
-  setBias:      (bias: Direction, mode: Mode) => void;
-  getState:     () => ReturnType<StateMachine['getState']>;
-  reset:        () => void;
-  injectEvent:  (event: SMEvent) => void;
+  onTick:               (tick: Tick) => void;
+  setBias:              (bias: Direction, mode: Mode) => void;
+  getState:             () => ReturnType<StateMachine['getState']>;
+  reset:                () => void;
+  injectEvent:          (event: SMEvent) => void;
+  processClosedCandles: (candles: Candle[]) => void;
 }
 
 let _engine: Engine | null = null;
@@ -53,12 +54,18 @@ export function getEngine(onSignal: (sig: Signal) => void): Engine {
     sm.processBatch(closed.map(c => ({ type: 'CANDLE_CLOSE' as const, candle: c, tf: c.tf })));
   });
 
+  function runPipeline(candles: Candle[]) {
+    detectors.process(candles);
+    sm.processBatch(candles.map(c => ({ type: 'CANDLE_CLOSE' as const, candle: c, tf: c.tf })));
+  }
+
   _engine = {
-    onTick:      (tick)  => aggregator.onTick(tick),
-    setBias:     (bias, mode) => sm.processBatch([{ type: 'BIAS_SET', bias, mode }]),
-    getState:    () => sm.getState(),
-    reset:       () => sm.reset(),
-    injectEvent: (event) => sm.processBatch([event]),
+    onTick:               (tick)  => aggregator.onTick(tick),
+    setBias:              (bias, mode) => sm.processBatch([{ type: 'BIAS_SET', bias, mode }]),
+    getState:             () => sm.getState(),
+    reset:                () => sm.reset(),
+    injectEvent:          (event) => sm.processBatch([event]),
+    processClosedCandles: (candles) => runPipeline(candles),
   };
 
   return _engine;
