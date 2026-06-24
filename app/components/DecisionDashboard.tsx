@@ -1,8 +1,10 @@
 'use client';
 
+import { useState }                  from 'react';
 import { useDecisionEngine }         from '../hooks/useDecisionEngine';
 import { useLivePrices }             from '../hooks/useLivePrices';
 import { fmtHMS }                    from '../lib/sessions';
+import EngineTestPanel               from './EngineTestPanel';
 import type { Phase, Direction, Mode, Signal, YesSignal } from '../lib/engine/types';
 import type { SessionInfo }          from '../hooks/useDecisionEngine';
 
@@ -182,7 +184,9 @@ function LogRow({ sig, i }: { sig: Signal; i: number }) {
 
 export default function DecisionDashboard() {
   const live = useLivePrices();
-  const { phase, bias, mode, signals, last, sessionInfo, setBias } = useDecisionEngine(live.es.price);
+  const { phase, bias, mode, signals, last, sessionInfo, setBias, injectEvent, resetEngine, getSmState } =
+    useDecisionEngine(live.es.price);
+  const [showTest, setShowTest] = useState(false);
 
   const latestYes = last?.result === 'YES' ? (last as YesSignal) : null;
 
@@ -294,6 +298,29 @@ export default function DecisionDashboard() {
             Waiting for setup
           </span>
         </div>
+      )}
+
+      {/* ── Test Mode toggle ────────────────────────────────────────────────── */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowTest(p => !p)}
+          className="font-mono text-[9px] uppercase tracking-[0.2em] px-2.5 py-1 rounded-[3px]
+                     border border-[#2a1f1f] bg-[#0d0a0a] text-[#c98080]/50
+                     hover:text-[#c98080]/80 hover:border-[#5a2a2a] transition-all"
+        >
+          {showTest ? '▲ Hide Test Mode' : '▼ Test Mode'}
+        </button>
+      </div>
+
+      {showTest && (
+        <EngineTestPanel
+          bias={bias}
+          mode={mode}
+          onInject={injectEvent}
+          onReset={resetEngine}
+          getSmState={getSmState}
+          setBias={setBias}
+        />
       )}
 
       <style>{`

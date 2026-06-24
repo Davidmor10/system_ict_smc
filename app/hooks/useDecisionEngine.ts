@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { engineEmitter, getEngine } from '../lib/engine';
 import { israelClock, getSessionStatus, type Session } from '../lib/sessions';
-import type { Phase, Direction, Mode, Signal } from '../lib/engine/types';
+import type { Phase, Direction, Mode, Signal, SMEvent } from '../lib/engine/types';
 
 const SIGNAL_MAX  = 20;
 const BIAS_LS_KEY = 'onyx.engine.bias';
@@ -29,13 +29,16 @@ export interface SessionInfo {
 }
 
 export interface EngineHook {
-  phase:       Phase;
-  bias:        Direction | null;
-  mode:        Mode      | null;
-  signals:     Signal[];
-  last:        Signal    | null;
-  sessionInfo: SessionInfo;
-  setBias:     (bias: Direction, mode: Mode) => void;
+  phase:        Phase;
+  bias:         Direction | null;
+  mode:         Mode      | null;
+  signals:      Signal[];
+  last:         Signal    | null;
+  sessionInfo:  SessionInfo;
+  setBias:      (bias: Direction, mode: Mode) => void;
+  injectEvent:  (event: SMEvent) => void;
+  resetEngine:  () => void;
+  getSmState:   () => ReturnType<ReturnType<typeof getEngine>['getState']>;
 }
 
 export function useDecisionEngine(esPrice: number): EngineHook {
@@ -120,5 +123,20 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     engineRef.current?.setBias(b, m);
   }, []);
 
-  return { phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, setBias };
+  const injectEvent = useCallback((event: SMEvent) => {
+    engineRef.current?.injectEvent(event);
+  }, []);
+
+  const resetEngine = useCallback(() => {
+    engineRef.current?.reset();
+    setSignals([]);
+    setPhase('IDLE');
+  }, []);
+
+  const getSmState = useCallback(() => engineRef.current!.getState(), []);
+
+  return {
+    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo,
+    setBias, injectEvent, resetEngine, getSmState,
+  };
 }

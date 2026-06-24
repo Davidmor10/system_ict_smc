@@ -2,7 +2,7 @@ import { CandleAggregator }  from './candleAggregator';
 import { DetectorPipeline }  from './detectors';
 import { StateMachine }      from './stateMachine';
 import { engineEmitter }     from './emitter';
-import type { Tick, Direction, Mode, LiquidityLevel, Signal } from './types';
+import type { Tick, Direction, Mode, LiquidityLevel, Signal, SMEvent } from './types';
 
 export type { Signal, Direction, Mode } from './types';
 export { engineEmitter } from './emitter';
@@ -22,10 +22,11 @@ export const liquidityStore = {
 // ── Engine singleton ──────────────────────────────────────────────────────────
 
 export interface Engine {
-  onTick:   (tick: Tick) => void;
-  setBias:  (bias: Direction, mode: Mode) => void;
-  getState: () => ReturnType<StateMachine['getState']>;
-  reset:    () => void;
+  onTick:       (tick: Tick) => void;
+  setBias:      (bias: Direction, mode: Mode) => void;
+  getState:     () => ReturnType<StateMachine['getState']>;
+  reset:        () => void;
+  injectEvent:  (event: SMEvent) => void;
 }
 
 let _engine: Engine | null = null;
@@ -53,10 +54,11 @@ export function getEngine(onSignal: (sig: Signal) => void): Engine {
   });
 
   _engine = {
-    onTick:   (tick) => aggregator.onTick(tick),
-    setBias:  (bias, mode) => sm.processBatch([{ type: 'BIAS_SET', bias, mode }]),
-    getState: () => sm.getState(),
-    reset:    () => sm.reset(),
+    onTick:      (tick)  => aggregator.onTick(tick),
+    setBias:     (bias, mode) => sm.processBatch([{ type: 'BIAS_SET', bias, mode }]),
+    getState:    () => sm.getState(),
+    reset:       () => sm.reset(),
+    injectEvent: (event) => sm.processBatch([event]),
   };
 
   return _engine;
