@@ -1,0 +1,101 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+// © system_ict_smc
+
+//@version=5
+indicator("ICT Feed", overlay=true, max_boxes_count=100, max_labels_count=30)
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ICT FEED  —  Minimal visual · Rich real-time alerts → your app
+//
+//  How it works:
+//   1. Each bar close sends a typed JSON event to /api/tv-webhook
+//   2. FVG or MANIP detection fires additional events
+//   3. Your app's engine processes all events in real time
+//   4. Chart stays clean so you can actually read price action
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+g_vis  = "Visual"
+g_alrt = "Alerts → App"
+
+show_pdh_pdl = input.bool(true,  "PDH / PDL lines",    group=g_vis)
+show_pwh_pwl = input.bool(false, "PWH / PWL lines",    group=g_vis)
+show_sess_bg = input.bool(true,  "Session highlight",  group=g_vis)
+show_fvg     = input.bool(true,  "FVG boxes",          group=g_vis)
+fvg_min      = input.float(1.0,  "FVG min size (pts)", group=g_vis,  minval=0.25, step=0.25)
+
+alrt_candle  = input.bool(true,  "Bar-close OHLCV",    group=g_alrt)
+alrt_fvg     = input.bool(true,  "FVG detected",       group=g_alrt)
+alrt_manip   = input.bool(true,  "MANIP signal",       group=g_alrt)
+manip_look   = input.int(8,      "Sweep lookback",     group=g_alrt, minval=3, maxval=20)
+
+// ── Session detection (Israel IDT = UTC+3) ────────────────────────────────────
+utc_h   = hour(time,   "UTC")
+utc_m   = minute(time, "UTC")
+utc_min = utc_h * 60 + utc_m
+
+in_asia   = utc_min >= 23*60 or  utc_min <  4*60
+in_london = utc_min >= 6*60  and utc_min <  9*60
+in_ny_am  = utc_min >= 13*60 and utc_min < 15*60 + 30
+in_ny_pm  = utc_min >= 17*60 + 30 and utc_min < 20*60
+in_sess   = in_asia or in_london or in_ny_am or in_ny_pm
+
+sess_name = in_asia ? "asia" : in_london ? "london" : in_ny_am ? "ny_am" : in_ny_pm ? "ny_pm" : "off"
+
+// Very light background — just enough to know which session you're in
+sess_col = in_asia   ? color.new(#4a90d9, 95) :
+           in_london ? color.new(#4caf50, 95) :
+           in_ny_am  ? color.new(#d4af37, 95) :
+           in_ny_pm  ? color.new(#e07b54, 95) : na
+bgcolor(show_sess_bg ? sess_col : na, title="Session")
+
+// ── PDH / PDL / PWH / PWL (dashed horizontal lines) ──────────────────────────
+[d_h1, d_l1] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[w_h1, w_l1] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+
+plot(show_pdh_pdl ? d_h1 : na, "PDH", color=color.new(#ef5350, 60), linewidth=1, style=plot.style_linebr)
+plot(show_pdh_pdl ? d_l1 : na, "PDL", color=color.new(#26a69a, 60), linewidth=1, style=plot.style_linebr)
+plot(show_pwh_pwl ? w_h1 : na, "PWH", color=color.new(#e53935,  0), linewidth=2, style=plot.style_linebr)
+plot(show_pwh_pwl ? w_l1 : na, "PWL", color=color.new(#1565c0,  0), linewidth=2, style=plot.style_linebr)
+
+// ── FVG detection (current chart TF) ─────────────────────────────────────────
+bull_top   = low[0]
+bull_bot   = high[2]
+bear_top   = low[2]
+bear_bot   = high[0]
+bull_fvg   = bull_bot < bull_top and (bull_top - bull_bot) >= fvg_min
+bear_fvg   = bear_bot < bear_top and (bear_top - bear_bot) >= fvg_min
+
+// Draw FVG boxes — very subtle, only inside a session
+if show_fvg and in_sess and barstate.isconfirmed
+    if bull_fvg
+        box.new(bar_index - 2, bull_top, bar_index + 15, bull_bot, border_color=color.new(#26a69a, 50), bgcolor=color.new(#26a69a, 92), border_width=1)
+    if bear_fvg
+        box.new(bar_index - 2, bear_top, bar_index + 15, bear_bot, border_color=color.new(#ef5350, 50), bgcolor=color.new(#ef5350, 92), border_width=1)
+
+// ── ALERTS → /api/tv-webhook ──────────────────────────────────────────────────
+// Set up ONE alert in TradingView:
+//   New Alert → "ICT Feed" → any condition → Webhook URL: https://YOUR_DOMAIN/api/tv-webhook
+// All event types below fire through the same webhook.
+
+if barstate.isconfirmed
+    // 1. Bar-close OHLCV — feeds the engine's candle pipeline
+    if alrt_candle
+        alert('{"type":"candle","tf":"' + timeframe.period + '","o":' + str.tostring(math.round(open, 2)) + ',"h":' + str.tostring(math.round(high, 2)) + ',"l":' + str.tostring(math.round(low, 2)) + ',"c":' + str.tostring(math.round(close, 2)) + ',"sess":"' + sess_name + '","t":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+
+    // 2. FVG formed — engine can register imbalance without waiting for next poll
+    if alrt_fvg and bull_fvg
+        alert('{"type":"fvg","dir":"bull","top":' + str.tostring(math.round(bull_top, 2)) + ',"bot":' + str.tostring(math.round(bull_bot, 2)) + ',"tf":"' + timeframe.period + '","sess":"' + sess_name + '","t":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+    if alrt_fvg and bear_fvg
+        alert('{"type":"fvg","dir":"bear","top":' + str.tostring(math.round(bear_top, 2)) + ',"bot":' + str.tostring(math.round(bear_bot, 2)) + ',"tf":"' + timeframe.period + '","sess":"' + sess_name + '","t":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+
+    // 3. Manipulation signal — engine can advance state machine immediately
+    if alrt_manip
+        pre_high = ta.highest(high, manip_look + 3)[3]
+        pre_low  = ta.lowest(low,   manip_look + 3)[3]
+        swept_low  = ta.lowest(low,   manip_look + 3)[1] < pre_low  and close[2] > pre_low
+        swept_high = ta.highest(high, manip_look + 3)[1] > pre_high and close[2] < pre_high
+        if bear_fvg and swept_low
+            alert('{"type":"manip","dir":"bull","tf":"' + timeframe.period + '","sess":"' + sess_name + '","t":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)
+        if bull_fvg and swept_high
+            alert('{"type":"manip","dir":"bear","tf":"' + timeframe.period + '","sess":"' + sess_name + '","t":' + str.tostring(time) + '}', alert.freq_once_per_bar_close)

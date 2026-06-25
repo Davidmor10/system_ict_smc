@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
-import { useLivePrices, type LiveQuote } from '../hooks/useLivePrices';
-import SmcChart from './SmcChart';
+import { useLivePrices } from '../hooks/useLivePrices';
 import DecisionDashboard from './DecisionDashboard';
 import PositionCalculator from './PositionCalculator';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
@@ -51,7 +50,7 @@ function StatusBar({
     <div className="sticky top-0 max-[880px]:top-[54px] z-50 flex items-center justify-between px-10 max-[880px]:px-4 h-[58px] max-[880px]:h-[45px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e] shrink-0">
 
       {/* Right: role badge / upgrade CTA */}
-      <div className={`flex items-center gap-3 max-[880px]:hidden`} dir={dir}>
+      <div className="flex items-center gap-3 max-[880px]:hidden" dir={dir}>
         {role === 'pro' ? (
           <>
             <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">
@@ -123,168 +122,6 @@ function StatusBar({
   );
 }
 
-// ─── Live quote card ──────────────────────────────────────────────────────────
-
-function QuoteCard({ symbol, name, quote }: { symbol: string; name: string; quote: LiveQuote }) {
-  const bullish = quote.change >= 0;
-  const hasData  = quote.price > 0;
-  const hasRange = quote.high > 0 && quote.low > 0 && quote.high > quote.low;
-  const rangePos = hasRange
-    ? Math.min(100, Math.max(0, ((quote.price - quote.low) / (quote.high - quote.low)) * 100))
-    : 50;
-
-  return (
-    <div className="bg-[#0d0d0f] border border-[#1c1c1e] rounded-[5px] p-6 lift">
-      {/* Symbol row */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className="font-mono text-[24px] font-bold text-white leading-none">{symbol}</div>
-          <div className="font-mono text-[11px] tracking-[0.18em] uppercase text-white/40 mt-1">{name}</div>
-        </div>
-        <span className="font-mono text-[10px] text-white/20 tracking-[0.15em] uppercase mt-1">TradingView</span>
-      </div>
-
-      {/* Price + change pill */}
-      <div className="flex items-end gap-3 mb-5">
-        <span className={`font-mono text-[42px] max-[880px]:text-[32px] font-black tabular-nums leading-none transition-colors duration-300 ${
-          quote.flash === 'up'   ? 'text-emerald-400' :
-          quote.flash === 'down' ? 'text-[#cf8d8d]'   : 'text-white'
-        }`}>
-          {hasData ? quote.price.toFixed(2) : '—'}
-        </span>
-        {hasData && (
-          <span className={`mb-1 px-2.5 py-1 rounded-sm font-mono text-[12px] font-bold tabular-nums ${
-            bullish
-              ? 'bg-emerald-950/60 text-emerald-400'
-              : 'bg-[rgba(139,58,58,.16)] text-[#cf8d8d]'
-          }`}>
-            {bullish ? '+' : ''}{quote.change.toFixed(2)} ({bullish ? '+' : ''}{quote.pct.toFixed(2)}%)
-          </span>
-        )}
-      </div>
-
-      {/* Day range bar */}
-      {hasRange ? (
-        <div>
-          <div className="flex justify-between font-mono text-[10px] text-white/35 mb-2">
-            <span>L {quote.low.toFixed(2)}</span>
-            <span>H {quote.high.toFixed(2)}</span>
-          </div>
-          <div className="relative h-px bg-[#1c1c1e]">
-            <div
-              className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-[#d4af37] [box-shadow:0_0_8px_rgba(212,175,55,0.6)] transition-all duration-500"
-              style={{ left: `clamp(0%, ${rangePos}%, 100%)` }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="h-px bg-[#1c1c1e] opacity-40" />
-      )}
-    </div>
-  );
-}
-
-// ─── Timeframe selector constants ────────────────────────────────────────────
-
-const TF_BUTTONS = [
-  { label: '1m',  tv: '1'   },
-  { label: '2m',  tv: '2'   },
-  { label: '3m',  tv: '3'   },
-  { label: '5m',  tv: '5'   },
-  { label: '15m', tv: '15'  },
-  { label: '1H',  tv: '60'  },
-  { label: '4H',  tv: '240' },
-  { label: '1D',  tv: 'D'   },
-] as const;
-
-export const TF_LABEL: Record<string, string> = {
-  '1':   '1-Minute',
-  '2':   '2-Minute',
-  '3':   '3-Minute',
-  '5':   '5-Minute',
-  '15':  '15-Minute',
-  '60':  '1-Hour',
-  '240': '4-Hour',
-  'D':   'Daily',
-};
-
-// ─── Chart panel ─────────────────────────────────────────────────────────────
-
-function ChartPanel({
-  symbol, name, interval, onIntervalChange,
-}: {
-  symbol: 'ES' | 'NQ';
-  name: string;
-  interval: string;
-  onIntervalChange: (tv: string) => void;
-}) {
-  return (
-    <div className="bg-black border border-[#1c1c1e] rounded-[5px] overflow-hidden">
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-[18px] py-[11px] border-b border-[#1c1c1e] bg-[#0d0d0f]">
-        {/* Symbol + name */}
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="font-mono text-[14px] font-bold text-white">{symbol}1!</span>
-          <span className="font-mono text-[10px] text-white/40 tracking-[0.15em] uppercase">{name}</span>
-        </div>
-        {/* Segmented TF control */}
-        <div
-          className="flex items-stretch rounded-[4px] border max-[880px]:max-w-[200px] max-[880px]:overflow-x-auto"
-          style={{
-            borderColor: 'rgba(255,255,255,.1)',
-            background: '#000',
-            scrollbarWidth: 'none',
-            WebkitOverflowScrolling: 'touch',
-          } as React.CSSProperties}
-        >
-          {TF_BUTTONS.map(({ label, tv }) => {
-            const active = tv === interval;
-            return (
-              <button
-                key={tv}
-                onClick={() => onIntervalChange(tv)}
-                className={[
-                  'font-mono text-[10px] font-semibold px-[7px] py-[5px] leading-none shrink-0',
-                  'transition-[color,background,box-shadow] duration-150 cursor-pointer border-none',
-                  active
-                    ? 'text-[#d4af37]'
-                    : 'text-white/[.38] hover:text-white/85 hover:bg-white/[.06]',
-                ].join(' ')}
-                style={active ? {
-                  background:  'rgba(212,175,55,.12)',
-                  boxShadow:   'inset 0 0 0 1px rgba(212,175,55,.4)',
-                  letterSpacing: '.06em',
-                } : { letterSpacing: '.06em' }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {/* Chart body */}
-      <div className="h-[440px] max-[880px]:h-[300px]">
-        <SmcChart symbol={symbol} interval={interval} />
-      </div>
-    </div>
-  );
-}
-
-// ─── Session gate (spans 2 columns) ──────────────────────────────────────────
-
-function SessionGate({ en }: { en: boolean }) {
-  return (
-    <div className="col-span-2 max-[880px]:col-span-1 flex items-center justify-center p-16 max-[880px]:p-8 bg-[#000000] border border-[#1c1c1e] rounded-[5px]">
-      <div className="max-w-lg text-center rounded-xl border border-[#d4af37]/50 bg-[#0d0d0f] p-10 [box-shadow:0_0_60px_-15px_rgba(212,175,55,0.4)]" dir={en ? 'ltr' : 'rtl'}>
-        <span className="text-[#d4af37] text-4xl">◈</span>
-        <p className="mt-5 text-xl font-bold text-white leading-relaxed tracking-wide">
-          {pick({ he: 'אין סשן מסחר פעיל כרגע — הגרפים יתעדכנו עם תחילת הסשן הבא.', en: 'No active trading session right now — charts will update at the start of the next session.' }, en)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function DashboardView({
@@ -304,61 +141,14 @@ export default function DashboardView({
   const [clock, setClock] = useState(() => israelClock());
   const [override, setOverride] = useState(false);
 
-  const [esInterval, setEsInterval] = useState<string>(() => {
-    if (typeof window === 'undefined') return '5';
-    return localStorage.getItem('onyx_chart_tf_ES') ?? '5';
-  });
-  const [nqInterval, setNqInterval] = useState<string>(() => {
-    if (typeof window === 'undefined') return '5';
-    return localStorage.getItem('onyx_chart_tf_NQ') ?? '5';
-  });
-  const handleEsInterval = (tv: string) => {
-    setEsInterval(tv);
-    try { localStorage.setItem('onyx_chart_tf_ES', tv); } catch {}
-    fetch('/api/preferences', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chart_tf_es: tv }),
-    }).catch(() => {});
-  };
-  const handleNqInterval = (tv: string) => {
-    setNqInterval(tv);
-    try { localStorage.setItem('onyx_chart_tf_NQ', tv); } catch {}
-    fetch('/api/preferences', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chart_tf_nq: tv }),
-    }).catch(() => {});
-  };
-
-  useEffect(() => {
-    // Load chart TF preferences from cloud on mount
-    fetch('/api/preferences')
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { prefs: { chart_tf_es?: string; chart_tf_nq?: string } | null } | null) => {
-        const p = data?.prefs;
-        if (!p) return;
-        if (p.chart_tf_es) {
-          setEsInterval(p.chart_tf_es);
-          try { localStorage.setItem('onyx_chart_tf_ES', p.chart_tf_es); } catch {}
-        }
-        if (p.chart_tf_nq) {
-          setNqInterval(p.chart_tf_nq);
-          try { localStorage.setItem('onyx_chart_tf_NQ', p.chart_tf_nq); } catch {}
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   useEffect(() => {
     const id = setInterval(() => setClock(israelClock()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const status    = getSessionStatus(clock.sec);
-  const visible   = override || (isMarketOpen && status.inSession);
-  const isDev     = process.env.NODE_ENV !== 'production';
-  const isOwner   = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'davidmor030908@gmail.com';
+  const status  = getSessionStatus(clock.sec);
+  const isDev   = process.env.NODE_ENV !== 'production';
+  const isOwner = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'davidmor030908@gmail.com';
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-[#c0c0c0]" dir={dir}>
@@ -381,16 +171,9 @@ export default function DashboardView({
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-10 max-[880px]:px-4 pb-20">
 
-          {/* ── 01 · Live Quotes ─────────────────────────────── */}
+          {/* ── 01 · Placeholder (שחור לבינתיים) ──────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
-            <SectionHeader num="01"
-              title={pick({ he: 'סקירת שוק', en: 'Market Overview' }, en)}
-              subtitle="Live Quotes · ES & NQ Futures"
-              dir={dir} />
-            <div className="grid grid-cols-2 max-[880px]:grid-cols-1 gap-[18px]">
-              <QuoteCard symbol="ES1!" name="S&P 500 Futures · CME" quote={live.es} />
-              <QuoteCard symbol="NQ1!" name="Nasdaq 100 Futures · CME" quote={live.nq} />
-            </div>
+            <div className="h-[280px] max-[880px]:h-[160px] bg-black rounded-[5px]" />
           </div>
 
           {/* ── 02 · Decision Engine ─────────────────────────── */}

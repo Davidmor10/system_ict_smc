@@ -33,18 +33,18 @@ export interface SessionInfo {
 }
 
 export interface EngineHook {
-  phase:         Phase;
-  bias:          Direction | null;
-  mode:          Mode      | null;
-  signals:       Signal[];
-  last:          Signal    | null;
-  sessionInfo:   SessionInfo;
-  feedStatus:    FeedStatus;
-  levelsCount:   number;
-  setBias:       (bias: Direction, mode: Mode) => void;
-  injectEvent:   (event: SMEvent) => void;
-  resetEngine:   () => void;
-  getSmState:    () => ReturnType<ReturnType<typeof getEngine>['getState']>;
+  phase:       Phase;
+  bias:        Direction | null;
+  mode:        Mode      | null;
+  signals:     Signal[];
+  last:        Signal    | null;
+  sessionInfo: SessionInfo;
+  feedStatus:  FeedStatus;
+  levelsCount: number;
+  setBias:     (bias: Direction, mode: Mode) => void;
+  injectEvent: (event: SMEvent) => void;
+  resetEngine: () => void;
+  getSmState:  () => ReturnType<ReturnType<typeof getEngine>['getState']>;
 }
 
 export function useDecisionEngine(esPrice: number): EngineHook {
@@ -105,24 +105,23 @@ export function useDecisionEngine(esPrice: number): EngineHook {
     return () => clearInterval(id);
   }, []);
 
-  // ── Yahoo Finance price → price display only ──────────────────────────────
+  // ── Price heartbeat (display only) ───────────────────────────────────────
 
   useEffect(() => {
     if (!sessionInfo.inSession) return;
     if (!esPrice || esPrice === prevPrice.current) return;
     prevPrice.current = esPrice;
-    // onTick feeds CandleAggregator — kept as lightweight price heartbeat
     engineRef.current?.onTick({ price: esPrice, timestamp: Date.now() });
   }, [esPrice, sessionInfo.inSession]);
 
-  // ── Real OHLCV candles from Yahoo Finance → engine (primary) ─────────────
+  // ── Yahoo Finance OHLCV candles → engine ──────────────────────────────────
 
   const feedStatus = useMarketCandles(useCallback((candles) => {
     if (!sessionInfoRef.current.inSession) return;
     engineRef.current?.processClosedCandles(candles);
   }, []));
 
-  // ── Liquidity levels — auto-fetched, auto-populates liquidityStore ─────────
+  // ── Liquidity levels — auto-fetched every 5 min ───────────────────────────
 
   const { levels } = useLiquidityLevels();
 
@@ -148,7 +147,8 @@ export function useDecisionEngine(esPrice: number): EngineHook {
   const getSmState = useCallback(() => engineRef.current!.getState(), []);
 
   return {
-    phase, bias, mode, signals, last: signals[0] ?? null, sessionInfo, feedStatus,
+    phase, bias, mode, signals, last: signals[0] ?? null,
+    sessionInfo, feedStatus,
     levelsCount: levels.length,
     setBias, injectEvent, resetEngine, getSmState,
   };

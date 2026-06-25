@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Candle, TF } from '../lib/engine/types';
+import type { TVEvent } from '../api/tv-webhook/route';
 
-interface TVCandle { tf: string; o: number; h: number; l: number; c: number; t: number; }
+interface TVCandle { tf: string; o: number; h: number; l: number; c: number; sess: string; t: number; }
 
 const VALID_TFS = new Set(['1m', '2m', '3m', '5m']);
 
@@ -22,25 +23,35 @@ function toCandle(raw: TVCandle): Candle | null {
 export type TvStatus = 'idle' | 'receiving' | 'error';
 
 export interface TvCandlesResult {
-  /** Latest closed candle per TF (most recently received) */
-  latestByTf:   Partial<Record<TF, Candle>>;
-  /** Status — 'receiving' once at least one candle has arrived */
-  status:        TvStatus;
-  /** Callback — call this with engine's processClosedCandles */
-  onNewCandles?: never;  // consumed internally via onCandles prop
+  latestByTf: Partial<Record<TF, Candle>>;
+  status:     TvStatus;
+  lastEvent:  TVEvent | null;
+}
+
+interface GetResponse {
+  candles: TVCandle[];
+  events:  TVEvent[];
 }
 
 /**
  * Polls /api/tv-webhook every 2s.
- * When new candles arrive (newer than lastSeen per TF), calls onCandles.
+ * Calls onCandles for new OHLCV bars.
+ * Calls onEvent for FVG / MANIP events.
  */
-export function useTvCandles(onCandles: (candles: Candle[]) => void): TvCandlesResult {
-  const lastSeen   = useRef<Map<string, number>>(new Map());
-  const onCandlesR = useRef(onCandles);
+export function useTvCandles(
+  onCandles: (candles: Candle[]) => void,
+  onEvent?: (event: TVEvent) => void,
+): TvCandlesResult {
+  const lastSeen     = useRef<Map<string, number>>(new Map());
+  const lastEventTs  = useRef(0);
+  const onCandlesR   = useRef(onCandles);
+  const onEventR     = useRef(onEvent);
   onCandlesR.current = onCandles;
+  onEventR.current   = onEvent;
 
-  const [status,     setStatus]    = useState<TvStatus>('idle');
+  const [status,     setStatus]     = useState<TvStatus>('idle');
   const [latestByTf, setLatestByTf] = useState<Partial<Record<TF, Candle>>>({});
+  const [lastEvent,  setLastEvent]  = useState<TVEvent | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -50,16 +61,16 @@ export function useTvCandles(onCandles: (candles: Candle[]) => void): TvCandlesR
         const res = await fetch('/api/tv-webhook', { cache: 'no-store' });
         if (!res.ok || !alive) return;
 
-        const data: TVCandle[] = await res.json();
-        if (!Array.isArray(data) || data.length === 0) return;
+        const data: GetResponse = await res.json();
 
+        // ── Candles ─────────────────────────────────────────────────────────
+        const candles = Array.isArray(data.candles) ? data.candles : [];
         const fresh: Candle[] = [];
         const updated: Partial<Record<TF, Candle>> = {};
 
-        for (const raw of data) {
+        for (const raw of candles) {
           const candle = toCandle(raw);
           if (!candle) continue;
-
           const seen = lastSeen.current.get(raw.tf) ?? 0;
           if (raw.t > seen) {
             lastSeen.current.set(raw.tf, raw.t);
@@ -69,11 +80,22 @@ export function useTvCandles(onCandles: (candles: Candle[]) => void): TvCandlesR
         }
 
         if (fresh.length > 0) {
-          // Sort oldest → newest so SM processes in order
           fresh.sort((a, b) => a.open_time - b.open_time);
           setStatus('receiving');
           setLatestByTf(prev => ({ ...prev, ...updated }));
           onCandlesR.current(fresh);
+        }
+
+        // ── Events (FVG / MANIP) ─────────────────────────────────────────────
+        const events = Array.isArray(data.events) ? data.events : [];
+        const newEvents = events.filter(e => e.receivedAt > lastEventTs.current);
+
+        if (newEvents.length > 0) {
+          lastEventTs.current = Math.max(...newEvents.map(e => e.receivedAt));
+          for (const ev of newEvents) {
+            setLastEvent(ev);
+            onEventR.current?.(ev);
+          }
         }
       } catch {
         if (alive) setStatus('error');
@@ -85,5 +107,5 @@ export function useTvCandles(onCandles: (candles: Candle[]) => void): TvCandlesR
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  return { latestByTf, status };
+  return { latestByTf, status, lastEvent };
 }
