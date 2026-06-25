@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { useLivePrices } from '../hooks/useLivePrices';
-import DecisionDashboard from './DecisionDashboard';
+import LivePricePanel from './LivePricePanel';
 import PositionCalculator from './PositionCalculator';
 import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
 import { useMarketStatus } from '../hooks/useMarketStatus';
@@ -176,9 +176,9 @@ export default function DashboardView({
             <div className="h-[280px] max-[880px]:h-[160px] bg-black rounded-[5px]" />
           </div>
 
-          {/* ── 02 · Decision Engine ─────────────────────────── */}
+          {/* ── 02 · Live Price ──────────────────────────────── */}
           <div className="py-12 border-b border-[#1c1c1e]">
-            <DecisionDashboard />
+            <LivePricePanel />
           </div>
 
           {/* ── 03 · Macro Journal ───────────────────────────── */}
