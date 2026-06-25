@@ -1,8 +1,8 @@
-// Fetches real 1m OHLCV candles from Yahoo Finance for ES=F
+// Fetches real 1m OHLCV candles from Yahoo Finance for ES=F and NQ=F
 // Aggregates into 2m, 3m, 5m on the server
-// Client polls every 30s — only processes candles newer than lastSeen
+// Client polls every 30s
 
-interface Raw { t: number; o: number; h: number; l: number; c: number; tf: string; }
+interface Raw { symbol: string; t: number; o: number; h: number; l: number; c: number; tf: string; }
 
 async function fetchRaw1m(symbol: string): Promise<Raw[]> {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
@@ -38,7 +38,7 @@ async function fetchRaw1m(symbol: string): Promise<Raw[]> {
     const l = q.low?.[i];
     const c = q.close?.[i];
     if (!o || !h || !l || !c) continue;
-    candles.push({ t: result.timestamp[i] * 1000, o, h, l, c, tf: '1m' });
+    candles.push({ symbol, t: result.timestamp[i] * 1000, o, h, l, c, tf: '1m' });
   }
   return candles;
 }
@@ -56,6 +56,7 @@ function aggregate(candles1m: Raw[], periodMs: number, tf: string): Raw[] {
   for (const [slot, group] of groups) {
     if (group.length === 0) continue;
     result.push({
+      symbol: group[0].symbol,
       tf,
       t: slot,
       o: group[0].o,
@@ -67,28 +68,35 @@ function aggregate(candles1m: Raw[], periodMs: number, tf: string): Raw[] {
   return result.sort((a, b) => a.t - b.t);
 }
 
-export async function GET(): Promise<Response> {
-  const candles1m = await fetchRaw1m('ES=F');
+async function fetchSymbol(ticker: string, fallback: string): Promise<Raw[]> {
+  let candles = await fetchRaw1m(ticker);
+  if (candles.length === 0) candles = await fetchRaw1m(fallback);
+  return candles;
+}
 
-  if (candles1m.length === 0) {
-    // Fallback to S&P 500 index if ES=F is unavailable
-    const fallback = await fetchRaw1m('^GSPC');
-    if (fallback.length > 0) fallback.forEach(c => { candles1m.push(c); });
+export async function GET(): Promise<Response> {
+  const [esRaw, nqRaw] = await Promise.all([
+    fetchSymbol('ES=F', '^GSPC'),
+    fetchSymbol('NQ=F', '^IXIC'),
+  ]);
+
+  const all: Raw[] = [];
+
+  for (const [candles1m, sym] of [[esRaw, 'ES'], [nqRaw, 'NQ']] as [Raw[], string][]) {
+    if (candles1m.length === 0) continue;
+    const last30 = candles1m.slice(-30);
+    all.push(
+      ...last30,
+      ...aggregate(candles1m, 2 * 60_000, '2m').slice(-20),
+      ...aggregate(candles1m, 3 * 60_000, '3m').slice(-20),
+      ...aggregate(candles1m, 5 * 60_000, '5m').slice(-20),
+    );
+    void sym;
   }
 
-  if (candles1m.length === 0) {
+  if (all.length === 0) {
     return Response.json({ error: 'unavailable' }, { status: 503 });
   }
-
-  // Keep only the last 30 candles (enough for detection + history)
-  const last30 = candles1m.slice(-30);
-
-  const all: Raw[] = [
-    ...last30,
-    ...aggregate(candles1m, 2 * 60_000,  '2m').slice(-20),
-    ...aggregate(candles1m, 3 * 60_000,  '3m').slice(-20),
-    ...aggregate(candles1m, 5 * 60_000,  '5m').slice(-20),
-  ];
 
   return Response.json(all, { headers: { 'Cache-Control': 'no-store' } });
 }
