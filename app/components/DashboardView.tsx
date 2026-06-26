@@ -1,201 +1,207 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
-import { useLivePrices } from '../hooks/useLivePrices';
-import LivePricePanel from './LivePricePanel';
-import PositionCalculator from './PositionCalculator';
-import { israelClock, getSessionStatus, fmtHMS, type SessionStatus } from '../lib/sessions';
-import { useMarketStatus } from '../hooks/useMarketStatus';
+import { loadTrades, computeStats, todayISO, tradePnL } from '../lib/journal';
+import type { TradeEntry } from '../lib/journal';
+import AIInsightPanel from './AIInsightPanel';
 
-type Bi = { he: string; en: string };
-const pick = (b: Bi, isEn: boolean) => (isEn ? b.en : b.he);
+// ── Stat Card ─────────────────────────────────────────────────────────────────
 
-// ─── Section header ───────────────────────────────────────────────────────────
-
-function SectionHeader({ num, title, subtitle, dir }: { num: string; title: string; subtitle: string; dir?: 'rtl' | 'ltr' }) {
+function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="flex items-end justify-between mb-[30px] pb-5 border-b border-[#1c1c1e]">
-      <span className="font-mono text-[12px] tracking-[0.3em] text-[#52525b]">{num}</span>
-      <div className={dir === 'ltr' ? 'text-left' : 'text-right'} dir={dir ?? 'rtl'}>
-        <h2 className="font-serif text-[26px] font-bold text-white leading-none">{title}</h2>
-        <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-white/45 mt-2">{subtitle}</p>
-      </div>
+    <div className="flex-1 min-w-[120px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">{label}</p>
+      <p className="font-serif text-2xl font-bold" style={{ color: color ?? '#fff' }}>{value}</p>
+      {sub && <p className="font-mono text-[10px] text-white/30 mt-1">{sub}</p>}
     </div>
   );
 }
 
-// ─── Sticky status bar ────────────────────────────────────────────────────────
+// ── Trade Row ─────────────────────────────────────────────────────────────────
 
-function StatusBar({
-  role, clock, status, isMarketOpen, override, setOverride, isDev, isOwner, nextOpenLabel, en,
-}: {
-  role: 'free' | 'pro';
-  clock: string;
-  status: SessionStatus;
-  isMarketOpen: boolean;
-  override: boolean;
-  setOverride: React.Dispatch<React.SetStateAction<boolean>>;
-  isDev: boolean;
-  isOwner: boolean;
-  nextOpenLabel: string;
-  en: boolean;
-}) {
-  const marketOpen = override || isMarketOpen;
-  const dir = en ? 'ltr' : 'rtl';
-
+function TradeRow({ trade }: { trade: TradeEntry }) {
+  const pnl = tradePnL(trade);
+  const win = trade.result === 'WIN';
+  const loss = trade.result === 'LOSS';
   return (
-    <div className="sticky top-0 max-[880px]:top-[54px] z-50 flex items-center justify-between px-10 max-[880px]:px-4 h-[58px] max-[880px]:h-[45px] bg-[rgba(8,8,9,.86)] backdrop-blur-md border-b border-[#1c1c1e] shrink-0">
-
-      {/* Right: role badge / upgrade CTA */}
-      <div className="flex items-center gap-3 max-[880px]:hidden" dir={dir}>
-        {role === 'pro' ? (
-          <>
-            <span className="px-3 py-1 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37] font-mono text-[11px] font-bold tracking-[0.2em] uppercase [box-shadow:0_0_20px_rgba(212,175,55,0.25)]">
-              PRO
-            </span>
-            <span className="h-1.5 w-1.5 rounded-full bg-[#d4af37] animate-pulse" />
-            <span className="font-mono text-xs text-white/50 hidden sm:block">
-              {pick({ he: 'גישת PRO פעילה', en: 'PRO access active' }, en)}
-            </span>
-          </>
-        ) : (
-          <>
-            <Link
-              href="/checkout"
-              className="shrink-0 px-4 py-1.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.6)] transition-shadow duration-500"
-            >
-              {pick({ he: 'שדרוג ל-PRO ←', en: '→ Upgrade to PRO' }, en)}
-            </Link>
-            <span className="font-mono text-xs text-white/40 hidden sm:block">
-              {pick({ he: 'חשבון חינמי', en: 'Free account' }, en)}
-            </span>
-          </>
-        )}
+    <div className="flex items-center justify-between py-3 border-b border-[#111] last:border-0">
+      <div className="flex items-center gap-3">
+        <span className={`w-1.5 h-1.5 rounded-full ${win ? 'bg-[#22c55e]' : loss ? 'bg-[#ef4444]' : 'bg-white/30'}`} />
+        <span className="font-mono text-sm text-white/80">{trade.symbol}</span>
+        <span className="font-mono text-xs text-white/40">{trade.direction}</span>
+        {trade.model && <span className="px-2 py-0.5 rounded-sm bg-[#1c1c1e] text-[10px] font-mono text-white/40">{trade.model}</span>}
       </div>
-
-      {/* Left: clock + session countdown + dev override */}
       <div className="flex items-center gap-4">
-        {(isDev || isOwner) && (
-          <button
-            onClick={() => setOverride(o => !o)}
-            className={`px-2.5 py-1 rounded-sm border text-xs font-bold font-mono transition-colors duration-300 ${
-              override
-                ? 'border-[#d4af37] text-[#d4af37] bg-[#d4af37]/10'
-                : 'border-[#2a2a2d] text-white/60 hover:text-white'
-            }`}
-          >
-            {pick({ he: 'עקוף סשן', en: 'Override Session' }, en)}
-          </button>
+        {typeof trade.tradeR === 'number' && (
+          <span className={`font-mono text-xs font-bold ${win ? 'text-[#22c55e]' : loss ? 'text-[#ef4444]' : 'text-white/40'}`}>
+            {trade.tradeR >= 0 ? '+' : ''}{trade.tradeR.toFixed(2)}R
+          </span>
         )}
-
-        {marketOpen ? (
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-[20px] font-black text-white tabular-nums [text-shadow:0_0_20px_rgba(212,175,55,0.25)]">
-              {clock}
-            </span>
-            <span className="font-mono text-xs font-bold text-[#d4af37] uppercase tracking-[0.2em]">IDT</span>
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
-              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${status.inSession ? 'bg-[#d4af37] animate-pulse' : 'bg-white/40'}`} />
-              <span className="font-mono text-xs font-bold text-white/60 hidden sm:inline">
-                {status.inSession
-                  ? pick({ he: 'מסתיים בעוד:', en: 'Ends in:' }, en)
-                  : pick({ he: 'מתחיל בעוד:', en: 'Starts in:' }, en)}
-              </span>
-              <span className="font-mono text-xs font-black text-[#d4af37] tabular-nums">{fmtHMS(status.remaining)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-sm border border-[#d4af37]/30 bg-[#d4af37]/5">
-            <span className="h-2 w-2 rounded-full bg-white/40" />
-            <span className="font-mono text-sm font-bold text-white/80 uppercase tracking-[0.18em]">
-              {pick({ he: 'שוק סגור', en: 'Market Closed' }, en)}
-            </span>
-            <span className="h-3 w-px bg-[#d4af37]/20" />
-            <span className="font-mono text-sm font-black text-[#d4af37] uppercase tracking-[0.14em] tabular-nums">{nextOpenLabel}</span>
-          </div>
+        {pnl !== null && (
+          <span className={`font-mono text-sm font-bold tabular-nums ${pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+            {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
+          </span>
         )}
+        <span className="font-mono text-[10px] text-white/30">{trade.time}</span>
       </div>
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ── Daily Plan ────────────────────────────────────────────────────────────────
 
-export default function DashboardView({
-  role = 'free',
-  macroBoard,
-}: {
-  role?: 'free' | 'pro';
-  macroBoard?: React.ReactNode;
-}) {
-  const live = useLivePrices();
-  const { isMarketOpen, nextOpenLabel } = useMarketStatus();
-  const { user } = useUser();
-  const { lang } = useLanguage();
-  const en = lang === 'en';
-  const dir = en ? 'ltr' : 'rtl';
-
-  const [clock, setClock] = useState(() => israelClock());
-  const [override, setOverride] = useState(false);
+function DailyPlan() {
+  const [plan, setPlan] = useState('');
+  const [saved, setSaved] = useState(false);
+  const key = `onyx_daily_plan_${todayISO()}`;
 
   useEffect(() => {
-    const id = setInterval(() => setClock(israelClock()), 1000);
-    return () => clearInterval(id);
-  }, []);
+    setPlan(localStorage.getItem(key) ?? '');
+  }, [key]);
 
-  const status  = getSessionStatus(clock.sec);
-  const isDev   = process.env.NODE_ENV !== 'production';
-  const isOwner = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'davidmor030908@gmail.com';
+  function save() {
+    localStorage.setItem(key, plan);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[#000000] text-[#c0c0c0]" dir={dir}>
-
-      {/* Sticky status bar */}
-      <StatusBar
-        role={role}
-        clock={clock.clock}
-        status={status}
-        isMarketOpen={isMarketOpen}
-        override={override}
-        setOverride={setOverride}
-        isDev={isDev}
-        isOwner={isOwner}
-        nextOpenLabel={nextOpenLabel}
-        en={en}
+    <div className="border border-[#1c1c1e] rounded-sm bg-[#0a0a0b] p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">תוכנית יומית</p>
+        <button
+          onClick={save}
+          className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4af37]/60 hover:text-[#d4af37] transition-colors"
+        >
+          {saved ? '✓ נשמר' : 'שמור'}
+        </button>
+      </div>
+      <textarea
+        value={plan}
+        onChange={e => setPlan(e.target.value)}
+        placeholder="מה התוכנית שלך להיום? ביאס, רמות מפתח, שיטה..."
+        className="w-full bg-transparent resize-none text-sm text-white/70 placeholder-white/20 outline-none font-mono leading-relaxed"
+        rows={4}
+        dir="rtl"
       />
+    </div>
+  );
+}
 
-      {/* Scrollable body */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-10 max-[880px]:px-4 pb-20">
+// ── Main ──────────────────────────────────────────────────────────────────────
 
-          {/* ── 01 · Placeholder (שחור לבינתיים) ──────────────── */}
-          <div className="py-12 border-b border-[#1c1c1e]">
-            <div className="h-[280px] max-[880px]:h-[160px] bg-black rounded-[5px]" />
+export default function DashboardView({ role = 'free' }: { role?: 'free' | 'pro' }) {
+  const { lang } = useLanguage();
+  const en = lang === 'en';
+
+  const [trades, setTrades] = useState<TradeEntry[]>([]);
+
+  useEffect(() => {
+    setTrades(loadTrades());
+  }, []);
+
+  const today = todayISO();
+  const todayTrades = trades.filter(t => t.dateISO === today);
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekISO = weekStart.toISOString().slice(0, 10);
+  const weekTrades = trades.filter(t => t.dateISO >= weekISO);
+
+  const todayStats = computeStats(todayTrades);
+  const weekStats  = computeStats(weekTrades);
+  const allStats   = computeStats(trades);
+
+  const todayPnl = todayTrades.map(tradePnL).filter((n): n is number => n !== null).reduce((a, b) => a + b, 0);
+  const weekPnl  = weekTrades.map(tradePnL).filter((n): n is number => n !== null).reduce((a, b) => a + b, 0);
+
+  const pnlColor = (n: number) => n > 0 ? '#22c55e' : n < 0 ? '#ef4444' : '#fff';
+  const fmt$ = (n: number) => `${n >= 0 ? '+' : ''}$${Math.abs(n).toLocaleString()}`;
+
+  return (
+    <div className="flex-1 overflow-y-auto" dir={en ? 'ltr' : 'rtl'}>
+      <div className="px-8 max-[880px]:px-4 py-8 pb-24 max-w-5xl mx-auto space-y-8">
+
+        {/* Header */}
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="font-serif text-3xl font-bold text-white">
+              {en ? 'Dashboard' : 'לוח בקרה'}
+            </h1>
+            <p className="font-mono text-xs text-white/30 mt-1 uppercase tracking-[0.18em]">{today}</p>
           </div>
-
-          {/* ── 02 · Live Price ──────────────────────────────── */}
-          <div className="py-12 border-b border-[#1c1c1e]">
-            <LivePricePanel />
-          </div>
-
-          {/* ── 03 · Macro Journal ───────────────────────────── */}
-          <div className="py-12 border-b border-[#1c1c1e]">
-            {macroBoard}
-          </div>
-
-          {/* ── 04 · Position Calculator ─────────────────────── */}
-          <div className="py-12">
-            <SectionHeader num="04"
-              title={pick({ he: 'מחשבון פוזיציה', en: 'Position Calculator' }, en)}
-              subtitle="CME Spec · ES & NQ Risk Engine"
-              dir={dir} />
-            <PositionCalculator live={live} />
-          </div>
-
+          <Link
+            href="/dashboard/journal"
+            className="px-5 py-2.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold tracking-[0.12em] uppercase hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.3)]"
+          >
+            {en ? '+ New Trade' : '+ עסקה חדשה'}
+          </Link>
         </div>
+
+        {/* PnL Stats */}
+        <div className="flex gap-3 flex-wrap">
+          <StatCard
+            label={en ? "Today's P&L" : 'רווח/הפסד היום'}
+            value={todayTrades.length ? fmt$(todayPnl) : '—'}
+            sub={`${todayStats.wins}W / ${todayStats.losses}L`}
+            color={pnlColor(todayPnl)}
+          />
+          <StatCard
+            label={en ? 'This Week' : 'השבוע'}
+            value={weekTrades.length ? fmt$(weekPnl) : '—'}
+            sub={`${weekStats.wins}W / ${weekStats.losses}L`}
+            color={pnlColor(weekPnl)}
+          />
+          <StatCard
+            label={en ? 'Win Rate' : 'אחוז ניצחון'}
+            value={allStats.count > 0 ? `${allStats.winRate.toFixed(0)}%` : '—'}
+            sub={`${allStats.wins + allStats.losses} trades`}
+          />
+          <StatCard
+            label={en ? 'Avg R' : 'R ממוצע'}
+            value={allStats.count > 0 ? `${allStats.avgR >= 0 ? '+' : ''}${allStats.avgR.toFixed(2)}R` : '—'}
+            color={pnlColor(allStats.avgR)}
+          />
+        </div>
+
+        {/* Daily Plan + AI Insight */}
+        <div className="grid grid-cols-1 min-[700px]:grid-cols-2 gap-4">
+          <DailyPlan />
+          <AIInsightPanel trades={trades} />
+        </div>
+
+        {/* Today's Trades */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-mono text-xs uppercase tracking-[0.22em] text-white/40">
+              {en ? "Today's Trades" : 'עסקאות היום'}
+            </h2>
+            <Link href="/dashboard/journal" className="font-mono text-[10px] text-[#d4af37]/60 hover:text-[#d4af37] transition-colors uppercase tracking-[0.18em]">
+              {en ? 'All →' : '← הכל'}
+            </Link>
+          </div>
+          {todayTrades.length === 0 ? (
+            <div className="py-12 text-center border border-[#1c1c1e] rounded-sm">
+              <p className="font-mono text-sm text-white/20">{en ? 'No trades today' : 'אין עסקאות היום'}</p>
+              <Link href="/dashboard/journal" className="mt-3 inline-block font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors">
+                {en ? '+ Log first trade' : '+ הזן עסקה ראשונה'}
+              </Link>
+            </div>
+          ) : (
+            <div className="border border-[#1c1c1e] rounded-sm bg-[#0a0a0b] px-4">
+              {todayTrades.map(t => <TradeRow key={t.id} trade={t} />)}
+            </div>
+          )}
+        </div>
+
+        {role === 'free' && (
+          <div className="p-4 border border-[#d4af37]/20 rounded-sm bg-[#d4af37]/5 flex items-center justify-between">
+            <p className="font-mono text-xs text-white/50">{en ? 'Unlock AI insights, Playbook & Rules Engine' : 'פתח תובנות AI, פלייבוק ומנוע חוקים'}</p>
+            <Link href="/checkout" className="font-mono text-xs font-bold text-[#d4af37] hover:text-[#e5c84a] transition-colors">
+              {en ? 'Upgrade →' : '← שדרג'}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

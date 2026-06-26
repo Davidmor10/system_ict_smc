@@ -5,13 +5,14 @@ export const DICT = {
   lang_other:           { en: 'עב',                    he: 'EN'                              },
 
   // ── Sidebar ──────────────────────────────────────────────────────
-  nav_workspace:        { en: 'Main Workspace',         he: 'סביבת עבודה'                    },
-  nav_analytics:        { en: 'Market Analytics',       he: 'ניתוח שוק'                      },
-  nav_journal:          { en: 'Trading Journal',        he: 'יומן מסחר'                      },
-  nav_stats:            { en: 'Statistics',             he: 'סטטיסטיקה'                      },
-  sys_live:             { en: 'System Live',            he: 'מערכת פעילה'                    },
+  nav_workspace:        { en: 'Dashboard',              he: 'לוח בקרה'                       },
+  nav_analytics:        { en: 'Analytics',              he: 'ניתוח'                          },
+  nav_journal:          { en: 'Journal',                he: 'יומן'                           },
+  nav_playbook:         { en: 'Playbook',               he: 'פלייבוק'                        },
+  nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
+  sys_live:             { en: 'Onyx',                   he: 'אוניקס'                         },
   sys_account:          { en: 'Account',                he: 'חשבון'                          },
-  brand_sub:            { en: 'Trading',                he: 'מסחר'                           },
+  brand_sub:            { en: 'Journal',                he: 'יומן'                           },
 
   // ── Header ───────────────────────────────────────────────────────
   es_label:             { en: 'ES1! · S&P 500 Futures', he: 'ES1! · חוזי S&P 500'           },

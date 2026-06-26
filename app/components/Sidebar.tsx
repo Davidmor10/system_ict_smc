@@ -7,11 +7,12 @@ import { useLanguage } from '../hooks/useLanguage';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-const NAV_KEYS = [
-  { href: '/dashboard',           key: 'nav_workspace' },
-  { href: '/dashboard/analytics', key: 'nav_analytics' },
-  { href: '/dashboard/journal',   key: 'nav_journal'   },
-  { href: '/dashboard/stats',     key: 'nav_stats'     },
+const NAV = [
+  { href: '/dashboard',             key: 'nav_workspace' },
+  { href: '/dashboard/journal',     key: 'nav_journal'   },
+  { href: '/dashboard/analytics',   key: 'nav_analytics' },
+  { href: '/dashboard/playbook',    key: 'nav_playbook'  },
+  { href: '/dashboard/rules',       key: 'nav_rules'     },
 ] as const;
 
 export default function Sidebar() {
@@ -24,10 +25,7 @@ export default function Sidebar() {
 
       {/* ── Branding ─────────────────────────────────────────── */}
       <div className="px-5 py-5 border-b border-[#1c1c1e]">
-        <span
-          className="block font-serif text-lg font-bold tracking-[0.06em] text-white leading-none"
-          style={{ fontStyle: 'normal' }}
-        >
+        <span className="block font-serif text-lg font-bold tracking-[0.06em] text-white leading-none">
           Onyx
         </span>
         <span className={`block font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase leading-none mt-1.5 ${rtl ? 'text-right' : ''}`}>
@@ -37,8 +35,8 @@ export default function Sidebar() {
 
       {/* ── Navigation ───────────────────────────────────────── */}
       <nav className="flex-1 px-3 py-5 flex flex-col gap-0.5">
-        {NAV_KEYS.map(({ href, key }) => {
-          const active = pathname === href;
+        {NAV.map(({ href, key }) => {
+          const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
           return (
             <Link
               key={href}
@@ -69,7 +67,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* ── Account + system status + language toggle ─────────── */}
+      {/* ── Account + language toggle ─────────── */}
       <div className="px-5 py-4 border-t border-[#1c1c1e]">
         {CLERK_ENABLED && (
           <div className={`flex items-center gap-2.5 mb-3 ${rtl ? 'flex-row-reverse' : ''}`}>
@@ -77,17 +75,12 @@ export default function Sidebar() {
             <span className="text-xs font-bold font-mono text-white/50 uppercase tracking-[0.18em]">{t('sys_account')}</span>
           </div>
         )}
-        <div className={`flex items-center gap-2 mb-1.5 ${rtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-2 mb-3 ${rtl ? 'flex-row-reverse' : ''}`}>
           <span className="h-2 w-2 rounded-full bg-[#d4af37] shrink-0" />
-          <span className={`text-sm font-bold font-mono uppercase tracking-[0.18em] text-[#d4af37] ${rtl ? 'text-right' : ''}`}>
+          <span className={`text-[10px] font-bold font-mono uppercase tracking-[0.18em] text-[#d4af37] ${rtl ? 'text-right' : ''}`}>
             {t('sys_live')}
           </span>
         </div>
-        <span className={`text-[10px] font-bold font-mono text-white/40 tracking-[0.16em] uppercase block mb-3 ${rtl ? 'text-right' : ''}`}>
-          CME · ES · NQ · Real-time
-        </span>
-
-        {/* Language toggle */}
         <button
           onClick={toggle}
           aria-label="Toggle language"

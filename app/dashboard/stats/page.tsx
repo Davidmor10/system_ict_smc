@@ -1,7 +1,6 @@
-import { requirePro } from '../../lib/withRoleCheck';
-import StatsWorkspace from '../../components/StatsWorkspace';
+import { redirect } from 'next/navigation';
 
-export default async function StatsPage() {
-  await requirePro();
-  return <StatsWorkspace />;
+// /dashboard/stats merged into /dashboard/analytics
+export default function StatsPage() {
+  redirect('/dashboard/analytics');
 }

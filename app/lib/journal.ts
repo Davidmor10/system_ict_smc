@@ -10,9 +10,7 @@
 // analytics never requires the user to re-enter history.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Bias } from '../hooks/useMarketStream';
-
-export type { Bias };
+export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
 // ── Core types ───────────────────────────────────────────────────────────────
 

@@ -1,8 +1,7 @@
-import DashboardWorkspace from '../components/DashboardWorkspace';
-import MacroBoard from '../components/NewsWidget';
 import { getUserRole } from '../lib/getUserRole';
+import DashboardView from '../components/DashboardView';
 
 export default async function DashboardPage() {
   const role = await getUserRole();
-  return <DashboardWorkspace role={role} macroBoard={<MacroBoard />} />;
+  return <DashboardView role={role} />;
 }
