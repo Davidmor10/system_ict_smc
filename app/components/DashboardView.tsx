@@ -6,6 +6,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { loadTrades, computeStats, todayISO, tradePnL } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import AIInsightPanel from './AIInsightPanel';
+import PositionCalculator from './PositionCalculator';
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 
@@ -192,6 +193,14 @@ export default function DashboardView({ role = 'free' }: { role?: 'free' | 'pro'
               {todayTrades.map(t => <TradeRow key={t.id} trade={t} />)}
             </div>
           )}
+        </div>
+
+        {/* Position Calculator */}
+        <div>
+          <h2 className="font-mono text-xs uppercase tracking-[0.22em] text-white/40 mb-4">
+            {en ? 'Position Calculator' : 'מחשבון פוזיציה'}
+          </h2>
+          <PositionCalculator />
         </div>
 
         {role === 'free' && (
