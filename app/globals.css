@@ -8,8 +8,8 @@
   --ease-in-expo:    cubic-bezier(0.7, 0, 0.84, 0);   /* exit / fade-out    */
 
   /* ── Onyx Master Palette ─────────────────────────────────── */
-  --background:  #050505;   /* absolute obsidian */
-  --surface:     #0d0d0f;   /* heavy panel backdrop */
+  --background:  #000000;   /* absolute black */
+  --surface:     #0a0a0b;   /* panel fill — barely above black */
   --border:      #1c1c1e;   /* metallic charcoal dividers */
   --foreground:  #c0c0c0;   /* refined silver */
   --muted:       #52525b;   /* subdued silver */
