@@ -304,11 +304,30 @@ export default function DashboardView() {
     try { localStorage.setItem('onyx_dash_reminders_v2', JSON.stringify(next)); } catch {}
   }
 
-  /* ── Data helpers ────────────────────────────────────────────── */
+  /* ── Real trade stats per period ────────────────────────────── */
+  function calcPeriodStats(filter: (t: { dateISO: string }) => boolean) {
+    const filtered = trades.filter(t => filter(t) && (t.result === 'WIN' || t.result === 'LOSS' || t.result === 'BE'));
+    const w = filtered.filter(t => t.result === 'WIN').length;
+    const l = filtered.filter(t => t.result === 'LOSS').length;
+    const total = w + l;
+    const wr = total > 0 ? Math.round((w / total) * 100) : 0;
+    const totalR = filtered.reduce((sum, t) => sum + (t.tradeR ?? 0), 0);
+    const totalPnl = filtered.reduce((sum, t) => sum + (t.pnlUsd ?? 0), 0);
+    const wlStr = total === 0 ? '—' : `${w}W · ${l}L`;
+    const wrStr = total === 0 ? '—' : `${wr}%`;
+    const rStr  = total === 0 ? '—' : (totalR >= 0 ? '+' : '') + totalR.toFixed(2) + 'R';
+    return { pnl: totalPnl, wl: wlStr, wr: wrStr, r: rStr };
+  }
+  const todayISO2 = new Date().toLocaleDateString('en-CA');
+  const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toLocaleDateString('en-CA'); })();
+  const monthStart = new Date().toLocaleDateString('en-CA').slice(0, 7);
+  const statsToday = calcPeriodStats(t => t.dateISO === todayISO2);
+  const statsWeek  = calcPeriodStats(t => t.dateISO >= weekStart);
+  const statsMonth = calcPeriodStats(t => t.dateISO.startsWith(monthStart));
   const periods = [
-    { label: s.today, pnl: anim.today, wl: '3W · 1L',    wr: '75%', r: '+2.8R'  },
-    { label: s.week,  pnl: anim.week,  wl: '12W · 5L',   wr: '71%', r: '+7.4R'  },
-    { label: s.month, pnl: anim.month, wl: '48W · 22L',  wr: '69%', r: '+18.6R' },
+    { label: s.today, ...statsToday },
+    { label: s.week,  ...statsWeek  },
+    { label: s.month, ...statsMonth },
   ];
   const acctStats = [
     { label: s.accBalance, value: '$' + bal.toLocaleString('en-US'), color: '#fff' },
@@ -687,7 +706,7 @@ export default function DashboardView() {
                     </div>
                     <div className="dp-bias-row-item">
                       <span className="dp-bias-row-key">{s.rSession}</span>
-                      <span className="dp-bias-row-val gold">{activeSessionIdx >= 0 ? SESS[activeSessionIdx][L] : 'NY AM'}</span>
+                      <span className="dp-bias-row-val gold">{activeSessionIdx >= 0 ? SESS[activeSessionIdx][L] : s.noSession}</span>
                     </div>
                   </div>
                 </div>
