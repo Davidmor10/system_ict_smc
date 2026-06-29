@@ -175,6 +175,7 @@ export default function DashboardView() {
   const [anim,      setAnim]      = useState({ today: 0, week: 0, month: 0, win: 0, pf: 0, avgr: 0 });
   const [userName,  setUserName]  = useState('');
   const [trades,    setTrades]    = useState<ReturnType<typeof loadTrades>>([]);
+  const isEmpty = trades.length === 0;
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -186,9 +187,10 @@ export default function DashboardView() {
     return () => clearInterval(iv);
   }, []);
 
-  /* ── data-lang attribute ─────────────────────────────────────── */
+  /* ── data-lang + dir on <html> ──────────────────────────────── */
   useEffect(() => {
     document.documentElement.setAttribute('data-lang', L);
+    document.documentElement.dir = L === 'he' ? 'rtl' : 'ltr';
   }, [L]);
 
   /* ── Load localStorage on mount ──────────────────────────────── */
@@ -226,8 +228,9 @@ export default function DashboardView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── Animate metrics on mount ────────────────────────────────── */
+  /* ── Animate metrics (only when user has trades) ─────────────── */
   useEffect(() => {
+    if (isEmpty) { setAnim({ today: 0, week: 0, month: 0, win: 0, pf: 0, avgr: 0 }); return; }
     const targets = { today: 1250, week: 4180, month: 11920, win: 68.4, pf: 2.31, avgr: 1.42 };
     const dur = 1100, t0 = performance.now();
     let raf: number;
@@ -239,7 +242,7 @@ export default function DashboardView() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [isEmpty]);
 
   /* ── Derived values ──────────────────────────────────────────── */
   const activeSessionIdx = getActiveSession();
@@ -258,9 +261,6 @@ export default function DashboardView() {
   const stdContracts   = st * spec.ptStd   > 0 ? Math.floor(cash / (st * spec.ptStd))   : 0;
   const microContracts = st * spec.ptMicro > 0 ? Math.floor(cash / (st * spec.ptMicro)) : 0;
   const cashStr = '$' + Math.round(cash).toLocaleString('en-US');
-
-  /* ── Empty state ────────────────────────────────────────────── */
-  const isEmpty = trades.length === 0;
 
   /* ── Plan dirty check ────────────────────────────────────────── */
   const planDirty    = !(saved.goal === goal && saved.bias === bias && saved.maxTrades === String(maxTrades) && saved.note === note);

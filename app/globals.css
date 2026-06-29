@@ -333,3 +333,7 @@ html[lang="he"] .sec-title { font-weight: 900; }
   transition: color 200ms var(--ease-smooth);
 }
 .btn-ghost:hover { color: #fff; }
+
+
+/* ── RTL: sidebar moves to the right, layout mirrors ─────────── */
+html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }

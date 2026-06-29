@@ -57,7 +57,7 @@ export default function RootLayout({
   const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${frankRuhl.variable} ${heebo.variable} antialiased`}>
+    <html lang="he" dir="rtl" data-lang="he" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${frankRuhl.variable} ${heebo.variable} antialiased`}>
       <body className="flex flex-col bg-[#050505]">
         {/* One language context for the whole app, so the Header toggle and the
             Sidebar toggle drive the same state across every route. */}
