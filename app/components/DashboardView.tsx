@@ -247,21 +247,29 @@ export default function DashboardView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades]);
 
-  /* ── Animate metrics (only when user has trades) ─────────────── */
+  /* ── Animate KPI metrics from real trade data ───────────────── */
   useEffect(() => {
     if (isEmpty) { setAnim({ today: 0, week: 0, month: 0, win: 0, pf: 0, avgr: 0 }); return; }
-    const targets = { today: 1250, week: 4180, month: 11920, win: 68.4, pf: 2.31, avgr: 1.42 };
+    const closed = trades.filter(t => t.result !== 'OPEN');
+    const wins   = closed.filter(t => t.result === 'WIN');
+    const losses = closed.filter(t => t.result === 'LOSS');
+    const winPct = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+    const sumWinR  = wins.reduce((s, t) => s + Math.abs(t.tradeR ?? 0), 0);
+    const sumLossR = losses.reduce((s, t) => s + Math.abs(t.tradeR ?? 0), 0);
+    const pf   = sumLossR > 0 ? sumWinR / sumLossR : sumWinR > 0 ? 99 : 0;
+    const avgr = closed.length > 0 ? closed.reduce((s, t) => s + (t.tradeR ?? 0), 0) / closed.length : 0;
+    const targets = { today: 0, week: 0, month: 0, win: winPct, pf, avgr };
     const dur = 1100, t0 = performance.now();
     let raf: number;
     const tick = (t: number) => {
       const p = Math.min(1, (t - t0) / dur);
       const e = 1 - Math.pow(1 - p, 3);
-      setAnim({ today: targets.today * e, week: targets.week * e, month: targets.month * e, win: targets.win * e, pf: targets.pf * e, avgr: targets.avgr * e });
+      setAnim({ today: 0, week: 0, month: 0, win: targets.win * e, pf: targets.pf * e, avgr: targets.avgr * e });
       if (p < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [isEmpty]);
+  }, [isEmpty, trades]);
 
   /* ── Derived values ──────────────────────────────────────────── */
   const activeSessionIdx = getActiveSession();
@@ -358,7 +366,7 @@ export default function DashboardView() {
   ];
   const acctStats = [
     { label: s.accBalance, value: '$' + bal.toLocaleString('en-US'), color: '#fff' },
-    { label: s.accToday,   value: money(anim.today),                 color: anim.today >= 0 ? 'var(--bull)' : 'var(--bear)' },
+    { label: s.accToday,   value: money(statsToday.pnl),             color: statsToday.pnl >= 0 ? 'var(--bull)' : 'var(--bear)' },
     { label: s.accRisk,    value: '$' + Math.round(bal * rk / 100).toLocaleString('en-US') + ' · ' + rk + '%', color: 'var(--gold)' },
   ];
   const statusChips = [
