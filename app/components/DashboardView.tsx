@@ -4,6 +4,7 @@ import './dp.css';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../hooks/useLanguage';
+import { loadTrades } from '../lib/journal';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -79,6 +80,13 @@ const STR = {
     stRiskV: 'בתוך הגבולות', stDiscK: 'משמעת', stDiscV: 'רצף 6 ימים',
     stHealthK: 'בריאות החשבון', stHealthV: 'חזקה',
     focusK: 'הפוקוס של היום', rTrend: 'מגמה', rSession: 'סשן',
+    stDiscVEmpty: 'התחל היום',
+    coachStatusEmpty: 'ממתין לעסקאות הראשונות',
+    coachWelcomeTitle: 'ברוך הבא',
+    coachWelcomeText: 'ברוך הבא ל-Onyx. ברגע שתתחיל לתעד עסקאות, המאמן יזהה עבורך דפוסים — מתי אתה מרוויח, היכן אתה מפסיד, ומה כדאי לשפר. ההחלטה תמיד נשארת שלך.',
+    emptyPerfTitle: 'אין עדיין נתוני ביצועים',
+    emptyPerfSub: 'הוסף את העסקה הראשונה שלך כדי לצפות בנתוני הביצועים שלך.',
+    emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
   en: {
     nav: ['Overview','Trade Journal','Analytics','Playbook','Rules Engine'],
@@ -112,6 +120,13 @@ const STR = {
     stRiskV: 'WITHIN LIMITS', stDiscK: 'DISCIPLINE', stDiscV: '6-DAY STREAK',
     stHealthK: 'ACCOUNT HEALTH', stHealthV: 'STRONG',
     focusK: "TODAY'S FOCUS", rTrend: 'TREND', rSession: 'SESSION',
+    stDiscVEmpty: 'START TODAY',
+    coachStatusEmpty: 'Waiting for first trades',
+    coachWelcomeTitle: 'Welcome',
+    coachWelcomeText: 'Welcome to Onyx. Once you start logging trades, the coach will identify patterns for you — when you profit, where you lose, and what\'s worth improving. The decision is always yours.',
+    emptyPerfTitle: 'No performance data yet',
+    emptyPerfSub: 'Add your first trade to start seeing your performance data.',
+    emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
 } as const;
 
@@ -159,6 +174,7 @@ export default function DashboardView() {
   const [clockStr,  setClockStr]  = useState('00:00:00');
   const [anim,      setAnim]      = useState({ today: 0, week: 0, month: 0, win: 0, pf: 0, avgr: 0 });
   const [userName,  setUserName]  = useState('');
+  const [trades,    setTrades]    = useState<ReturnType<typeof loadTrades>>([]);
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -204,6 +220,8 @@ export default function DashboardView() {
 
       const storedName = localStorage.getItem('onyx_user_name');
       if (storedName) setUserName(storedName);
+
+      setTrades(loadTrades());
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -240,6 +258,9 @@ export default function DashboardView() {
   const stdContracts   = st * spec.ptStd   > 0 ? Math.floor(cash / (st * spec.ptStd))   : 0;
   const microContracts = st * spec.ptMicro > 0 ? Math.floor(cash / (st * spec.ptMicro)) : 0;
   const cashStr = '$' + Math.round(cash).toLocaleString('en-US');
+
+  /* ── Empty state ────────────────────────────────────────────── */
+  const isEmpty = trades.length === 0;
 
   /* ── Plan dirty check ────────────────────────────────────────── */
   const planDirty    = !(saved.goal === goal && saved.bias === bias && saved.maxTrades === String(maxTrades) && saved.note === note);
@@ -297,7 +318,7 @@ export default function DashboardView() {
   const statusChips = [
     { k: s.stTradingK, v: s.stTradingV, c: 'var(--bull)' },
     { k: s.stRiskK,    v: s.stRiskV,    c: 'var(--bull)' },
-    { k: s.stDiscK,    v: s.stDiscV,    c: 'var(--gold)' },
+    { k: s.stDiscK,    v: isEmpty ? s.stDiscVEmpty : s.stDiscV,  c: isEmpty ? 'var(--w40)' : 'var(--gold)' },
     { k: s.stHealthK,  v: s.stHealthV,  c: 'var(--bull)' },
   ];
   const coachKeys = [s.cOppK, s.cWarnK, s.cPatK] as const;
@@ -407,31 +428,58 @@ export default function DashboardView() {
                         <span className="dp-coach-title">{s.aiCoach}</span>
                         <span className="dp-coach-status">
                           <span className="dp-pulse-dot sm green" />
-                          <span className="dp-coach-status-text">{s.coachStatus}</span>
+                          <span className="dp-coach-status-text">{isEmpty ? s.coachStatusEmpty : s.coachStatus}</span>
                         </span>
                       </div>
                     </div>
                     <button className="dp-ghost-btn">{s.aiAll} {isRTL ? '←' : '→'}</button>
                   </div>
                   <div className="dp-coach-body">
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <div className="dp-coach-focus-label">{s.cFocusK}</div>
-                      <p className="dp-coach-focus-text">{s.coachFocus}</p>
-                    </div>
-                    <div className="dp-coach-insights">
-                      {AI_INSIGHTS.map((insight, i) => {
-                        const m = COACH_META[i];
-                        return (
-                          <div key={i} className="dp-coach-item">
-                            <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
-                            <div>
-                              <div className="dp-coach-item-k" style={{ color: m.fg }}>{coachKeys[i]}</div>
-                              <p className="dp-coach-item-text">{insight[L]}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {isEmpty ? (
+                      /* ── Empty state: welcome message ── */
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <div className="dp-coach-focus-label">{s.coachWelcomeTitle}</div>
+                          <p className="dp-coach-focus-text">{s.coachWelcomeText}</p>
+                        </div>
+                        <div className="dp-coach-insights">
+                          {([s.cOppK, s.cWarnK, s.cPatK] as const).map((label, i) => {
+                            const m = COACH_META[i];
+                            return (
+                              <div key={i} className="dp-coach-item">
+                                <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w30)' }}>{m.icon}</span>
+                                <div>
+                                  <div className="dp-coach-item-k" style={{ color: 'var(--w30)' }}>{label}</div>
+                                  <p className="dp-coach-item-text" style={{ color: 'var(--w30)' }}>—</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      /* ── Has trades: real insights ── */
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <div className="dp-coach-focus-label">{s.cFocusK}</div>
+                          <p className="dp-coach-focus-text">{s.coachFocus}</p>
+                        </div>
+                        <div className="dp-coach-insights">
+                          {AI_INSIGHTS.map((insight, i) => {
+                            const m = COACH_META[i];
+                            return (
+                              <div key={i} className="dp-coach-item">
+                                <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
+                                <div>
+                                  <div className="dp-coach-item-k" style={{ color: m.fg }}>{coachKeys[i]}</div>
+                                  <p className="dp-coach-item-text">{insight[L]}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="dp-coach-disc">{s.coachDisc}</div>
                 </div>
@@ -442,40 +490,57 @@ export default function DashboardView() {
             <div className="dp-section-sep dp-reveal dp-rev-2">
               <div className="dp-perf-head">
                 <span className="dp-perf-label">{s.perf}</span>
-                <span className="dp-perf-hint">{s.perfHint}</span>
+                {!isEmpty && <span className="dp-perf-hint">{s.perfHint}</span>}
                 <span className="dp-perf-spacer" />
-                <span className="dp-perf-disclaimer">{s.disclaimer}</span>
+                {isEmpty
+                  ? <span className="dp-perf-disclaimer" style={{ color: 'var(--w40)' }}>{s.emptyPerfTitle}</span>
+                  : <span className="dp-perf-disclaimer">{s.disclaimer}</span>
+                }
               </div>
-              <div className="dp-perf-periods">
-                {periods.map((p, i) => (
-                  <div key={i}>
-                    <div className="dp-perf-period-label">{p.label}</div>
-                    <div className="dp-perf-pnl" dir="ltr" style={{ color: p.pnl >= 0 ? 'var(--bull)' : 'var(--bear)', textAlign: isRTL ? 'right' : 'left' }}>{money(p.pnl)}</div>
-                    <div className="dp-perf-sub">
-                      <span dir="ltr">{p.wl}</span>
-                      <span style={{ color: 'var(--border-strong)' }}>|</span>
-                      <span dir="ltr" style={{ color: 'var(--w55)' }}>{p.wr}</span>
-                      <span style={{ color: 'var(--border-strong)' }}>|</span>
-                      <span dir="ltr" style={{ color: 'var(--gold)' }}>{p.r}</span>
+              {isEmpty ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 0 48px', gap: 18 }}>
+                  <span style={{ fontSize: 38, color: 'var(--gold)', opacity: 0.35 }}>◈</span>
+                  <div style={{ fontFamily: 'var(--ff-serif)', fontSize: 22, fontWeight: 700, color: 'var(--w55)', textAlign: 'center' }}>{s.emptyPerfTitle}</div>
+                  <div style={{ fontFamily: 'var(--ff-mono)', fontSize: 12, color: 'var(--w30)', textAlign: 'center', maxWidth: 360, lineHeight: 1.7 }}>{s.emptyPerfSub}</div>
+                  <Link href="/dashboard/journal" className="dp-cta-primary" style={{ maxWidth: 260, marginTop: 8 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                    <span>{s.ctaNewTrade}</span>
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <div className="dp-perf-periods">
+                    {periods.map((p, i) => (
+                      <div key={i}>
+                        <div className="dp-perf-period-label">{p.label}</div>
+                        <div className="dp-perf-pnl" dir="ltr" style={{ color: p.pnl >= 0 ? 'var(--bull)' : 'var(--bear)', textAlign: isRTL ? 'right' : 'left' }}>{money(p.pnl)}</div>
+                        <div className="dp-perf-sub">
+                          <span dir="ltr">{p.wl}</span>
+                          <span style={{ color: 'var(--border-strong)' }}>|</span>
+                          <span dir="ltr" style={{ color: 'var(--w55)' }}>{p.wr}</span>
+                          <span style={{ color: 'var(--border-strong)' }}>|</span>
+                          <span dir="ltr" style={{ color: 'var(--gold)' }}>{p.r}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="dp-perf-sep" />
+                  <div className="dp-perf-kpi">
+                    <div className="dp-kpi-cell">
+                      <span className="dp-kpi-label">{s.winRate}</span>
+                      <span className="dp-kpi-value" dir="ltr" style={{ color: 'var(--gold)', textShadow: '0 0 22px rgba(212,175,55,.5)' }}>{anim.win.toFixed(1)}%</span>
+                    </div>
+                    <div className="dp-kpi-cell">
+                      <span className="dp-kpi-label">{s.profitFactor}</span>
+                      <span className="dp-kpi-value" dir="ltr" style={{ color: '#fff' }}>{anim.pf.toFixed(2)}</span>
+                    </div>
+                    <div className="dp-kpi-cell">
+                      <span className="dp-kpi-label">{s.avgR}</span>
+                      <span className="dp-kpi-value" dir="ltr" style={{ color: 'var(--bull)' }}>+{anim.avgr.toFixed(2)}R</span>
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="dp-perf-sep" />
-              <div className="dp-perf-kpi">
-                <div className="dp-kpi-cell">
-                  <span className="dp-kpi-label">{s.winRate}</span>
-                  <span className="dp-kpi-value" dir="ltr" style={{ color: 'var(--gold)', textShadow: '0 0 22px rgba(212,175,55,.5)' }}>{anim.win.toFixed(1)}%</span>
-                </div>
-                <div className="dp-kpi-cell">
-                  <span className="dp-kpi-label">{s.profitFactor}</span>
-                  <span className="dp-kpi-value" dir="ltr" style={{ color: '#fff' }}>{anim.pf.toFixed(2)}</span>
-                </div>
-                <div className="dp-kpi-cell">
-                  <span className="dp-kpi-label">{s.avgR}</span>
-                  <span className="dp-kpi-value" dir="ltr" style={{ color: 'var(--bull)' }}>+{anim.avgr.toFixed(2)}R</span>
-                </div>
-              </div>
+                </>
+              )}
             </div>
 
             {/* ── TOOLS ── */}
