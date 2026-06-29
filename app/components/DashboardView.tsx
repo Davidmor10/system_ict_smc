@@ -23,23 +23,7 @@ const SESS = [
   { key: 'nypm',   he: 'ניו יורק PM', en: 'NY PM',  start: 20, end: 23 },
 ] as const;
 
-const AI_INSIGHTS = [
-  {
-    tag_he: 'סשן', tag_en: 'SESSION', time: '07:42',
-    he: 'בחלון NY AM נרשם אצלך אחוז ההצלחה הגבוה ביותר — 71% ב-30 הימים האחרונים. אולי כדאי לתת לו עדיפות.',
-    en: 'Your NY AM window shows your highest win rate — 71% over the last 30 days. You may want to prioritize it.',
-  },
-  {
-    tag_he: 'סיכון', tag_en: 'RISK', time: '07:41',
-    he: 'נראה ש-3 מתוך 5 ההפסדים האחרונים היו בעסקאות נגד הביאס שהגדרת. אולי שווה לשים לב.',
-    en: 'It looks like 3 of your last 5 losses were trades against the bias you set. It may be worth keeping an eye on that.',
-  },
-  {
-    tag_he: 'משמעת', tag_en: 'DISCIPLINE', time: '07:40',
-    he: 'ה-R הממוצע בעסקאות אחרי 11:30 נוטה לרדת ל-0.3R. ייתכן שתרצה לשקול לסיים את היום מוקדם יותר.',
-    en: 'Your average R on trades after 11:30 tends to drop to 0.3R. You might consider wrapping up earlier.',
-  },
-] as const;
+interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
 
 const COACH_META = [
   { fg: 'var(--bull)', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)', icon: '▲' },
@@ -175,6 +159,10 @@ export default function DashboardView() {
   const [anim,      setAnim]      = useState({ today: 0, week: 0, month: 0, win: 0, pf: 0, avgr: 0 });
   const [userName,  setUserName]  = useState('');
   const [trades,    setTrades]    = useState<ReturnType<typeof loadTrades>>([]);
+  const [focus,     setFocus]     = useState('');
+  const [focusSaved,setFocusSaved]= useState(false);
+  const [aiInsights, setAiInsights] = useState<AiInsight[]>([]);
+  const [aiLoading,  setAiLoading]  = useState(false);
   const isEmpty = trades.length === 0;
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -223,10 +211,41 @@ export default function DashboardView() {
       const storedName = localStorage.getItem('onyx_user_name');
       if (storedName) setUserName(storedName);
 
-      setTrades(loadTrades());
+      const f = localStorage.getItem('onyx_focus_' + todayKey());
+      if (f != null) setFocus(f);
+
+      const cachedAi = localStorage.getItem('onyx_ai_' + todayKey());
+      if (cachedAi) { try { setAiInsights(JSON.parse(cachedAi)); } catch {} }
+
+      const t = loadTrades();
+      setTrades(t);
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ── Fetch AI insights when trades are loaded ───────────────── */
+  useEffect(() => {
+    if (trades.length < 3) { setAiInsights([]); return; }
+    const cacheKey = 'onyx_ai_' + todayKey();
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { setAiInsights(JSON.parse(cached)); return; } catch {} }
+    setAiLoading(true);
+    fetch('/api/ai/insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trades, lang: L }),
+    })
+      .then(r => r.json())
+      .then(({ insights }) => {
+        if (Array.isArray(insights) && insights.length) {
+          setAiInsights(insights);
+          try { localStorage.setItem(cacheKey, JSON.stringify(insights)); } catch {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades]);
 
   /* ── Animate metrics (only when user has trades) ─────────────── */
   useEffect(() => {
@@ -290,6 +309,14 @@ export default function DashboardView() {
   function handleSavePlanText(v: string) {
     setPlan(v);
     try { localStorage.setItem('onyx_dash_plan_' + todayKey(), v); } catch {}
+  }
+
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  function handleSaveFocus() {
+    try { localStorage.setItem('onyx_focus_' + todayKey(), focus); } catch {}
+    setFocusSaved(true);
+    clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = setTimeout(() => setFocusSaved(false), 1800);
   }
 
   function toggleReminder(id: string) {
@@ -477,25 +504,44 @@ export default function DashboardView() {
                         </div>
                       </>
                     ) : (
-                      /* ── Has trades: real insights ── */
+                      /* ── Has trades: real AI insights ── */
                       <>
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                           <div className="dp-coach-focus-label">{s.cFocusK}</div>
-                          <p className="dp-coach-focus-text">{s.coachFocus}</p>
+                          {aiLoading
+                            ? <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'מנתח את היומן שלך...' : 'Analyzing your journal...'}</p>
+                            : aiInsights.length > 0
+                              ? <p className="dp-coach-focus-text">{aiInsights[0]?.text}</p>
+                              : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis'}</p>
+                          }
                         </div>
                         <div className="dp-coach-insights">
-                          {AI_INSIGHTS.map((insight, i) => {
-                            const m = COACH_META[i];
-                            return (
-                              <div key={i} className="dp-coach-item">
-                                <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
-                                <div>
-                                  <div className="dp-coach-item-k" style={{ color: m.fg }}>{coachKeys[i]}</div>
-                                  <p className="dp-coach-item-text">{insight[L]}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {aiLoading
+                            ? ([s.cOppK, s.cWarnK, s.cPatK] as const).map((label, i) => {
+                                const m = COACH_META[i];
+                                return (
+                                  <div key={i} className="dp-coach-item">
+                                    <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w30)' }}>{m.icon}</span>
+                                    <div>
+                                      <div className="dp-coach-item-k" style={{ color: 'var(--w30)' }}>{label}</div>
+                                      <p className="dp-coach-item-text" style={{ color: 'var(--w30)' }}>...</p>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            : aiInsights.map((insight, i) => {
+                                const m = COACH_META[i] ?? COACH_META[2];
+                                return (
+                                  <div key={i} className="dp-coach-item">
+                                    <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
+                                    <div>
+                                      <div className="dp-coach-item-k" style={{ color: m.fg }}>{L === 'he' ? insight.tag_he : insight.tag_en}</div>
+                                      <p className="dp-coach-item-text">{insight.text}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                          }
                         </div>
                       </>
                     )}
@@ -758,9 +804,12 @@ export default function DashboardView() {
               <div className="dp-brief-focus-card">
                 <div className="dp-brief-focus-head">
                   <span className="dp-brief-focus-title">{s.focusK}</span>
-                  <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: 'var(--w30)' }}>{s.autosave}</span>
+                  {focusSaved && <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: 'var(--bull)' }}>{isRTL ? 'נשמר ✓' : 'SAVED ✓'}</span>}
                 </div>
-                <textarea className="dp-brief-plan-ta" value={plan} onChange={e => handleSavePlanText(e.target.value)} placeholder={s.planPh} />
+                <textarea className="dp-brief-plan-ta" value={focus} onChange={e => setFocus(e.target.value)} placeholder={isRTL ? 'מה אתה רוצה לשים עליו דגש היום?' : 'What do you want to focus on today?'} />
+                <button onClick={handleSaveFocus} style={{ marginTop: 8, fontFamily: 'var(--ff-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', background: 'rgba(212,175,55,.1)', border: '1px solid rgba(212,175,55,.3)', color: 'var(--gold)', borderRadius: 6, padding: '6px 16px', cursor: 'pointer', width: '100%' }}>
+                  {isRTL ? 'שמור פוקוס' : 'SAVE FOCUS'}
+                </button>
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -768,13 +817,23 @@ export default function DashboardView() {
                   <button className="dp-ghost-btn" style={{ fontSize: 10 }}>{s.aiAll} {isRTL ? '←' : '→'}</button>
                 </div>
                 <div className="dp-insights-list">
-                  {AI_INSIGHTS.map((x, i) => (
+                  {(isEmpty || (!aiLoading && aiInsights.length === 0)) && (
+                    <div className="dp-insight-card" style={{ textAlign: 'center', padding: '18px 12px', color: 'var(--w30)', fontFamily: 'var(--ff-mono)', fontSize: 11 }}>
+                      {isEmpty ? (isRTL ? 'הוסף עסקאות כדי לקבל תובנות' : 'Add trades to get insights') : (isRTL ? 'הוסף לפחות 3 עסקאות' : 'Add at least 3 trades')}
+                    </div>
+                  )}
+                  {aiLoading && [0,1,2].map(i => (
+                    <div key={i} className="dp-insight-card" style={{ opacity: 0.4 }}>
+                      <div className="dp-insight-head"><span className="dp-insight-tag">...</span></div>
+                      <p className="dp-insight-text">{isRTL ? 'מנתח...' : 'Analyzing...'}</p>
+                    </div>
+                  ))}
+                  {!aiLoading && aiInsights.map((x, i) => (
                     <div key={i} className="dp-insight-card">
                       <div className="dp-insight-head">
                         <span className="dp-insight-tag">{L === 'he' ? x.tag_he : x.tag_en}</span>
-                        <span className="dp-insight-time" dir="ltr">{x.time}</span>
                       </div>
-                      <p className="dp-insight-text">{x[L]}</p>
+                      <p className="dp-insight-text">{x.text}</p>
                     </div>
                   ))}
                 </div>
@@ -816,7 +875,7 @@ export default function DashboardView() {
                   </div>
                   <div className="dp-brief-calc-right">
                     <div className="dp-cash-label">{s.cashRisk}</div>
-                    <div className="dp-cash-value" dir="ltr" style={{ fontSize: 44, textAlign: isRTL ? 'right' : 'left' }}>{cashStr}</div>
+                    <div className="dp-cash-value" dir="ltr" style={{ fontSize: 32, textAlign: isRTL ? 'right' : 'left' }}>{cashStr}</div>
                     <div className="dp-contracts" style={{ marginTop: 'auto', borderRadius: 4 }}>
                       <div className="dp-contract-cell">
                         <div className="dp-contract-label">{s.standard} · {spec.std}</div>
