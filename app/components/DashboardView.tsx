@@ -511,14 +511,15 @@ export default function DashboardView() {
                           {aiLoading
                             ? <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'מנתח את היומן שלך...' : 'Analyzing your journal...'}</p>
                             : aiInsights.length > 0
-                              ? <p className="dp-coach-focus-text">{aiInsights[0]?.text}</p>
+                              ? <p className="dp-coach-focus-text">{aiInsights[0].text}</p>
                               : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis'}</p>
                           }
                         </div>
+                        {/* Right column — insights 1 & 2 only (insight 0 shown as main focus above) */}
                         <div className="dp-coach-insights">
                           {aiLoading
-                            ? ([s.cOppK, s.cWarnK, s.cPatK] as const).map((label, i) => {
-                                const m = COACH_META[i];
+                            ? ([s.cWarnK, s.cPatK] as const).map((label, i) => {
+                                const m = COACH_META[i + 1];
                                 return (
                                   <div key={i} className="dp-coach-item">
                                     <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w30)' }}>{m.icon}</span>
@@ -529,8 +530,8 @@ export default function DashboardView() {
                                   </div>
                                 );
                               })
-                            : aiInsights.map((insight, i) => {
-                                const m = COACH_META[i] ?? COACH_META[2];
+                            : aiInsights.slice(1).map((insight, i) => {
+                                const m = COACH_META[i + 1] ?? COACH_META[2];
                                 return (
                                   <div key={i} className="dp-coach-item">
                                     <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
