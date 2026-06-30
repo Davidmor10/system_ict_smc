@@ -1,10 +1,30 @@
-/** Point value per contract for CME futures. */
-export const PT_VALUE: Record<string, number> = {
-  ES: 50,
-  NQ: 20,
-  GC: 100,
-  CL: 1000,
-};
+import { INSTRUMENTS, pointValue } from '../instruments';
+
+/** @deprecated kept for any external import; prefer `pointValue()` from lib/instruments. */
+export const PT_VALUE: Record<string, number> = Object.fromEntries(
+  Object.keys(INSTRUMENTS).map(k => [k, pointValue(k)]),
+);
+
+/** Points gained/lost, direction-adjusted. Positive = favorable. */
+export function calcPoints(
+  entry: number,
+  exitPrice: number,
+  direction: 'LONG' | 'SHORT',
+): number {
+  const dir = direction === 'LONG' ? 1 : -1;
+  return (exitPrice - entry) * dir;
+}
+
+/** Tick movement, direction-adjusted. */
+export function calcTicks(
+  entry: number,
+  exitPrice: number,
+  direction: 'LONG' | 'SHORT',
+  symbol: string,
+): number {
+  const tickSize = INSTRUMENTS[symbol]?.tickSize ?? 0.25;
+  return calcPoints(entry, exitPrice, direction) / tickSize;
+}
 
 /**
  * Planned reward-to-risk ratio.
@@ -23,8 +43,8 @@ export function calcRR(
 }
 
 /**
- * Realized PnL in USD.
- * @param contracts number of contracts (default 1)
+ * Gross realized PnL in USD — instrument- and contract-size-aware.
+ * This is the single source of truth for trade PnL across the app.
  */
 export function calcPnL(
   entry: number,
@@ -33,13 +53,13 @@ export function calcPnL(
   symbol: string,
   contracts = 1,
 ): number {
-  const dir = direction === 'LONG' ? 1 : -1;
-  const pts = (exitPrice - entry) * dir;
-  return pts * (PT_VALUE[symbol] ?? 50) * contracts;
+  const pts = calcPoints(entry, exitPrice, direction);
+  return pts * pointValue(symbol) * contracts;
 }
 
 /**
  * Realized R multiple: how many R the trader made/lost.
+ * Instrument-independent — R is a ratio of price distances, not dollars.
  */
 export function calcRealizedR(
   entry: number,

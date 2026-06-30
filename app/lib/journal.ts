@@ -10,12 +10,16 @@
 // analytics never requires the user to re-enter history.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { type InstrumentKey, isKnownInstrument, pointValue } from './instruments';
+import { calcPnL, calcRR } from './calc/trade';
+
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
 // ── Core types ───────────────────────────────────────────────────────────────
 
 export type TradeResult = 'OPEN' | 'WIN' | 'LOSS' | 'BE';
-export type Symbol = 'ES' | 'NQ';
+/** Instrument key — kept in sync with lib/instruments.ts, the single source of truth for specs. */
+export type Symbol = InstrumentKey;
 export type Direction = 'LONG' | 'SHORT';
 export type Setup = 'REVERSAL' | 'CONTINUATION';
 export type IFVGConfirmation = 'IFVG_1M' | 'IFVG_2M' | 'IFVG_3M' | 'IFVG_5M';
@@ -32,6 +36,8 @@ export interface TradeEntry {
   /** Wall-clock entry time, `HH:mm`. */
   time: string;
   symbol: Symbol;
+  /** Number of contracts traded. Drives gross PnL — never asked as a separate dollar amount. */
+  contracts: number;
   direction: Direction;
   entry: number;
   stop: number;
@@ -162,7 +168,9 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
       ? r.dateISO
       : toLocalISO(new Date(id));
 
-  const symbol: Symbol    = r.symbol === 'NQ' ? 'NQ' : 'ES';
+  const symbol: Symbol = typeof r.symbol === 'string' && isKnownInstrument(r.symbol) ? r.symbol : 'ES';
+  const contracts = Number(r.contracts);
+  const contractsVal = Number.isFinite(contracts) && contracts > 0 ? contracts : 1;
   const direction: Direction = r.direction === 'SHORT' ? 'SHORT' : 'LONG';
   const bias: Bias        = (r.bias as Bias) ?? 'INDECISIVE';
 
@@ -181,15 +189,15 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
 
   const risk = Math.abs(entry - stop);
   const dir  = direction === 'LONG' ? 1 : -1;
-  const ptVal = symbol === 'NQ' ? 20 : 50;
+  const ptVal = pointValue(symbol);
   const plannedR = risk > 0 ? ((target - entry) * dir) / risk : 0;
   const tradeR: number =
     result === 'WIN'  ? plannedR :
     result === 'LOSS' ? -1 :
     0;
   const pnlUsd: number =
-    result === 'WIN'  ? tradeR * ptVal :
-    result === 'LOSS' ? -risk * ptVal :
+    result === 'WIN'  ? tradeR * ptVal * contractsVal :
+    result === 'LOSS' ? -risk * ptVal * contractsVal :
     0;
 
   return {
@@ -197,6 +205,7 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     dateISO,
     time: typeof r.time === 'string' ? r.time : '',
     symbol,
+    contracts: contractsVal,
     direction,
     entry,
     stop,
@@ -240,26 +249,20 @@ export function saveTrades(trades: TradeEntry[]): void {
 }
 
 // ── PnL & statistics ─────────────────────────────────────────────────────────
+// Gross PnL is always derived from instrument spec × contracts (lib/instruments.ts +
+// lib/calc/trade.ts) — never from a manually-entered dollar amount.
 
-/** CME standard point values per 1 standard contract. */
-export const PT_VALUE: Record<Symbol, number> = { ES: 50, NQ: 20 };
-
-/** Realized PnL in USD for one standard contract; null for still-open trades. */
+/** Realized PnL in USD, contract-size aware; null for still-open trades. */
 export function tradePnL(t: TradeEntry): number | null {
   if (t.result === 'OPEN') return null;
   if (t.result === 'BE') return 0;
-  const dir = t.direction === 'LONG' ? 1 : -1;
   const exit = t.result === 'WIN' ? t.target : t.stop;
-  return (exit - t.entry) * dir * PT_VALUE[t.symbol];
+  return calcPnL(t.entry, exit, t.direction, t.symbol, t.contracts || 1);
 }
 
 /** Planned reward-to-risk of a trade (target distance / stop distance). */
 export function rMultiple(t: TradeEntry): number | null {
-  const risk = Math.abs(t.entry - t.stop);
-  if (risk === 0) return null;
-  const dir = t.direction === 'LONG' ? 1 : -1;
-  const reward = (t.target - t.entry) * dir;
-  return reward / risk;
+  return calcRR(t.entry, t.stop, t.target);
 }
 
 export interface TradeStats {

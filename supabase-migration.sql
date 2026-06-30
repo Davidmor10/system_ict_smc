@@ -9,7 +9,8 @@ create table if not exists journal_trades (
   clerk_id       text         not null,
   date_iso       text         not null default '',
   time_val       text         not null default '',
-  symbol         text         not null default 'ES',
+  symbol         text         not null default 'ES',  -- 'MNQ'|'NQ'|'MES'|'ES' (see app/lib/instruments.ts)
+  contracts      integer      not null default 1,
   direction      text         not null default 'LONG',
   entry          float8       not null default 0,
   stop_price     float8       not null default 0,
@@ -25,10 +26,15 @@ create table if not exists journal_trades (
   bias_alignment text,
   trade_r        float8,
   pnl_usd        float8,
+  screenshots    jsonb,       -- array of data-URL strings
   deleted_at     timestamptz,
   primary key    (clerk_id, id)
 );
 create index if not exists journal_trades_clerk_idx on journal_trades (clerk_id);
+
+-- Idempotent — adds the new columns to a journal_trades table created before this migration.
+alter table journal_trades add column if not exists contracts integer not null default 1;
+alter table journal_trades add column if not exists screenshots jsonb;
 
 -- 2. User preferences
 create table if not exists user_preferences (

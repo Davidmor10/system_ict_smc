@@ -12,6 +12,7 @@ type TradeRow = {
   date_iso: string;
   time_val: string;
   symbol: string;
+  contracts: number | null;
   direction: string;
   entry: number;
   stop_price: number;
@@ -27,6 +28,7 @@ type TradeRow = {
   bias_alignment: string | null;
   trade_r: number | null;
   pnl_usd: number | null;
+  screenshots: string[] | null;
   deleted_at: string | null;
 };
 
@@ -36,6 +38,7 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     dateISO: row.date_iso,
     time: row.time_val,
     symbol: row.symbol as Symbol,
+    contracts: row.contracts ?? 1,
     direction: row.direction as Direction,
     entry: row.entry,
     stop: row.stop_price,
@@ -51,6 +54,7 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     biasAlignment: (row.bias_alignment as BiasAlignment) ?? undefined,
     tradeR: row.trade_r ?? undefined,
     pnlUsd: row.pnl_usd ?? undefined,
+    screenshots: row.screenshots ?? undefined,
     deletedAt: row.deleted_at,
   };
 }
@@ -62,6 +66,7 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     date_iso: trade.dateISO,
     time_val: trade.time,
     symbol: trade.symbol,
+    contracts: trade.contracts ?? 1,
     direction: trade.direction,
     entry: trade.entry,
     stop_price: trade.stop,
@@ -77,6 +82,7 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     bias_alignment: trade.biasAlignment ?? null,
     trade_r: trade.tradeR ?? null,
     pnl_usd: trade.pnlUsd ?? null,
+    screenshots: trade.screenshots ?? null,
     deleted_at: null,
   };
 }

@@ -1,27 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import type { TradeEntry, Symbol, Direction, TradeResult, IFVGConfirmation } from '../lib/journal';
+import type { TradeEntry, Direction, TradeResult, IFVGConfirmation } from '../lib/journal';
 import { todayISO } from '../lib/journal';
-import { calcRR, calcPnL, calcRealizedR } from '../lib/calc/trade';
+import { calcRR, calcPnL, calcRealizedR, calcPoints, calcTicks } from '../lib/calc/trade';
+import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 
-const SYMBOLS: Symbol[] = ['ES', 'NQ'];
 const CONFIRMATIONS: IFVGConfirmation[] = ['IFVG_1M', 'IFVG_2M', 'IFVG_3M', 'IFVG_5M'];
 
 /* ── Every field maps to a specific future insight:
-   symbol/direction/result → win-rate breakdowns
-   entry/stop/target      → RR distribution, planned-vs-realized edge
-   session                → win-rate-by-session (drives the AI coach)
-   bias alignment (auto)  → the Discipline Score on the dashboard hero
-   confirmation/model     → fractal-engine confluence performance (advanced — power users)
-   screenshots/notes      → fed into the AI's pattern + psychology analysis
-   Setup lives in the Playbook now, not on every trade — keeping the journal fast. ── */
+   instrument/contracts/direction/result → win-rate + gross-PnL breakdowns, instrument-aware
+   entry/stop/target                    → RR distribution, planned-vs-realized edge, points/ticks
+   session                              → win-rate-by-session (drives the AI coach)
+   bias alignment (auto)                → the Discipline Score on the dashboard hero
+   confirmation/model                   → fractal-engine confluence performance (advanced — power users)
+   screenshots/notes                    → fed into the AI's pattern + psychology analysis
+   Setup lives in the Playbook now, not on every trade — keeping the journal fast.
+   PnL is never typed in by hand — it's always derived from instrument spec × contracts. ── */
 
 interface FormState {
-  symbol: Symbol;
+  symbol: InstrumentKey;
+  contracts: string;
   direction: Direction;
   date: string;
   time: string;
@@ -40,6 +42,7 @@ function empty(): FormState {
   const now = new Date();
   return {
     symbol: 'ES',
+    contracts: '1',
     direction: 'LONG',
     date: todayISO(),
     time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
@@ -94,16 +97,23 @@ export default function TradeForm({
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  const entry  = parseFloat(form.entry);
-  const stop   = parseFloat(form.stop);
-  const target = parseFloat(form.target);
+  const entry     = parseFloat(form.entry);
+  const stop      = parseFloat(form.stop);
+  const target    = parseFloat(form.target);
+  const contracts = Math.max(1, parseInt(form.contracts, 10) || 1);
 
   const rr = (isFinite(entry) && isFinite(stop) && isFinite(target))
     ? calcRR(entry, stop, target)
     : null;
 
-  const pnl = (form.result !== 'OPEN' && form.result !== 'BE' && isFinite(entry) && isFinite(stop) && isFinite(target))
-    ? calcPnL(entry, form.result === 'WIN' ? target : stop, form.direction, form.symbol)
+  const exitPrice = form.result === 'WIN' ? target : form.result === 'LOSS' ? stop : null;
+  const hasExit = exitPrice !== null && isFinite(entry) && isFinite(exitPrice);
+
+  const points = (form.result !== 'OPEN' && hasExit) ? calcPoints(entry, exitPrice!, form.direction) : form.result === 'BE' ? 0 : null;
+  const ticks  = (form.result !== 'OPEN' && hasExit) ? calcTicks(entry, exitPrice!, form.direction, form.symbol) : form.result === 'BE' ? 0 : null;
+
+  const pnl = (form.result !== 'OPEN' && form.result !== 'BE' && hasExit)
+    ? calcPnL(entry, exitPrice!, form.direction, form.symbol, contracts)
     : form.result === 'BE' ? 0 : null;
 
   const realizedR = (form.result !== 'OPEN' && isFinite(entry) && isFinite(stop))
@@ -125,6 +135,7 @@ export default function TradeForm({
       dateISO: form.date,
       time: form.time,
       symbol: form.symbol,
+      contracts,
       direction: form.direction,
       entry,
       stop,
@@ -157,17 +168,18 @@ export default function TradeForm({
 
       {/* ── TRADE INFO ── */}
       <Group label="Trade">
+        <Field label="Instrument">
+          <div className="grid grid-cols-4 gap-1.5">
+            {INSTRUMENT_KEYS.map(s => (
+              <button type="button" key={s} onClick={() => set('symbol', s)}
+                title={INSTRUMENTS[s].label}
+                className={toggleBtn(form.symbol === s, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Symbol">
-            <div className="flex gap-1.5">
-              {SYMBOLS.map(s => (
-                <button type="button" key={s} onClick={() => set('symbol', s)}
-                  className={toggleBtn(form.symbol === s, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </Field>
           <Field label="Direction">
             <div className="flex gap-1.5">
               {(['LONG', 'SHORT'] as Direction[]).map(d => (
@@ -177,6 +189,9 @@ export default function TradeForm({
                 </button>
               ))}
             </div>
+          </Field>
+          <Field label="Contracts">
+            <input type="number" min={1} step="1" value={form.contracts} onChange={e => set('contracts', e.target.value)} placeholder="1" className={inputCls} required />
           </Field>
         </div>
       </Group>
@@ -205,9 +220,20 @@ export default function TradeForm({
               <>
                 <div className="h-8 w-px bg-[#1c1c1e]" />
                 <div>
-                  <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Est. P&L</span>
+                  <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Gross P&L</span>
                   <span className="font-mono text-xl font-bold" style={{ color: pnl >= 0 ? '#22c55e' : '#ef4444' }}>
                     {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
+                  </span>
+                </div>
+              </>
+            )}
+            {points !== null && (
+              <>
+                <div className="h-8 w-px bg-[#1c1c1e]" />
+                <div>
+                  <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Points · Ticks</span>
+                  <span className="font-mono text-sm font-bold text-white/70">
+                    {points >= 0 ? '+' : ''}{points.toFixed(2)} · {ticks! >= 0 ? '+' : ''}{Math.round(ticks!)}
                   </span>
                 </div>
               </>

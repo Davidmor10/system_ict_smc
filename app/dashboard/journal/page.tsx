@@ -18,7 +18,7 @@ function TradeRow({ trade, onDelete }: { trade: TradeEntry; onDelete: (id: numbe
         <span className={`w-2 h-2 rounded-full shrink-0 ${win ? 'bg-[#22c55e]' : loss ? 'bg-[#ef4444]' : trade.result === 'BE' ? 'bg-[#d4af37]' : 'bg-white/20'}`} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-sm font-bold text-white/90">{trade.symbol}</span>
+            <span className="font-mono text-sm font-bold text-white/90">{trade.symbol}{trade.contracts > 1 ? ` ×${trade.contracts}` : ''}</span>
             <span className="font-mono text-xs text-white/40">{trade.direction}</span>
             {trade.model && <span className="px-1.5 py-0.5 rounded-sm bg-[#1c1c1e] text-[10px] font-mono text-white/40">{trade.model}</span>}
             {trade.session && <span className="font-mono text-[10px] text-white/30">{trade.session}</span>}
