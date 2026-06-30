@@ -5,6 +5,8 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { loadTrades, saveTrades, softDelete, todayISO, tradePnL } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import TradeForm from '../../components/TradeForm';
+import AIInsightPanel from '../../components/AIInsightPanel';
+import EmptyState from '../../components/EmptyState';
 
 function TradeRow({ trade, onDelete }: { trade: TradeEntry; onDelete: (id: number) => void }) {
   const pnl = tradePnL(trade);
@@ -97,10 +99,13 @@ export default function JournalPage() {
 
         {/* Trade Form */}
         {showForm && (
-          <div className="border border-[#d4af37]/20 rounded-sm bg-[#0a0a0b] p-6">
+          <div className="border border-[#d4af37]/20 rounded-xl bg-[#0a0a0b] p-6">
             <TradeForm onSave={handleSave} onCancel={() => setShowForm(false)} />
           </div>
         )}
+
+        {/* AI Insight */}
+        {trades.length > 0 && <AIInsightPanel trades={trades} />}
 
         {/* Date filter */}
         {dates.length > 0 && (
@@ -125,15 +130,21 @@ export default function JournalPage() {
 
         {/* Grouped trade list */}
         {filtered.length === 0 ? (
-          <div className="py-20 text-center border border-[#1c1c1e] rounded-sm">
-            <p className="font-mono text-sm text-white/20">{en ? 'No trades yet' : 'אין עסקאות עדיין'}</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="mt-4 font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors"
-            >
-              {en ? '+ Log your first trade' : '+ הזן את העסקה הראשונה שלך'}
-            </button>
-          </div>
+          <EmptyState
+            icon="◈"
+            title={en ? 'No trades logged yet' : 'עדיין לא תיעדת עסקאות'}
+            description={en
+              ? 'Log your first trade so the system can start calculating your discipline score, win rate, and AI-driven insights.'
+              : 'הזן את העסקה הראשונה שלך כדי שהמערכת תוכל להתחיל לחשב את ציון המשמעת, אחוזי ההצלחה והתובנות של ה-AI שלך.'}
+            action={
+              <button
+                onClick={() => setShowForm(true)}
+                className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors"
+              >
+                {en ? '+ Log your first trade' : '+ הזן את העסקה הראשונה שלך'}
+              </button>
+            }
+          />
         ) : (
           groupedDates.map(date => {
             const dayTrades = filtered.filter(t => t.dateISO === date);

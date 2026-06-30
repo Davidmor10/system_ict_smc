@@ -337,3 +337,9 @@ html[lang="he"] .sec-title { font-weight: 900; }
 
 /* ── RTL: sidebar moves to the right, layout mirrors ─────────── */
 html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
+
+/* ── Typing indicator dots ───────────────────────────────────── */
+@keyframes dp-typing-bounce {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}

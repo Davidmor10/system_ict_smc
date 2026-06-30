@@ -115,8 +115,8 @@ Provide EXACTLY 3 insights in this JSON format:
 ]
 
 Rules:
-- Be specific, not generic. Reference their actual numbers.
-- Each insight: 1-2 sentences max.
+- Be specific, not generic. Reference their actual numbers. Use ICT/SMC terminology where it fits naturally (FVG, Order Block, Liquidity Sweep, BSL/SSL, SMT, etc.) — this trader knows the vocabulary.
+- Each insight should be ONE well-formed block: 1-2 sentences normally, but if there are multiple distinct points worth making (e.g. two separate risk patterns), use bullet points starting with "• " on separate lines within the same text field instead of cramming everything into one run-on sentence. Never split one idea into several weak fragments.
 - No fluff. No "I noticed that...". Start directly with the insight.
 - JSON only, no extra text.`;
 

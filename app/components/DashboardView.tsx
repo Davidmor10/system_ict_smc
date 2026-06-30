@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../hooks/useLanguage';
 import { loadTrades } from '../lib/journal';
+import TypingDots from './TypingDots';
+import Tooltip from './Tooltip';
+import InsightText from './InsightText';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -51,6 +54,7 @@ const STR = {
     ctaNewTrade: 'תיעוד עסקה חדשה', ctaJournal: 'פתח יומן מסחר',
     statusReady: 'מוכן למסחר',
     heroWelcome: 'ברוך הבא,', badgeAccountActive: 'חשבון פעיל', badgeDisciplineK: 'ציון משמעת', badgeDisciplineEmpty: 'אין עדיין נתונים',
+    badgeDisciplineTip: 'מחושב לפי אחוז העסקאות התואמות את תוכנית המסחר והביאס היומי.',
     aiCoach: 'מאמן ה-AI', coachStatus: 'מבוסס על היומן שלך',
     coachFocus: 'לפי היומן שלך, חלון NY AM הניב את התוצאות הטובות ביותר. שווה לשקול לתת לו עדיפות — ההחלטה תמיד שלך.',
     coachDisc: 'התובנות מבוססות על היומן האישי שלך ואינן מהוות ייעוץ או המלצת מסחר.',
@@ -70,7 +74,7 @@ const STR = {
     coachWelcomeTitle: 'ברוך הבא',
     coachWelcomeText: 'ברוך הבא ל-Onyx. ברגע שתתחיל לתעד עסקאות, המאמן יזהה עבורך דפוסים — מתי אתה מרוויח, היכן אתה מפסיד, ומה כדאי לשפר. ההחלטה תמיד נשארת שלך.',
     emptyPerfTitle: 'אין עדיין נתוני ביצועים',
-    emptyPerfSub: 'הוסף את העסקה הראשונה שלך כדי לצפות בנתוני הביצועים שלך.',
+    emptyPerfSub: 'הזן את העסקה הראשונה שלך כדי שהמערכת תוכל להתחיל לחשב את ציון המשמעת, אחוז ההצלחה ופרופיט פקטור שלך.',
     emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
   en: {
@@ -92,6 +96,7 @@ const STR = {
     ctaNewTrade: 'Log New Trade', ctaJournal: 'Open Trade Journal',
     statusReady: 'READY TO TRADE',
     heroWelcome: 'Welcome,', badgeAccountActive: 'Account Active', badgeDisciplineK: 'Discipline Score', badgeDisciplineEmpty: 'No data yet',
+    badgeDisciplineTip: 'Calculated from the percentage of trades that matched your trading plan and declared daily bias.',
     aiCoach: 'AI COACH', coachStatus: 'Based on your journal',
     coachFocus: 'Based on your journal, the NY AM window has produced your best results. It may be worth prioritizing it — the decision is always yours.',
     coachDisc: 'Insights are based on your own journal and are not financial or trading advice.',
@@ -111,7 +116,7 @@ const STR = {
     coachWelcomeTitle: 'Welcome',
     coachWelcomeText: 'Welcome to Onyx. Once you start logging trades, the coach will identify patterns for you — when you profit, where you lose, and what\'s worth improving. The decision is always yours.',
     emptyPerfTitle: 'No performance data yet',
-    emptyPerfSub: 'Add your first trade to start seeing your performance data.',
+    emptyPerfSub: 'Log your first trade so the system can start calculating your discipline score, win rate, and profit factor.',
     emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
 } as const;
@@ -165,6 +170,7 @@ export default function DashboardView() {
   const [focusSaved,setFocusSaved]= useState(false);
   const [aiInsights, setAiInsights] = useState<AiInsight[]>([]);
   const [aiLoading,  setAiLoading]  = useState(false);
+  const [aiUpdatedAt, setAiUpdatedAt] = useState<string | null>(null);
   const isEmpty = trades.length === 0;
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -230,7 +236,14 @@ export default function DashboardView() {
     if (trades.length < 3) { setAiInsights([]); return; }
     const cacheKey = 'onyx_ai_' + todayKey();
     const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { setAiInsights(JSON.parse(cached)); return; } catch {} }
+    if (cached) {
+      try {
+        setAiInsights(JSON.parse(cached));
+        const cachedTime = localStorage.getItem(cacheKey + '_time');
+        if (cachedTime) setAiUpdatedAt(cachedTime);
+        return;
+      } catch {}
+    }
     setAiLoading(true);
     fetch('/api/ai/insights', {
       method: 'POST',
@@ -241,7 +254,12 @@ export default function DashboardView() {
       .then(({ insights }) => {
         if (Array.isArray(insights) && insights.length) {
           setAiInsights(insights);
-          try { localStorage.setItem(cacheKey, JSON.stringify(insights)); } catch {}
+          const stamp = new Date().toLocaleTimeString(L === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+          setAiUpdatedAt(stamp);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(insights));
+            localStorage.setItem(cacheKey + '_time', stamp);
+          } catch {}
         }
       })
       .catch(() => {})
@@ -441,10 +459,12 @@ export default function DashboardView() {
                       <b>{s.badgeAccountActive}</b>
                     </span>
                     <span className="dp-statusbar-sep" />
-                    <span className="dp-statusbar-badge">
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
-                      {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
-                    </span>
+                    <Tooltip text={s.badgeDisciplineTip}>
+                      <span className="dp-statusbar-badge" style={{ cursor: 'default' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
+                        {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
+                      </span>
+                    </Tooltip>
                   </div>
                   <div className="dp-sessions">
                     {SESS.map((sess, i) => (
@@ -534,9 +554,12 @@ export default function DashboardView() {
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                           <div className="dp-coach-focus-label">{s.cFocusK}</div>
                           {aiLoading
-                            ? <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'מנתח את היומן שלך...' : 'Analyzing your journal...'}</p>
+                            ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                <TypingDots />
+                                <span className="dp-coach-focus-text" style={{ color: 'var(--w30)', margin: 0 }}>{isRTL ? 'מנתח את היומן שלך...' : 'Analyzing your journal...'}</span>
+                              </div>
                             : aiInsights.length > 0
-                              ? <p className="dp-coach-focus-text">{aiInsights[0].text}</p>
+                              ? <InsightText text={aiInsights[0].text} className="dp-coach-focus-text" />
                               : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis'}</p>
                           }
                         </div>
@@ -562,7 +585,7 @@ export default function DashboardView() {
                                     <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
                                     <div>
                                       <div className="dp-coach-item-k" style={{ color: m.fg }}>{L === 'he' ? insight.tag_he : insight.tag_en}</div>
-                                      <p className="dp-coach-item-text">{insight.text}</p>
+                                      <InsightText text={insight.text} className="dp-coach-item-text" />
                                     </div>
                                   </div>
                                 );
@@ -572,7 +595,12 @@ export default function DashboardView() {
                       </>
                     )}
                   </div>
-                  <div className="dp-coach-disc">{s.coachDisc}</div>
+                  <div className="dp-coach-disc" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <span>{s.coachDisc}</span>
+                    {aiUpdatedAt && !isEmpty && (
+                      <span style={{ color: 'var(--w30)', whiteSpace: 'nowrap' }} dir="ltr">{isRTL ? 'עדכון אחרון' : 'Last updated'}: {aiUpdatedAt}</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -765,10 +793,12 @@ export default function DashboardView() {
                     <b>{s.badgeAccountActive}</b>
                   </span>
                   <span className="dp-statusbar-sep" />
-                  <span className="dp-statusbar-badge">
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
-                    {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
-                  </span>
+                  <Tooltip text={s.badgeDisciplineTip}>
+                    <span className="dp-statusbar-badge" style={{ cursor: 'default' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
+                      {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
+                    </span>
+                  </Tooltip>
                 </div>
                 <div className="dp-sessions">
                   {SESS.map((sess, i) => (
@@ -850,8 +880,11 @@ export default function DashboardView() {
                 </button>
               </div>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
                   <span className="dp-insights-title">{s.aiK}</span>
+                  {aiUpdatedAt && !isEmpty && !aiLoading && (
+                    <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, color: 'var(--w30)' }} dir="ltr">{isRTL ? 'עדכון אחרון' : 'Last updated'}: {aiUpdatedAt}</span>
+                  )}
                   <button className="dp-ghost-btn" style={{ fontSize: 10 }}>{s.aiAll} {isRTL ? '←' : '→'}</button>
                 </div>
                 <div className="dp-insights-list">
@@ -861,9 +894,9 @@ export default function DashboardView() {
                     </div>
                   )}
                   {aiLoading && [0,1,2].map(i => (
-                    <div key={i} className="dp-insight-card" style={{ opacity: 0.4 }}>
+                    <div key={i} className="dp-insight-card" style={{ opacity: 0.5 }}>
                       <div className="dp-insight-head"><span className="dp-insight-tag">...</span></div>
-                      <p className="dp-insight-text">{isRTL ? 'מנתח...' : 'Analyzing...'}</p>
+                      <div style={{ marginTop: 6 }}><TypingDots dotClassName="bg-[#d4af37]/60" /></div>
                     </div>
                   ))}
                   {!aiLoading && aiInsights.map((x, i) => (
@@ -871,7 +904,7 @@ export default function DashboardView() {
                       <div className="dp-insight-head">
                         <span className="dp-insight-tag">{L === 'he' ? x.tag_he : x.tag_en}</span>
                       </div>
-                      <p className="dp-insight-text">{x.text}</p>
+                      <InsightText text={x.text} className="dp-insight-text" />
                     </div>
                   ))}
                 </div>
