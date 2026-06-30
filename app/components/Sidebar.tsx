@@ -44,7 +44,7 @@ export default function Sidebar() {
               dir={rtl ? 'rtl' : 'ltr'}
               style={{ transition: 'color 250ms cubic-bezier(0.16,1,0.3,1), background-color 250ms cubic-bezier(0.16,1,0.3,1), border-color 250ms cubic-bezier(0.16,1,0.3,1)' }}
               className={[
-                'flex items-center gap-3 px-3 py-2.5 rounded-sm',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl',
                 'text-sm font-bold font-mono tracking-[0.12em] uppercase',
                 rtl ? 'pr-[10px] pl-3 border-r-2 border-l-0' : 'pl-[10px] pr-3 border-l-2',
                 active
@@ -84,11 +84,11 @@ export default function Sidebar() {
         <button
           onClick={toggle}
           aria-label="Toggle language"
-          className="w-full flex items-center justify-between px-3 py-2 border border-[#1c1c1e] rounded-sm text-xs font-bold font-mono tracking-[0.25em] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all duration-700 ease-in-out group"
+          className="w-full flex items-center justify-between px-3 py-2 border border-[#1c1c1e] rounded-xl text-xs font-bold font-mono tracking-[0.25em] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all duration-200 ease-in-out group"
         >
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-700">◈</span>
+          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
           <span>{t('lang_other')}</span>
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-700">◈</span>
+          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
         </button>
       </div>
     </aside>

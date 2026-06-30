@@ -24,13 +24,13 @@ export default function Header() {
   }, []);
 
   const ghost =
-    'px-5 py-2 rounded-sm border border-[#d4af37]/50 text-[#d4af37] font-mono text-xs font-bold uppercase tracking-[0.18em] hover:bg-[#d4af37]/10 hover:border-[#d4af37] transition-all duration-500';
+    'px-5 py-2 rounded-xl border border-[#d4af37]/50 text-[#d4af37] font-mono text-xs font-bold uppercase tracking-[0.18em] hover:bg-[#d4af37]/10 hover:border-[#d4af37] transition-all duration-200';
   const solid =
-    'px-5 py-2 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold uppercase tracking-[0.18em] [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.65)] transition-all duration-500';
+    'px-5 py-2 rounded-xl bg-[#d4af37] text-black font-mono text-xs font-bold uppercase tracking-[0.18em] [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.65)] transition-all duration-200';
 
   return (
     <header
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${
+      className={`fixed top-0 inset-x-0 z-50 transition-all duration-200 ${
         scrolled
           ? 'bg-[#0d0d0f] border-b border-[#1c1c1e] [box-shadow:0_8px_30px_-12px_rgba(0,0,0,0.85)]'
           : 'bg-transparent border-b border-transparent'
@@ -50,7 +50,7 @@ export default function Header() {
           <button
             onClick={toggle}
             aria-label="Toggle language"
-            className="px-2.5 py-1.5 rounded-sm border border-[#1c1c1e] text-white/60 font-mono text-xs font-bold uppercase tracking-[0.18em] hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-500"
+            className="px-2.5 py-1.5 rounded-xl border border-[#1c1c1e] text-white/60 font-mono text-xs font-bold uppercase tracking-[0.18em] hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-200"
           >
             {t('lang_other')}
           </button>

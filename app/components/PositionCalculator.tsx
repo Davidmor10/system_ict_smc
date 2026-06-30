@@ -65,15 +65,15 @@ export default function PositionCalculator() {
   const actualLine  = (dollars: number, pct: number) => `${usd(dollars)} (${pct.toFixed(2)}%)`;
 
   const inputCls =
-    'w-full bg-[#1c1c1e] border border-[#2a2a2d] rounded-sm px-3 py-2.5 text-base font-bold font-mono text-white ' +
-    'tabular-nums tracking-wide outline-none transition-colors duration-300 focus:border-[#d4af37]/60 ' +
+    'w-full bg-[#1c1c1e] border border-[#2a2a2d] rounded-xl px-3 py-2.5 text-base font-bold font-mono text-white ' +
+    'tabular-nums tracking-wide outline-none transition-colors duration-200 focus:border-[#d4af37]/60 ' +
     'placeholder:text-[#52525b] placeholder:font-medium';
   const labelCls = `text-sm font-bold font-mono text-white/70 uppercase tracking-[0.18em] block mb-2 ${align}`;
 
   return (
     <section dir={rtl ? 'rtl' : 'ltr'} className="w-full">
       <div className="w-full">
-        <div className="grid lg:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-sm overflow-hidden">
+        <div className="grid lg:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-xl overflow-hidden">
 
           {/* ── Inputs ─────────────────────────────────────────────── */}
           <div className="bg-[#000000] p-6 flex flex-col gap-5">
@@ -86,7 +86,7 @@ export default function PositionCalculator() {
                   <button
                     key={k}
                     onClick={() => setAsset(k)}
-                    className={`py-2.5 rounded-sm text-sm font-bold font-mono tracking-[0.15em] uppercase transition-all duration-300 border ${
+                    className={`py-2.5 rounded-xl text-sm font-bold font-mono tracking-[0.15em] uppercase transition-all duration-200 border ${
                       asset === k
                         ? 'bg-white text-black border-white'
                         : 'bg-[#1c1c1e] text-white/60 border-[#2a2a2d] hover:text-white'
@@ -116,7 +116,7 @@ export default function PositionCalculator() {
                   <button
                     key={p}
                     onClick={() => setRisk(String(p))}
-                    className={`py-2 rounded-sm text-sm font-bold font-mono tabular-nums transition-all duration-300 border ${
+                    className={`py-2 rounded-xl text-sm font-bold font-mono tabular-nums transition-all duration-200 border ${
                       num(risk) === p
                         ? 'bg-white text-black border-white'
                         : 'bg-[#1c1c1e] text-white/60 border-[#2a2a2d] hover:text-white'
@@ -159,7 +159,7 @@ export default function PositionCalculator() {
 
             {/* Contract counts */}
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4">
+              <div className="bg-[#000000] border border-[#1c1c1e] rounded-xl p-4 transition-all duration-200 hover:scale-[1.01] hover:border-[#2a2a2d]">
                 <span className="text-xs font-bold font-mono text-white/60 uppercase tracking-[0.16em] block mb-2">
                   {t('calc_std')} · {spec.std}
                 </span>
@@ -171,7 +171,7 @@ export default function PositionCalculator() {
                   <span dir="ltr" className="text-[#d4af37] tabular-nums">{actualLine(actualStd, pctStd)}</span>
                 </span>
               </div>
-              <div className="bg-[#000000] border border-[#1c1c1e] rounded-sm p-4">
+              <div className="bg-[#000000] border border-[#1c1c1e] rounded-xl p-4 transition-all duration-200 hover:scale-[1.01] hover:border-[#2a2a2d]">
                 <span className="text-xs font-bold font-mono text-white/60 uppercase tracking-[0.16em] block mb-2">
                   {t('calc_micro')} · {spec.micro}
                 </span>

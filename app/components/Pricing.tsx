@@ -57,7 +57,7 @@ export function PricingCards({
             key={tier.id}
             onClick={onSelect ? () => onSelect(tier.id) : undefined}
             className={[
-              'lift relative rounded-xl p-7 flex flex-col bg-[#0d0d0f]',
+              'lift relative rounded-xl p-6 flex flex-col bg-[#0d0d0f]',
               tier.featured
                 ? 'border border-[#d4af37] [box-shadow:0_0_60px_-12px_rgba(212,175,55,0.45)]'
                 : 'border border-zinc-800',
@@ -88,7 +88,7 @@ export function PricingCards({
               {ctaHref ? (
                 <Link
                   href={ctaHref}
-                  className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-sm font-serif text-base font-bold transition-all duration-500 ${
+                  className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-serif text-base font-bold transition-all duration-200 ${
                     tier.featured
                       ? 'bg-[#d4af37] text-black [box-shadow:0_0_36px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_56px_rgba(212,175,55,0.65)]'
                       : 'border border-[#d4af37]/50 text-[#d4af37] hover:bg-[#d4af37]/10 hover:border-[#d4af37]'
@@ -98,7 +98,7 @@ export function PricingCards({
                 </Link>
               ) : (
                 <span
-                  className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-sm font-serif text-base font-bold transition-all duration-500 ${
+                  className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-serif text-base font-bold transition-all duration-200 ${
                     selected
                       ? 'bg-[#d4af37] text-black [box-shadow:0_0_36px_rgba(212,175,55,0.4)]'
                       : 'border border-zinc-800 text-white/70'

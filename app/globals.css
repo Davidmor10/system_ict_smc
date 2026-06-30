@@ -82,8 +82,8 @@ button:not(:disabled):active,
 /* ── Card lift — attach .lift class to any interactive card ─ */
 .lift {
   transition:
-    transform  300ms var(--ease-expo-out),
-    box-shadow 300ms var(--ease-expo-out);
+    transform  200ms var(--ease-expo-out),
+    box-shadow 200ms var(--ease-expo-out);
 }
 .lift:hover {
   transform: translateY(-3px);

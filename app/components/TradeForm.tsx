@@ -52,7 +52,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputCls = 'w-full bg-[#111] border border-[#222] rounded-sm px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/50 transition-colors tabular-nums';
+const inputCls = 'w-full bg-[#111] border border-[#222] rounded-xl px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/50 transition-colors tabular-nums';
 
 export default function TradeForm({
   onSave,
@@ -125,7 +125,7 @@ export default function TradeForm({
                 type="button"
                 key={s}
                 onClick={() => set('symbol', s)}
-                className={`flex-1 py-2 rounded-sm border font-mono text-sm font-bold transition-colors ${form.symbol === s ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/40 hover:text-white/70'}`}
+                className={`flex-1 py-2 rounded-xl border font-mono text-sm font-bold transition-colors ${form.symbol === s ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/40 hover:text-white/70'}`}
               >
                 {s}
               </button>
@@ -139,7 +139,7 @@ export default function TradeForm({
                 type="button"
                 key={d}
                 onClick={() => set('direction', d)}
-                className={`flex-1 py-2 rounded-sm border font-mono text-sm font-bold transition-colors ${form.direction === d ? (d === 'LONG' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]' : 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]') : 'border-[#222] text-white/40 hover:text-white/70'}`}
+                className={`flex-1 py-2 rounded-xl border font-mono text-sm font-bold transition-colors ${form.direction === d ? (d === 'LONG' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]' : 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]') : 'border-[#222] text-white/40 hover:text-white/70'}`}
               >
                 {d}
               </button>
@@ -163,7 +163,7 @@ export default function TradeForm({
 
       {/* Live RR display */}
       {rr !== null && (
-        <div className="flex items-center gap-4 px-4 py-3 rounded-sm border border-[#1c1c1e] bg-[#070708]">
+        <div className="flex items-center gap-4 px-4 py-3 rounded-xl border border-[#1c1c1e] bg-[#070708]">
           <div>
             <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Planned RR</span>
             <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>
@@ -193,7 +193,7 @@ export default function TradeForm({
                 type="button"
                 key={r}
                 onClick={() => set('result', r)}
-                className={`flex-1 py-1.5 rounded-sm border font-mono text-[10px] font-bold uppercase tracking-[0.10em] transition-colors ${
+                className={`flex-1 py-1.5 rounded-xl border font-mono text-[10px] font-bold uppercase tracking-[0.10em] transition-colors ${
                   form.result === r
                     ? r === 'WIN'  ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]'
                     : r === 'LOSS' ? 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]'
@@ -235,7 +235,7 @@ export default function TradeForm({
               type="button"
               key={m}
               onClick={() => set('mood', m)}
-              className={`flex-1 py-2 rounded-sm border text-lg transition-all ${form.mood === m ? 'border-[#d4af37]/50 bg-[#d4af37]/5 scale-110' : 'border-[#1c1c1e] opacity-40 hover:opacity-70'}`}
+              className={`flex-1 py-2 rounded-xl border text-lg transition-all ${form.mood === m ? 'border-[#d4af37]/50 bg-[#d4af37]/5 scale-110' : 'border-[#1c1c1e] opacity-40 hover:opacity-70'}`}
             >
               {MOOD_LABELS[i]}
             </button>
@@ -259,7 +259,7 @@ export default function TradeForm({
       <div className="flex gap-3 pt-1">
         <button
           type="submit"
-          className="flex-1 py-3 rounded-sm bg-[#d4af37] text-black font-mono text-sm font-bold uppercase tracking-[0.14em] hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
+          className="flex-1 py-3 rounded-xl bg-[#d4af37] text-black font-mono text-sm font-bold uppercase tracking-[0.14em] hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
         >
           Log Trade
         </button>
@@ -267,7 +267,7 @@ export default function TradeForm({
           <button
             type="button"
             onClick={onCancel}
-            className="px-6 py-3 rounded-sm border border-[#1c1c1e] text-white/40 font-mono text-sm uppercase tracking-[0.14em] hover:text-white/70 hover:border-[#333] transition-colors"
+            className="px-6 py-3 rounded-xl border border-[#1c1c1e] text-white/40 font-mono text-sm uppercase tracking-[0.14em] hover:text-white/70 hover:border-[#333] transition-colors"
           >
             Cancel
           </button>

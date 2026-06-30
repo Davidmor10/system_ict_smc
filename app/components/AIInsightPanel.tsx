@@ -40,7 +40,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   }, [closedCount]);
 
   return (
-    <div className="border border-[#1c1c1e] rounded-sm bg-[#0a0a0b] p-5 flex flex-col gap-3">
+    <div className="border border-[#1c1c1e] rounded-xl bg-[#0a0a0b] p-6 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.01] hover:border-[#2a2a2d]">
       <div className="flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">AI Insight</p>
         {(insight || error) && (

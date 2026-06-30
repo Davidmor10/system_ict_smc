@@ -12,7 +12,7 @@ export default function UpgradeBanner() {
       </div>
       <Link
         href="/checkout"
-        className="shrink-0 px-4 py-1.5 rounded-sm bg-[#d4af37] text-black font-serif text-sm font-bold [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.6)] transition-shadow duration-500"
+        className="shrink-0 px-4 py-1.5 rounded-xl bg-[#d4af37] text-black font-serif text-sm font-bold [box-shadow:0_0_24px_rgba(212,175,55,0.4)] hover:[box-shadow:0_0_40px_rgba(212,175,55,0.6)] transition-shadow duration-200"
       >
         שדרוג ל-PRO ←
       </Link>
