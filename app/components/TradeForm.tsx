@@ -1,27 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { TradeEntry, Symbol, Direction, TradeResult } from '../lib/journal';
+import { useState } from 'react';
+import type { TradeEntry, Symbol, Direction, TradeResult, Setup, IFVGConfirmation } from '../lib/journal';
 import { todayISO } from '../lib/journal';
 import { calcRR, calcPnL, calcRealizedR } from '../lib/calc/trade';
+import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
+import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 
 const SYMBOLS: Symbol[] = ['ES', 'NQ'];
-const SESSIONS = ['london', 'new_york', 'asia', 'overnight'];
-const MOODS = [1, 2, 3, 4, 5] as const;
-const MOOD_LABELS = ['😤', '😕', '😐', '🙂', '😊'];
+const SETUPS: Setup[] = ['REVERSAL', 'CONTINUATION'];
+const CONFIRMATIONS: IFVGConfirmation[] = ['IFVG_1M', 'IFVG_2M', 'IFVG_3M', 'IFVG_5M'];
+
+/* ── Every field below maps to a specific future insight. Nothing here is decorative:
+   symbol/direction/setup/result → win-rate-by-setup breakdowns
+   entry/stop/target            → RR distribution, planned-vs-realized edge
+   session (auto)               → win-rate-by-session (already surfaced in the AI coach)
+   bias alignment (auto)        → the Discipline Score on the dashboard hero
+   confirmation/model           → fractal-engine confluence performance (the core product thesis)
+   notes                        → fed into the AI's pattern + psychology analysis           ── */
 
 interface FormState {
   symbol: Symbol;
   direction: Direction;
+  setup: Setup;
   date: string;
   time: string;
   entry: string;
   stop: string;
   target: string;
   result: TradeResult;
+  confirmation: IFVGConfirmation;
   model: string;
-  session: string;
-  mood: number;
+  session: SessionKey | '';
   notes: string;
 }
 
@@ -30,15 +40,16 @@ function empty(): FormState {
   return {
     symbol: 'ES',
     direction: 'LONG',
+    setup: 'REVERSAL',
     date: todayISO(),
     time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
     entry: '',
     stop: '',
     target: '',
     result: 'OPEN',
+    confirmation: 'IFVG_2M',
     model: '',
-    session: 'new_york',
-    mood: 3,
+    session: getActiveSessionKey() ?? '',
     notes: '',
   };
 }
@@ -53,6 +64,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const inputCls = 'w-full bg-[#111] border border-[#222] rounded-xl px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/50 transition-colors tabular-nums';
+const toggleBtn = (active: boolean, activeCls: string) =>
+  `flex-1 py-2 rounded-xl border font-mono text-sm font-bold transition-colors ${active ? activeCls : 'border-[#222] text-white/40 hover:text-white/70'}`;
 
 export default function TradeForm({
   onSave,
@@ -62,6 +75,7 @@ export default function TradeForm({
   onCancel?: () => void;
 }) {
   const [form, setForm] = useState<FormState>(empty());
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -85,6 +99,11 @@ export default function TradeForm({
       : 0)
     : null;
 
+  // Auto-derived context — never asked, always computed.
+  const declaredBias = getTodaysDeclaredBias();
+  const alignment = computeBiasAlignment(declaredBias, form.direction);
+  const sessionLabel = SESS.find(s => s.key === form.session)?.en;
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.entry || !form.stop || !form.target) return;
@@ -99,13 +118,15 @@ export default function TradeForm({
       stop,
       target,
       result: form.result,
-      session: form.session,
-      bias: 'INDECISIVE',
+      session: form.session || 'NONE',
+      bias: declaredBias ?? 'INDECISIVE',
       model: form.model || 'Unspecified',
+      setup: form.setup,
+      confirmation: form.confirmation,
       notes: form.notes,
       tradeR: realizedR ?? undefined,
       pnlUsd: pnl ?? undefined,
-      biasAlignment: 'ALIGNED',
+      biasAlignment: alignment,
     };
     onSave(trade);
     setForm(empty());
@@ -116,17 +137,13 @@ export default function TradeForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5" dir="ltr">
 
-      {/* Row 1: Symbol + Direction */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* ── TRADE INFO: symbol / direction / setup — one click each ── */}
+      <div className="grid grid-cols-3 gap-3">
         <Field label="Symbol">
           <div className="flex gap-1.5">
             {SYMBOLS.map(s => (
-              <button
-                type="button"
-                key={s}
-                onClick={() => set('symbol', s)}
-                className={`flex-1 py-2 rounded-xl border font-mono text-sm font-bold transition-colors ${form.symbol === s ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/40 hover:text-white/70'}`}
-              >
+              <button type="button" key={s} onClick={() => set('symbol', s)}
+                className={toggleBtn(form.symbol === s, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
                 {s}
               </button>
             ))}
@@ -135,20 +152,26 @@ export default function TradeForm({
         <Field label="Direction">
           <div className="flex gap-1.5">
             {(['LONG', 'SHORT'] as Direction[]).map(d => (
-              <button
-                type="button"
-                key={d}
-                onClick={() => set('direction', d)}
-                className={`flex-1 py-2 rounded-xl border font-mono text-sm font-bold transition-colors ${form.direction === d ? (d === 'LONG' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]' : 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]') : 'border-[#222] text-white/40 hover:text-white/70'}`}
-              >
+              <button type="button" key={d} onClick={() => set('direction', d)}
+                className={toggleBtn(form.direction === d, d === 'LONG' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]' : 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]')}>
                 {d}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Setup">
+          <div className="flex gap-1.5">
+            {SETUPS.map(s => (
+              <button type="button" key={s} onClick={() => set('setup', s)}
+                className={toggleBtn(form.setup === s, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
+                {s === 'REVERSAL' ? 'Reversal' : 'Continuation'}
               </button>
             ))}
           </div>
         </Field>
       </div>
 
-      {/* Row 2: Entry / SL / TP with live RR */}
+      {/* ── EXECUTION: entry / SL / TP with live RR ── */}
       <div className="grid grid-cols-3 gap-3">
         <Field label="Entry">
           <input type="number" step="0.25" value={form.entry} onChange={e => set('entry', e.target.value)} placeholder="0.00" className={inputCls} required />
@@ -161,14 +184,11 @@ export default function TradeForm({
         </Field>
       </div>
 
-      {/* Live RR display */}
       {rr !== null && (
         <div className="flex items-center gap-4 px-4 py-3 rounded-xl border border-[#1c1c1e] bg-[#070708]">
           <div>
             <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Planned RR</span>
-            <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>
-              {rr >= 0 ? '' : ''}{rr.toFixed(2)}R
-            </span>
+            <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>{rr.toFixed(2)}R</span>
           </div>
           {pnl !== null && (
             <>
@@ -184,67 +204,50 @@ export default function TradeForm({
         </div>
       )}
 
-      {/* Row 3: Result + Setup */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Result">
-          <div className="flex gap-1">
-            {(['OPEN', 'WIN', 'LOSS', 'BE'] as TradeResult[]).map(r => (
-              <button
-                type="button"
-                key={r}
-                onClick={() => set('result', r)}
-                className={`flex-1 py-1.5 rounded-xl border font-mono text-[10px] font-bold uppercase tracking-[0.10em] transition-colors ${
-                  form.result === r
-                    ? r === 'WIN'  ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]'
-                    : r === 'LOSS' ? 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]'
-                    : r === 'BE'   ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]'
-                    :                'border-[#444] bg-[#1c1c1e] text-white/60'
-                    : 'border-[#222] text-white/30 hover:text-white/60'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </Field>
-        <Field label="Setup / Model">
-          <input type="text" value={form.model} onChange={e => set('model', e.target.value)} placeholder="e.g. Reversal at PDH" className={inputCls} />
-        </Field>
-      </div>
-
-      {/* Row 4: Session + Date + Time */}
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Session">
-          <select value={form.session} onChange={e => set('session', e.target.value)} className={inputCls + ' cursor-pointer'}>
-            {SESSIONS.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-          </select>
-        </Field>
-        <Field label="Date">
-          <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Time">
-          <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} />
-        </Field>
-      </div>
-
-      {/* Mood */}
-      <Field label="Mood">
-        <div className="flex gap-2">
-          {MOODS.map((m, i) => (
+      {/* ── Result ── */}
+      <Field label="Result">
+        <div className="flex gap-1">
+          {(['OPEN', 'WIN', 'LOSS', 'BE'] as TradeResult[]).map(r => (
             <button
               type="button"
-              key={m}
-              onClick={() => set('mood', m)}
-              className={`flex-1 py-2 rounded-xl border text-lg transition-all ${form.mood === m ? 'border-[#d4af37]/50 bg-[#d4af37]/5 scale-110' : 'border-[#1c1c1e] opacity-40 hover:opacity-70'}`}
+              key={r}
+              onClick={() => set('result', r)}
+              className={`flex-1 py-1.5 rounded-xl border font-mono text-[10px] font-bold uppercase tracking-[0.10em] transition-colors ${
+                form.result === r
+                  ? r === 'WIN'  ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]'
+                  : r === 'LOSS' ? 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]'
+                  : r === 'BE'   ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]'
+                  :                'border-[#444] bg-[#1c1c1e] text-white/60'
+                  : 'border-[#222] text-white/30 hover:text-white/60'
+              }`}
             >
-              {MOOD_LABELS[i]}
+              {r}
             </button>
           ))}
         </div>
       </Field>
 
-      {/* Notes */}
-      <Field label="Notes">
+      {/* ── AUTO CONTEXT — derived, not asked. Feeds the discipline score + session insights. ── */}
+      <div className="flex items-center gap-2 flex-wrap px-4 py-3 rounded-xl border border-[#1c1c1e] bg-[#070708]">
+        <span className="font-mono text-[10px] text-white/40">
+          Session: <b className="text-white/80">{sessionLabel ?? '—'}</b>
+        </span>
+        <span className="text-white/15">·</span>
+        <span className="font-mono text-[10px] text-white/40">
+          {declaredBias ? (
+            <>Today&apos;s bias: <b className="text-white/80">{declaredBias}</b>{' '}
+              {alignment === 'ALIGNED'
+                ? <span className="text-[#22c55e]">✓ aligned</span>
+                : <span className="text-[#d4af37]">⚠ counter-trend</span>}
+            </>
+          ) : (
+            <span className="text-white/25">No bias declared today — set one on the dashboard</span>
+          )}
+        </span>
+      </div>
+
+      {/* ── Notes — optional, but feeds the AI's pattern + psychology analysis ── */}
+      <Field label="Notes (optional)">
         <textarea
           value={form.notes}
           onChange={e => set('notes', e.target.value)}
@@ -255,11 +258,52 @@ export default function TradeForm({
         />
       </Field>
 
+      {/* ── Advanced — collapsed by default; confirmation timeframe, model label, manual overrides ── */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(v => !v)}
+        className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/30 hover:text-white/60 transition-colors"
+      >
+        {showAdvanced ? '▴ Hide advanced fields' : '▾ Show advanced fields'}
+      </button>
+
+      {showAdvanced && (
+        <div className="space-y-4 pt-1 border-t border-[#1c1c1e]">
+          <Field label="IFVG Confirmation">
+            <div className="flex gap-1.5">
+              {CONFIRMATIONS.map(c => (
+                <button type="button" key={c} onClick={() => set('confirmation', c)}
+                  className={toggleBtn(form.confirmation === c, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
+                  {c.replace('IFVG_', '')}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Model Label">
+            <input type="text" value={form.model} onChange={e => set('model', e.target.value)} placeholder="e.g. Reversal at PDH" className={inputCls} />
+          </Field>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Session override">
+              <select value={form.session} onChange={e => set('session', e.target.value as SessionKey)} className={inputCls + ' cursor-pointer'}>
+                <option value="">—</option>
+                {SESS.map(s => <option key={s.key} value={s.key}>{s.en}</option>)}
+              </select>
+            </Field>
+            <Field label="Date">
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Time">
+              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 pt-1">
         <button
           type="submit"
-          className="flex-1 py-3 rounded-xl bg-[#d4af37] text-black font-mono text-sm font-bold uppercase tracking-[0.14em] hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
+          className="flex-1 py-3 rounded-xl bg-[#d4af37] text-black font-mono text-sm font-bold uppercase tracking-[0.14em] hover:bg-[#e5c84a] transition-all duration-200 hover:scale-[1.01] [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
         >
           Log Trade
         </button>

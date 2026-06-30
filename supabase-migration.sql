@@ -91,7 +91,7 @@ create table if not exists trades (
 
   -- Context
   setup_id        uuid        references setups(id) on delete set null,
-  session         text,       -- 'london'|'new_york'|'asia'|'overnight'
+  session         text,       -- 'asia'|'london'|'nyam'|'nypm' (see app/lib/sessions.ts)
   followed_rules  boolean     not null default true,
   mood            smallint    check (mood between 1 and 5),
   notes           text        not null default '',

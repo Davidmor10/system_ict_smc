@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../hooks/useLanguage';
 import { loadTrades } from '../lib/journal';
+import { SESS, getActiveSessionIdx } from '../lib/sessions';
 import TypingDots from './TypingDots';
 import Tooltip from './Tooltip';
 import InsightText from './InsightText';
@@ -18,13 +19,6 @@ const SPEC = {
 } as const;
 type AssetKey = keyof typeof SPEC;
 const RISK_PRESETS = [0.25, 0.5, 1, 2] as const;
-
-const SESS = [
-  { key: 'asia',   he: 'אסיה',        en: 'ASIA',   start: 2,  end: 7  },
-  { key: 'london', he: 'לונדון',      en: 'LONDON', start: 9,  end: 12 },
-  { key: 'nyam',   he: 'ניו יורק AM', en: 'NY AM',  start: 16, end: 18 },
-  { key: 'nypm',   he: 'ניו יורק PM', en: 'NY PM',  start: 20, end: 23 },
-] as const;
 
 interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
 
@@ -129,15 +123,6 @@ type Lang = 'he' | 'en';
 const todayKey = () => new Date().toISOString().slice(0, 10);
 const num = (s: string) => { const n = parseFloat(s); return Number.isFinite(n) && n > 0 ? n : 0; };
 const money = (n: number) => (n >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
-
-function getIdtHour() {
-  const idtDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
-  return idtDate.getHours() + idtDate.getMinutes() / 60;
-}
-function getActiveSession() {
-  const hf = getIdtHour();
-  return SESS.findIndex(s => hf >= s.start && hf < s.end);
-}
 
 /* ══════════════════════════════════════════════════════════════════
    Component
@@ -292,7 +277,7 @@ export default function DashboardView() {
   }, [isEmpty, trades]);
 
   /* ── Derived values ──────────────────────────────────────────── */
-  const activeSessionIdx = getActiveSession();
+  const activeSessionIdx = getActiveSessionIdx();
   const now     = new Date();
   const idtDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
   const h       = idtDate.getHours();
