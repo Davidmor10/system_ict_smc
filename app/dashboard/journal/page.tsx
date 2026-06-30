@@ -132,10 +132,10 @@ export default function JournalPage() {
         {filtered.length === 0 ? (
           <EmptyState
             icon="◈"
-            title={en ? 'No trades logged yet' : 'עדיין לא תיעדת עסקאות'}
+            title={en ? 'Your journal is empty — and so is your edge, until you log one' : 'היומן שלך ריק — וכך גם היתרון שלך, עד שתתעד עסקה אחת'}
             description={en
-              ? 'Log your first trade so the system can start calculating your discipline score, win rate, and AI-driven insights.'
-              : 'הזן את העסקה הראשונה שלך כדי שהמערכת תוכל להתחיל לחשב את ציון המשמעת, אחוזי ההצלחה והתובנות של ה-AI שלך.'}
+              ? 'Every trade you log sharpens the picture: your discipline score, your win rate by session, the patterns the AI surfaces. None of it exists until the first entry. It takes under a minute.'
+              : 'כל עסקה שאתה מתעד מחדדת את התמונה: ציון המשמעת שלך, אחוזי ההצלחה לפי סשן, הדפוסים שה-AI מזהה. שום דבר מזה לא קיים לפני העסקה הראשונה. זה לוקח פחות מדקה.'}
             action={
               <button
                 onClick={() => setShowForm(true)}

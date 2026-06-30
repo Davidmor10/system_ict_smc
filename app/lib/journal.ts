@@ -54,6 +54,8 @@ export interface TradeEntry {
   tradeR?: number;
   /** Realized PnL in USD for 1 standard contract. */
   pnlUsd?: number;
+  /** Chart screenshots attached to this trade, as data URLs. */
+  screenshots?: string[];
 }
 
 // ── Trash / Soft-delete ──────────────────────────────────────────────────────
@@ -210,6 +212,7 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : alignment,
     tradeR: typeof r.tradeR === 'number' ? r.tradeR : tradeR,
     pnlUsd: typeof r.pnlUsd === 'number' ? r.pnlUsd : pnlUsd,
+    screenshots: Array.isArray(r.screenshots) ? r.screenshots.filter((s): s is string => typeof s === 'string') : undefined,
   };
 }
 
