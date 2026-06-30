@@ -50,6 +50,7 @@ const STR = {
     accBalance: 'הון בחשבון', accToday: 'P&L היום', accRisk: 'סיכון לעסקה',
     ctaNewTrade: 'תיעוד עסקה חדשה', ctaJournal: 'פתח יומן מסחר',
     statusReady: 'מוכן למסחר',
+    heroWelcome: 'ברוך הבא,', badgeAccountActive: 'חשבון פעיל', badgeDisciplineK: 'ציון משמעת', badgeDisciplineEmpty: 'אין עדיין נתונים',
     aiCoach: 'מאמן ה-AI', coachStatus: 'מבוסס על היומן שלך',
     coachFocus: 'לפי היומן שלך, חלון NY AM הניב את התוצאות הטובות ביותר. שווה לשקול לתת לו עדיפות — ההחלטה תמיד שלך.',
     coachDisc: 'התובנות מבוססות על היומן האישי שלך ואינן מהוות ייעוץ או המלצת מסחר.',
@@ -90,6 +91,7 @@ const STR = {
     accBalance: 'ACCOUNT BALANCE', accToday: "TODAY'S P&L", accRisk: 'RISK / TRADE',
     ctaNewTrade: 'Log New Trade', ctaJournal: 'Open Trade Journal',
     statusReady: 'READY TO TRADE',
+    heroWelcome: 'Welcome,', badgeAccountActive: 'Account Active', badgeDisciplineK: 'Discipline Score', badgeDisciplineEmpty: 'No data yet',
     aiCoach: 'AI COACH', coachStatus: 'Based on your journal',
     coachFocus: 'Based on your journal, the NY AM window has produced your best results. It may be worth prioritizing it — the decision is always yours.',
     coachDisc: 'Insights are based on your own journal and are not financial or trading advice.',
@@ -278,7 +280,6 @@ export default function DashboardView() {
   const h       = idtDate.getHours();
   const greetWord = h < 12 ? s.greetMorning : h < 17 ? s.greetAfternoon : s.greetEvening;
   const displayName = userName || (isRTL ? 'אורח' : 'Trader');
-  const greet   = greetWord + ' ' + displayName;
   const dateStr = now.toLocaleDateString(L === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
   /* ── Calculator ──────────────────────────────────────────────── */
@@ -369,6 +370,10 @@ export default function DashboardView() {
     { label: s.accToday,   value: money(statsToday.pnl),             color: statsToday.pnl >= 0 ? 'var(--bull)' : 'var(--bear)' },
     { label: s.accRisk,    value: '$' + Math.round(bal * rk / 100).toLocaleString('en-US') + ' · ' + rk + '%', color: 'var(--gold)' },
   ];
+  /* Discipline score — % of closed trades taken aligned with the declared daily bias. Real data only. */
+  const closedAllTrades = trades.filter(t => t.result !== 'OPEN');
+  const alignedTrades = closedAllTrades.filter(t => t.biasAlignment === 'ALIGNED');
+  const disciplineScore = closedAllTrades.length > 0 ? Math.round((alignedTrades.length / closedAllTrades.length) * 100) : null;
   const statusChips = [
     { k: s.stTradingK, v: s.stTradingV, c: 'var(--bull)' },
     { k: s.stRiskK,    v: s.stRiskV,    c: 'var(--bull)' },
@@ -421,14 +426,26 @@ export default function DashboardView() {
               <div className="dp-hero-grid">
                 <div>
                   <div className="dp-greeting-row">
-                    <span className="dp-greet-label">{greet}</span>
+                    <span className="dp-greet-label">{greetWord}</span>
                     <span className="dp-status-pill">
                       <span className="dp-pulse-dot" style={{ width: 6, height: 6 }} />
                       <span className="dp-status-pill-text">{s.statusReady}</span>
                     </span>
                   </div>
-                  <h1 className="dp-hero-date">{dateStr}</h1>
+                  <h1 className="dp-hero-date">{s.heroWelcome} {displayName}</h1>
+                  <div className="dp-hero-subdate">{dateStr}</div>
                   <p className="dp-hero-brief">{s.briefing}</p>
+                  <div className="dp-statusbar">
+                    <span className="dp-statusbar-badge">
+                      <span className="dp-pulse-dot" style={{ width: 6, height: 6, background: 'var(--bull)', boxShadow: '0 0 8px var(--bull)' }} />
+                      <b>{s.badgeAccountActive}</b>
+                    </span>
+                    <span className="dp-statusbar-sep" />
+                    <span className="dp-statusbar-badge">
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
+                      {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
+                    </span>
+                  </div>
                   <div className="dp-sessions">
                     {SESS.map((sess, i) => (
                       <div key={sess.key} className={`dp-session-chip${i === activeSessionIdx ? ' active' : ''}`}>
@@ -738,9 +755,21 @@ export default function DashboardView() {
           <div className="dp-reveal">
             <div className="dp-brief-hero-grid">
               <div>
-                <div className="dp-greet-label">{greet}</div>
-                <h1 className="dp-brief-date">{dateStr}</h1>
+                <div className="dp-greet-label">{greetWord}</div>
+                <h1 className="dp-brief-date">{s.heroWelcome} {displayName}</h1>
+                <div className="dp-hero-subdate">{dateStr}</div>
                 <p className="dp-brief-briefing">{s.briefing}</p>
+                <div className="dp-statusbar">
+                  <span className="dp-statusbar-badge">
+                    <span className="dp-pulse-dot" style={{ width: 6, height: 6, background: 'var(--bull)', boxShadow: '0 0 8px var(--bull)' }} />
+                    <b>{s.badgeAccountActive}</b>
+                  </span>
+                  <span className="dp-statusbar-sep" />
+                  <span className="dp-statusbar-badge">
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', boxShadow: '0 0 8px var(--gold)' }} />
+                    {s.badgeDisciplineK}: <b>{disciplineScore !== null ? disciplineScore + '%' : s.badgeDisciplineEmpty}</b>
+                  </span>
+                </div>
                 <div className="dp-sessions">
                   {SESS.map((sess, i) => (
                     <div key={sess.key} className={`dp-session-chip${i === activeSessionIdx ? ' active' : ''}`}>
