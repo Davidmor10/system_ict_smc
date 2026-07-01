@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { TradeEntry } from '../../../lib/journal';
 import { runFullAnalysis } from '../../../lib/analytics';
 import { fmtPF } from '../../../lib/ai/factsBlock';
-import { genAI, AI_MODEL } from '../../../lib/ai/client';
+import { generateInsightText } from '../../../lib/ai/client';
 
 export interface AiInsight {
   type: 'opportunity' | 'warning' | 'pattern';
@@ -113,12 +113,7 @@ Rules:
 - No fluff. No "I noticed that...". Start directly with the insight.
 - JSON only, no extra text.`;
 
-    const result = await genAI.models.generateContent({
-      model: AI_MODEL,
-      contents: prompt,
-    });
-
-    const raw = result.text ?? '[]';
+    const raw = await generateInsightText(prompt);
     let parsed: Array<{ type: string; text: string }> = [];
     try {
       const match = raw.match(/\[[\s\S]*\]/);

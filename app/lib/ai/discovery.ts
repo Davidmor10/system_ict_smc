@@ -1,7 +1,7 @@
 import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
 import { summarizeAnalysis } from './factsBlock';
-import { genAI, AI_MODEL } from './client';
+import { generateInsightText } from './client';
 
 export interface AiDiscovery {
   /** One sentence naming the discovery, must cite the specific number(s). */
@@ -60,12 +60,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const result = await genAI.models.generateContent({
-    model: AI_MODEL,
-    contents: prompt,
-  });
-
-  const raw = result.text ?? '{}';
+  const raw = await generateInsightText(prompt);
   let parsed: { title?: string; evidence?: string; action?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
