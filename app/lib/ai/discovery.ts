@@ -1,7 +1,7 @@
 import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
 import { summarizeAnalysis } from './factsBlock';
-import { anthropic, AI_MODEL } from './client';
+import { genAI, AI_MODEL } from './client';
 
 export interface AiDiscovery {
   /** One sentence naming the discovery, must cite the specific number(s). */
@@ -60,13 +60,12 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const message = await anthropic.messages.create({
+  const result = await genAI.models.generateContent({
     model: AI_MODEL,
-    max_tokens: 400,
-    messages: [{ role: 'user', content: prompt }],
+    contents: prompt,
   });
 
-  const raw = message.content[0].type === 'text' ? message.content[0].text : '{}';
+  const raw = result.text ?? '{}';
   let parsed: { title?: string; evidence?: string; action?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);

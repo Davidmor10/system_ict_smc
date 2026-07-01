@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { TradeEntry } from '../../../lib/journal';
 import { runFullAnalysis } from '../../../lib/analytics';
 import { fmtPF } from '../../../lib/ai/factsBlock';
-import { anthropic, AI_MODEL } from '../../../lib/ai/client';
+import { genAI, AI_MODEL } from '../../../lib/ai/client';
 
 export interface AiInsight {
   type: 'opportunity' | 'warning' | 'pattern';
@@ -113,13 +113,12 @@ Rules:
 - No fluff. No "I noticed that...". Start directly with the insight.
 - JSON only, no extra text.`;
 
-    const message = await anthropic.messages.create({
+    const result = await genAI.models.generateContent({
       model: AI_MODEL,
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
+      contents: prompt,
     });
 
-    const raw = message.content[0].type === 'text' ? message.content[0].text : '[]';
+    const raw = result.text ?? '[]';
     let parsed: Array<{ type: string; text: string }> = [];
     try {
       const match = raw.match(/\[[\s\S]*\]/);

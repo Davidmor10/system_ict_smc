@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from "@google/genai";
 
 /** Single shared client — every AI route in the app goes through this. */
-export const anthropic = new Anthropic();
+export const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-/** Fast, cheap model — every insight here is a phrasing task over numbers
-    that are already computed, not open-ended reasoning, so Haiku is enough. */
-export const AI_MODEL = 'claude-haiku-4-5-20251001';
+/** Free-tier Gemini model — every insight here is a phrasing task over numbers
+    that are already computed, not open-ended reasoning, so Flash is enough. */
+export const AI_MODEL = "gemini-2.0-flash";

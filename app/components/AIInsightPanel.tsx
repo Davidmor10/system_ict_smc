@@ -34,6 +34,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ trades, lang }),
       });
+      if (!res.ok) throw new Error(`Insights request failed: ${res.status}`);
       const data = await res.json();
       setInsights(Array.isArray(data.insights) ? data.insights : []);
       setUpdatedAt(new Date().toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
