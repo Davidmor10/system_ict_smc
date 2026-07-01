@@ -1,0 +1,74 @@
+import type { TradeEntry, Direction } from '../journal';
+import { INSTRUMENT_KEYS } from '../instruments';
+import { SESS } from '../sessions';
+import { computeGroupPerformance, normSession } from './metrics';
+import { hourOf } from './time';
+import { analyzeInstruments } from './instruments';
+import { analyzeSessions } from './sessions';
+import type { PatternCandidate } from './types';
+
+const DIRECTIONS: Direction[] = ['LONG', 'SHORT'];
+
+/** Combines dimensions (instrument×session, session×direction, hour×instrument)
+    plus each single-dimension standout, and ranks every candidate by
+    confidence tier first, then by how far it deviates from the trader's
+    overall win rate. This is the raw material for "today's discovery" — the
+    AI layer only ever phrases the #1 candidate, never invents its own. */
+export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
+  const overall = computeGroupPerformance(trades, 'ALL', 'All');
+  const baseline = overall.winRate;
+  const candidates: PatternCandidate[] = [];
+
+  const push = (kind: PatternCandidate['kind'], id: string, subject: Record<string, string | number>, subset: TradeEntry[], label: string) => {
+    if (subset.length < 3) return; // below this, "patterns" are just noise
+    const metric = computeGroupPerformance(subset, id, label);
+    candidates.push({ id, kind, subject, metric, baseline, delta: metric.winRate - baseline, confidence: metric.confidence });
+  };
+
+  // instrument × session
+  for (const sym of INSTRUMENT_KEYS) {
+    for (const s of SESS) {
+      const subset = trades.filter(t => t.symbol === sym && normSession(t.session) === s.key);
+      push('instrument+session', `${sym}_${s.key}`, { instrument: sym, session: s.key }, subset, `${sym} · ${s.en}`);
+    }
+  }
+
+  // session × direction
+  for (const s of SESS) {
+    for (const dir of DIRECTIONS) {
+      const subset = trades.filter(t => normSession(t.session) === s.key && t.direction === dir);
+      push('session+direction', `${s.key}_${dir}`, { session: s.key, direction: dir }, subset, `${dir} · ${s.en}`);
+    }
+  }
+
+  // hour × instrument
+  const hoursSeen = new Set<number>();
+  for (const t of trades) {
+    const h = hourOf(t);
+    if (h !== null) hoursSeen.add(h);
+  }
+  for (const h of hoursSeen) {
+    for (const sym of INSTRUMENT_KEYS) {
+      const subset = trades.filter(t => hourOf(t) === h && t.symbol === sym);
+      push('hour+instrument', `${sym}_h${h}`, { instrument: sym, hour: h }, subset, `${sym} @ ${String(h).padStart(2, '0')}:00`);
+    }
+  }
+
+  // single-dimension standouts, in case combos stay too sparse for a while
+  for (const g of analyzeInstruments(trades)) {
+    if (g.trades < 3) continue;
+    candidates.push({ id: `inst_${g.key}`, kind: 'instrument_best', subject: { instrument: g.key }, metric: g, baseline, delta: g.winRate - baseline, confidence: g.confidence });
+  }
+  for (const g of analyzeSessions(trades)) {
+    if (g.trades < 3) continue;
+    candidates.push({ id: `sess_${g.key}`, kind: 'session_vs_overall', subject: { session: g.key }, metric: g, baseline, delta: g.winRate - baseline, confidence: g.confidence });
+  }
+
+  const tierWeight = (c: PatternCandidate) => (c.confidence.level === 'high' ? 2 : c.confidence.level === 'medium' ? 1 : 0);
+
+  return candidates.sort((a, b) => {
+    const tierDiff = tierWeight(b) - tierWeight(a);
+    if (tierDiff !== 0) return tierDiff;
+    return Math.abs(b.delta) - Math.abs(a.delta);
+  });
+}

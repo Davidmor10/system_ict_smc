@@ -7,6 +7,7 @@ import { todayISO, computeStats } from '../lib/journal';
 import { calcRR, calcPnL, calcRealizedR, calcPoints, calcTicks } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
+import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
@@ -75,10 +76,49 @@ function empty(): FormState {
   };
 }
 
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+/** One line straight from the analytics engine — no network call, so it's on screen
+    instantly. Only fires once the trader has 3+ trades logged (any dates), matching
+    the same threshold every AI surface in the app uses. */
+function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string | null {
+  if (allTrades.length < 3) return null;
+
+  if (trade.session && trade.session !== 'NONE') {
+    const week = isoWeekKey(trade.dateISO);
+    const sessionThisWeek = allTrades.filter(t => normSession(t.session) === normSession(trade.session) && isoWeekKey(t.dateISO) === week);
+    const decided = sessionThisWeek.filter(t => t.result === 'WIN' || t.result === 'LOSS');
+    if (decided.length > 0) {
+      const wins = sessionThisWeek.filter(t => t.result === 'WIN').length;
+      const winRate = Math.round((wins / decided.length) * 100);
+      const label = SESS.find(s => s.key === trade.session)?.en ?? trade.session;
+      return `This was your ${ordinal(sessionThisWeek.length)} ${label} trade this week. Current ${label} win rate: ${winRate}%.`;
+    }
+  }
+
+  const strongInstruments = analyzeInstruments(allTrades).filter(g => g.confidence.level !== 'low');
+  if (strongInstruments.length > 0) {
+    const best = strongInstruments.reduce((a, b) => (b.winRate > a.winRate ? b : a));
+    return `${best.key} remains your strongest instrument by win rate (${best.winRate.toFixed(0)}%).`;
+  }
+
+  return null;
+}
+
 /** Short, immediate feedback lines shown right after a trade is logged — not a deep
     review, just proof the system did something with the entry. */
 function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
   const facts: string[] = [];
+  const allTrades = [trade, ...priorTrades];
 
   if (trade.session && trade.session !== 'NONE') {
     const label = SESS.find(s => s.key === trade.session)?.en ?? trade.session;
@@ -91,13 +131,16 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
   if (trade.result === 'OPEN') {
     facts.push('Marked Open — update the result once it closes.');
   } else {
-    const after = computeStats([trade, ...priorTrades]);
+    const after = computeStats(allTrades);
     facts.push(`Win rate updated to ${after.winRate.toFixed(0)}%.`);
   }
 
   facts.push(trade.biasAlignment === 'ALIGNED' ? 'Aligned with today’s bias.' : 'Logged as counter-trend for awareness.');
 
-  return facts.slice(0, 3);
+  const instant = buildInstantInsight(trade, allTrades);
+  if (instant) facts.push(instant);
+
+  return facts.slice(0, 5);
 }
 
 function Group({ label, tone = 'primary', children }: { label: string; tone?: 'primary' | 'muted'; children: React.ReactNode }) {

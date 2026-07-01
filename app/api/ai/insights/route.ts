@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
-
-const client = new Anthropic();
+import type { TradeEntry } from '../../../lib/journal';
+import { runFullAnalysis } from '../../../lib/analytics';
+import { fmtPF } from '../../../lib/ai/factsBlock';
+import { anthropic, AI_MODEL } from '../../../lib/ai/client';
 
 export interface AiInsight {
   type: 'opportunity' | 'warning' | 'pattern';
@@ -19,25 +20,20 @@ export async function POST(req: NextRequest) {
     }
 
     const closed = trades.filter((t: { result: string }) => t.result !== 'OPEN');
-    const wins   = closed.filter((t: { result: string }) => t.result === 'WIN').length;
-    const losses = closed.filter((t: { result: string }) => t.result === 'LOSS').length;
-    const bes    = closed.filter((t: { result: string }) => t.result === 'BE').length;
-    const winRate = closed.length > 0 ? Math.round((wins / closed.length) * 100) : 0;
-    const avgR = closed.length > 0
-      ? (closed.reduce((s: number, t: { tradeR?: number }) => s + (t.tradeR ?? 0), 0) / closed.length)
-      : 0;
-    const totalPnl = closed.reduce((sum: number, t: { pnlUsd?: number }) => sum + (t.pnlUsd ?? 0), 0);
 
-    // Session breakdown
-    const bySession: Record<string, { w: number; l: number }> = {};
-    for (const t of closed as Array<{ session?: string; result: string }>) {
-      const sess = t.session ?? 'unknown';
-      if (!bySession[sess]) bySession[sess] = { w: 0, l: 0 };
-      if (t.result === 'WIN') bySession[sess].w++;
-      if (t.result === 'LOSS') bySession[sess].l++;
-    }
-    const sessionStats = Object.entries(bySession)
-      .map(([s, { w, l }]) => `${s}: ${w}W/${l}L (${w + l > 0 ? Math.round(w / (w + l) * 100) : 0}%)`)
+    // Precomputed by the analytics engine — the prompt below only ever cites
+    // numbers that come from here, never math done ad hoc against raw trades.
+    const analysis = runFullAnalysis(trades as TradeEntry[]);
+    const { performance: perf, direction } = analysis;
+    const winRate = Math.round(perf.winRate);
+    const avgR = perf.avgRR;
+    const totalPnl = perf.totalPnl;
+
+    const sessionStats = analysis.sessions
+      .map(g => `${g.label}: ${g.wins}W/${g.losses}L (${g.winRate.toFixed(0)}%)`)
+      .join(', ');
+    const instrumentStats = analysis.instruments
+      .map(g => `${g.key}: ${g.wins}W/${g.losses}L (${g.winRate.toFixed(0)}%), PF ${fmtPF(g.profitFactor)}`)
       .join(', ');
 
     // Model breakdown
@@ -51,15 +47,6 @@ export async function POST(req: NextRequest) {
     const modelStats = Object.entries(byModel)
       .map(([m, { w, l }]) => `${m}: ${w}W/${l}L`)
       .join(', ');
-
-    // Direction breakdown
-    const byDir: Record<string, { w: number; l: number }> = {};
-    for (const t of closed as Array<{ direction?: string; result: string }>) {
-      const d = t.direction ?? 'unknown';
-      if (!byDir[d]) byDir[d] = { w: 0, l: 0 };
-      if (t.result === 'WIN') byDir[d].w++;
-      if (t.result === 'LOSS') byDir[d].l++;
-    }
 
     // Consecutive losses check
     let maxConsecLoss = 0, cur = 0;
@@ -81,21 +68,27 @@ export async function POST(req: NextRequest) {
       ? 'Respond entirely in Hebrew (עברית). Use natural, professional Hebrew for a serious trader.'
       : 'Respond in English.';
 
+    const totalWins = direction.long.wins + direction.short.wins;
+    const totalLosses = direction.long.losses + direction.short.losses;
+    const totalBE = perf.closedTrades - totalWins - totalLosses;
+
     const prompt = `You are an elite ICT trading coach with deep expertise in institutional order flow, liquidity concepts, and trader psychology. You are analyzing a trader's journal data.
 
 ${langInstruction}
 
 TRADER STATISTICS (${closed.length} closed trades):
-- Win/Loss/BE: ${wins}W / ${losses}L / ${bes}BE
+- Win/Loss/BE: ${totalWins}W / ${totalLosses}L / ${totalBE}BE
 - Win rate: ${winRate}%
-- Avg R: ${avgR.toFixed(2)}R
+- Avg RR: ${avgR.toFixed(2)}R
 - Net P&L: $${totalPnl.toFixed(0)}
+- Profit factor: ${fmtPF(perf.profitFactor)}
 - Max consecutive losses: ${maxConsecLoss}
 - Recent 5 results: ${recentResults}
 
 SESSION PERFORMANCE: ${sessionStats || 'insufficient data'}
+INSTRUMENT PERFORMANCE: ${instrumentStats || 'insufficient data'}
 MODEL/SETUP PERFORMANCE: ${modelStats || 'insufficient data'}
-DIRECTION BIAS: LONG: ${byDir['LONG'] ? `${byDir['LONG'].w}W/${byDir['LONG'].l}L` : '0W/0L'} | SHORT: ${byDir['SHORT'] ? `${byDir['SHORT'].w}W/${byDir['SHORT'].l}L` : '0W/0L'}
+DIRECTION BIAS: LONG: ${direction.long.wins}W/${direction.long.losses}L (${direction.long.winRate.toFixed(0)}%) | SHORT: ${direction.short.wins}W/${direction.short.losses}L (${direction.short.winRate.toFixed(0)}%)
 ${noteSamples ? `TRADER NOTES (recent):\n${noteSamples}` : ''}
 
 Provide EXACTLY 3 insights in this JSON format:
@@ -120,8 +113,8 @@ Rules:
 - No fluff. No "I noticed that...". Start directly with the insight.
 - JSON only, no extra text.`;
 
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const message = await anthropic.messages.create({
+      model: AI_MODEL,
       max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     });

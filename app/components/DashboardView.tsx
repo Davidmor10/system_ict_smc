@@ -22,6 +22,24 @@ const RISK_PRESETS = [0.25, 0.5, 1, 2] as const;
 
 interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
 
+type ConfidenceLevel = 'low' | 'medium' | 'high';
+/** Mirrors app/lib/ai/discovery.ts's AiDiscovery — kept as a local type (not
+    imported) so this client component never pulls in the server-only
+    Anthropic SDK module. */
+interface AiDiscovery {
+  title: string;
+  evidence: string;
+  action: string;
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+}
+
+const CONF_META: Record<ConfidenceLevel, { fg: string; bg: string; bd: string; icon: string }> = {
+  high:   { fg: 'var(--bull)', bg: 'rgba(111,165,128,.1)',  bd: 'rgba(111,165,128,.32)', icon: '✓' },
+  medium: { fg: 'var(--gold)', bg: 'var(--gold-08)',        bd: 'var(--gold-20)',        icon: '~' },
+  low:    { fg: 'var(--w55)',  bg: 'rgba(255,255,255,.04)', bd: 'rgba(255,255,255,.08)', icon: '!' },
+};
+
 const COACH_META = [
   { fg: 'var(--bull)', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)', icon: '▲' },
   { fg: 'var(--gold)', bg: 'var(--gold-08)',        bd: 'var(--gold-20)',         icon: '◈' },
@@ -156,6 +174,11 @@ export default function DashboardView() {
   const [aiInsights, setAiInsights] = useState<AiInsight[]>([]);
   const [aiLoading,  setAiLoading]  = useState(false);
   const [aiUpdatedAt, setAiUpdatedAt] = useState<string | null>(null);
+  const [discovery, setDiscovery] = useState<AiDiscovery | null>(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryUpdatedAt, setDiscoveryUpdatedAt] = useState<string | null>(null);
+  const [discoveryHistory, setDiscoveryHistory] = useState<{ date: string; discovery: AiDiscovery }[]>([]);
+  const [showPrevDiscoveries, setShowPrevDiscoveries] = useState(false);
   const isEmpty = trades.length === 0;
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -210,6 +233,17 @@ export default function DashboardView() {
       const cachedAi = localStorage.getItem('onyx_ai_' + todayKey());
       if (cachedAi) { try { setAiInsights(JSON.parse(cachedAi)); } catch {} }
 
+      const cachedDiscovery = localStorage.getItem('onyx_ai_discovery_' + todayKey());
+      if (cachedDiscovery) {
+        try {
+          setDiscovery(JSON.parse(cachedDiscovery));
+          const stamp = localStorage.getItem('onyx_ai_discovery_' + todayKey() + '_time');
+          if (stamp) setDiscoveryUpdatedAt(stamp);
+        } catch {}
+      }
+      const historyStr = localStorage.getItem('onyx_ai_discovery_history');
+      if (historyStr) { try { setDiscoveryHistory(JSON.parse(historyStr)); } catch {} }
+
       const t = loadTrades();
       setTrades(t);
     } catch {}
@@ -249,6 +283,45 @@ export default function DashboardView() {
       })
       .catch(() => {})
       .finally(() => setAiLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades]);
+
+  /* ── Fetch today's single strongest AI discovery for the hero block ── */
+  useEffect(() => {
+    if (trades.length < 3) { setDiscovery(null); return; }
+    const cacheKey = 'onyx_ai_discovery_' + todayKey();
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        setDiscovery(JSON.parse(cached));
+        const cachedTime = localStorage.getItem(cacheKey + '_time');
+        if (cachedTime) setDiscoveryUpdatedAt(cachedTime);
+        return;
+      } catch {}
+    }
+    setDiscoveryLoading(true);
+    fetch('/api/ai/discovery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trades, lang: L }),
+    })
+      .then(r => r.json())
+      .then(({ discovery: d }: { discovery: AiDiscovery | null }) => {
+        if (!d) return;
+        setDiscovery(d);
+        const stamp = new Date().toLocaleTimeString(L === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+        setDiscoveryUpdatedAt(stamp);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(d));
+          localStorage.setItem(cacheKey + '_time', stamp);
+          const withoutToday = discoveryHistory.filter(h => h.date !== todayKey());
+          const updated = [{ date: todayKey(), discovery: d }, ...withoutToday].slice(0, 14);
+          setDiscoveryHistory(updated);
+          localStorage.setItem('onyx_ai_discovery_history', JSON.stringify(updated));
+        } catch {}
+      })
+      .catch(() => {})
+      .finally(() => setDiscoveryLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades]);
 
@@ -508,7 +581,11 @@ export default function DashboardView() {
                         </span>
                       </div>
                     </div>
-                    <button className="dp-ghost-btn">{s.aiAll} {isRTL ? '←' : '→'}</button>
+                    {!isEmpty && (
+                      <button className="dp-ghost-btn" onClick={() => setShowPrevDiscoveries(v => !v)}>
+                        {isRTL ? 'תובנות קודמות' : 'View Previous Insights'} {isRTL ? '←' : '→'}
+                      </button>
+                    )}
                   </div>
                   <div className="dp-coach-body">
                     {isEmpty ? (
@@ -534,56 +611,88 @@ export default function DashboardView() {
                         </div>
                       </>
                     ) : (
-                      /* ── Has trades: real AI insights ── */
+                      /* ── Has trades: today's single strongest discovery ── */
                       <>
                         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                          <div className="dp-coach-focus-label">{s.cFocusK}</div>
-                          {aiLoading
+                          <div className="dp-coach-focus-label">{isRTL ? "הגילוי של היום" : "TODAY'S DISCOVERY"}</div>
+                          {discoveryLoading
                             ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                                 <TypingDots />
                                 <span className="dp-coach-focus-text" style={{ color: 'var(--w30)', margin: 0 }}>{isRTL ? 'מנתח את היומן שלך...' : 'Analyzing your journal...'}</span>
                               </div>
-                            : aiInsights.length > 0
-                              ? <InsightText text={aiInsights[0].text} className="dp-coach-focus-text" />
-                              : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>{isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis'}</p>
+                            : discovery
+                              ? <InsightText text={discovery.title} className="dp-coach-focus-text" />
+                              : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>
+                                  {trades.length < 3
+                                    ? (isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis')
+                                    : (isRTL ? "הגילוי של היום עדיין לא זמין — נסה שוב עוד רגע" : "Today's discovery isn't ready yet — check back shortly")}
+                                </p>
                           }
                         </div>
-                        {/* Right column — insights 1 & 2 only (insight 0 shown as main focus above) */}
+                        {/* Right column — Evidence, Confidence, Action */}
                         <div className="dp-coach-insights">
-                          {aiLoading
-                            ? ([s.cWarnK, s.cPatK] as const).map((label, i) => {
-                                const m = COACH_META[i + 1];
-                                return (
-                                  <div key={i} className="dp-coach-item">
-                                    <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w30)' }}>{m.icon}</span>
-                                    <div>
-                                      <div className="dp-coach-item-k" style={{ color: 'var(--w30)' }}>{label}</div>
-                                      <p className="dp-coach-item-text" style={{ color: 'var(--w30)' }}>...</p>
-                                    </div>
+                          {discoveryLoading
+                            ? ([isRTL ? 'ראיות' : 'EVIDENCE', isRTL ? 'רמת ביטחון' : 'CONFIDENCE', isRTL ? 'פעולה' : 'ACTION'] as const).map((label, i) => (
+                                <div key={i} className="dp-coach-item">
+                                  <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w30)' }}>◈</span>
+                                  <div>
+                                    <div className="dp-coach-item-k" style={{ color: 'var(--w30)' }}>{label}</div>
+                                    <p className="dp-coach-item-text" style={{ color: 'var(--w30)' }}>...</p>
                                   </div>
-                                );
-                              })
-                            : aiInsights.slice(1).map((insight, i) => {
-                                const m = COACH_META[i + 1] ?? COACH_META[2];
+                                </div>
+                              ))
+                            : discovery && (() => {
+                                const cm = CONF_META[discovery.confidenceLevel];
+                                const confLabel = { high: { he: 'גבוהה', en: 'High' }, medium: { he: 'בינונית', en: 'Medium' }, low: { he: 'נמוכה', en: 'Low' } }[discovery.confidenceLevel];
                                 return (
-                                  <div key={i} className="dp-coach-item">
-                                    <span className="dp-coach-item-icon" style={{ background: m.bg, border: `1px solid ${m.bd}`, color: m.fg }}>{m.icon}</span>
-                                    <div>
-                                      <div className="dp-coach-item-k" style={{ color: m.fg }}>{L === 'he' ? insight.tag_he : insight.tag_en}</div>
-                                      <InsightText text={insight.text} className="dp-coach-item-text" />
+                                  <>
+                                    <div className="dp-coach-item">
+                                      <span className="dp-coach-item-icon" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', color: 'var(--w55)' }}>◈</span>
+                                      <div>
+                                        <div className="dp-coach-item-k" style={{ color: 'var(--w55)' }}>{isRTL ? 'ראיות' : 'EVIDENCE'}</div>
+                                        <InsightText text={discovery.evidence} className="dp-coach-item-text" />
+                                      </div>
                                     </div>
-                                  </div>
+                                    <div className="dp-coach-item">
+                                      <span className="dp-coach-item-icon" style={{ background: cm.bg, border: `1px solid ${cm.bd}`, color: cm.fg }}>{cm.icon}</span>
+                                      <div>
+                                        <div className="dp-coach-item-k" style={{ color: cm.fg }}>{isRTL ? 'רמת ביטחון' : 'CONFIDENCE'}</div>
+                                        <p className="dp-coach-item-text">{isRTL ? confLabel.he : confLabel.en} · {discovery.sampleSize} {isRTL ? 'עסקאות' : 'trades'}</p>
+                                      </div>
+                                    </div>
+                                    <div className="dp-coach-item">
+                                      <span className="dp-coach-item-icon" style={{ background: 'var(--gold-08)', border: '1px solid var(--gold-20)', color: 'var(--gold)' }}>→</span>
+                                      <div>
+                                        <div className="dp-coach-item-k" style={{ color: 'var(--gold)' }}>{isRTL ? 'פעולה' : 'ACTION'}</div>
+                                        <InsightText text={discovery.action} className="dp-coach-item-text" />
+                                      </div>
+                                    </div>
+                                  </>
                                 );
-                              })
+                              })()
                           }
                         </div>
                       </>
                     )}
                   </div>
+                  {showPrevDiscoveries && !isEmpty && (
+                    <div style={{ marginTop: 4, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,.05)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {discoveryHistory.length === 0 ? (
+                        <p style={{ fontFamily: 'var(--ff-mono)', fontSize: 11, color: 'var(--w30)' }}>{isRTL ? 'אין עדיין תובנות קודמות' : 'No previous insights yet'}</p>
+                      ) : (
+                        discoveryHistory.map(h => (
+                          <div key={h.date} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                            <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, color: 'var(--w30)', whiteSpace: 'nowrap' }} dir="ltr">{h.date}</span>
+                            <InsightText text={h.discovery.title} className="dp-coach-item-text" />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                   <div className="dp-coach-disc" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                     <span>{s.coachDisc}</span>
-                    {aiUpdatedAt && !isEmpty && (
-                      <span style={{ color: 'var(--w30)', whiteSpace: 'nowrap' }} dir="ltr">{isRTL ? 'עדכון אחרון' : 'Last updated'}: {aiUpdatedAt}</span>
+                    {discoveryUpdatedAt && !isEmpty && (
+                      <span style={{ color: 'var(--w30)', whiteSpace: 'nowrap' }} dir="ltr">{isRTL ? 'עדכון אחרון' : 'Last updated'}: {discoveryUpdatedAt}</span>
                     )}
                   </div>
                 </div>
