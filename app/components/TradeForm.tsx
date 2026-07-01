@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import type { TradeEntry, Direction, TradeResult, IFVGConfirmation } from '../lib/journal';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { TradeEntry, Direction, TradeResult } from '../lib/journal';
 import { todayISO } from '../lib/journal';
 import { calcRR, calcPnL, calcRealizedR, calcPoints, calcTicks } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
@@ -9,16 +10,33 @@ import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 
-const CONFIRMATIONS: IFVGConfirmation[] = ['IFVG_1M', 'IFVG_2M', 'IFVG_3M', 'IFVG_5M'];
+const PLAYBOOK_STORAGE_KEY = 'onyx_playbook';
+/** IFVG confirmation timeframe is no longer surfaced to the trader — kept as a fixed default so
+    older analytics/exports that read TradeEntry.confirmation keep working. */
+const DEFAULT_CONFIRMATION = 'IFVG_2M' as const;
+
+interface PlaybookSetup { id: string; name: string; }
+
+function loadPlaybookSetups(): PlaybookSetup[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s): s is PlaybookSetup => !!s?.name) : [];
+  } catch {
+    return [];
+  }
+}
 
 /* ── Every field maps to a specific future insight:
    instrument/contracts/direction/result → win-rate + gross-PnL breakdowns, instrument-aware
    entry/stop/target                    → RR distribution, planned-vs-realized edge, points/ticks
    session                              → win-rate-by-session (drives the AI coach)
    bias alignment (auto)                → the Discipline Score on the dashboard hero
-   confirmation/model                   → fractal-engine confluence performance (advanced — power users)
+   model                                → picked from the Playbook; drives per-model performance analytics
    screenshots/notes                    → fed into the AI's pattern + psychology analysis
-   Setup lives in the Playbook now, not on every trade — keeping the journal fast.
+   Setup checklist lives in the Playbook now, not on every trade — keeping the journal fast.
    PnL is never typed in by hand — it's always derived from instrument spec × contracts. ── */
 
 interface FormState {
@@ -31,7 +49,6 @@ interface FormState {
   stop: string;
   target: string;
   result: TradeResult;
-  confirmation: IFVGConfirmation;
   model: string;
   session: SessionKey | '';
   notes: string;
@@ -50,7 +67,6 @@ function empty(): FormState {
     stop: '',
     target: '',
     result: 'OPEN',
-    confirmation: 'IFVG_2M',
     model: '',
     session: getActiveSessionKey() ?? '',
     notes: '',
@@ -92,6 +108,11 @@ export default function TradeForm({
   const [form, setForm] = useState<FormState>(empty());
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
+
+  useEffect(() => {
+    setPlaybookSetups(loadPlaybookSetups());
+  }, []);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -144,7 +165,7 @@ export default function TradeForm({
       session: form.session || 'NONE',
       bias: declaredBias ?? 'INDECISIVE',
       model: form.model || 'Unspecified',
-      confirmation: form.confirmation,
+      confirmation: DEFAULT_CONFIRMATION,
       notes: form.notes,
       screenshots: form.screenshots.length ? form.screenshots : undefined,
       tradeR: realizedR ?? undefined,
@@ -165,6 +186,18 @@ export default function TradeForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-7" dir="ltr">
+
+      {/* ── WHEN — always visible; every trade needs a timestamp ── */}
+      <Group label="When">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
+          </Field>
+          <Field label="Time">
+            <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
+          </Field>
+        </div>
+      </Group>
 
       {/* ── TRADE INFO ── */}
       <Group label="Trade">
@@ -302,7 +335,7 @@ export default function TradeForm({
         />
       </Group>
 
-      {/* ── Advanced — collapsed by default; confirmation timeframe, model label, manual date/time ── */}
+      {/* ── Advanced — collapsed by default; model tag, picked from the Playbook ── */}
       <button
         type="button"
         onClick={() => setShowAdvanced(v => !v)}
@@ -313,27 +346,24 @@ export default function TradeForm({
 
       {showAdvanced && (
         <div className="space-y-5 pt-1 border-t border-[#1c1c1e]">
-          <Field label="IFVG Confirmation">
-            <div className="flex gap-1.5">
-              {CONFIRMATIONS.map(c => (
-                <button type="button" key={c} onClick={() => set('confirmation', c)}
-                  className={toggleBtn(form.confirmation === c, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
-                  {c.replace('IFVG_', '')}
-                </button>
-              ))}
-            </div>
+          <Field label="Model">
+            {playbookSetups.length > 0 ? (
+              <select value={form.model} onChange={e => set('model', e.target.value)} className={inputCls}>
+                <option value="">Unspecified</option>
+                {playbookSetups.map(s => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            ) : (
+              <p className="font-mono text-xs text-white/30">
+                No setups in your Playbook yet —{' '}
+                <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
+                  define one
+                </Link>{' '}
+                to tag trades by model.
+              </p>
+            )}
           </Field>
-          <Field label="Model Label">
-            <input type="text" value={form.model} onChange={e => set('model', e.target.value)} placeholder="e.g. Reversal at PDH" className={inputCls} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Date">
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Time">
-              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} />
-            </Field>
-          </div>
         </div>
       )}
 
