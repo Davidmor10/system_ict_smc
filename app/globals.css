@@ -61,6 +61,14 @@ body {
   font-family: var(--font-geist-sans), 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* ── Bold everywhere — every letter in the system, no exceptions ── */
+* {
+  font-weight: 700 !important;
+}
+strong, b, .font-serif {
+  font-weight: 800 !important;
+}
+
 /* ── Universal button/link feel ──────────────────────────── */
 button:not(:disabled),
 a[href],

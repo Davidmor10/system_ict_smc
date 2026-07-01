@@ -5,20 +5,19 @@ import { usePathname } from 'next/navigation';
 import { useMarketingLang } from './LangProvider';
 
 const NAV_LINKS = [
-  { he: 'מנוע הפרקטל', en: 'Fractal Engine', href: '/fractal-engine' },
-  { he: "פיצ'רים",     en: 'Features',       href: '/features' },
-  { he: 'ביצועים',     en: 'Performance',    href: '/performance' },
-  { he: 'מנוי',        en: 'Pricing',        href: '/pricing' },
+  { he: 'מנוע הפרקטל', href: '/fractal-engine' },
+  { he: "פיצ'רים",     href: '/features' },
+  { he: 'ביצועים',     href: '/performance' },
+  { he: 'מנוי',        href: '/pricing' },
 ] as const;
 
 export default function MarketingNav() {
-  const { lang, setLang } = useMarketingLang();
+  useMarketingLang();
   const pathname = usePathname();
-  const rtl = lang === 'he';
 
   return (
     <nav
-      dir={rtl ? 'rtl' : 'ltr'}
+      dir="rtl"
       className="sticky top-0 z-50 border-b border-[var(--border)]"
       style={{
         background: 'rgba(5,5,5,.82)',
@@ -55,7 +54,7 @@ export default function MarketingNav() {
               href={link.href}
               className={`nav-link${pathname === link.href ? ' active' : ''}`}
             >
-              {lang === 'he' ? link.he : link.en}
+              {link.he}
             </Link>
           ))}
         </div>
@@ -63,33 +62,13 @@ export default function MarketingNav() {
         {/* ── Controls ─────────────────────────────────────────── */}
         <div className="flex items-center gap-[10px] shrink-0 max-[900px]:basis-full max-[900px]:justify-center max-[900px]:flex-wrap">
 
-          {/* Language toggle pill */}
-          <div
-            className="flex rounded-full overflow-hidden border border-[var(--border2)]"
-            style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600 }}
-          >
-            {(['he', 'en'] as const).map(l => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                className="px-[15px] max-[900px]:py-[7px] py-1 uppercase tracking-[.12em] transition-colors duration-200"
-                style={{
-                  background: lang === l ? 'var(--gold)' : 'transparent',
-                  color:      lang === l ? '#000'        : 'rgba(255,255,255,.55)',
-                }}
-              >
-                {l.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
           {/* Sign in — visible on all screen sizes */}
           <Link
             href="/sign-in"
             className="btn-ghost"
             style={{ padding: '8px 14px' } as React.CSSProperties}
           >
-            {lang === 'he' ? 'התחברות' : 'Sign In'}
+            התחברות
           </Link>
 
           {/* Subscribe CTA */}
@@ -97,7 +76,7 @@ export default function MarketingNav() {
             href="/pricing"
             className="btn-gold max-[900px]:px-5 max-[900px]:py-[9px]"
           >
-            {lang === 'he' ? 'לרכישת מנוי' : 'Subscribe'}
+            לרכישת מנוי
           </Link>
         </div>
       </div>

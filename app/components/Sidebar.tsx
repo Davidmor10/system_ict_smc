@@ -17,7 +17,7 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lang, toggle, t } = useLanguage();
+  const { lang, t } = useLanguage();
   const rtl = lang === 'he';
 
   return (
@@ -81,15 +81,6 @@ export default function Sidebar() {
             {t('sys_live')}
           </span>
         </div>
-        <button
-          onClick={toggle}
-          aria-label="Toggle language"
-          className="w-full flex items-center justify-between px-3 py-2 border border-[#1c1c1e] rounded-xl text-xs font-bold font-mono tracking-[0.25em] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all duration-200 ease-in-out group"
-        >
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
-          <span>{t('lang_other')}</span>
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
-        </button>
       </div>
     </aside>
   );
