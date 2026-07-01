@@ -44,13 +44,25 @@ export default function ScreenshotUpload({
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={e => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
-          className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 cursor-pointer transition-all duration-200 ${
-            dragOver ? 'border-[#d4af37] bg-[#d4af37]/[0.06] scale-[1.005]' : 'border-[#2a2a2d] hover:border-[#3a3a3d] hover:bg-white/[0.02]'
+          className={`group flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed px-6 py-11 cursor-pointer transition-all duration-200 ${
+            dragOver ? 'border-[#d4af37]/70 bg-[#d4af37]/[0.05] scale-[1.006]' : 'border-white/10 hover:border-[#d4af37]/30 hover:bg-white/[0.015]'
           }`}
         >
-          <span className="text-xl text-[#d4af37]/50">⤓</span>
-          <span className="font-mono text-xs text-white/50 text-center">
-            Drag a chart screenshot here, or <span className="text-[#d4af37]/70">click to browse</span>
+          <span
+            className={`flex items-center justify-center w-11 h-11 rounded-full border transition-all duration-200 ${
+              dragOver ? 'border-[#d4af37]/50 bg-[#d4af37]/10' : 'border-white/10 bg-white/[0.02] group-hover:border-[#d4af37]/25'
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className={dragOver ? 'text-[#d4af37]' : 'text-white/35 group-hover:text-[#d4af37]/60'} style={{ transition: 'color 200ms var(--ease-smooth)' }}>
+              <path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M12 15V4M12 4 8 8M12 4l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="text-[13px] text-white/60 text-center">
+            {dragOver ? 'Drop to attach' : 'Drag a chart screenshot here'}
+          </span>
+          <span className="font-mono text-[10px] text-white/25 text-center max-w-[280px] leading-relaxed">
+            {dragOver ? '' : <>or <span className="text-[#d4af37]/60">click to browse</span> — evidence makes every trade easier to review</>}
           </span>
           <input
             ref={inputRef}
@@ -64,11 +76,11 @@ export default function ScreenshotUpload({
       )}
 
       {images.length > 0 && (
-        <div className="flex gap-2 mt-3 flex-wrap">
+        <div className="flex gap-2.5 mt-3 flex-wrap">
           {images.map((src, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <div key={i} className="relative group">
-              <img src={src} alt={`Screenshot ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-[#1c1c1e]" />
+            <div key={i} className="relative group onyx-pop-in">
+              <img src={src} alt={`Screenshot ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-white/[0.06]" />
               <button
                 type="button"
                 onClick={() => removeAt(i)}

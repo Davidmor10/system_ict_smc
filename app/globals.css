@@ -123,6 +123,20 @@ button:not(:disabled):active,
 }
 .laser-run { animation: laser-sweep 1.9s cubic-bezier(0.45, 0, 0.2, 1) 0.2s both; }
 
+/* ── Pop-in — soft entrance for step transitions (save flow, panels) ── */
+@keyframes onyx-pop-in {
+  0%   { opacity: 0; transform: translateY(5px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.onyx-pop-in { animation: onyx-pop-in 190ms var(--ease-expo-out) both; }
+
+/* ── Reveal — soft entrance for expanding panels (advanced fields) ── */
+@keyframes onyx-reveal {
+  0%   { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.onyx-reveal { animation: onyx-reveal 160ms var(--ease-expo-out) both; }
+
 /* ── Scroll-strip dot — glides down the track and loops ──── */
 @keyframes scrollDot {
   0%   { transform: translateY(0);    opacity: 0.3; }

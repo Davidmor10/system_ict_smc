@@ -13,7 +13,7 @@ function TradeRow({ trade, onDelete }: { trade: TradeEntry; onDelete: (id: numbe
   const win  = trade.result === 'WIN';
   const loss = trade.result === 'LOSS';
   return (
-    <div className="flex items-center justify-between py-3 px-4 border-b border-[#111] last:border-0 group hover:bg-white/[0.015] transition-colors">
+    <div className="flex items-center justify-between py-3 px-4 border-b border-white/[0.03] last:border-0 group hover:bg-white/[0.015] transition-colors">
       <div className="flex items-center gap-3 min-w-0">
         <span className={`w-2 h-2 rounded-full shrink-0 ${win ? 'bg-[#22c55e]' : loss ? 'bg-[#ef4444]' : trade.result === 'BE' ? 'bg-[#d4af37]' : 'bg-white/20'}`} />
         <div className="min-w-0">
@@ -62,10 +62,11 @@ export default function JournalPage() {
   useEffect(() => { setTrades(loadTrades()); }, []);
 
   function handleSave(trade: TradeEntry) {
+    // Persist immediately — TradeForm keeps its own post-save summary open and
+    // decides when to actually close (onDone) or reset for another entry.
     const updated = [trade, ...trades];
     saveTrades(updated);
     setTrades(updated);
-    setShowForm(false);
   }
 
   function handleDelete(id: number) {
@@ -99,8 +100,13 @@ export default function JournalPage() {
 
         {/* Trade Form */}
         {showForm && (
-          <div className="border border-[#d4af37]/20 rounded-xl bg-[#0a0a0b] p-6">
-            <TradeForm onSave={handleSave} onCancel={() => setShowForm(false)} />
+          <div className="rounded-2xl bg-[#0a0a0b] p-6 sm:p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.7)]">
+            <TradeForm
+              trades={trades}
+              onSave={handleSave}
+              onCancel={() => setShowForm(false)}
+              onDone={() => setShowForm(false)}
+            />
           </div>
         )}
 
@@ -160,7 +166,7 @@ export default function JournalPage() {
                     {dayPnl >= 0 ? '+' : ''}${Math.abs(dayPnl).toFixed(0)}
                   </span>
                 </div>
-                <div className="border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+                <div className="rounded-xl bg-[#0a0a0b] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
                   {dayTrades.map(t => <TradeRow key={t.id} trade={t} onDelete={handleDelete} />)}
                 </div>
               </div>
