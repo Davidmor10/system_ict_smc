@@ -7,6 +7,7 @@ export const DICT = {
   // ── Sidebar ──────────────────────────────────────────────────────
   nav_workspace:        { en: 'Dashboard',              he: 'לוח בקרה'                       },
   nav_analytics:        { en: 'Analytics',              he: 'ניתוח'                          },
+  nav_ai_analytics:     { en: 'AI Analytics',           he: 'אנליטיקת AI'                    },
   nav_journal:          { en: 'Journal',                he: 'יומן'                           },
   nav_playbook:         { en: 'Playbook',               he: 'פלייבוק'                        },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },

@@ -91,5 +91,6 @@ export function analyzeTime(trades: TradeEntry[]): TimeSummary {
     worstWeekday: pickExtreme(byWeekday, g => g.winRate, 'min'),
     strongestWeek: pickExtreme(byWeek, g => g.totalPnl, 'max'),
     weakestWeek: pickExtreme(byWeek, g => g.totalPnl, 'min'),
+    bestMonth: pickExtreme(byMonth, g => g.winRate, 'max'),
   };
 }

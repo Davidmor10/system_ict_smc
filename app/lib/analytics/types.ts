@@ -72,12 +72,16 @@ export interface TimeSummary {
   worstWeekday: GroupPerformance | null;
   strongestWeek: GroupPerformance | null;
   weakestWeek: GroupPerformance | null;
+  bestMonth: GroupPerformance | null;
 }
 
 export type PatternKind =
   | 'instrument+session'
   | 'session+direction'
   | 'hour+instrument'
+  | 'instrument+confirmation'
+  | 'confirmation+hour'
+  | 'direction+hour'
   | 'instrument_best'
   | 'session_vs_overall';
 
@@ -100,6 +104,7 @@ export interface FullAnalysis {
   performance: PerformanceSummary;
   instruments: GroupPerformance[];
   sessions: GroupPerformance[];
+  confirmations: GroupPerformance[];
   time: TimeSummary;
   direction: DirectionSummary;
   patterns: PatternCandidate[];

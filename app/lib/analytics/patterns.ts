@@ -54,6 +54,28 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
     }
   }
 
+  // instrument × confirmation (model/setup tag) and confirmation × hour
+  const modelsSeen = new Set<string>();
+  for (const t of trades) if (t.model) modelsSeen.add(t.model);
+  for (const m of modelsSeen) {
+    for (const sym of INSTRUMENT_KEYS) {
+      const subset = trades.filter(t => t.model === m && t.symbol === sym);
+      push('instrument+confirmation', `${sym}_${m}`, { instrument: sym, confirmation: m }, subset, `${sym} · ${m}`);
+    }
+    for (const h of hoursSeen) {
+      const subset = trades.filter(t => t.model === m && hourOf(t) === h);
+      push('confirmation+hour', `${m}_h${h}`, { confirmation: m, hour: h }, subset, `${m} @ ${String(h).padStart(2, '0')}:00`);
+    }
+  }
+
+  // direction × hour
+  for (const dir of DIRECTIONS) {
+    for (const h of hoursSeen) {
+      const subset = trades.filter(t => t.direction === dir && hourOf(t) === h);
+      push('direction+hour', `${dir}_h${h}`, { direction: dir, hour: h }, subset, `${dir} @ ${String(h).padStart(2, '0')}:00`);
+    }
+  }
+
   // single-dimension standouts, in case combos stay too sparse for a while
   for (const g of analyzeInstruments(trades)) {
     if (g.trades < 3) continue;
