@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { TradeEntry } from '../lib/journal';
+import { todayISO } from '../lib/journal';
 import { useLanguage } from '../hooks/useLanguage';
 import TypingDots from './TypingDots';
 import EmptyState from './EmptyState';
@@ -23,6 +24,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const closedCount = trades.filter(t => t.result !== 'OPEN').length;
+  const cacheKey = 'onyx_ai_insights_' + todayISO();
 
   async function fetchInsights() {
     if (trades.length < 3) return;
@@ -36,8 +38,13 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       });
       if (!res.ok) throw new Error(`Insights request failed: ${res.status}`);
       const data = await res.json();
-      setInsights(Array.isArray(data.insights) ? data.insights : []);
-      setUpdatedAt(new Date().toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      const fetched = Array.isArray(data.insights) ? data.insights : [];
+      const stamp = new Date().toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+      setInsights(fetched);
+      setUpdatedAt(stamp);
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ insights: fetched, updatedAt: stamp }));
+      } catch { /* storage unavailable — non-fatal */ }
     } catch {
       setError(true);
     } finally {
@@ -45,11 +52,23 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
     }
   }
 
-  // Auto-fetch when 3+ closed trades and no insight yet
+  // Same-day cache first — analyzing once per day (like the dashboard's
+  // discovery card) instead of re-calling the AI on every page visit, which
+  // was burning through the free-tier model quota for nothing.
   useEffect(() => {
-    if (closedCount >= 3 && insights.length === 0 && !loading) {
-      fetchInsights();
-    }
+    if (closedCount < 3) return;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { insights: AiInsight[]; updatedAt: string };
+        if (Array.isArray(parsed.insights) && parsed.insights.length > 0) {
+          setInsights(parsed.insights);
+          setUpdatedAt(parsed.updatedAt);
+          return;
+        }
+      }
+    } catch { /* corrupt cache entry — fall through to a fresh fetch */ }
+    fetchInsights();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closedCount]);
 
