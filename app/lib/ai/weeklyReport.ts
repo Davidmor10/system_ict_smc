@@ -2,6 +2,7 @@ import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type ConfidenceLevel } from '../analytics';
 import { summarizeAnalysis, fmtPF } from './factsBlock';
 import { generateInsightText } from './client';
+import { HEBREW_MENTOR_STYLE } from './styleGuide';
 
 export interface WeeklyReport {
   biggestStrength: string;
@@ -38,9 +39,7 @@ export async function generateWeeklyReport(trades: TradeEntry[], lang: 'he' | 'e
   const prevAnalysis = prevClosed.length >= 3 ? runFullAnalysis(prevWeek) : null;
 
   const isHe = lang === 'he';
-  const langInstruction = isHe
-    ? 'Respond entirely in Hebrew (עברית), natural and professional — this is a serious trader, not a beginner.'
-    : 'Respond in English.';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
 
   const comparisonBlock = prevAnalysis
     ? `PREVIOUS WEEK (for comparison — ${prevAnalysis.performance.closedTrades} closed trades):\n` +
@@ -48,7 +47,7 @@ export async function generateWeeklyReport(trades: TradeEntry[], lang: 'he' | 'e
       `avgRR ${prevAnalysis.performance.avgRR.toFixed(2)}, PnL $${prevAnalysis.performance.totalPnl.toFixed(0)}`
     : `PREVIOUS WEEK: not enough data to compare (fewer than 3 closed trades) — for the improvement/decline fields, say plainly there isn't enough prior-week data yet instead of inventing a comparison.`;
 
-  const prompt = `You are Onyx, the weekly performance-review layer of a futures day-trading journal. You do NOT predict markets and you NEVER give buy/sell signals — you only summarize what already happened in the trader's own data.
+  const prompt = `You are Onyx, an experienced trading mentor doing a weekly review of a futures day-trader's journal — talking straight, like one trader to another. You do NOT predict markets and you NEVER give buy/sell signals — you only summarize what already happened in the trader's own data.
 
 ${langInstruction}
 

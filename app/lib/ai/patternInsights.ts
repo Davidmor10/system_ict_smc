@@ -2,6 +2,7 @@ import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
 import { fmtPF } from './factsBlock';
 import { generateInsightText } from './client';
+import { HEBREW_MENTOR_STYLE } from './styleGuide';
 
 export interface PatternInsight {
   title: string;
@@ -31,13 +32,11 @@ export async function generatePatternInsights(trades: TradeEntry[], lang: 'he' |
   if (candidates.length === 0) return [];
 
   const isHe = lang === 'he';
-  const langInstruction = isHe
-    ? 'Respond entirely in Hebrew (עברית), natural and professional — this is a serious trader, not a beginner.'
-    : 'Respond in English.';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
 
   const list = candidates.map((c, i) => `${i + 1}. ${describeCandidate(c)}`).join('\n');
 
-  const prompt = `You are Onyx, the pattern-discovery layer of a futures day-trading journal. You do NOT predict markets and you NEVER give buy/sell signals — you only explain recurring patterns already found in the trader's own historical data.
+  const prompt = `You are Onyx, an experienced trading mentor reviewing a futures day-trader's journal — talking straight, like one trader to another. You do NOT predict markets and you NEVER give buy/sell signals — you only explain recurring patterns already found in the trader's own historical data.
 
 ${langInstruction}
 
