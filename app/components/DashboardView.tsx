@@ -20,8 +20,6 @@ const SPEC = {
 type AssetKey = keyof typeof SPEC;
 const RISK_PRESETS = [0.25, 0.5, 1, 2] as const;
 
-interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
-
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 /** Mirrors app/lib/ai/discovery.ts's AiDiscovery — kept as a local type (not
     imported) so this client component never pulls in the server-only
@@ -57,7 +55,6 @@ const STR = {
     winRate: 'אחוז הצלחה', profitFactor: 'פרופיט פקטור', avgR: 'R ממוצע',
     planK: 'תוכנית המסחר להיום', planPh: 'ביאס, רמות מפתח, סשנים לצפייה, תרחישים...',
     autosave: 'נשמר אוטומטית',
-    aiK: 'תובנות AI אחרונות', aiAll: 'כל התובנות',
     calcK: 'מחשבון סיכון', asset: 'נכס', balance: 'הון בחשבון', risk: 'סיכון',
     stop: 'סטופ · נקודות', cashRisk: 'סכום בסיכון', standard: 'סטנדרט', micro: 'מיקרו',
     remindersK: 'תזכורות אישיות',
@@ -70,7 +67,7 @@ const STR = {
     aiCoach: 'מאמן ה-AI', coachStatus: 'מבוסס על היומן שלך',
     coachFocus: 'לפי היומן שלך, חלון NY AM הניב את התוצאות הטובות ביותר. שווה לשקול לתת לו עדיפות — ההחלטה תמיד שלך.',
     coachDisc: 'התובנות מבוססות על היומן האישי שלך ואינן מהוות ייעוץ או המלצת מסחר.',
-    cFocusK: 'הפוקוס של היום', cOppK: 'הזדמנות', cWarnK: 'אזהרה', cPatK: 'תבנית אחרונה',
+    cFocusK: 'הפוקוס של היום', cEvidenceK: 'ראיות', cConfidenceK: 'רמת ביטחון', cActionK: 'פעולה',
     pGoalK: 'המטרה של היום', pGoalPh: 'מה תרצה להשיג היום?',
     pBiasK: 'הביאס שלי', biasBull: 'עולה', biasBear: 'יורד', biasNeutral: 'ניטרלי',
     pMaxK: 'מקסימום עסקאות', pNoteK: 'תזכורת אישית',
@@ -87,7 +84,6 @@ const STR = {
     coachWelcomeText: 'ברוך הבא ל-Onyx. ברגע שתתחיל לתעד עסקאות, המאמן יזהה עבורך דפוסים — מתי אתה מרוויח, היכן אתה מפסיד, ומה כדאי לשפר. ההחלטה תמיד נשארת שלך.',
     emptyPerfTitle: 'אין עדיין נתוני ביצועים',
     emptyPerfSub: 'הזן את העסקה הראשונה שלך כדי שהמערכת תוכל להתחיל לחשב את ציון המשמעת, אחוז ההצלחה ופרופיט פקטור שלך.',
-    emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
   en: {
     nav: ['Overview','Trade Journal','Analytics','Playbook','Rules Engine'],
@@ -99,7 +95,6 @@ const STR = {
     winRate: 'WIN RATE', profitFactor: 'PROFIT FACTOR', avgR: 'AVG R',
     planK: "TODAY'S TRADING PLAN", planPh: 'Bias, key levels, sessions to watch, scenarios...',
     autosave: 'AUTO-SAVED',
-    aiK: 'LATEST AI INSIGHTS', aiAll: 'ALL INSIGHTS',
     calcK: 'RISK CALCULATOR', asset: 'ASSET', balance: 'ACCOUNT BALANCE', risk: 'RISK',
     stop: 'STOP · POINTS', cashRisk: 'CASH AT RISK', standard: 'STANDARD', micro: 'MICRO',
     remindersK: 'PERSONAL REMINDERS',
@@ -112,7 +107,7 @@ const STR = {
     aiCoach: 'AI COACH', coachStatus: 'Based on your journal',
     coachFocus: 'Based on your journal, the NY AM window has produced your best results. It may be worth prioritizing it — the decision is always yours.',
     coachDisc: 'Insights are based on your own journal and are not financial or trading advice.',
-    cFocusK: "TODAY'S FOCUS", cOppK: 'OPPORTUNITY', cWarnK: 'WARNING', cPatK: 'LAST PATTERN',
+    cFocusK: "TODAY'S FOCUS", cEvidenceK: 'EVIDENCE', cConfidenceK: 'CONFIDENCE', cActionK: 'ACTION',
     pGoalK: "TODAY'S GOAL", pGoalPh: 'What do you want to achieve today?',
     pBiasK: 'MY BIAS', biasBull: 'BULLISH', biasBear: 'BEARISH', biasNeutral: 'NEUTRAL',
     pMaxK: 'MAX TRADES', pNoteK: 'PERSONAL REMINDER',
@@ -129,7 +124,6 @@ const STR = {
     coachWelcomeText: 'Welcome to Onyx. Once you start logging trades, the coach will identify patterns for you — when you profit, where you lose, and what\'s worth improving. The decision is always yours.',
     emptyPerfTitle: 'No performance data yet',
     emptyPerfSub: 'Log your first trade so the system can start calculating your discipline score, win rate, and profit factor.',
-    emptyCoachOpp: '—', emptyCoachWarn: '—', emptyCoachPat: '—',
   },
 } as const;
 
@@ -171,9 +165,6 @@ export default function DashboardView() {
   const [trades,    setTrades]    = useState<ReturnType<typeof loadTrades>>([]);
   const [focus,     setFocus]     = useState('');
   const [focusSaved,setFocusSaved]= useState(false);
-  const [aiInsights, setAiInsights] = useState<AiInsight[]>([]);
-  const [aiLoading,  setAiLoading]  = useState(false);
-  const [aiUpdatedAt, setAiUpdatedAt] = useState<string | null>(null);
   const [discovery, setDiscovery] = useState<AiDiscovery | null>(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [discoveryUpdatedAt, setDiscoveryUpdatedAt] = useState<string | null>(null);
@@ -230,9 +221,6 @@ export default function DashboardView() {
       const f = localStorage.getItem('onyx_focus_' + todayKey());
       if (f != null) setFocus(f);
 
-      const cachedAi = localStorage.getItem('onyx_ai_' + todayKey());
-      if (cachedAi) { try { setAiInsights(JSON.parse(cachedAi)); } catch {} }
-
       const cachedDiscovery = localStorage.getItem('onyx_ai_discovery_' + todayKey());
       if (cachedDiscovery) {
         try {
@@ -249,42 +237,6 @@ export default function DashboardView() {
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /* ── Fetch AI insights when trades are loaded ───────────────── */
-  useEffect(() => {
-    if (trades.length < 3) { setAiInsights([]); return; }
-    const cacheKey = 'onyx_ai_' + todayKey();
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        setAiInsights(JSON.parse(cached));
-        const cachedTime = localStorage.getItem(cacheKey + '_time');
-        if (cachedTime) setAiUpdatedAt(cachedTime);
-        return;
-      } catch {}
-    }
-    setAiLoading(true);
-    fetch('/api/ai/insights', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trades, lang: L }),
-    })
-      .then(r => r.json())
-      .then(({ insights }) => {
-        if (Array.isArray(insights) && insights.length) {
-          setAiInsights(insights);
-          const stamp = new Date().toLocaleTimeString(L === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-          setAiUpdatedAt(stamp);
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(insights));
-            localStorage.setItem(cacheKey + '_time', stamp);
-          } catch {}
-        }
-      })
-      .catch(() => {})
-      .finally(() => setAiLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades]);
 
   /* ── Fetch today's single strongest AI discovery for the hero block ── */
   useEffect(() => {
@@ -456,7 +408,6 @@ export default function DashboardView() {
     { k: s.stDiscK,    v: isEmpty ? s.stDiscVEmpty : s.stDiscV,  c: isEmpty ? 'var(--w40)' : 'var(--gold)' },
     { k: s.stHealthK,  v: s.stHealthV,  c: 'var(--bull)' },
   ];
-  const coachKeys = [s.cOppK, s.cWarnK, s.cPatK] as const;
   const verdictMap: Record<string, string> = { bull: 'BULLISH', bear: 'BEARISH', neutral: 'NEUTRAL' };
   const toneMap:    Record<string, string> = { bull: 'bull',    bear: 'bear',    neutral: 'neutral'  };
   const trendMap:   Record<string, string> = { bull: s.biasBull, bear: s.biasBear, neutral: s.biasNeutral };
@@ -596,7 +547,7 @@ export default function DashboardView() {
                           <p className="dp-coach-focus-text">{s.coachWelcomeText}</p>
                         </div>
                         <div className="dp-coach-insights">
-                          {([s.cOppK, s.cWarnK, s.cPatK] as const).map((label, i) => {
+                          {([s.cEvidenceK, s.cConfidenceK, s.cActionK] as const).map((label, i) => {
                             const m = COACH_META[i];
                             return (
                               <div key={i} className="dp-coach-item">
@@ -623,9 +574,9 @@ export default function DashboardView() {
                             : discovery
                               ? <InsightText text={discovery.title} className="dp-coach-focus-text" />
                               : <p className="dp-coach-focus-text" style={{ color: 'var(--w30)' }}>
-                                  {trades.length < 3
-                                    ? (isRTL ? 'הוסף לפחות 3 עסקאות לקבלת ניתוח' : 'Add at least 3 trades for analysis')
-                                    : (isRTL ? "הגילוי של היום עדיין לא זמין — נסה שוב עוד רגע" : "Today's discovery isn't ready yet — check back shortly")}
+                                  {isRTL
+                                    ? 'אין עדיין מספיק נתונים היסטוריים כדי לייצר תובנה ברמת ביטחון גבוהה.'
+                                    : 'Not enough historical data yet to generate a high-confidence insight.'}
                                 </p>
                           }
                         </div>
@@ -960,49 +911,17 @@ export default function DashboardView() {
             </div>
           </div>
 
-          {/* Focus + AI Insights */}
+          {/* Focus */}
           <div className="dp-reveal dp-rev-3">
-            <div className="dp-brief-lower-grid">
-              <div className="dp-brief-focus-card">
-                <div className="dp-brief-focus-head">
-                  <span className="dp-brief-focus-title">{s.focusK}</span>
-                  {focusSaved && <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: 'var(--bull)' }}>{isRTL ? 'נשמר ✓' : 'SAVED ✓'}</span>}
-                </div>
-                <textarea className="dp-brief-plan-ta" value={focus} onChange={e => setFocus(e.target.value)} placeholder={isRTL ? 'מה אתה רוצה לשים עליו דגש היום?' : 'What do you want to focus on today?'} />
-                <button onClick={handleSaveFocus} style={{ marginTop: 8, fontFamily: 'var(--ff-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', background: 'rgba(212,175,55,.1)', border: '1px solid rgba(212,175,55,.3)', color: 'var(--gold)', borderRadius: 6, padding: '6px 16px', cursor: 'pointer', width: '100%' }}>
-                  {isRTL ? 'שמור פוקוס' : 'SAVE FOCUS'}
-                </button>
+            <div className="dp-brief-focus-card" style={{ maxWidth: 520 }}>
+              <div className="dp-brief-focus-head">
+                <span className="dp-brief-focus-title">{s.focusK}</span>
+                {focusSaved && <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' as const, color: 'var(--bull)' }}>{isRTL ? 'נשמר ✓' : 'SAVED ✓'}</span>}
               </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 6 }}>
-                  <span className="dp-insights-title">{s.aiK}</span>
-                  {aiUpdatedAt && !isEmpty && !aiLoading && (
-                    <span style={{ fontFamily: 'var(--ff-mono)', fontSize: 9, color: 'var(--w30)' }} dir="ltr">{isRTL ? 'עדכון אחרון' : 'Last updated'}: {aiUpdatedAt}</span>
-                  )}
-                  <button className="dp-ghost-btn" style={{ fontSize: 10 }}>{s.aiAll} {isRTL ? '←' : '→'}</button>
-                </div>
-                <div className="dp-insights-list">
-                  {(isEmpty || (!aiLoading && aiInsights.length === 0)) && (
-                    <div className="dp-insight-card" style={{ textAlign: 'center', padding: '18px 12px', color: 'var(--w30)', fontFamily: 'var(--ff-mono)', fontSize: 11 }}>
-                      {isEmpty ? (isRTL ? 'הוסף עסקאות כדי לקבל תובנות' : 'Add trades to get insights') : (isRTL ? 'הוסף לפחות 3 עסקאות' : 'Add at least 3 trades')}
-                    </div>
-                  )}
-                  {aiLoading && [0,1,2].map(i => (
-                    <div key={i} className="dp-insight-card" style={{ opacity: 0.5 }}>
-                      <div className="dp-insight-head"><span className="dp-insight-tag">...</span></div>
-                      <div style={{ marginTop: 6 }}><TypingDots dotClassName="bg-[#d4af37]/60" /></div>
-                    </div>
-                  ))}
-                  {!aiLoading && aiInsights.map((x, i) => (
-                    <div key={i} className="dp-insight-card">
-                      <div className="dp-insight-head">
-                        <span className="dp-insight-tag">{L === 'he' ? x.tag_he : x.tag_en}</span>
-                      </div>
-                      <InsightText text={x.text} className="dp-insight-text" />
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <textarea className="dp-brief-plan-ta" value={focus} onChange={e => setFocus(e.target.value)} placeholder={isRTL ? 'מה אתה רוצה לשים עליו דגש היום?' : 'What do you want to focus on today?'} />
+              <button onClick={handleSaveFocus} style={{ marginTop: 8, fontFamily: 'var(--ff-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', background: 'rgba(212,175,55,.1)', border: '1px solid rgba(212,175,55,.3)', color: 'var(--gold)', borderRadius: 6, padding: '6px 16px', cursor: 'pointer', width: '100%' }}>
+                {isRTL ? 'שמור פוקוס' : 'SAVE FOCUS'}
+              </button>
             </div>
           </div>
 
