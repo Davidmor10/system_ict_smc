@@ -59,10 +59,10 @@ export default function ScreenshotUpload({
             </svg>
           </span>
           <span className="text-[13px] text-white/60 text-center">
-            {dragOver ? 'Drop to attach' : 'Drag a chart screenshot here'}
+            {dragOver ? 'שחרר כדי לצרף' : 'גרור לכאן צילום מסך של הגרף'}
           </span>
           <span className="font-mono text-[10px] text-white/25 text-center max-w-[280px] leading-relaxed">
-            {dragOver ? '' : <>or <span className="text-[#d4af37]/60">click to browse</span> — evidence makes every trade easier to review</>}
+            {dragOver ? '' : <>או <span className="text-[#d4af37]/60">לחץ לבחירה</span> — ראיות הופכות כל עסקה לקלה יותר לבדיקה</>}
           </span>
           <input
             ref={inputRef}
@@ -80,12 +80,12 @@ export default function ScreenshotUpload({
           {images.map((src, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <div key={i} className="relative group onyx-pop-in">
-              <img src={src} alt={`Screenshot ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-white/[0.06]" />
+              <img src={src} alt={`צילום מסך ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-white/[0.06]" />
               <button
                 type="button"
                 onClick={() => removeAt(i)}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black border border-[#333] text-white/60 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:text-white hover:border-[#ef4444]/60 transition-all duration-150"
-                aria-label="Remove screenshot"
+                aria-label="הסר צילום מסך"
               >✕</button>
             </div>
           ))}

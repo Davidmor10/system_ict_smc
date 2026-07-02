@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
-import { loadTrades, computeStats, groupByKey, rDistribution } from '../../lib/journal';
+import { loadTrades, computeStats, groupByKey, rDistribution, UNSPECIFIED_MODEL } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 
 function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -99,7 +99,7 @@ export default function AnalyticsPage() {
   const stats     = computeStats(filtered);
   const rawDist   = rDistribution(filtered);
   const dist      = rawDist.map(d => ({ label: d.bucket, count: d.count, isWin: d.isWin }));
-  const byModel   = [...groupByKey(filtered, t => t.model || 'Unspecified').entries()].sort((a, b) => b[1].tradeCount - a[1].tradeCount);
+  const byModel   = [...groupByKey(filtered, t => t.model || UNSPECIFIED_MODEL).entries()].sort((a, b) => b[1].tradeCount - a[1].tradeCount);
   const bySession = [...groupByKey(filtered, t => t.session || 'Unknown').entries()];
   const maxDist   = Math.max(...dist.map(d => d.count), 1);
   const pnlColor  = (n: number) => n > 0 ? '#22c55e' : n < 0 ? '#ef4444' : '#fff';

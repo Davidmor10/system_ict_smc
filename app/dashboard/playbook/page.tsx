@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
-import { groupByKey, loadTrades } from '../../lib/journal';
+import { groupByKey, loadTrades, UNSPECIFIED_MODEL } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 
 const STORAGE_KEY = 'onyx_playbook';
@@ -201,7 +201,7 @@ export default function PlaybookPage() {
     persist(setups.filter(s => s.id !== id));
   }
 
-  const statsBySetup = groupByKey(trades, t => t.model || 'Unspecified');
+  const statsBySetup = groupByKey(trades, t => t.model || UNSPECIFIED_MODEL);
 
   return (
     <div className="flex-1 overflow-y-auto" dir={en ? 'ltr' : 'rtl'}>
