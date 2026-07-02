@@ -10,7 +10,6 @@ const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const NAV = [
   { href: '/dashboard',             key: 'nav_workspace' },
   { href: '/dashboard/journal',     key: 'nav_journal'   },
-  { href: '/dashboard/analytics',   key: 'nav_analytics' },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics' },
   { href: '/dashboard/playbook',    key: 'nav_playbook'  },
   { href: '/dashboard/rules',       key: 'nav_rules'     },

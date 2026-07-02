@@ -49,10 +49,10 @@ function IconShield() {
 }
 
 function getActive(pathname: string): string {
-  if (pathname.startsWith('/dashboard/journal'))   return 'journal';
-  if (pathname.startsWith('/dashboard/analytics')) return 'analytics';
-  if (pathname.startsWith('/dashboard/playbook'))  return 'playbook';
-  if (pathname.startsWith('/dashboard/rules'))     return 'rules';
+  if (pathname.startsWith('/dashboard/journal'))      return 'journal';
+  if (pathname.startsWith('/dashboard/ai-analytics'))  return 'ai-analytics';
+  if (pathname.startsWith('/dashboard/playbook'))     return 'playbook';
+  if (pathname.startsWith('/dashboard/rules'))        return 'rules';
   return 'dashboard';
 }
 
@@ -62,11 +62,11 @@ export default function MobileNav() {
   const active = getActive(pathname);
 
   const tabs = [
-    { id: 'dashboard',  href: '/dashboard',           Icon: IconGrid,   label: t('nav_workspace') },
-    { id: 'journal',    href: '/dashboard/journal',   Icon: IconBook,   label: t('nav_journal')   },
-    { id: 'analytics',  href: '/dashboard/analytics', Icon: IconChart,  label: t('nav_analytics') },
-    { id: 'playbook',   href: '/dashboard/playbook',  Icon: IconPlay,   label: t('nav_playbook')  },
-    { id: 'rules',      href: '/dashboard/rules',     Icon: IconShield, label: t('nav_rules')     },
+    { id: 'dashboard',     href: '/dashboard',              Icon: IconGrid,   label: t('nav_workspace')    },
+    { id: 'journal',       href: '/dashboard/journal',      Icon: IconBook,   label: t('nav_journal')      },
+    { id: 'ai-analytics',  href: '/dashboard/ai-analytics', Icon: IconChart,  label: t('nav_ai_analytics') },
+    { id: 'playbook',      href: '/dashboard/playbook',     Icon: IconPlay,   label: t('nav_playbook')     },
+    { id: 'rules',         href: '/dashboard/rules',        Icon: IconShield, label: t('nav_rules')        },
   ];
 
   return (
