@@ -18,7 +18,7 @@ const PLAYBOOK_STORAGE_KEY = 'onyx_playbook';
 const DEFAULT_CONFIRMATION = 'IFVG_2M' as const;
 
 const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שורט' };
-const RESULT_HE: Record<TradeResult, string> = { OPEN: 'פתוחה', WIN: 'זכייה', LOSS: 'הפסד', BE: 'איזון' };
+const RESULT_HE: Record<TradeResult, string> = { OPEN: 'עדיין רצה', WIN: 'טייק - TP', LOSS: 'הפסד - SL', BE: 'ברייק איוון - BE' };
 const BIAS_HE: Record<string, string> = { BULLISH: 'עולה', BEARISH: 'יורד', INDECISIVE: 'ניטרלי' };
 
 interface PlaybookSetup { id: string; name: string; }
@@ -303,7 +303,7 @@ export default function TradeForm({
 
         {/* ── TRADE INFO ── */}
         <Group label="פרטי העסקה">
-          <Field label="מכשיר">
+          <Field label="נכס">
             <div className="grid grid-cols-4 gap-1.5">
               {INSTRUMENT_KEYS.map(s => (
                 <button type="button" key={s} onClick={() => set('symbol', s)}
