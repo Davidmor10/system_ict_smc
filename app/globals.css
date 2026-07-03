@@ -153,6 +153,21 @@ button:not(:disabled):active,
   100% { transform: translateY(56px); opacity: 0; }
 }
 
+/* ── Live-indicator pulse dot ─────────────────────────────── */
+@keyframes onyx-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .4; }
+}
+
+/* ── Numeric spans — tabular, always LTR even inside RTL text ── */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  direction: ltr;
+  display: inline-block;
+  unicode-bidi: isolate;
+}
+
 /* ── Scrollbars — obsidian, 4px, near-invisible ──────────── */
 * {
   scrollbar-width: thin;

@@ -1,10 +1,13 @@
 import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
+import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
 import { generateInsightText } from './client';
 import { HEBREW_MENTOR_STYLE } from './styleGuide';
 
 export interface PatternInsight {
+  /** Short dimension label (e.g. "MNQ · ניו יורק AM") — computed, never AI-generated. */
+  subject: string;
   title: string;
   evidence: string;
   confidenceLevel: ConfidenceLevel;
@@ -12,10 +15,27 @@ export interface PatternInsight {
 }
 
 const MAX_PATTERNS = 5;
+const SESSION_HE: Record<string, string> = Object.fromEntries(SESS.map(s => [s.key, s.he]));
+const DIRECTION_HE: Record<string, string> = { LONG: 'לונג', SHORT: 'שורט' };
+
+/** Builds the subject label straight from the candidate's structured
+    `subject` record (instrument/session/direction/hour/confirmation) rather
+    than the engine's pre-baked `metric.label`, which still carries English
+    session/direction names from before the app went Hebrew-only. */
+function subjectLabel(c: PatternCandidate): string {
+  const s = c.subject;
+  const parts: string[] = [];
+  if (s.instrument) parts.push(String(s.instrument));
+  if (s.confirmation) parts.push(String(s.confirmation));
+  if (s.session) parts.push(SESSION_HE[String(s.session)] ?? String(s.session));
+  if (s.direction) parts.push(DIRECTION_HE[String(s.direction)] ?? String(s.direction));
+  if (s.hour !== undefined) parts.push(`${String(s.hour).padStart(2, '0')}:00`);
+  return parts.join(' · ');
+}
 
 function describeCandidate(c: PatternCandidate): string {
   const g = c.metric;
-  return `${g.label}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}% (overall ${c.baseline.toFixed(0)}%), ` +
+  return `${subjectLabel(c)}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}% (overall ${c.baseline.toFixed(0)}%), ` +
     `PnL $${g.totalPnl.toFixed(0)}, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, confidence ${c.confidence.level} (n=${c.confidence.sampleSize})`;
 }
 
@@ -68,6 +88,7 @@ Rules:
 
   return candidates
     .map((c, i) => ({
+      subject: subjectLabel(c),
       title: parsed[i]?.title ?? '',
       evidence: parsed[i]?.evidence ?? '',
       confidenceLevel: c.confidence.level,
