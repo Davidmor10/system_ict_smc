@@ -283,24 +283,44 @@ export default function AiAnalyticsPage() {
   const weekdayRows = useMemo(() => {
     const days = analysis.time.byWeekday;
     if (days.length === 0) return [];
+    const byKey = new Map(days.map(g => [g.key, g]));
     const max = Math.max(1, ...days.map(g => g.winRate));
-    return days.map(g => ({
-      ...g,
-      heading: WEEKDAY_HE[Number(g.key)] ?? g.label,
-      pct: (g.winRate / max) * 100,
-      tone: (analysis.time.bestWeekday?.key === g.key ? 'best' : analysis.time.worstWeekday?.key === g.key ? 'worst' : 'mid') as 'best' | 'worst' | 'mid',
-    }));
+    // Full Sunday–Saturday spread, not just the days that happen to have trades —
+    // an untraded day still needs to show up as an (empty) bar for the chart to
+    // read as a real weekly distribution.
+    return Array.from({ length: 7 }, (_, w) => {
+      const g = byKey.get(String(w));
+      return {
+        key: String(w),
+        trades: g?.trades ?? 0,
+        heading: WEEKDAY_HE[w],
+        pct: g ? (g.winRate / max) * 100 : 0,
+        tone: (analysis.time.bestWeekday?.key === String(w) ? 'best' : analysis.time.worstWeekday?.key === String(w) ? 'worst' : 'mid') as 'best' | 'worst' | 'mid',
+      };
+    });
   }, [analysis.time]);
 
   const hourRows = useMemo(() => {
     const hours = analysis.time.byHour;
     if (hours.length === 0) return [];
+    const byKey = new Map(hours.map(g => [Number(g.key), g]));
+    const keys = hours.map(g => Number(g.key));
+    const lo = Math.min(...keys), hi = Math.max(...keys);
     const max = Math.max(1, ...hours.map(g => g.winRate));
-    return hours.map(g => ({
-      ...g,
-      pct: (g.winRate / max) * 100,
-      tone: (analysis.time.bestHour?.key === g.key ? 'best' : analysis.time.worstHour?.key === g.key ? 'worst' : 'mid') as 'best' | 'worst' | 'mid',
-    }));
+    // Fill every hour between the earliest and latest trade, not just the
+    // hours that already have one — gaps inside the trading window should
+    // read as zero, not disappear from the chart.
+    return Array.from({ length: hi - lo + 1 }, (_, i) => {
+      const h = lo + i;
+      const g = byKey.get(h);
+      return {
+        key: String(h),
+        trades: g?.trades ?? 0,
+        label: `${String(h).padStart(2, '0')}:00`,
+        pct: g ? (g.winRate / max) * 100 : 0,
+        tone: (analysis.time.bestHour?.key === String(h) ? 'best' : analysis.time.worstHour?.key === String(h) ? 'worst' : 'mid') as 'best' | 'worst' | 'mid',
+      };
+    });
   }, [analysis.time]);
 
   const monthCount = analysis.time.byMonth.length;
