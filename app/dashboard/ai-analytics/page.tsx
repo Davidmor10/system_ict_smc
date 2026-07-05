@@ -43,7 +43,12 @@ const CONF_META: Record<ConfidenceLevel, { fg: string; bg: string; bd: string }>
 /* ══════════ Animation primitives — mirrors the reference design's
    scroll-reveal / count-up / bar-fill behavior ══════════ */
 
-function useInView<T extends HTMLElement>(threshold = 0.12) {
+/** Triggers slightly BEFORE an element scrolls into view (positive rootMargin
+    extends the intersection root past the real viewport edge), so the reveal
+    transition finishes by the time a normal scroll actually brings the section
+    into sight — instead of still being mid-fade (and looking broken/blank) at
+    the moment a user's eye, or a screenshot, reaches it. */
+function useInView<T extends HTMLElement>(threshold = 0.01) {
   const ref = useRef<T | null>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -51,7 +56,7 @@ function useInView<T extends HTMLElement>(threshold = 0.12) {
     if (!el) return;
     const io = new IntersectionObserver(entries => {
       entries.forEach(en => { if (en.isIntersecting) { setVisible(true); io.unobserve(el); } });
-    }, { threshold, rootMargin: '0px 0px -6% 0px' });
+    }, { threshold, rootMargin: '0px 0px 180px 0px' });
     io.observe(el);
     return () => io.disconnect();
   }, [threshold]);
@@ -67,9 +72,9 @@ function Reveal({ children, style, className }: { children: React.ReactNode; sty
       style={{
         ...style,
         opacity: visible ? 1 : 0,
-        transform: visible ? 'none' : 'translateY(10px)',
-        filter: visible ? 'none' : 'blur(6px)',
-        transition: 'opacity .7s var(--ease-expo-out), transform .7s var(--ease-expo-out), filter .7s var(--ease-expo-out)',
+        transform: visible ? 'none' : 'translateY(6px)',
+        filter: visible ? 'none' : 'blur(2px)',
+        transition: 'opacity .35s var(--ease-expo-out), transform .35s var(--ease-expo-out), filter .35s var(--ease-expo-out)',
       }}
     >
       {children}
