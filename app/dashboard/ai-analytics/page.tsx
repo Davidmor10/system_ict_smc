@@ -163,11 +163,14 @@ function NumberedSection({ index, total, eyebrow, title, description, extra, chi
   index: number; total: number; eyebrow: string; title: string; description: string; extra?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
-    <section className="grid grid-cols-1 min-[760px]:grid-cols-[clamp(220px,20vw,280px)_minmax(0,1fr)] gap-9 min-[760px]:gap-14 py-12 sm:py-16 border-t border-[#1c1c1e]">
+    <section
+      className="grid grid-cols-1 min-[760px]:grid-cols-[clamp(220px,20vw,280px)_minmax(0,1fr)] border-t border-[#1c1c1e]"
+      style={{ gap: 'clamp(36px,4vw,72px)', padding: 'clamp(52px,5vw,80px) 0' }}
+    >
       <Reveal className="text-right min-[760px]:sticky min-[760px]:top-[84px] min-[760px]:self-start">
         <div className="font-mono text-xs font-bold text-[#52525b] tracking-[0.28em] mb-4" dir="ltr">{String(index).padStart(2, '0')} / {String(total).padStart(2, '0')}</div>
         <div className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-[#d4af37] mb-3">◈ {eyebrow}</div>
-        <h3 className="font-serif font-bold text-white leading-tight" style={{ fontSize: 'clamp(24px,2.6vw,32px)' }}>{title}</h3>
+        <h3 className="font-serif font-bold text-white leading-tight" style={{ fontSize: 'clamp(26px,2.6vw,34px)' }}>{title}</h3>
         <p className="mt-4 text-sm text-white/55 leading-relaxed">{description}</p>
         {extra}
       </Reveal>
@@ -368,36 +371,37 @@ export default function AiAnalyticsPage() {
         {/* ══════════ HERO ══════════ */}
         <section className="relative overflow-hidden pt-12 sm:pt-[clamp(48px,5.5vw,80px)]">
           <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(120% 90% at 82% 0%,rgba(212,175,55,.11),transparent 58%)' }} />
+          <div className="onyx-hero-sweep absolute inset-x-0 top-0 h-px pointer-events-none z-[2]" />
           <div className="relative">
             <Reveal className="grid grid-cols-1 min-[820px]:grid-cols-[clamp(240px,24vw,340px)_minmax(0,1fr)] gap-8 sm:gap-[clamp(32px,4vw,72px)] items-end mb-9 sm:mb-[clamp(38px,4vw,56px)]">
               <div className="text-right">
                 <div className="flex items-center gap-2.5 mb-4"><span className="text-[#d4af37] text-sm">◈</span><span className="font-mono text-[11px] font-bold tracking-[0.3em] uppercase text-[#d4af37]">Onyx Intelligence</span></div>
-                <h2 className="font-serif font-bold text-white leading-[0.96]" style={{ fontSize: 'clamp(40px,5.5vw,68px)' }}>
+                <h2 className="font-serif font-bold text-white leading-[0.96]" style={{ fontSize: 'clamp(40px,5.5vw,76px)' }}>
                   אנליטיקת <span style={{ color: '#d4af37', textShadow: '0 0 60px rgba(212,175,55,.4)' }}>AI</span>
                 </h2>
               </div>
-              <p className="text-sm sm:text-base font-medium text-[#c0c0c0] leading-relaxed text-right max-w-xl ms-auto pb-1">
+              <p className="font-medium text-[#c0c0c0] leading-[1.7] text-right max-w-xl ms-auto pb-1" style={{ fontSize: 'clamp(15px,1.4vw,18px)' }}>
                 ניתוח אוטומטי של יומן המסחר שלך. המערכת מזקקת מכל עסקה את הקצה — לפי מכשיר, סשן, כיוון וזמן — מזהה דפוסים חוזרים ומסכמת אותם לדוח שבועי, כדי שתדע בדיוק היכן הביצועים חזקים והיכן כדאי לחדד.
               </p>
             </Reveal>
 
             {/* Headline ledger strip */}
             <Reveal className="grid grid-cols-2 sm:grid-cols-4 bg-[#0a0a0b] border-y border-[#1c1c1e]">
-              <div className="p-6 sm:p-7 border-s border-[#1c1c1e]">
+              <div className="px-6 sm:px-[30px] py-[22px] sm:py-[28px] border-s border-[#1c1c1e]">
                 <span className="block font-mono text-[13px] font-bold tracking-[0.1em] text-white/62 mb-4">רווח / הפסד כולל</span>
-                <CountUp to={Math.abs(p.totalPnl)} prefix={p.totalPnl >= 0 ? '+$' : '-$'} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(28px,3.4vw,44px)', color: p.totalPnl >= 0 ? '#6fa580' : '#c98080', textShadow: `0 0 34px ${p.totalPnl >= 0 ? 'rgba(74,124,89,.4)' : 'rgba(139,58,58,.4)'}` }} />
+                <CountUp to={Math.abs(p.totalPnl)} prefix={p.totalPnl >= 0 ? '+$' : '-$'} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: p.totalPnl >= 0 ? '#6fa580' : '#c98080', textShadow: `0 0 34px ${p.totalPnl >= 0 ? 'rgba(74,124,89,.4)' : 'rgba(139,58,58,.4)'}` }} />
               </div>
-              <div className="p-6 sm:p-7 border-s border-[#1c1c1e]">
+              <div className="px-6 sm:px-[30px] py-[22px] sm:py-[28px] border-s border-[#1c1c1e]">
                 <span className="block font-mono text-[13px] font-bold tracking-[0.1em] text-white/62 mb-4">אחוז הצלחה</span>
-                <CountUp to={p.winRate} decimals={1} suffix="%" className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(28px,3.4vw,44px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.45)' }} />
+                <CountUp to={p.winRate} decimals={1} suffix="%" className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.45)' }} />
               </div>
-              <div className="p-6 sm:p-7 border-s border-[#1c1c1e]">
+              <div className="px-6 sm:px-[30px] py-[22px] sm:py-[28px] border-s border-[#1c1c1e]">
                 <span className="block font-mono text-[13px] font-bold tracking-[0.1em] text-white/62 mb-4">פרופיט פקטור</span>
-                <CountUp to={p.profitFactor} decimals={2} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(28px,3.4vw,44px)', color: '#fff' }} />
+                <CountUp to={p.profitFactor} decimals={2} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#fff' }} />
               </div>
-              <div className="p-6 sm:p-7">
+              <div className="px-6 sm:px-[30px] py-[22px] sm:py-[28px]">
                 <span className="block font-mono text-[13px] font-bold tracking-[0.1em] text-white/62 mb-4">יחס R:R ממוצע</span>
-                <CountUp to={p.avgRR} decimals={2} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(28px,3.4vw,44px)', color: '#fff' }} />
+                <CountUp to={p.avgRR} decimals={2} className="font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#fff' }} />
               </div>
             </Reveal>
 
@@ -422,13 +426,18 @@ export default function AiAnalyticsPage() {
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
             : `${bestInst.key} מוביל עם הרווח הגבוה ביותר; ${worstInst.key} כרגע החלש מביניהם.`
           }
+          extra={instrumentRows.length > 0 && (
+            <span className="block font-mono text-[10.5px] font-bold text-white/38 tracking-[0.14em] mt-4">
+              {instrumentRows.map(g => g.key).join(' · ')}
+            </span>
+          )}
         >
           {instrumentRows.length === 0 ? (
             <p className="text-sm text-white/30">אין עדיין מספיק נתונים.</p>
           ) : (
             <div>
               {instrumentRows.map(g => (
-                <div key={g.key} className="grid gap-5 sm:gap-8 items-center py-6 border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: '90px minmax(0,1fr) clamp(220px,26vw,300px)' }}>
+                <div key={g.key} className="grid gap-5 sm:gap-8 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: '110px minmax(0,1fr) clamp(240px,26vw,320px)' }}>
                   <div className="text-right">
                     <span className="font-mono text-xl font-extrabold text-white tracking-[0.04em]">{g.key}</span>
                     {g.badge === 'best' && <span className="block w-fit mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#6fa580] border border-[#6fa580]/45 bg-[#6fa580]/12 px-2 py-0.5 rounded-sm">◆ מיטבי</span>}
@@ -442,9 +451,9 @@ export default function AiAnalyticsPage() {
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-0.5 text-center">
-                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">R:R</span><span className="num font-mono text-lg font-extrabold text-white">{g.avgRR.toFixed(2)}</span></div>
-                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">PF</span><span className="num font-mono text-lg font-extrabold text-[#d4af37]">{fmtPF(g.profitFactor)}</span></div>
-                    <div><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">הצלחה</span><span className="num font-mono text-lg font-extrabold text-[#6fa580]">{g.winRate.toFixed(0)}%</span></div>
+                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">R:R</span><span className="num font-mono text-lg font-extrabold text-white">{g.avgRR.toFixed(2)}</span></div>
+                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">PF</span><span className="num font-mono text-lg font-extrabold text-[#d4af37]">{fmtPF(g.profitFactor)}</span></div>
+                    <div><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-lg font-extrabold text-[#6fa580]">{g.winRate.toFixed(0)}%</span></div>
                   </div>
                 </div>
               ))}
@@ -467,9 +476,9 @@ export default function AiAnalyticsPage() {
                 </p>
               </div>
               <div className="flex items-stretch">
-                <div className="px-6 text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] mb-3">עסקאות</span><span className="num font-mono text-4xl font-extrabold text-white">{topSession.trades}</span></div>
-                <div className="px-6 text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] mb-3">הצלחה</span><span className="num font-mono text-4xl font-extrabold" style={{ color: '#d4af37', textShadow: '0 0 28px rgba(212,175,55,.4)' }}>{topSession.winRate.toFixed(0)}%</span></div>
-                <div className="ps-6 text-center"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] mb-3">נטו</span><span className="num font-mono text-4xl font-extrabold" style={{ color: topSession.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{topSession.totalPnl >= 0 ? '+' : '-'}${Math.abs(topSession.totalPnl).toFixed(0)}</span></div>
+                <div className="px-[28px] text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">עסקאות</span><span className="num font-mono text-white" style={{ fontSize: 42, fontWeight: 800 }}>{topSession.trades}</span></div>
+                <div className="px-[28px] text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">הצלחה</span><span className="num font-mono" style={{ fontSize: 42, fontWeight: 800, color: '#d4af37', textShadow: '0 0 28px rgba(212,175,55,.4)' }}>{topSession.winRate.toFixed(0)}%</span></div>
+                <div className="ps-[28px] text-center"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">נטו</span><span className="num font-mono" style={{ fontSize: 42, fontWeight: 800, color: topSession.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{topSession.totalPnl >= 0 ? '+' : '-'}${Math.abs(topSession.totalPnl).toFixed(0)}</span></div>
               </div>
             </div>
           ) : (
@@ -562,7 +571,7 @@ export default function AiAnalyticsPage() {
                 </p>
                 <div className="text-right order-1">
                   <span className="block font-mono text-sm font-extrabold uppercase tracking-[0.14em] text-[#9a9aa2] mb-3.5">החודש החזק ביותר</span>
-                  <span className="block font-serif font-extrabold leading-none num" style={{ fontSize: 'clamp(28px,3.4vw,44px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.35)' }}>{analysis.time.bestMonth.key.replace('-', '·')}</span>
+                  <span className="block font-serif font-extrabold leading-none num" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.35)' }}>{analysis.time.bestMonth.key.replace('-', '·')}</span>
                   <span className="block font-mono text-sm font-extrabold text-white/66 tracking-[0.06em] mt-3">
                     {MONTH_HE[Number(analysis.time.bestMonth.key.slice(5, 7)) - 1]} · {analysis.time.bestMonth.trades} עסקאות · {analysis.time.bestMonth.totalPnl >= 0 ? '+' : '-'}${Math.abs(analysis.time.bestMonth.totalPnl).toFixed(0)}
                   </span>
@@ -592,9 +601,9 @@ export default function AiAnalyticsPage() {
                     <HBar pct={g.pct} />
                   </div>
                   <div className="flex justify-between items-center">
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">עסקאות</span><span className="num font-mono text-lg font-extrabold text-white">{g.trades}</span></div>
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">הצלחה</span><span className="num font-mono text-lg font-extrabold" style={{ color: '#6fa580' }}>{g.winRate.toFixed(0)}%</span></div>
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] mb-2">נטו</span><span className="num font-mono text-lg font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span></div>
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">עסקאות</span><span className="num font-mono text-[19px] font-extrabold text-white">{g.trades}</span></div>
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: '#6fa580' }}>{g.winRate.toFixed(0)}%</span></div>
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">נטו</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span></div>
                   </div>
                 </div>
               ))}
