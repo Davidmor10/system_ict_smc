@@ -366,7 +366,7 @@ export default function AiAnalyticsPage() {
         </div>
       </div>
 
-      <div className="max-w-[1500px] mx-auto w-full px-6 sm:px-[clamp(24px,3.5vw,60px)] pb-28">
+      <div className="max-w-[1760px] mx-auto w-full px-6 sm:px-[clamp(24px,3.5vw,60px)] pb-28">
 
         {/* ══════════ HERO ══════════ */}
         <section className="relative overflow-hidden pt-12 sm:pt-[clamp(48px,5.5vw,80px)]">
