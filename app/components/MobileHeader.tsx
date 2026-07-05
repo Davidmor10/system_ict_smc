@@ -15,7 +15,7 @@ export default function MobileHeader() {
     >
       {/* Brand */}
       <div className="flex items-baseline gap-[7px] leading-none">
-        <span className="font-serif text-[21px] font-bold text-white tracking-[0.04em]">Onyx</span>
+        <span className="font-serif text-[21px] font-bold text-white tracking-[0.04em]">ONYX</span>
         <span className="font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#d4af37]">Trading</span>
       </div>
 

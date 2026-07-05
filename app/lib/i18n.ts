@@ -5,12 +5,11 @@ export const DICT = {
   lang_other:           { en: 'עב',                    he: 'EN'                              },
 
   // ── Sidebar ──────────────────────────────────────────────────────
-  nav_workspace:        { en: 'Dashboard',              he: 'לוח בקרה'                       },
+  nav_workspace:        { en: 'Dashboard',              he: 'דשבורד'                         },
   nav_analytics:        { en: 'Analytics',              he: 'ניתוח'                          },
   nav_journal:          { en: 'Journal',                he: 'יומן'                           },
-  nav_playbook:         { en: 'Playbook',               he: 'פלייבוק'                        },
+  nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
-  sys_live:             { en: 'Onyx',                   he: 'אוניקס'                         },
   sys_account:          { en: 'Account',                he: 'חשבון'                          },
   brand_sub:            { en: 'Journal',                he: 'יומן'                           },
 

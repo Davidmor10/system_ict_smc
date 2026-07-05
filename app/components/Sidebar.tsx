@@ -26,7 +26,7 @@ export default function Sidebar() {
       {/* ── Branding ─────────────────────────────────────────── */}
       <div className="px-5 py-5 border-b border-[#1c1c1e]">
         <span className="block font-serif text-lg font-bold tracking-[0.06em] text-white leading-none">
-          Onyx
+          ONYX
         </span>
         <span className={`block font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase leading-none mt-1.5 ${rtl ? 'text-right' : ''}`}>
           {t('brand_sub')}
@@ -75,12 +75,6 @@ export default function Sidebar() {
             <span className="text-xs font-bold font-mono text-white/50 uppercase tracking-[0.18em]">{t('sys_account')}</span>
           </div>
         )}
-        <div className={`flex items-center gap-2 mb-3 ${rtl ? 'flex-row-reverse' : ''}`}>
-          <span className="h-2 w-2 rounded-full bg-[#d4af37] shrink-0" />
-          <span className={`text-[10px] font-bold font-mono uppercase tracking-[0.18em] text-[#d4af37] ${rtl ? 'text-right' : ''}`}>
-            {t('sys_live')}
-          </span>
-        </div>
         <button
           onClick={toggle}
           aria-label="Toggle language"
