@@ -380,7 +380,7 @@ export default function AiAnalyticsPage() {
                   אנליטיקת <span style={{ color: '#d4af37', textShadow: '0 0 60px rgba(212,175,55,.4)' }}>AI</span>
                 </h2>
               </div>
-              <p className="font-medium text-[#c0c0c0] leading-[1.7] text-right max-w-xl ms-auto pb-1" style={{ fontSize: 'clamp(15px,1.4vw,18px)' }}>
+              <p className="font-medium text-[#c0c0c0] leading-[1.7] text-right max-w-xl me-auto pb-1" style={{ fontSize: 'clamp(15px,1.4vw,18px)' }}>
                 ניתוח אוטומטי של יומן המסחר שלך. המערכת מזקקת מכל עסקה את הקצה — לפי מכשיר, סשן, כיוון וזמן — מזהה דפוסים חוזרים ומסכמת אותם לדוח שבועי, כדי שתדע בדיוק היכן הביצועים חזקים והיכן כדאי לחדד.
               </p>
             </Reveal>
