@@ -125,7 +125,7 @@ function HBar({ pct }: { pct: number }) {
 }
 
 /** Vertical fill bar — for the weekday/hour time-signature charts. */
-function VBar({ pct, tone, label }: { pct: number; tone: 'best' | 'worst' | 'mid'; label: string }) {
+function VBar({ pct, tone, label, labelSize = 11.5 }: { pct: number; tone: 'best' | 'worst' | 'mid'; label: string; labelSize?: number }) {
   const [ref, visible] = useInView<HTMLDivElement>();
   const gradient =
     tone === 'best'  ? 'linear-gradient(180deg,#d4af37,#6b5820)' :
@@ -141,7 +141,7 @@ function VBar({ pct, tone, label }: { pct: number; tone: 'best' | 'worst' | 'mid
         borderRadius: '3px 3px 0 0', background: gradient, boxShadow: glow,
         transition: 'height 1s var(--ease-expo-out)',
       }} />
-      <span className="font-mono" style={{ fontSize: 11, fontWeight: weight, color }}>{label}</span>
+      <span className="font-mono" style={{ fontSize: labelSize, fontWeight: weight, color }}>{label}</span>
     </div>
   );
 }
@@ -470,7 +470,7 @@ export default function AiAnalyticsPage() {
             <div className="flex items-center justify-between gap-7 flex-wrap py-2 pb-8 border-b border-[#1c1c1e]">
               <div className="text-right">
                 <div className="flex items-center gap-2.5 mb-3"><span className="w-2 h-2 rounded-full bg-[#d4af37]" style={{ animation: 'onyx-dot-pulse 2.4s infinite' }} /><span className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#d4af37]">{analysis.sessions.length === 1 ? 'חלון המנצח היחיד' : 'הסשן החזק ביותר'}</span></div>
-                <h4 className="font-serif font-extrabold text-white leading-none" style={{ fontSize: 'clamp(26px,3vw,38px)' }}>{SESSION_HE[topSession.key] ?? topSession.label}</h4>
+                <h4 className="font-serif font-extrabold text-white leading-none" style={{ fontSize: 'clamp(26px,3vw,40px)' }}>{SESSION_HE[topSession.key] ?? topSession.label}</h4>
                 <p className="max-w-md mt-3 text-sm text-[#c0c0c0] leading-relaxed">
                   {topSession.trades} מתוך {p.totalTrades} העסקאות שלך נפתחו בסשן זה{analysis.sessions.length === 1 ? ' — הסשן היחיד שבו קיימת כרגע דגימה.' : `, עם ${topSession.winRate.toFixed(0)}% הצלחה.`}
                 </p>
@@ -489,7 +489,7 @@ export default function AiAnalyticsPage() {
             <div className="pt-8">
               <div className="flex items-baseline justify-between mb-5">
                 <span className="font-mono text-sm font-extrabold text-white/66 tracking-[0.06em]">{analysis.direction.long.trades} לונג · {analysis.direction.short.trades} שורט</span>
-                <span className="font-serif text-lg font-bold text-white">לונג מול שורט</span>
+                <span className="font-serif font-bold text-white" style={{ fontSize: 19 }}>לונג מול שורט</span>
               </div>
               <div className="flex h-[70px] border border-[#1c1c1e] rounded-[3px] overflow-hidden">
                 {longPct > 0 && (
@@ -553,7 +553,7 @@ export default function AiAnalyticsPage() {
                     <span className="block font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] text-[#d4af37] mt-2">שעה · IDT</span>
                   </div>
                   <div className="flex gap-0.5 items-end h-[130px]">
-                    {hourRows.map(g => <VBar key={g.key} pct={g.pct} tone={g.tone} label={g.label} />)}
+                    {hourRows.map(g => <VBar key={g.key} pct={g.pct} tone={g.tone} label={g.label} labelSize={10} />)}
                   </div>
                 </div>
               )}
@@ -595,7 +595,7 @@ export default function AiAnalyticsPage() {
           ) : (
             <div>
               {confirmationRows.map(g => (
-                <div key={g.key} className="grid gap-6 sm:gap-9 items-center py-6 border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: 'minmax(0,1fr) clamp(200px,24vw,260px)' }}>
+                <div key={g.key} className="grid gap-6 sm:gap-9 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: 'minmax(0,1fr) clamp(200px,24vw,260px)' }}>
                   <div className="text-right">
                     <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 11 }}>◈</span><span className="font-mono text-base font-bold text-white">{g.key}</span></div>
                     <HBar pct={g.pct} />
@@ -667,14 +667,14 @@ export default function AiAnalyticsPage() {
               </Reveal>
 
               <div className="mt-8 pt-6 border-t border-[#1c1c1e] flex items-center justify-between gap-4 flex-wrap">
-                <span className="font-mono text-xs font-semibold text-[#52525b]">
-                  {reportHistory.length === 0 ? 'אין עדיין דוחות קודמים — הארכיון יתמלא שבוע אחר שבוע.' : `${reportHistory.length} דוחות בארכיון.`}
-                </span>
                 {reportHistory.length > 0 && (
                   <button onClick={() => setShowHistory(v => !v)} className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-white/45 hover:text-[#d4af37] transition-colors">
                     {showHistory ? 'הסתר' : 'גיליונות קודמים'}
                   </button>
                 )}
+                <span className="font-mono text-xs font-semibold text-[#52525b]">
+                  {reportHistory.length === 0 ? 'אין עדיין דוחות קודמים — הארכיון יתמלא שבוע אחר שבוע.' : `${reportHistory.length} דוחות בארכיון.`}
+                </span>
               </div>
               {showHistory && (
                 <div className="mt-4 flex flex-col gap-2.5 onyx-reveal">
