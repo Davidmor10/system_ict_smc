@@ -373,7 +373,7 @@ export default function AiAnalyticsPage() {
           <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(120% 90% at 82% 0%,rgba(212,175,55,.11),transparent 58%)' }} />
           <div className="onyx-hero-sweep absolute inset-x-0 top-0 h-px pointer-events-none z-[2]" />
           <div className="relative">
-            <Reveal className="grid grid-cols-1 min-[820px]:grid-cols-[clamp(240px,24vw,340px)_minmax(0,1fr)] gap-8 sm:gap-[clamp(32px,4vw,72px)] items-end mb-9 sm:mb-[clamp(38px,4vw,56px)]">
+            <Reveal className="grid grid-cols-1 min-[820px]:grid-cols-[clamp(240px,24vw,340px)_minmax(0,1fr)] gap-8 sm:gap-[clamp(32px,4vw,72px)] items-start mb-9 sm:mb-[clamp(38px,4vw,56px)]">
               <div className="text-right">
                 <div className="flex items-center gap-2.5 mb-4"><span className="text-[#d4af37] text-sm">◈</span><span className="font-mono text-[11px] font-bold tracking-[0.3em] uppercase text-[#d4af37]">Onyx Intelligence</span></div>
                 <h2 className="font-serif font-bold text-white leading-[0.96]" style={{ fontSize: 'clamp(40px,5.5vw,76px)' }}>
