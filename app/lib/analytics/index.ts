@@ -11,6 +11,7 @@ import type { TradeEntry } from '../journal';
 import { analyzePerformance } from './performance';
 import { analyzeInstruments } from './instruments';
 import { analyzeSessions } from './sessions';
+import { analyzeConfirmations } from './confirmations';
 import { analyzeTime } from './time';
 import { analyzeDirection } from './direction';
 import { discoverPatterns } from './patterns';
@@ -21,6 +22,7 @@ export function runFullAnalysis(trades: TradeEntry[]): FullAnalysis {
     performance: analyzePerformance(trades),
     instruments: analyzeInstruments(trades),
     sessions: analyzeSessions(trades),
+    confirmations: analyzeConfirmations(trades),
     time: analyzeTime(trades),
     direction: analyzeDirection(trades),
     patterns: discoverPatterns(trades),
@@ -30,6 +32,7 @@ export function runFullAnalysis(trades: TradeEntry[]): FullAnalysis {
 export { analyzePerformance } from './performance';
 export { analyzeInstruments } from './instruments';
 export { analyzeSessions } from './sessions';
+export { analyzeConfirmations } from './confirmations';
 export { analyzeTime, hourOf, isoWeekKey } from './time';
 export { analyzeDirection } from './direction';
 export { discoverPatterns } from './patterns';

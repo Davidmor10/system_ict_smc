@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { TradeEntry, Direction, TradeResult } from '../lib/journal';
-import { todayISO, computeStats } from '../lib/journal';
+import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcPnL, calcRealizedR, calcPoints, calcTicks } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
@@ -16,6 +16,10 @@ const PLAYBOOK_STORAGE_KEY = 'onyx_playbook';
 /** IFVG confirmation timeframe is no longer surfaced to the trader — kept as a fixed default so
     older analytics/exports that read TradeEntry.confirmation keep working. */
 const DEFAULT_CONFIRMATION = 'IFVG_2M' as const;
+
+const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שורט' };
+const RESULT_HE: Record<TradeResult, string> = { OPEN: 'עדיין רצה', WIN: 'טייק - TP', LOSS: 'הפסד - SL', BE: 'ברייק איוון - BE' };
+const BIAS_HE: Record<string, string> = { BULLISH: 'עולה', BEARISH: 'יורד', INDECISIVE: 'ניטרלי' };
 
 interface PlaybookSetup { id: string; name: string; }
 
@@ -76,17 +80,6 @@ function empty(): FormState {
   };
 }
 
-function ordinal(n: number): string {
-  const v = n % 100;
-  if (v >= 11 && v <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1: return `${n}st`;
-    case 2: return `${n}nd`;
-    case 3: return `${n}rd`;
-    default: return `${n}th`;
-  }
-}
-
 /** One line straight from the analytics engine — no network call, so it's on screen
     instantly. Only fires once the trader has 3+ trades logged (any dates), matching
     the same threshold every AI surface in the app uses. */
@@ -100,15 +93,15 @@ function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string
     if (decided.length > 0) {
       const wins = sessionThisWeek.filter(t => t.result === 'WIN').length;
       const winRate = Math.round((wins / decided.length) * 100);
-      const label = SESS.find(s => s.key === trade.session)?.en ?? trade.session;
-      return `This was your ${ordinal(sessionThisWeek.length)} ${label} trade this week. Current ${label} win rate: ${winRate}%.`;
+      const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
+      return `זו העסקה ה-${sessionThisWeek.length} שלך השבוע בסשן ${label}. אחוז ההצלחה הנוכחי בסשן: ${winRate}%.`;
     }
   }
 
   const strongInstruments = analyzeInstruments(allTrades).filter(g => g.confidence.level !== 'low');
   if (strongInstruments.length > 0) {
     const best = strongInstruments.reduce((a, b) => (b.winRate > a.winRate ? b : a));
-    return `${best.key} remains your strongest instrument by win rate (${best.winRate.toFixed(0)}%).`;
+    return `${best.key} עדיין המכשיר הכי חזק שלך מבחינת אחוז הצלחה (${best.winRate.toFixed(0)}%).`;
   }
 
   return null;
@@ -121,21 +114,21 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
   const allTrades = [trade, ...priorTrades];
 
   if (trade.session && trade.session !== 'NONE') {
-    const label = SESS.find(s => s.key === trade.session)?.en ?? trade.session;
-    facts.push(`Added to ${label} session stats.`);
+    const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
+    facts.push(`נוסף לסטטיסטיקת סשן ${label}.`);
   }
 
   const rr = calcRR(trade.entry, trade.stop, trade.target);
-  if (rr !== null) facts.push(`Planned RR calculated automatically: ${rr.toFixed(2)}R.`);
+  if (rr !== null) facts.push(`ה-RR המתוכנן חושב אוטומטית: ${rr.toFixed(2)}R.`);
 
   if (trade.result === 'OPEN') {
-    facts.push('Marked Open — update the result once it closes.');
+    facts.push('סומנה כפתוחה — עדכן את התוצאה כשהעסקה תיסגר.');
   } else {
     const after = computeStats(allTrades);
-    facts.push(`Win rate updated to ${after.winRate.toFixed(0)}%.`);
+    facts.push(`אחוז ההצלחה התעדכן ל-${after.winRate.toFixed(0)}%.`);
   }
 
-  facts.push(trade.biasAlignment === 'ALIGNED' ? 'Aligned with today’s bias.' : 'Logged as counter-trend for awareness.');
+  facts.push(trade.biasAlignment === 'ALIGNED' ? 'מיושרת עם הביאס של היום.' : 'נרשמה כנגד המגמה, לשים לב.');
 
   const instant = buildInstantInsight(trade, allTrades);
   if (instant) facts.push(instant);
@@ -244,7 +237,7 @@ export default function TradeForm({
       result: form.result,
       session: form.session || 'NONE',
       bias: declaredBias ?? 'INDECISIVE',
-      model: form.model || 'Unspecified',
+      model: form.model || UNSPECIFIED_MODEL,
       confirmation: DEFAULT_CONFIRMATION,
       notes: form.notes,
       screenshots: form.screenshots.length ? form.screenshots : undefined,
@@ -285,32 +278,32 @@ export default function TradeForm({
       <form
         onSubmit={handleSubmit}
         className={`space-y-6 transition-opacity duration-200 ${busy ? 'opacity-30 pointer-events-none' : ''}`}
-        dir="ltr"
+        dir="rtl"
         aria-hidden={busy}
       >
         {/* ── Context — quiet, human framing, not another field ── */}
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/40 mb-1.5">New Entry</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/40 mb-1.5">עסקה חדשה</p>
           <p className="text-[13px] text-white/40 leading-relaxed">
-            Document your latest trade — most entries take under a minute, and every one sharpens your edge.
+            תעד את העסקה האחרונה שלך — כל רישום לוקח פחות מדקה, וכל עסקה מחדדת את היתרון שלך.
           </p>
         </div>
 
         {/* ── WHEN — always visible; every trade needs a timestamp ── */}
-        <Group label="When" tone="muted">
+        <Group label="מתי" tone="muted">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Date">
+            <Field label="תאריך">
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
             </Field>
-            <Field label="Time">
+            <Field label="שעה">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
             </Field>
           </div>
         </Group>
 
         {/* ── TRADE INFO ── */}
-        <Group label="Trade">
-          <Field label="Instrument">
+        <Group label="פרטי העסקה">
+          <Field label="נכס">
             <div className="grid grid-cols-4 gap-1.5">
               {INSTRUMENT_KEYS.map(s => (
                 <button type="button" key={s} onClick={() => set('symbol', s)}
@@ -322,32 +315,32 @@ export default function TradeForm({
             </div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Direction">
+            <Field label="כיוון">
               <div className="flex gap-1.5">
                 {(['LONG', 'SHORT'] as Direction[]).map(d => (
                   <button type="button" key={d} onClick={() => set('direction', d)}
                     className={toggleBtn(form.direction === d, d === 'LONG' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]' : 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]')}>
-                    {d}
+                    {DIRECTION_HE[d]}
                   </button>
                 ))}
               </div>
             </Field>
-            <Field label="Contracts">
+            <Field label="חוזים">
               <input type="number" min={1} step="1" value={form.contracts} onChange={e => set('contracts', e.target.value)} placeholder="1" className={inputCls} required />
             </Field>
           </div>
         </Group>
 
         {/* ── EXECUTION — entry/stop/target, the resulting RR, and the outcome ── */}
-        <Group label="Execution">
+        <Group label="ביצוע">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Entry">
+            <Field label="כניסה">
               <input type="number" step="0.25" value={form.entry} onChange={e => set('entry', e.target.value)} placeholder="0.00" className={inputCls} required />
             </Field>
-            <Field label="Stop Loss">
+            <Field label="סטופ">
               <input type="number" step="0.25" value={form.stop} onChange={e => set('stop', e.target.value)} placeholder="0.00" className={inputCls} required />
             </Field>
-            <Field label="Take Profit">
+            <Field label="יעד">
               <input type="number" step="0.25" value={form.target} onChange={e => set('target', e.target.value)} placeholder="0.00" className={inputCls} required />
             </Field>
           </div>
@@ -355,14 +348,14 @@ export default function TradeForm({
           {rr !== null && (
             <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white/[0.02] transition-all duration-150">
               <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Planned RR</span>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">RR מתוכנן</span>
                 <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>{rr.toFixed(2)}R</span>
               </div>
               {pnl !== null && (
                 <>
                   <div className="h-8 w-px bg-white/[0.08]" />
                   <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Gross P&L</span>
+                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד גולמי</span>
                     <span className="font-mono text-xl font-bold" style={{ color: pnl >= 0 ? '#22c55e' : '#ef4444' }}>
                       {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
                     </span>
@@ -373,7 +366,7 @@ export default function TradeForm({
                 <>
                   <div className="h-8 w-px bg-white/[0.08]" />
                   <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">Points · Ticks</span>
+                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">נקודות · טיקים</span>
                     <span className="font-mono text-sm font-bold text-white/70">
                       {points >= 0 ? '+' : ''}{points.toFixed(2)} · {ticks! >= 0 ? '+' : ''}{Math.round(ticks!)}
                     </span>
@@ -383,7 +376,7 @@ export default function TradeForm({
             </div>
           )}
 
-          <Field label="Result">
+          <Field label="תוצאה">
             <div className="flex gap-1.5">
               {(['OPEN', 'WIN', 'LOSS', 'BE'] as TradeResult[]).map(r => (
                 <button
@@ -399,7 +392,7 @@ export default function TradeForm({
                       : 'border-[#222] text-white/30 hover:text-white/60'
                   }`}
                 >
-                  {r}
+                  {RESULT_HE[r]}
                 </button>
               ))}
             </div>
@@ -407,32 +400,32 @@ export default function TradeForm({
         </Group>
 
         {/* ── SESSION — explicit, manual; critical for analytics ── */}
-        <Group label="Session">
+        <Group label="סשן">
           <div className="flex gap-1.5">
             {SESS.map(s => (
               <button type="button" key={s.key} onClick={() => set('session', s.key)}
                 className={toggleBtn(form.session === s.key, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
-                {s.en}
+                {s.he}
               </button>
             ))}
           </div>
           {declaredBias && (
             <p className="font-mono text-[10px] text-white/30">
-              Today&apos;s bias: <b className="text-white/60">{declaredBias}</b>{' '}
+              הביאס של היום: <b className="text-white/60">{BIAS_HE[declaredBias] ?? declaredBias}</b>{' '}
               {alignment === 'ALIGNED'
-                ? <span className="text-[#22c55e]">✓ this trade is aligned</span>
-                : <span className="text-[#d4af37]">⚠ this trade is counter-trend</span>}
+                ? <span className="text-[#22c55e]">✓ העסקה הזו מיושרת עם הביאס</span>
+                : <span className="text-[#d4af37]">⚠ העסקה הזו נגד המגמה</span>}
             </p>
           )}
         </Group>
 
         {/* ── SCREENSHOT — encouraged, always visible ── */}
-        <Group label="Screenshot" tone="muted">
+        <Group label="צילום מסך" tone="muted">
           <ScreenshotUpload images={form.screenshots} onChange={s => set('screenshots', s)} />
         </Group>
 
         {/* ── REASONING — feeds the AI's pattern + psychology analysis ── */}
-        <Group label="Reasoning" tone="muted">
+        <Group label="נימוק" tone="muted">
           <div>
             <p className="text-[13px] text-white/55 mb-2 leading-snug" dir="rtl">מה גרם לך להיכנס לעסקה הזו?</p>
             <textarea
@@ -458,26 +451,26 @@ export default function TradeForm({
           >
             ▾
           </span>
-          {showAdvanced ? 'Hide advanced fields' : 'Show advanced fields'}
+          {showAdvanced ? 'הסתר שדות מתקדמים' : 'הצג שדות מתקדמים'}
         </button>
 
         {showAdvanced && (
           <div className="onyx-reveal space-y-5 pt-1 border-t border-white/[0.04]">
-            <Field label="Model">
+            <Field label="מודל">
               {playbookSetups.length > 0 ? (
                 <select value={form.model} onChange={e => set('model', e.target.value)} className={inputCls}>
-                  <option value="">Unspecified</option>
+                  <option value="">{UNSPECIFIED_MODEL}</option>
                   {playbookSetups.map(s => (
                     <option key={s.id} value={s.name}>{s.name}</option>
                   ))}
                 </select>
               ) : (
                 <p className="font-mono text-xs text-white/30">
-                  No setups in your Playbook yet —{' '}
+                  עדיין אין לך סטאפים בפלייבוק —{' '}
                   <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
-                    define one
+                    הגדר אחד
                   </Link>{' '}
-                  to tag trades by model.
+                  כדי לתייג עסקאות לפי מודל.
                 </p>
               )}
             </Field>
@@ -490,7 +483,7 @@ export default function TradeForm({
             type="submit"
             className="flex-1 py-3.5 rounded-xl font-mono text-sm font-bold uppercase tracking-[0.14em] transition-all duration-200 bg-[#d4af37] text-black hover:bg-[#e5c84a] hover:scale-[1.01] [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
           >
-            Log Trade
+            שמור עסקה
           </button>
           {onCancel && (
             <button
@@ -498,7 +491,7 @@ export default function TradeForm({
               onClick={onCancel}
               className="px-6 py-3.5 rounded-xl border border-white/[0.06] text-white/40 font-mono text-sm uppercase tracking-[0.14em] hover:text-white/70 hover:border-white/15 transition-colors duration-150"
             >
-              Cancel
+              ביטול
             </button>
           )}
         </div>
@@ -506,13 +499,13 @@ export default function TradeForm({
 
       {/* ── Save flow overlay — saving → analyzed → immediate feedback ── */}
       {busy && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/65 backdrop-blur-[3px]" dir="ltr">
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/65 backdrop-blur-[3px]" dir="rtl">
           <div key={stage} className="onyx-pop-in w-full max-w-sm px-6 py-8">
 
             {stage === 'saving' && (
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="w-9 h-9 rounded-full border-2 border-[#d4af37]/15 border-t-[#d4af37] animate-spin" />
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/35">Saving trade…</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/35">שומר את העסקה...</p>
               </div>
             )}
 
@@ -521,10 +514,10 @@ export default function TradeForm({
                 <div className="w-9 h-9 rounded-full flex items-center justify-center border-2 border-[#22c55e]/30 bg-[#22c55e]/5">
                   <span className="text-[#22c55e] text-base leading-none">✓</span>
                 </div>
-                <p className="text-sm text-white/70">Trade recorded</p>
+                <p className="text-sm text-white/70">העסקה נשמרה</p>
                 <div className="flex items-center gap-2">
                   <TypingDots />
-                  <span className="font-mono text-[11px] text-white/35">Onyx is analyzing the trade…</span>
+                  <span className="font-mono text-[11px] text-white/35">Onyx מנתח את העסקה...</span>
                 </div>
               </div>
             )}
@@ -535,7 +528,7 @@ export default function TradeForm({
                   <div className="w-10 h-10 rounded-full flex items-center justify-center border-2 border-[#22c55e]/40 bg-[#22c55e]/5">
                     <span className="text-[#22c55e] text-lg leading-none">✓</span>
                   </div>
-                  <p className="text-sm font-medium text-white/80">Trade logged successfully</p>
+                  <p className="text-sm font-medium text-white/80">העסקה נשמרה בהצלחה</p>
                 </div>
                 <ul className="space-y-2">
                   {summaryFacts.map((f, i) => (
@@ -550,14 +543,14 @@ export default function TradeForm({
                     onClick={logAnother}
                     className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/55 hover:text-white hover:border-white/20 font-mono text-[11px] uppercase tracking-[0.12em] transition-all duration-150"
                   >
-                    Log another
+                    הוסף עוד עסקה
                   </button>
                   <button
                     type="button"
                     onClick={finish}
                     className="flex-1 py-2.5 rounded-xl bg-[#d4af37] text-black font-mono text-[11px] font-bold uppercase tracking-[0.12em] hover:bg-[#e5c84a] transition-all duration-150"
                   >
-                    Done
+                    סיימתי
                   </button>
                 </div>
               </div>

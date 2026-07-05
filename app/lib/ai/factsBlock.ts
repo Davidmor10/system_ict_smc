@@ -27,6 +27,7 @@ export function summarizeAnalysis(a: FullAnalysis): string {
 
   if (a.instruments.length) lines.push(`\nBY INSTRUMENT:\n${a.instruments.map(fmtGroup).join('\n')}`);
   if (a.sessions.length) lines.push(`\nBY SESSION:\n${a.sessions.map(fmtGroup).join('\n')}`);
+  if (a.confirmations.length) lines.push(`\nBY CONFIRMATION:\n${a.confirmations.map(fmtGroup).join('\n')}`);
 
   lines.push(`\nBY DIRECTION:\n${fmtGroup(a.direction.long)}\n${fmtGroup(a.direction.short)}`);
 
@@ -34,6 +35,7 @@ export function summarizeAnalysis(a: FullAnalysis): string {
   if (a.time.worstHour) lines.push(`Worst hour: ${fmtGroup(a.time.worstHour)}`);
   if (a.time.bestWeekday) lines.push(`Best weekday: ${fmtGroup(a.time.bestWeekday)}`);
   if (a.time.worstWeekday) lines.push(`Worst weekday: ${fmtGroup(a.time.worstWeekday)}`);
+  if (a.time.bestMonth) lines.push(`Best month: ${fmtGroup(a.time.bestMonth)}`);
 
   return lines.join('\n');
 }

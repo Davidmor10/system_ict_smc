@@ -142,11 +142,17 @@ function toLocalISO(d: Date): string {
 
 const VALID_RESULTS: TradeResult[] = ['OPEN', 'WIN', 'LOSS', 'BE'];
 
+/** Sentinel for "no model/setup tag chosen" — shown in the UI and used to
+    exclude untagged trades from confirmation analytics. Trades saved before
+    the app went Hebrew-only stored the English literal "Unspecified"; treat
+    it the same as empty so old journals pick up the Hebrew label too. */
+export const UNSPECIFIED_MODEL = 'לא צוין';
+
 /**
  * Repair one raw record into a complete `TradeEntry`. Back-fills fields that did
  * not exist when older trades were saved:
  *   • `dateISO` ← derived from the `id` (a `Date.now()` timestamp at creation).
- *   • `model`   ← 'Unspecified'.
+ *   • `model`   ← UNSPECIFIED_MODEL.
  * Returns `null` for a record too malformed to use (so one bad row can't poison
  * the whole journal).
  */
@@ -162,7 +168,9 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
 
   const result = VALID_RESULTS.includes(r.result as TradeResult) ? (r.result as TradeResult) : 'OPEN';
   const model =
-    typeof r.model === 'string' && r.model.length > 0 ? (r.model as IctModel) : 'Unspecified';
+    typeof r.model === 'string' && r.model.length > 0 && r.model !== 'Unspecified'
+      ? (r.model as IctModel)
+      : UNSPECIFIED_MODEL;
   const dateISO =
     typeof r.dateISO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dateISO)
       ? r.dateISO

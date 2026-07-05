@@ -10,14 +10,14 @@ const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const NAV = [
   { href: '/dashboard',             key: 'nav_workspace' },
   { href: '/dashboard/journal',     key: 'nav_journal'   },
-  { href: '/dashboard/analytics',   key: 'nav_analytics' },
+  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics' },
   { href: '/dashboard/playbook',    key: 'nav_playbook'  },
   { href: '/dashboard/rules',       key: 'nav_rules'     },
 ] as const;
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lang, toggle, t } = useLanguage();
+  const { lang, t } = useLanguage();
   const rtl = lang === 'he';
 
   return (
@@ -75,15 +75,6 @@ export default function Sidebar() {
             <span className="text-xs font-bold font-mono text-white/50 uppercase tracking-[0.18em]">{t('sys_account')}</span>
           </div>
         )}
-        <button
-          onClick={toggle}
-          aria-label="Toggle language"
-          className="w-full flex items-center justify-between px-3 py-2 border border-[#1c1c1e] rounded-xl text-xs font-bold font-mono tracking-[0.25em] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all duration-200 ease-in-out group"
-        >
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
-          <span>{t('lang_other')}</span>
-          <span className="text-[#d4af37]/50 group-hover:text-[#d4af37]/70 transition-colors duration-200">◈</span>
-        </button>
       </div>
     </aside>
   );

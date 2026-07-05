@@ -6,6 +6,7 @@ import { loadTrades, saveTrades, softDelete, todayISO, tradePnL } from '../../li
 import type { TradeEntry } from '../../lib/journal';
 import TradeForm from '../../components/TradeForm';
 import AIInsightPanel from '../../components/AIInsightPanel';
+import JournalCalendar from '../../components/JournalCalendar';
 import EmptyState from '../../components/EmptyState';
 
 function TradeRow({ trade, onDelete }: { trade: TradeEntry; onDelete: (id: number) => void }) {
@@ -112,6 +113,9 @@ export default function JournalPage() {
 
         {/* AI Insight */}
         {trades.length > 0 && <AIInsightPanel trades={trades} />}
+
+        {/* Monthly calendar */}
+        {trades.length > 0 && <JournalCalendar trades={trades} />}
 
         {/* Date filter */}
         {dates.length > 0 && (

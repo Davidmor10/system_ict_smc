@@ -13,7 +13,7 @@ import { useLanguage } from '../hooks/useLanguage';
 // landing page only mounts it when Clerk is configured.
 export default function Header() {
   const { isLoaded, isSignedIn } = useAuth();
-  const { t, toggle } = useLanguage();
+  const { t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -45,15 +45,8 @@ export default function Header() {
           <span className="font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase">Trading</span>
         </Link>
 
-        {/* Language toggle + auth entry */}
+        {/* Auth entry */}
         <nav className="flex items-center gap-2">
-          <button
-            onClick={toggle}
-            aria-label="Toggle language"
-            className="px-2.5 py-1.5 rounded-xl border border-[#1c1c1e] text-white/60 font-mono text-xs font-bold uppercase tracking-[0.18em] hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-200"
-          >
-            {t('lang_other')}
-          </button>
           {!isLoaded ? null : isSignedIn ? (
             <Link href="/dashboard" className={solid}>
               <span className="hidden sm:inline">{t('hdr_workspace')} </span>←

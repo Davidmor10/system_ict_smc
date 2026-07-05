@@ -1,7 +1,8 @@
 import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
 import { summarizeAnalysis } from './factsBlock';
-import { anthropic, AI_MODEL } from './client';
+import { generateInsightText } from './client';
+import { HEBREW_MENTOR_STYLE } from './styleGuide';
 
 export interface AiDiscovery {
   /** One sentence naming the discovery, must cite the specific number(s). */
@@ -30,15 +31,13 @@ export async function generateDiscovery(trades: TradeEntry[], lang: 'he' | 'en')
   const analysis = runFullAnalysis(trades);
   const top = analysis.patterns[0];
 
-  const langInstruction = lang === 'he'
-    ? 'Respond entirely in Hebrew (עברית), natural and professional — this is a serious trader, not a beginner.'
-    : 'Respond in English.';
+  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
 
   const focusFacts = top
     ? `TOP FINDING (already computed — this is the discovery, do not pick a different one and do not recompute it):\n${describeCandidate(top)}`
     : `No combo pattern has reached the minimum sample size yet. Use the OVERALL stats below as the discovery instead, and keep the claim modest — describe the win rate itself, don't imply a comparison that isn't backed by data.`;
 
-  const prompt = `You are Onyx, the trading intelligence layer of a futures day-trading journal. You do NOT predict markets, you do NOT give buy/sell signals, and you NEVER tell the trader what to trade next. You only explain patterns already found in the trader's own historical data.
+  const prompt = `You are Onyx, an experienced trading mentor reviewing a futures day-trader's journal — talking straight, like one trader to another. You do NOT predict markets, you do NOT give buy/sell signals, and you NEVER tell the trader what to trade next. You only explain patterns already found in the trader's own historical data.
 
 ${langInstruction}
 
@@ -60,13 +59,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const message = await anthropic.messages.create({
-    model: AI_MODEL,
-    max_tokens: 400,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const raw = message.content[0].type === 'text' ? message.content[0].text : '{}';
+  const raw = await generateInsightText(prompt);
   let parsed: { title?: string; evidence?: string; action?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);

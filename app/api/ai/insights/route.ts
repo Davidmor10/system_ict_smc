@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { TradeEntry } from '../../../lib/journal';
 import { runFullAnalysis } from '../../../lib/analytics';
 import { fmtPF } from '../../../lib/ai/factsBlock';
-import { anthropic, AI_MODEL } from '../../../lib/ai/client';
+import { generateInsightText } from '../../../lib/ai/client';
+import { HEBREW_MENTOR_STYLE } from '../../../lib/ai/styleGuide';
 
 export interface AiInsight {
   type: 'opportunity' | 'warning' | 'pattern';
@@ -64,15 +65,13 @@ export async function POST(req: NextRequest) {
       .join('\n');
 
     const isHe = lang === 'he';
-    const langInstruction = isHe
-      ? 'Respond entirely in Hebrew (עברית). Use natural, professional Hebrew for a serious trader.'
-      : 'Respond in English.';
+    const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
 
     const totalWins = direction.long.wins + direction.short.wins;
     const totalLosses = direction.long.losses + direction.short.losses;
     const totalBE = perf.closedTrades - totalWins - totalLosses;
 
-    const prompt = `You are an elite ICT trading coach with deep expertise in institutional order flow, liquidity concepts, and trader psychology. You are analyzing a trader's journal data.
+    const prompt = `You are an experienced trading mentor reviewing a trader's journal data — the kind of person who talks straight, like one trader to another, not a research analyst.
 
 ${langInstruction}
 
@@ -108,18 +107,12 @@ Provide EXACTLY 3 insights in this JSON format:
 ]
 
 Rules:
-- Be specific, not generic. Reference their actual numbers. Use ICT/SMC terminology where it fits naturally (FVG, Order Block, Liquidity Sweep, BSL/SSL, SMT, etc.) — this trader knows the vocabulary.
+- Be specific, not generic. Reference their actual numbers. Only name a specific instrument, session, or confirmation tag when it's the exact one from the data above — never invent trading terminology on top of it.
 - Each insight should be ONE well-formed block: 1-2 sentences normally, but if there are multiple distinct points worth making (e.g. two separate risk patterns), use bullet points starting with "• " on separate lines within the same text field instead of cramming everything into one run-on sentence. Never split one idea into several weak fragments.
 - No fluff. No "I noticed that...". Start directly with the insight.
 - JSON only, no extra text.`;
 
-    const message = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const raw = message.content[0].type === 'text' ? message.content[0].text : '[]';
+    const raw = await generateInsightText(prompt);
     let parsed: Array<{ type: string; text: string }> = [];
     try {
       const match = raw.match(/\[[\s\S]*\]/);
