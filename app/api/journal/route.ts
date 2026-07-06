@@ -3,6 +3,18 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
 import { logSecurityEvent } from '../../lib/securityLog';
+import { checkRateLimit } from '../../lib/rateLimit';
+import { logger } from '../../lib/logger';
+
+// Returns null (and never throws) on a malformed body — lets callers turn it
+// into a clean 400 instead of an unhandled exception bubbling out of the route.
+async function parseJsonBody(req: Request): Promise<unknown | null> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
 import type {
   TradeEntry, Symbol, Direction, TradeResult, Bias,
   Setup, IFVGConfirmation, BiasAlignment,
@@ -96,6 +108,13 @@ export async function GET() {
     logSecurityEvent('auth_failed', { route: '/api/journal GET' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const limited = checkRateLimit(`journal:get:${userId}`, 60, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/journal GET', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
   if (!isSupabaseConfigured()) return NextResponse.json({ trades: [] });
 
   const supabase = createServerSupabaseClient();
@@ -105,7 +124,10 @@ export async function GET() {
     .eq('clerk_id', userId)
     .order('id', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logger.error('journal GET failed', { userId, error: error.message });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
   return NextResponse.json({ trades: (data ?? []).map(rowToTrade) });
 }
 
@@ -116,9 +138,22 @@ export async function POST(req: Request) {
     logSecurityEvent('auth_failed', { route: '/api/journal POST' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const limited = checkRateLimit(`journal:post:${userId}`, 60, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/journal POST', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const parsed = tradeEntrySchema.safeParse(await req.json());
+  const body = await parseJsonBody(req);
+  if (body === null) {
+    logSecurityEvent('validation_failed', { route: '/api/journal POST', userId, reason: 'invalid_json' });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const parsed = tradeEntrySchema.safeParse(body);
   if (!parsed.success) {
     logSecurityEvent('validation_failed', { route: '/api/journal POST', userId });
     return NextResponse.json({ error: 'Invalid trade payload', issues: parsed.error.issues }, { status: 400 });
@@ -130,7 +165,10 @@ export async function POST(req: Request) {
     .from('journal_trades')
     .upsert(tradeToRow(userId, trade), { onConflict: 'clerk_id,id' });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logger.error('journal POST failed', { userId, error: error.message });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -141,10 +179,22 @@ export async function PUT(req: Request) {
     logSecurityEvent('auth_failed', { route: '/api/journal PUT' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const limited = checkRateLimit(`journal:put:${userId}`, 10, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/journal PUT', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const body = await req.json();
-  const rawTrades = Array.isArray(body?.trades) ? body.trades : [];
+  const body = await parseJsonBody(req);
+  if (body === null) {
+    logSecurityEvent('validation_failed', { route: '/api/journal PUT', userId, reason: 'invalid_json' });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const rawTrades = Array.isArray((body as { trades?: unknown })?.trades) ? (body as { trades: unknown[] }).trades : [];
   if (rawTrades.length === 0) return NextResponse.json({ ok: true });
 
   const parsed = tradesArraySchema.safeParse(rawTrades);
@@ -159,6 +209,9 @@ export async function PUT(req: Request) {
     .from('journal_trades')
     .upsert(trades.map(t => tradeToRow(userId, t)), { onConflict: 'clerk_id,id' });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logger.error('journal PUT failed', { userId, error: error.message });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

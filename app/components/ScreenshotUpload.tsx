@@ -2,6 +2,11 @@
 
 import { useRef, useState } from 'react';
 
+// Kept comfortably under the server's MAX_SCREENSHOT_LEN (2M base64 chars,
+// ~1.5MB decoded) — filtering oversized files before the FileReader pass
+// avoids reading huge images into memory only to have the server reject them.
+const MAX_FILE_BYTES = 1_400_000;
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -27,7 +32,9 @@ export default function ScreenshotUpload({
   async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const room = Math.max(0, max - images.length);
-    const picked = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, room);
+    const picked = Array.from(files)
+      .filter(f => f.type.startsWith('image/') && f.size <= MAX_FILE_BYTES)
+      .slice(0, room);
     const urls = await Promise.all(picked.map(fileToDataUrl));
     if (urls.length) onChange([...images, ...urls]);
   }

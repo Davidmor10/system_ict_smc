@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { userPrefsPatchSchema } from '../../lib/validation';
 import { logSecurityEvent } from '../../lib/securityLog';
+import { checkRateLimit } from '../../lib/rateLimit';
+import { logger } from '../../lib/logger';
 
 export type UserPrefs = {
   chart_tf_es: string;
@@ -19,15 +21,26 @@ export async function GET() {
     logSecurityEvent('auth_failed', { route: '/api/preferences GET' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const limited = checkRateLimit(`preferences:get:${userId}`, 60, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/preferences GET', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
   if (!isSupabaseConfigured()) return NextResponse.json({ prefs: null });
 
   const supabase = createServerSupabaseClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_preferences')
     .select('chart_tf_es, chart_tf_nq, analysis_state, lockout_config, news_filters')
     .eq('clerk_id', userId)
     .maybeSingle();
 
+  if (error) {
+    logger.error('preferences GET failed', { userId, error: error.message });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
   return NextResponse.json({ prefs: data });
 }
 
@@ -38,23 +51,41 @@ export async function PUT(req: Request) {
     logSecurityEvent('auth_failed', { route: '/api/preferences PUT' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const limited = checkRateLimit(`preferences:put:${userId}`, 30, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/preferences PUT', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const parsed = userPrefsPatchSchema.safeParse(await req.json());
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    logSecurityEvent('validation_failed', { route: '/api/preferences PUT', userId, reason: 'invalid_json' });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const parsed = userPrefsPatchSchema.safeParse(body);
   if (!parsed.success) {
     logSecurityEvent('validation_failed', { route: '/api/preferences PUT', userId });
     return NextResponse.json({ error: 'Invalid preferences payload', issues: parsed.error.issues }, { status: 400 });
   }
-  const body: Partial<UserPrefs> = parsed.data;
+  const patch: Partial<UserPrefs> = parsed.data;
 
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('user_preferences')
     .upsert(
-      { clerk_id: userId, ...body, updated_at: new Date().toISOString() },
+      { clerk_id: userId, ...patch, updated_at: new Date().toISOString() },
       { onConflict: 'clerk_id' },
     );
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logger.error('preferences PUT failed', { userId, error: error.message });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
