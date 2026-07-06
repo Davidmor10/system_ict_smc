@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getStripe, isStripeConfigured, priceIdForTier } from '../../lib/stripe/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { checkRateLimit } from '../../lib/rateLimit';
+import { logSecurityEvent } from '../../lib/securityLog';
 
 // Creates a Stripe hosted Checkout session for the signed-in user and returns
 // its URL. When Stripe isn't configured we return { configured: false } so the
@@ -14,11 +15,13 @@ export async function POST(req: Request) {
 
   const { userId } = await auth();
   if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/checkout' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const limited = checkRateLimit(`checkout:${userId}`, 5, 60_000);
   if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/checkout', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 

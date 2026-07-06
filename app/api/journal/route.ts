@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
+import { logSecurityEvent } from '../../lib/securityLog';
 import type {
   TradeEntry, Symbol, Direction, TradeResult, Bias,
   Setup, IFVGConfirmation, BiasAlignment,
@@ -91,7 +92,10 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
 /** GET /api/journal — returns all trades (active + trash) for the current user. */
 export async function GET() {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/journal GET' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ trades: [] });
 
   const supabase = createServerSupabaseClient();
@@ -108,11 +112,17 @@ export async function GET() {
 /** POST /api/journal — upsert a single trade. Body: TradeEntry (JSON). */
 export async function POST(req: Request) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/journal POST' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const parsed = tradeEntrySchema.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid trade payload', issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) {
+    logSecurityEvent('validation_failed', { route: '/api/journal POST', userId });
+    return NextResponse.json({ error: 'Invalid trade payload', issues: parsed.error.issues }, { status: 400 });
+  }
   const trade: TradeEntry = parsed.data;
 
   const supabase = createServerSupabaseClient();
@@ -127,7 +137,10 @@ export async function POST(req: Request) {
 /** PUT /api/journal — bulk upsert (used for initial localStorage → cloud migration). */
 export async function PUT(req: Request) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/journal PUT' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const body = await req.json();
@@ -135,7 +148,10 @@ export async function PUT(req: Request) {
   if (rawTrades.length === 0) return NextResponse.json({ ok: true });
 
   const parsed = tradesArraySchema.safeParse(rawTrades);
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid trades payload', issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) {
+    logSecurityEvent('validation_failed', { route: '/api/journal PUT', userId });
+    return NextResponse.json({ error: 'Invalid trades payload', issues: parsed.error.issues }, { status: 400 });
+  }
   const trades: TradeEntry[] = parsed.data;
 
   const supabase = createServerSupabaseClient();

@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { userPrefsPatchSchema } from '../../lib/validation';
+import { logSecurityEvent } from '../../lib/securityLog';
 
 export type UserPrefs = {
   chart_tf_es: string;
@@ -14,7 +15,10 @@ export type UserPrefs = {
 /** GET /api/preferences — returns stored preferences for the current user. */
 export async function GET() {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/preferences GET' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ prefs: null });
 
   const supabase = createServerSupabaseClient();
@@ -30,11 +34,17 @@ export async function GET() {
 /** PUT /api/preferences — upserts a partial preferences patch for the current user. */
 export async function PUT(req: Request) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/preferences PUT' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const parsed = userPrefsPatchSchema.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid preferences payload', issues: parsed.error.issues }, { status: 400 });
+  if (!parsed.success) {
+    logSecurityEvent('validation_failed', { route: '/api/preferences PUT', userId });
+    return NextResponse.json({ error: 'Invalid preferences payload', issues: parsed.error.issues }, { status: 400 });
+  }
   const body: Partial<UserPrefs> = parsed.data;
 
   const supabase = createServerSupabaseClient();

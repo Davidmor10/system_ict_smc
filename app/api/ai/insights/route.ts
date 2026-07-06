@@ -6,6 +6,7 @@ import { fmtPF } from '../../../lib/ai/factsBlock';
 import { generateInsightText } from '../../../lib/ai/client';
 import { HEBREW_MENTOR_STYLE } from '../../../lib/ai/styleGuide';
 import { checkRateLimit } from '../../../lib/rateLimit';
+import { logSecurityEvent } from '../../../lib/securityLog';
 
 export interface AiInsight {
   type: 'opportunity' | 'warning' | 'pattern';
@@ -16,10 +17,16 @@ export interface AiInsight {
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/ai/insights' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const limited = checkRateLimit(`ai:insights:${userId}`);
-  if (!limited.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/ai/insights', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
 
   try {
     const { trades, lang = 'he' } = await req.json();

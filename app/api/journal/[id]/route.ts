@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/supabase/server';
+import { logSecurityEvent } from '../../../lib/securityLog';
 
 /** DELETE /api/journal/[id] — soft-delete (sets deleted_at). */
 export async function DELETE(
@@ -8,7 +9,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/journal/[id] DELETE' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const { id } = await params;
@@ -29,7 +33,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/journal/[id] PATCH' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const { id } = await params;
