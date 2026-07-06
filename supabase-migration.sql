@@ -126,5 +126,20 @@ alter table setups           enable row level security;
 alter table trading_rules    enable row level security;
 alter table rule_violations  enable row level security;
 
+-- Also cover the legacy/account tables — journal_trades and user_preferences are
+-- created above, and profiles is created out-of-band (by the Clerk webhook's
+-- first upsert) but already exists in any live database, so this ALTER is safe
+-- to run against it. With RLS enabled and no policies defined, every one of
+-- these tables defaults to deny-all for any connection that isn't the
+-- service-role key — which is exactly the app's model (Clerk, not Supabase
+-- Auth, does the authentication; every read/write goes through server-side API
+-- routes using the service-role key, which bypasses RLS by design). This is a
+-- backstop, not the primary access control: if a future route ever forgets to
+-- scope a query by clerk_id, RLS has no way to help since the service-role key
+-- ignores it — the real guarantee is every API route filtering by clerk_id.
+alter table journal_trades   enable row level security;
+alter table user_preferences enable row level security;
+alter table profiles         enable row level security;
+
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)

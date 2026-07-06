@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
+import { userPrefsPatchSchema } from '../../lib/validation';
 
 export type UserPrefs = {
   chart_tf_es: string;
@@ -32,7 +33,10 @@ export async function PUT(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const body: Partial<UserPrefs> = await req.json();
+  const parsed = userPrefsPatchSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid preferences payload', issues: parsed.error.issues }, { status: 400 });
+  const body: Partial<UserPrefs> = parsed.data;
+
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('user_preferences')

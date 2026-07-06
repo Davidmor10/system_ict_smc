@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
+import { tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
 import type {
   TradeEntry, Symbol, Direction, TradeResult, Bias,
   Setup, IFVGConfirmation, BiasAlignment,
@@ -110,7 +111,10 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const trade: TradeEntry = await req.json();
+  const parsed = tradeEntrySchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid trade payload', issues: parsed.error.issues }, { status: 400 });
+  const trade: TradeEntry = parsed.data;
+
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('journal_trades')
@@ -126,8 +130,13 @@ export async function PUT(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
-  const { trades }: { trades: TradeEntry[] } = await req.json();
-  if (!Array.isArray(trades) || trades.length === 0) return NextResponse.json({ ok: true });
+  const body = await req.json();
+  const rawTrades = Array.isArray(body?.trades) ? body.trades : [];
+  if (rawTrades.length === 0) return NextResponse.json({ ok: true });
+
+  const parsed = tradesArraySchema.safeParse(rawTrades);
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid trades payload', issues: parsed.error.issues }, { status: 400 });
+  const trades: TradeEntry[] = parsed.data;
 
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
