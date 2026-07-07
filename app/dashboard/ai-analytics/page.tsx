@@ -335,7 +335,20 @@ export default function AiAnalyticsPage() {
 
   if (trades.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto" dir="rtl">
+      <div
+        className="flex-1 overflow-y-auto"
+        dir="rtl"
+        style={{
+          background: `
+            radial-gradient(60% 70% at 0% 20%, rgba(212,175,55,0.05), transparent 72%),
+            radial-gradient(60% 70% at 100% 15%, rgba(122,143,168,0.045), transparent 72%),
+            radial-gradient(55% 65% at 0% 85%, rgba(122,143,168,0.035), transparent 70%),
+            radial-gradient(55% 65% at 100% 90%, rgba(212,175,55,0.04), transparent 70%),
+            radial-gradient(70% 50% at 50% 100%, rgba(212,175,55,0.03), transparent 72%),
+            #050505
+          `,
+        }}
+      >
         <div className="px-8 max-[880px]:px-4 py-8 pb-24 max-w-4xl mx-auto">
           <EmptyState
             icon="◈"
@@ -354,7 +367,20 @@ export default function AiAnalyticsPage() {
   const worstConf = confirmationRows[confirmationRows.length - 1];
 
   return (
-    <div className="flex-1 overflow-y-auto" dir="rtl">
+    <div
+      className="flex-1 overflow-y-auto"
+      dir="rtl"
+      style={{
+        background: `
+          radial-gradient(60% 70% at 0% 20%, rgba(212,175,55,0.05), transparent 72%),
+          radial-gradient(60% 70% at 100% 15%, rgba(122,143,168,0.045), transparent 72%),
+          radial-gradient(55% 65% at 0% 85%, rgba(122,143,168,0.035), transparent 70%),
+          radial-gradient(55% 65% at 100% 90%, rgba(212,175,55,0.04), transparent 70%),
+          radial-gradient(70% 50% at 50% 100%, rgba(212,175,55,0.03), transparent 72%),
+          #050505
+        `,
+      }}
+    >
       {/* Topbar */}
       <div className="sticky top-0 z-30 flex items-center justify-between gap-5 px-6 sm:px-[clamp(24px,3.5vw,60px)] h-[60px] bg-[rgba(5,5,5,.82)] backdrop-blur-md border-b border-[#1c1c1e]">
         <h1 className="font-serif text-[17px] font-bold text-white">אנליטיקת AI · מרכז מודיעין</h1>
