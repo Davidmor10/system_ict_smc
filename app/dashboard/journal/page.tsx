@@ -95,7 +95,7 @@ export default function JournalPage() {
     >
       {/* Header */}
       <div className="border-b border-[#1c1c1e]">
-        <div className="max-w-[1480px] mx-auto py-11 px-10 max-[880px]:px-5 max-[880px]:py-7">
+        <div className="max-w-[1600px] mx-auto py-11 px-10 max-[880px]:px-5 max-[880px]:py-7">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div>
               <div className="font-mono text-[11px] font-bold tracking-[0.34em] uppercase text-[#d4af37] mb-3.5">TRADING JOURNAL</div>
@@ -145,7 +145,7 @@ export default function JournalPage() {
         </div>
       </div>
 
-      <div className="max-w-[1480px] mx-auto py-10 px-10 max-[880px]:px-5 max-[880px]:py-6 space-y-11">
+      <div className="max-w-[1600px] mx-auto py-10 px-10 max-[880px]:px-5 max-[880px]:py-6 space-y-11">
 
         {/* Trade Form */}
         {showForm && (
