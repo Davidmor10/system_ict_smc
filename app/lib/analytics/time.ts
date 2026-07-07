@@ -25,6 +25,29 @@ function monthKeyOf(t: TradeEntry): string {
   return t.dateISO.slice(0, 7); // YYYY-MM
 }
 
+function toLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Monday of the ISO week containing `dateISO`, as `YYYY-MM-DD`. Used to build
+    calendar-aligned weekly windows (this week / last week / trailing baseline)
+    instead of a rolling trailing-7-days window. */
+export function startOfIsoWeek(dateISO: string): string {
+  const d = parseLocalDate(dateISO);
+  const dayNr = (d.getDay() + 6) % 7; // Mon=0 .. Sun=6
+  const monday = new Date(d.valueOf());
+  monday.setDate(monday.getDate() - dayNr);
+  return toLocalISO(monday);
+}
+
+/** `dateISO` shifted by `days` (negative = earlier), as `YYYY-MM-DD`. Used to
+    build the this-week/last-week/trailing-baseline date windows. */
+export function addDaysISO(dateISO: string, days: number): string {
+  const d = parseLocalDate(dateISO);
+  d.setDate(d.getDate() + days);
+  return toLocalISO(d);
+}
+
 /** ISO-8601 week key ("2026-W14"), Monday-start, week 1 = week containing
     the year's first Thursday. */
 export function isoWeekKey(dateISO: string): string {

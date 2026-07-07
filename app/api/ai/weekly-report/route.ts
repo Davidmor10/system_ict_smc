@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWeeklyReport } from '../../../lib/ai/weeklyReport';
-import type { TradeEntry } from '../../../lib/journal';
+import { generateWeeklyDeepAnalysis } from '../../../lib/intelligence/service';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 
@@ -19,13 +18,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { trades, lang = 'he' } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const lang = body?.lang === 'en' ? 'en' : 'he';
 
-    if (!Array.isArray(trades)) {
-      return NextResponse.json({ report: null });
-    }
-
-    const report = await generateWeeklyReport(trades as TradeEntry[], lang === 'en' ? 'en' : 'he');
+    // Fetches its own trades server-side (via clerk_id) and persists a deep
+    // narrative report to weekly_ai_reports — trades in the request body,
+    // if any, are ignored.
+    const report = await generateWeeklyDeepAnalysis(userId, lang);
     return NextResponse.json({ report });
   } catch (err) {
     console.error('[AI Weekly Report]', err);

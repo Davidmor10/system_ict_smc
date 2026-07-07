@@ -33,7 +33,7 @@ export { analyzePerformance } from './performance';
 export { analyzeInstruments } from './instruments';
 export { analyzeSessions } from './sessions';
 export { analyzeConfirmations } from './confirmations';
-export { analyzeTime, hourOf, isoWeekKey } from './time';
+export { analyzeTime, hourOf, isoWeekKey, startOfIsoWeek, addDaysISO } from './time';
 export { analyzeDirection } from './direction';
 export { discoverPatterns } from './patterns';
 export { confidenceFor, confidenceLevelFor } from './confidence';

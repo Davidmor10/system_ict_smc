@@ -29,10 +29,12 @@ type ResultShape = { data: Row[] | null; error: null };
 
 class FakeQuery implements PromiseLike<ResultShape> {
   private filters: Array<[string, unknown]> = [];
-  private mode: 'select' | 'update' | 'upsert' = 'select';
+  private mode: 'select' | 'update' | 'upsert' | 'insert' = 'select';
   private updatePatch: Row | null = null;
   private upsertRows: Row[] | null = null;
   private upsertConflictCols: string[] = [];
+  private insertRows: Row[] | null = null;
+  private limitCount: number | null = null;
 
   constructor(private client: FakeSupabaseClient, private table: string) {}
 
@@ -40,9 +42,21 @@ class FakeQuery implements PromiseLike<ResultShape> {
 
   eq(col: string, val: unknown) { this.filters.push([col, val]); return this; }
 
+  /** Only `is(col, null)` is exercised anywhere in this app — treated the
+      same as an equality filter against `null`. */
+  is(col: string, val: unknown) { this.filters.push([col, val]); return this; }
+
   order(_col: string, _opts?: unknown) { return this; }
 
+  limit(n: number) { this.limitCount = n; return this; }
+
   update(patch: Row) { this.mode = 'update'; this.updatePatch = patch; return this; }
+
+  insert(rows: Row | Row[]) {
+    this.mode = 'insert';
+    this.insertRows = Array.isArray(rows) ? rows : [rows];
+    return this;
+  }
 
   upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
     this.mode = 'upsert';
@@ -52,17 +66,28 @@ class FakeQuery implements PromiseLike<ResultShape> {
   }
 
   private matches(row: Row): boolean {
-    return this.filters.every(([col, val]) => row[col] === val);
+    // A `null` filter value (from `.is(col, null)`) matches both an explicit
+    // null and a column the seed simply never set — mirrors real Postgres,
+    // where an absent column reads back as NULL.
+    return this.filters.every(([col, val]) => (val === null ? (row[col] ?? null) === null : row[col] === val));
   }
 
   private runSelect(): ResultShape {
-    return { data: this.client.getAll(this.table).filter(r => this.matches(r)), error: null };
+    const rows = this.client.getAll(this.table).filter(r => this.matches(r));
+    return { data: this.limitCount !== null ? rows.slice(0, this.limitCount) : rows, error: null };
   }
 
   private runUpdate(): ResultShape {
     for (const row of this.client.getAll(this.table)) {
       if (this.matches(row)) Object.assign(row, this.updatePatch);
     }
+    return { data: null, error: null };
+  }
+
+  private runInsert(): ResultShape {
+    const all = this.client.getAll(this.table);
+    for (const row of this.insertRows ?? []) all.push({ ...row });
+    this.client.tables[this.table] = all;
     return { data: null, error: null };
   }
 
@@ -79,6 +104,7 @@ class FakeQuery implements PromiseLike<ResultShape> {
 
   private resolve(): ResultShape {
     if (this.mode === 'update') return this.runUpdate();
+    if (this.mode === 'insert') return this.runInsert();
     if (this.mode === 'upsert') return this.runUpsert();
     return this.runSelect();
   }

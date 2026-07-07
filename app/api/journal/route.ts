@@ -20,7 +20,7 @@ import type {
   Setup, IFVGConfirmation, BiasAlignment,
 } from '../../lib/journal';
 
-type TradeRow = {
+export type TradeRow = {
   id: number;
   clerk_id: string;
   date_iso: string;

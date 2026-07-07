@@ -10,18 +10,15 @@ import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 
-/** Mirror app/lib/ai/patternInsights.ts and weeklyReport.ts's return shapes
-    as local types (not imported) so this client component never pulls in
-    the server-only Gemini SDK module. */
+/** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
+    return shapes as local types (not imported) so this client component
+    never pulls in server-only AI SDK / Supabase modules. */
 interface PatternInsight { subject: string; title: string; evidence: string; confidenceLevel: ConfidenceLevel; sampleSize: number; }
 interface WeeklyReport {
-  biggestStrength: string;
-  biggestWeakness: string;
-  largestImprovement: string;
-  largestDecline: string;
-  focusNextWeek: string;
+  paragraphs: string[];
   confidenceLevel: ConfidenceLevel;
   sampleSize: number;
+  weekKey?: string;
 }
 
 function fmtPF(n: number): string {
@@ -236,7 +233,7 @@ export default function AiAnalyticsPage() {
     fetch('/api/ai/weekly-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trades, lang: 'he' }),
+      body: JSON.stringify({ lang: 'he' }),
     })
       .then(r => r.json())
       .then(({ report }: { report: WeeklyReport | null }) => {
@@ -672,23 +669,15 @@ export default function AiAnalyticsPage() {
             <p className="text-sm text-white/30 py-2">אין עדיין מספיק נתונים היסטוריים כדי לייצר תובנה ברמת ביטחון גבוהה.</p>
           ) : (
             <div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
-                {[
-                  { k: 'החוזק הגדול ביותר', v: weeklyReport.biggestStrength, dot: '#6fa580' },
-                  { k: 'החולשה הגדולה ביותר', v: weeklyReport.biggestWeakness, dot: '#c98080' },
-                  { k: 'השיפור הגדול ביותר', v: weeklyReport.largestImprovement, dot: '#7a8fa8' },
-                  { k: 'הירידה הגדולה ביותר', v: weeklyReport.largestDecline, dot: '#52525b' },
-                ].map(row => (
-                  <div key={row.k} className="bg-[#0a0a0b] p-6">
-                    <div className="flex items-center gap-2 mb-3"><span className="w-1.5 h-1.5 rounded-full" style={{ background: row.dot }} /><span className="font-mono text-xs font-extrabold tracking-[0.08em]" style={{ color: row.dot }}>{row.k}</span></div>
-                    <InsightText text={row.v} className="text-sm font-medium text-[#c0c0c0] leading-relaxed" />
-                  </div>
+              <div className="bg-[#0a0a0b] border border-[#1c1c1e] rounded-[4px] p-6 sm:p-7 flex flex-col gap-4">
+                {weeklyReport.paragraphs.slice(0, -1).map((p, i) => (
+                  <InsightText key={i} text={p} className="text-[15px] text-[#c0c0c0] leading-relaxed" />
                 ))}
               </div>
 
               <Reveal className="mt-6 p-6 sm:p-7 rounded-[6px]" style={{ border: '1px solid rgba(212,175,55,.3)', background: 'radial-gradient(120% 140% at 100% 0%,rgba(212,175,55,.08),transparent 60%)', boxShadow: '0 0 50px -20px rgba(212,175,55,.4)' }}>
                 <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 14 }}>◈</span><span className="font-mono text-xs font-extrabold uppercase tracking-[0.14em] text-[#d4af37]">המיקוד לשבוע הבא</span></div>
-                <InsightText text={weeklyReport.focusNextWeek} className="text-base font-semibold text-white leading-relaxed" />
+                <InsightText text={weeklyReport.paragraphs[weeklyReport.paragraphs.length - 1]} className="text-base font-semibold text-white leading-relaxed" />
               </Reveal>
 
               <div className="mt-8 pt-6 border-t border-[#1c1c1e] flex items-center justify-between gap-4 flex-wrap">
@@ -706,7 +695,7 @@ export default function AiAnalyticsPage() {
                   {reportHistory.map(h => (
                     <div key={h.weekKey} className="rounded-lg bg-[#0a0a0b] border border-white/5 p-3.5 flex items-start gap-3">
                       <span className="font-mono text-[9px] text-white/30 shrink-0 mt-0.5" dir="ltr">{h.weekKey}</span>
-                      <InsightText text={h.report.biggestStrength} className="text-xs text-white/55 leading-relaxed" />
+                      <InsightText text={h.report.paragraphs[0]} className="text-xs text-white/55 leading-relaxed" />
                     </div>
                   ))}
                 </div>

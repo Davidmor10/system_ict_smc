@@ -1,0 +1,419 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Trader Intelligence System — public orchestrator API. Every exported
+// function here is the DB-touching half of the pure modules in this
+// directory: fetch → derive (pure) → persist. Nothing below computes a
+// statistic itself — that's always delegated to analytics/* or the pure
+// intelligence/* modules. LLM calls only ever phrase numbers that are
+// already computed, and only when a cached phrasing has gone stale.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  addDaysISO, discoverPatterns, isoWeekKey, runFullAnalysis, startOfIsoWeek,
+  type ConfidenceLevel, type FullAnalysis,
+} from '../analytics';
+import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
+import { todayISO, type TradeEntry } from '../journal';
+import { generateHypothesisPhrasing, generatePatternPhrasing } from '../ai/insightPhrasing';
+import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
+import {
+  summarizeAnalysis, summarizeComparison, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
+} from '../ai/factsBlock';
+
+import * as repo from './repository';
+import { deriveTraderProfile } from './profile';
+import { diffPatternMemory } from './patternMemory';
+import { computePeriodComparison } from './periods';
+import { selectPrimaryPattern } from './dashboardInsight';
+import { deriveHypothesis } from './hypothesis';
+import { computeEdgeScore, computeLearningScore } from './scores';
+import { deriveKnownFacts } from './memory';
+import { diagnoseRootCause } from './rootCause';
+import { buildEvolutionTimeline, type WeeklyHypothesisRecord } from './evolutionTimeline';
+import type {
+  EvolutionEntry, HypothesisState, KnownFact, PatternMemoryRow, PatternMemorySubjectSummary,
+  PeriodComparison, ScoreSnapshot, TraderProfile,
+} from './types';
+
+/** Dashboard "today's discovery" shape — mirrors the local interface already
+    duplicated in app/components/DashboardView.tsx (kept as a client-side
+    local type there so that file never pulls in server-only AI SDK modules).
+    Keeping both in sync by shape, not by import, means DashboardView.tsx
+    needs zero changes when this pipeline changes underneath it. */
+export interface AiDiscovery {
+  title: string;
+  evidence: string;
+  action: string;
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+}
+
+const MAX_RECURRING_PATTERNS = 5;
+const MIN_TRADES_FOR_WEEKLY = 3;       // matches the old weeklyReport.ts's threshold
+const MIN_BASELINE_TRADES = 10;        // aligned to confidenceLevelFor's low/medium boundary
+const MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE = 2;
+/** Below this, the dashboard falls back to the single strongest tracked
+    pattern instead of the synthesized hypothesis — a low-confidence
+    hypothesis isn't yet a better story than the plain top pattern. */
+const HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE = 50;
+const DEFAULT_LANG: 'he' | 'en' = 'he';
+
+function getClient(): SupabaseClient {
+  return createServerSupabaseClient();
+}
+
+function downgradeConfidence(level: ConfidenceLevel): ConfidenceLevel {
+  return level === 'high' ? 'medium' : 'low';
+}
+
+// ── The one atomic refresh — profile, pattern memory, and hypothesis all
+// depend on each other in the same pass, so every public entry point below
+// funnels through this instead of recomputing pieces independently. ──
+
+interface RefreshResult {
+  trades: TradeEntry[];
+  analysis: FullAnalysis;
+  profile: TraderProfile;
+  previousProfile: TraderProfile | null;
+  patternRows: PatternMemoryRow[];
+  hypothesis: HypothesisState;
+  edgeScore: number;
+  learningScore: number;
+  knownFacts: KnownFact[];
+}
+
+async function refreshIntelligence(supabase: SupabaseClient, userId: string, lang: 'he' | 'en'): Promise<RefreshResult> {
+  const nowISO = new Date().toISOString();
+  const trades = await repo.getRecentTrades(supabase, userId);
+  const analysis = runFullAnalysis(trades);
+
+  const [existingProfileRecord, existingPatternRows, existingHypothesis] = await Promise.all([
+    repo.getTraderProfile(supabase, userId),
+    repo.getPatternMemory(supabase, userId),
+    repo.getHypothesis(supabase, userId),
+  ]);
+
+  const candidates = discoverPatterns(trades);
+  const diff = diffPatternMemory(userId, candidates, existingPatternRows, nowISO);
+  await repo.savePatternMemory(supabase, diff.toUpsert);
+  await Promise.all(diff.statusChanges.map(change =>
+    repo.appendInsightHistory(supabase, userId, 'pattern_status_change', change.patternId, { ...change }),
+  ));
+
+  const recurringConditions: PatternMemorySubjectSummary[] = diff.toUpsert
+    .filter(p => p.status === 'active' || p.status === 'strengthening')
+    .sort((a, b) => b.currentSampleSize - a.currentSampleSize)
+    .slice(0, MAX_RECURRING_PATTERNS)
+    .map(p => ({ patternId: p.patternId, subject: p.subject, status: p.status, metric: p.currentMetric }));
+
+  const profile = deriveTraderProfile(analysis, trades, existingProfileRecord?.profile ?? null, recurringConditions);
+
+  let hypothesis = deriveHypothesis(userId, diff.toUpsert, existingHypothesis, nowISO);
+  if (hypothesis.status !== (existingHypothesis?.status ?? null)) {
+    await repo.appendInsightHistory(supabase, userId, 'hypothesis_status_change', null, {
+      previousStatus: existingHypothesis?.status ?? null, newStatus: hypothesis.status,
+    });
+  }
+  // Only re-phrase when the identity actually changed (description cleared by
+  // deriveHypothesis) — a continuing hypothesis keeps its cached text, same
+  // discipline as pattern_memory's ai_title caching below.
+  if (hypothesis.description === null && hypothesis.status !== 'insufficient_data' && hypothesis.status !== 'invalidated') {
+    const phrasing = await generateHypothesisPhrasing(
+      { status: hypothesis.status, confidenceScore: hypothesis.confidenceScore, supportingMetrics: hypothesis.supportingMetrics },
+      lang,
+    );
+    if (phrasing) {
+      hypothesis = { ...hypothesis, description: phrasing.description, evidence: phrasing.evidence };
+    }
+  }
+  await repo.saveHypothesis(supabase, hypothesis);
+
+  const edgeScore = computeEdgeScore(profile, diff.toUpsert, existingProfileRecord?.edgeScore ?? null);
+  const learningScore = computeLearningScore(existingProfileRecord?.scoreHistory ?? [], edgeScore);
+  const scoreSnapshot: ScoreSnapshot = {
+    at: nowISO, edgeScore, learningScore,
+    winRate: profile.winRate.current, avgRR: profile.avgRR.current, profitFactor: profile.profitFactor.current,
+  };
+  const scoreHistory = [...(existingProfileRecord?.scoreHistory ?? []), scoreSnapshot].slice(-12);
+
+  const knownFacts = deriveKnownFacts(profile, existingProfileRecord?.knownFacts ?? [], nowISO);
+
+  const closedCount = trades.filter(t => t.result !== 'OPEN').length;
+  await repo.saveTraderProfile(supabase, userId, {
+    profile, previousProfile: existingProfileRecord?.profile ?? null,
+    edgeScore, learningScore, scoreHistory, knownFacts,
+    builtFromTradeCount: closedCount, lastTradeDateIso: trades[0]?.dateISO ?? null,
+  });
+  await repo.appendInsightHistory(supabase, userId, 'profile_update', null, { closedCount, edgeScore, learningScore });
+
+  return {
+    trades, analysis, profile, previousProfile: existingProfileRecord?.profile ?? null,
+    patternRows: diff.toUpsert, hypothesis, edgeScore, learningScore, knownFacts,
+  };
+}
+
+// ── buildTraderProfile / updateTraderProfile ────────────────────────────────
+// The profile is always a full recompute, never incrementally patched, so
+// these are documented aliases of the same operation, not two code paths.
+
+export async function buildTraderProfile(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<TraderProfile | null> {
+  if (!isSupabaseConfigured()) return null;
+  const result = await refreshIntelligence(getClient(), userId, lang);
+  return result.profile;
+}
+
+export const updateTraderProfile = buildTraderProfile;
+
+// ── detectPatterns / updatePatternMemory ────────────────────────────────────
+
+export async function detectPatterns(userId: string) {
+  if (!isSupabaseConfigured()) return [];
+  const trades = await repo.getRecentTrades(getClient(), userId);
+  return discoverPatterns(trades);
+}
+
+/** Runs the same atomic refresh as buildTraderProfile — pattern memory can't
+    be updated in isolation since the profile's recurringConditions and the
+    hypothesis both depend on this run's pattern diff. */
+export async function updatePatternMemory(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<PatternMemoryRow[]> {
+  if (!isSupabaseConfigured()) return [];
+  const result = await refreshIntelligence(getClient(), userId, lang);
+  return result.patternRows;
+}
+
+// ── comparePeriods ───────────────────────────────────────────────────────────
+
+interface TradeWindows {
+  thisWeekTrades: TradeEntry[];
+  prevWeekTrades: TradeEntry[];
+  baselineTrades: TradeEntry[];
+}
+
+/** thisWeek = Monday..today; prevWeek = the 7 days before that; baseline4wk =
+    the 4 calendar weeks before prevWeek — deliberately disjoint from prevWeek
+    so "vs last week" and "vs trailing baseline" never double-count a trade. */
+function computeTradeWindows(trades: TradeEntry[], thisWeekStart: string): TradeWindows {
+  const prevWeekStart = addDaysISO(thisWeekStart, -7);
+  const prevWeekEnd = addDaysISO(thisWeekStart, -1);
+  const baselineStart = addDaysISO(thisWeekStart, -35);
+  const baselineEnd = addDaysISO(thisWeekStart, -8);
+
+  return {
+    thisWeekTrades: trades.filter(t => t.dateISO >= thisWeekStart),
+    prevWeekTrades: trades.filter(t => t.dateISO >= prevWeekStart && t.dateISO <= prevWeekEnd),
+    baselineTrades: trades.filter(t => t.dateISO >= baselineStart && t.dateISO <= baselineEnd),
+  };
+}
+
+export async function comparePeriods(userId: string): Promise<PeriodComparison | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = getClient();
+  const trades = await repo.getRecentTrades(supabase, userId);
+  const thisWeekStart = startOfIsoWeek(todayISO());
+  const windows = computeTradeWindows(trades, thisWeekStart);
+
+  const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
+  const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
+  const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
+  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_WEEKLY ? runFullAnalysis(windows.prevWeekTrades) : null;
+  const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
+
+  return computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
+}
+
+// ── generateWeeklyDeepAnalysis ───────────────────────────────────────────────
+
+export interface WeeklyDeepAnalysisResult {
+  paragraphs: string[];
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+  weekKey: string;
+}
+
+export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<WeeklyDeepAnalysisResult | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = getClient();
+  const today = todayISO();
+  const weekKey = isoWeekKey(today);
+  const thisWeekStart = startOfIsoWeek(today);
+
+  const trades = await repo.getRecentTrades(supabase, userId);
+  const windows = computeTradeWindows(trades, thisWeekStart);
+  const closedThisWeek = windows.thisWeekTrades.filter(t => t.result !== 'OPEN');
+  if (closedThisWeek.length < MIN_TRADES_FOR_WEEKLY) return null;
+
+  // Avoid redundant LLM spend on repeat visits within the same week — only
+  // regenerate if no report exists yet, or this week's closed-trade count
+  // has moved since it was last generated.
+  const cached = await repo.getWeeklyReport(supabase, userId, weekKey);
+  if (cached && cached.tradeCount === closedThisWeek.length) {
+    return {
+      paragraphs: cached.narrative.paragraphs,
+      confidenceLevel: cached.confidenceLevel as ConfidenceLevel,
+      sampleSize: cached.tradeCount,
+      weekKey,
+    };
+  }
+
+  const previousProfileRecord = await repo.getTraderProfile(supabase, userId);
+  const result = await refreshIntelligence(supabase, userId, lang);
+
+  const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
+  const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
+  const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
+  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_WEEKLY ? runFullAnalysis(windows.prevWeekTrades) : null;
+  const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
+  const comparison = computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
+
+  const rootCause = diagnoseRootCause(comparison, result.profile, previousProfileRecord?.profile ?? null);
+
+  const priorReports = await repo.getRecentWeeklyReports(supabase, userId, MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1);
+  const isEarlyInHistory = priorReports.length < MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE;
+  const confidenceLevel = isEarlyInHistory
+    ? downgradeConfidence(thisAnalysis.performance.confidence.level)
+    : thisAnalysis.performance.confidence.level;
+
+  const facts: NarrativeFacts = {
+    thisWeekSummary: summarizeAnalysis(thisAnalysis),
+    prevWeekSummary: prevAnalysis ? summarizeAnalysis(prevAnalysis) : null,
+    baselineSummary: baselineAnalysis ? summarizeAnalysis(baselineAnalysis) : null,
+    comparisonSummary: summarizeComparison(comparison),
+    patternMemorySummary: summarizePatternMemory(result.patternRows.filter(p => p.status === 'active' || p.status === 'strengthening')),
+    knownFactsSummary: summarizeKnownFacts(result.knownFacts),
+    rootCauseSummary: summarizeRootCause(rootCause),
+    hypothesisSummary: result.hypothesis.description
+      ? `${result.hypothesis.description} (status: ${result.hypothesis.status}, confidence ${result.hypothesis.confidenceScore}/100)`
+      : null,
+    notesObservations: result.profile.notesObservations,
+    isEarlyInHistory,
+    confidenceLevel,
+    sampleSize: closedThisWeek.length,
+  };
+
+  const narrative = await generateNarrativeText(facts, lang);
+  if (!narrative) return null;
+
+  await repo.saveWeeklyReport(supabase, {
+    clerkId: userId, isoWeek: weekKey, weekStartDate: thisWeekStart,
+    tradeCount: closedThisWeek.length, confidenceLevel,
+    narrative: { schemaVersion: 1, paragraphs: narrative.paragraphs },
+    facts: { ...comparison },
+    modelUsed: null,
+    primaryHypothesisSnapshot: result.hypothesis.description
+      ? { description: result.hypothesis.description, status: result.hypothesis.status, confidenceScore: result.hypothesis.confidenceScore }
+      : null,
+  });
+  await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, { sampleSize: closedThisWeek.length, confidenceLevel });
+
+  return { paragraphs: narrative.paragraphs, confidenceLevel, sampleSize: closedThisWeek.length, weekKey };
+}
+
+// ── generateDashboardPrimaryInsight ──────────────────────────────────────────
+// Selects (never freshly generates from scratch) the single best current
+// insight — the hypothesis when it's confident enough, else the strongest
+// tracked pattern. Output always maps onto the existing AiDiscovery shape so
+// DashboardView.tsx needs zero changes.
+
+function confidenceLevelForScore(score: number): ConfidenceLevel {
+  if (score >= 80) return 'high';
+  if (score >= HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE) return 'medium';
+  return 'low';
+}
+
+export async function generateDashboardPrimaryInsight(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<AiDiscovery | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = getClient();
+
+  const profileRecord = await repo.getTraderProfile(supabase, userId);
+  let patternRows: PatternMemoryRow[];
+  let hypothesis: HypothesisState | null;
+
+  if (!profileRecord) {
+    // Cold-start bootstrap: populate everything once so the dashboard
+    // doesn't stay empty until the user visits AI Analytics.
+    const result = await refreshIntelligence(supabase, userId, lang);
+    patternRows = result.patternRows;
+    hypothesis = result.hypothesis;
+  } else {
+    [patternRows, hypothesis] = await Promise.all([
+      repo.getPatternMemory(supabase, userId),
+      repo.getHypothesis(supabase, userId),
+    ]);
+  }
+
+  const hypothesisIsUsable = hypothesis
+    && hypothesis.status !== 'insufficient_data'
+    && hypothesis.status !== 'invalidated'
+    && hypothesis.confidenceScore >= HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE;
+
+  if (hypothesisIsUsable && hypothesis) {
+    let description = hypothesis.description;
+    let evidence = hypothesis.evidence;
+    if (!description) {
+      const phrasing = await generateHypothesisPhrasing(
+        { status: hypothesis.status, confidenceScore: hypothesis.confidenceScore, supportingMetrics: hypothesis.supportingMetrics },
+        lang,
+      );
+      if (!phrasing) return null;
+      description = phrasing.description;
+      evidence = phrasing.evidence;
+      await repo.saveHypothesis(supabase, { ...hypothesis, description, evidence });
+    }
+    await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', 'hypothesis', {
+      confidenceScore: hypothesis.confidenceScore, status: hypothesis.status,
+    });
+    const sampleSize = Object.values(hypothesis.supportingMetrics)[0]?.confidence.sampleSize ?? 0;
+    return {
+      title: description,
+      evidence: evidence ?? '',
+      action: lang === 'he'
+        ? 'המשך לעקוב אחרי התנאים האלה ובדוק אם הם ממשיכים לחזור.'
+        : 'Keep watching these conditions and see if they keep repeating.',
+      confidenceLevel: confidenceLevelForScore(hypothesis.confidenceScore),
+      sampleSize,
+    };
+  }
+
+  const anchor = selectPrimaryPattern(patternRows);
+  if (!anchor) return null;
+
+  const cacheIsFresh = anchor.aiTitle
+    && anchor.aiPhrasedStatus === anchor.status
+    && anchor.aiPhrasedWinRate !== null
+    && Math.abs(anchor.currentMetric.winRate - anchor.aiPhrasedWinRate) <= 2;
+
+  if (cacheIsFresh) {
+    await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', anchor.patternId, { cached: true });
+    return {
+      title: anchor.aiTitle!, evidence: anchor.aiEvidence ?? '', action: anchor.aiAction ?? '',
+      confidenceLevel: anchor.currentConfidenceLevel, sampleSize: anchor.currentSampleSize,
+    };
+  }
+
+  const phrased = await generatePatternPhrasing(anchor, lang);
+  if (!phrased) return null;
+
+  await repo.savePatternMemory(supabase, [{
+    ...anchor, aiTitle: phrased.title, aiEvidence: phrased.evidence, aiAction: phrased.action,
+    aiPhrasedStatus: anchor.status, aiPhrasedWinRate: anchor.currentMetric.winRate,
+  }]);
+  await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', anchor.patternId, { cached: false });
+
+  return {
+    title: phrased.title, evidence: phrased.evidence, action: phrased.action,
+    confidenceLevel: anchor.currentConfidenceLevel, sampleSize: anchor.currentSampleSize,
+  };
+}
+
+// ── Evolution Timeline ───────────────────────────────────────────────────────
+// Not wired into any UI in this pass — available for a future surface.
+
+export async function getEvolutionTimeline(userId: string): Promise<EvolutionEntry[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = getClient();
+  const reports = await repo.getRecentWeeklyReports(supabase, userId, 24);
+  const records: WeeklyHypothesisRecord[] = reports.map(r => ({
+    isoWeek: r.isoWeek, weekStartDate: r.weekStartDate, hypothesis: r.primaryHypothesisSnapshot,
+  }));
+  return buildEvolutionTimeline(records);
+}

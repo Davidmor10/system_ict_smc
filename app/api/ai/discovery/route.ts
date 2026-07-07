@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateDiscovery } from '../../../lib/ai/discovery';
-import type { TradeEntry } from '../../../lib/journal';
+import { generateDashboardPrimaryInsight } from '../../../lib/intelligence/service';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 
@@ -19,13 +18,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { trades, lang = 'he' } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const lang = body?.lang === 'en' ? 'en' : 'he';
 
-    if (!Array.isArray(trades)) {
-      return NextResponse.json({ discovery: null });
-    }
-
-    const discovery = await generateDiscovery(trades as TradeEntry[], lang === 'en' ? 'en' : 'he');
+    // The server now derives its own answer from the persisted trader
+    // profile / pattern memory (bootstrapping them on a cold start) instead
+    // of trusting whatever trades the client happens to have loaded —
+    // trades in the request body, if any, are ignored.
+    const discovery = await generateDashboardPrimaryInsight(userId, lang);
     return NextResponse.json({ discovery });
   } catch (err) {
     console.error('[AI Discovery]', err);

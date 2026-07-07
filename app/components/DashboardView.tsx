@@ -21,9 +21,9 @@ type AssetKey = keyof typeof SPEC;
 const RISK_PRESETS = [0.25, 0.5, 1, 2] as const;
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
-/** Mirrors app/lib/ai/discovery.ts's AiDiscovery — kept as a local type (not
-    imported) so this client component never pulls in the server-only
-    Anthropic SDK module. */
+/** Mirrors app/lib/intelligence/service.ts's AiDiscovery — kept as a local
+    type (not imported) so this client component never pulls in server-only
+    AI SDK / Supabase modules. */
 interface AiDiscovery {
   title: string;
   evidence: string;
