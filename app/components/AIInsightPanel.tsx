@@ -10,10 +10,10 @@ import InsightText from './InsightText';
 
 interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
 
-const META: Record<string, { fg: string; bg: string; bd: string }> = {
-  opportunity: { fg: '#6fa580', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)' },
-  warning:     { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.25)' },
-  pattern:     { fg: '#c0c0c0', bg: 'rgba(255,255,255,.04)', bd: 'rgba(255,255,255,.08)' },
+const META: Record<string, { fg: string; bg: string; bd: string; rail: string }> = {
+  opportunity: { fg: '#4a7c59', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)', rail: '#4a7c59' },
+  warning:     { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.25)', rail: '#d4af37' },
+  pattern:     { fg: '#7a8fa8', bg: 'rgba(255,255,255,.04)', bd: 'rgba(255,255,255,.08)', rail: '#7a8fa8' },
 };
 
 export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
@@ -72,45 +72,47 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closedCount]);
 
-  const lastUpdatedLabel = lang === 'he' ? 'עדכון אחרון' : 'Last updated';
-
   return (
-    <div className="border border-[#1c1c1e] rounded-xl bg-[#0a0a0b] p-6 flex flex-col gap-3 transition-all duration-200 hover:scale-[1.01] hover:border-[#2a2a2d]">
-      <div className="flex items-center justify-between">
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">AI Insight</p>
-        <div className="flex items-center gap-3">
+    <section className="rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] overflow-hidden [box-shadow:0_0_80px_-40px_rgba(212,175,55,0.35)]">
+      <div className="flex items-center justify-between py-[15px] px-[22px] border-b border-[#1c1c1e]" style={{ background: 'linear-gradient(90deg, rgba(212,175,55,0.08), transparent 60%)' }}>
+        <div className="flex items-center gap-[11px]">
+          <span className="text-[#d4af37] text-sm">◈</span>
+          <span className="font-mono text-xs font-bold tracking-[0.26em] text-[#d4af37]">AI INSIGHT</span>
+          <span className="text-[13px] text-white/40">תובנות היומן שלך</span>
+        </div>
+        <div className="flex items-center gap-3.5">
           {updatedAt && !loading && (
-            <span className="font-mono text-[9px] text-white/25" dir="ltr">{lastUpdatedLabel}: {updatedAt}</span>
+            <span className="font-mono text-[11px] font-semibold text-white/40">עודכן {updatedAt}</span>
           )}
           {(insights.length > 0 || error) && (
             <button
               onClick={fetchInsights}
               disabled={loading}
-              className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4af37]/50 hover:text-[#d4af37] disabled:opacity-30 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-[#d4af37]/45 py-1.5 px-3.5 text-xs font-semibold text-[#d4af37] hover:bg-[#d4af37]/10 disabled:opacity-30 transition-colors"
             >
-              {loading ? '...' : '↺ Refresh'}
+              רענון <span className="font-mono">↻</span>
             </button>
           )}
         </div>
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 p-6">
           <TypingDots />
-          <span className="font-mono text-xs text-white/30">{lang === 'he' ? 'מנתח את העסקאות שלך...' : 'Analyzing your trades...'}</span>
+          <span className="font-mono text-xs text-white/30">מנתח את העסקאות שלך...</span>
         </div>
       )}
 
       {!loading && insights.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-[#1c1c1e]">
           {insights.map((ins, i) => {
             const m = META[ins.type] ?? META.pattern;
             return (
-              <div key={i} className="flex items-start gap-3 rounded-lg p-3" style={{ background: m.bg, border: `1px solid ${m.bd}` }}>
-                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] shrink-0 mt-0.5" style={{ color: m.fg }}>
-                  {lang === 'he' ? ins.tag_he : ins.tag_en}
-                </span>
-                <InsightText text={ins.text} className="font-mono text-sm text-white/75 leading-relaxed" />
+              <div key={i} className="bg-[#0d0d0f] py-[22px] px-6" style={{ borderTop: `3px solid ${m.rail}` }}>
+                <div className="flex items-center gap-2 text-sm font-bold mb-[11px]" style={{ color: m.fg }}>
+                  <span className="text-[8px]">◆</span>{lang === 'he' ? ins.tag_he : ins.tag_en}
+                </div>
+                <InsightText text={ins.text} className="text-sm leading-[1.75] text-white/70" />
               </div>
             );
           })}
@@ -118,27 +120,27 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       )}
 
       {!loading && error && (
-        <p className="font-mono text-xs text-[#ef4444]/60">שגיאה בטעינת התובנה. בדוק את מפתח ה-API.</p>
+        <p className="font-mono text-xs text-[#ef4444]/60 p-6">שגיאה בטעינת התובנה. בדוק את מפתח ה-API.</p>
       )}
 
       {!loading && insights.length === 0 && !error && (
-        closedCount < 3 ? (
-          <EmptyState
-            icon="◈"
-            title={lang === 'he' ? 'עדיין אין מספיק נתונים' : 'Not enough data yet'}
-            description={lang === 'he'
-              ? 'הזן לפחות 3 עסקאות כדי שה-AI יוכל לנתח את הדפוסים שלך ולתת המלצות מדויקות.'
-              : 'Log at least 3 trades so the AI can analyze your patterns and give you accurate recommendations.'}
-          />
-        ) : (
-          <button
-            onClick={fetchInsights}
-            className="font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors"
-          >
-            → {lang === 'he' ? 'נתח את הביצועים שלי' : 'Analyze my performance'}
-          </button>
-        )
+        <div className="p-6">
+          {closedCount < 3 ? (
+            <EmptyState
+              icon="◈"
+              title="עדיין אין מספיק נתונים"
+              description="הזן לפחות 3 עסקאות כדי שה-AI יוכל לנתח את הדפוסים שלך ולתת המלצות מדויקות."
+            />
+          ) : (
+            <button
+              onClick={fetchInsights}
+              className="font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors"
+            >
+              → נתח את הביצועים שלי
+            </button>
+          )}
+        </div>
       )}
-    </div>
+    </section>
   );
 }

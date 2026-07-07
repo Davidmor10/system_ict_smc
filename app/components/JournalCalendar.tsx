@@ -21,6 +21,12 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+const usd = (n: number) => {
+  const a = Math.abs(n).toLocaleString('en-US');
+  return n > 0 ? '+$' + a : n < 0 ? '-$' + a : '$0';
+};
+const pnlColor = (n: number) => (n > 0 ? '#4a7c59' : n < 0 ? '#8b3a3a' : 'rgba(255,255,255,0.4)');
+
 function buildWeeks(year: number, month: number, trades: TradeEntry[]): (DayCell | null)[][] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstWeekday = new Date(year, month, 1).getDay();
@@ -49,7 +55,15 @@ function buildWeeks(year: number, month: number, trades: TradeEntry[]): (DayCell
   return weeks;
 }
 
-export default function JournalCalendar({ trades }: { trades: TradeEntry[] }) {
+export default function JournalCalendar({
+  trades,
+  selectedDate,
+  onSelectDate,
+}: {
+  trades: TradeEntry[];
+  selectedDate: string | null;
+  onSelectDate: (dateISO: string) => void;
+}) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -64,112 +78,129 @@ export default function JournalCalendar({ trades }: { trades: TradeEntry[] }) {
   const tradingDays = new Set(monthTrades.map(t => t.dateISO)).size;
   const totalPnl = monthTrades.reduce((sum, t) => sum + (tradePnL(t) ?? 0), 0);
 
-  function goPrev() {
-    if (month === 0) { setYear(y => y - 1); setMonth(11); } else { setMonth(m => m - 1); }
-  }
-  function goNext() {
+  // « moves forward in time, » moves back — RTL reading order.
+  function goForward() {
     if (month === 11) { setYear(y => y + 1); setMonth(0); } else { setMonth(m => m + 1); }
+  }
+  function goBack() {
+    if (month === 0) { setYear(y => y - 1); setMonth(11); } else { setMonth(m => m - 1); }
   }
 
   return (
-    <div className="rounded-2xl bg-[#0a0a0b] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]" dir="rtl">
-      {/* Header: month nav + month stats */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={goNext}
-            aria-label="חודש הבא"
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1c1c1e] text-white/60 hover:text-[#d4af37] transition-colors"
-          >
-            »
-          </button>
-          <span className="font-serif text-xl text-white min-w-[120px] text-center">
-            {year} {MONTH_NAMES[month]}
-          </span>
-          <button
-            onClick={goPrev}
-            aria-label="חודש קודם"
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1c1c1e] text-white/60 hover:text-[#d4af37] transition-colors"
-          >
-            «
-          </button>
+    <section dir="rtl">
+      <div className="flex items-end justify-between mb-[22px] flex-wrap gap-4">
+        <div>
+          <div className="font-mono text-[11px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-[9px]">MONTHLY P&amp;L</div>
+          <h2 style={{ fontFamily: 'var(--serif)' }} className="text-[30px] font-bold text-white m-0">יומן רווחים חודשי</h2>
         </div>
-        <div className="flex items-center gap-6 font-mono text-xs">
-          <div className="text-center">
-            <div className="text-white/30 uppercase tracking-[0.14em] text-[10px]">ימי מסחר</div>
-            <div className="text-white/90 mt-0.5">{tradingDays}</div>
+        <div className="flex items-center gap-[22px]">
+          <div className="flex items-center gap-7 pe-[22px] border-e border-[#1c1c1e]">
+            {[
+              { l: 'ימי מסחר', v: String(tradingDays), c: '#fff' },
+              { l: 'עסקאות', v: String(monthTrades.length).padStart(2, '0'), c: '#fff' },
+              { l: 'רווח כולל', v: monthTrades.length ? usd(totalPnl) : '—', c: pnlColor(totalPnl) },
+            ].map(s => (
+              <div key={s.l} className="text-center">
+                <div className="text-[11px] text-white/40 mb-1">{s.l}</div>
+                <div className="font-mono text-lg font-extrabold tabular-nums" style={{ color: s.c }}>{s.v}</div>
+              </div>
+            ))}
           </div>
-          <div className="text-center">
-            <div className="text-white/30 uppercase tracking-[0.14em] text-[10px]">סה&quot;כ עסקאות</div>
-            <div className="text-white/90 mt-0.5">{monthTrades.length}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-white/30 uppercase tracking-[0.14em] text-[10px]">רווח ותפסד כולל</div>
-            <div className={`mt-0.5 ${totalPnl > 0 ? 'text-[#22c55e]' : totalPnl < 0 ? 'text-[#ef4444]' : 'text-white/90'}`}>
-              {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
-            </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={goForward}
+              aria-label="חודש הבא"
+              className="w-9 h-9 flex items-center justify-center rounded-sm border border-[#2a2a2d] bg-transparent text-white/55 hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-colors font-mono text-base"
+            >
+              «
+            </button>
+            <span style={{ fontFamily: 'var(--serif)' }} className="min-w-[140px] text-center text-[22px] font-bold text-white">
+              {MONTH_NAMES[month]} {year}
+            </span>
+            <button
+              onClick={goBack}
+              aria-label="חודש קודם"
+              className="w-9 h-9 flex items-center justify-center rounded-sm border border-[#2a2a2d] bg-transparent text-white/55 hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-colors font-mono text-base"
+            >
+              »
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Weekday header row */}
-      <div className="grid grid-cols-8 gap-1.5 mb-1.5">
+      {/* Weekday header */}
+      <div className="grid grid-cols-8 gap-2 mb-2">
         {WEEKDAY_LABELS.map(label => (
-          <div key={label} className="text-center font-mono text-[10px] uppercase tracking-[0.1em] text-white/30 py-1">
-            {label}
-          </div>
+          <div key={label} className="text-center text-xs font-semibold text-white/40 py-1">{label}</div>
         ))}
-        <div className="text-center font-mono text-[10px] uppercase tracking-[0.1em] text-white/30 py-1">
-          סיכום שבועי
-        </div>
+        <div className="text-center font-mono text-[10px] font-bold tracking-[0.1em] uppercase text-[#d4af37] py-1">סיכום שבועי</div>
       </div>
 
-      {/* Weeks */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {weeks.map((week, wi) => {
           const weekPnl = week.reduce((sum, c) => sum + (c?.pnl ?? 0), 0);
           const weekCount = week.reduce((sum, c) => sum + (c?.count ?? 0), 0);
           return (
-            <div key={wi} className="grid grid-cols-8 gap-1.5">
-              {week.map((cell, ci) => (
-                <div
-                  key={ci}
-                  className={`rounded-lg p-2 min-h-[72px] flex flex-col justify-between ${
-                    cell ? 'bg-black/40' : 'bg-transparent'
-                  } ${cell?.dateISO === today ? 'ring-1 ring-[#d4af37]/50' : ''}`}
-                >
-                  {cell && (
-                    <>
-                      <span className="font-mono text-xs text-white/40 self-end">{cell.day}</span>
-                      {cell.count > 0 && (
-                        <div className="text-right">
-                          <div className={`font-mono text-sm ${cell.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                            {cell.pnl >= 0 ? '+' : '-'}${Math.abs(cell.pnl).toFixed(0)}
+            <div key={wi} className="grid grid-cols-8 gap-2">
+              {week.map((cell, ci) => {
+                const isSel = !!cell && cell.dateISO === selectedDate;
+                const isToday = !!cell && cell.dateISO === today;
+                const hasTrades = !!cell && cell.count > 0;
+                let bg = 'transparent';
+                let border = 'transparent';
+                if (cell) {
+                  bg = '#0d0d0f';
+                  border = '#1c1c1e';
+                  if (hasTrades) {
+                    bg = cell.pnl > 0
+                      ? 'linear-gradient(150deg, rgba(74,124,89,0.2), rgba(13,13,15,0.4))'
+                      : cell.pnl < 0
+                        ? 'linear-gradient(150deg, rgba(139,58,58,0.2), rgba(13,13,15,0.4))'
+                        : 'rgba(212,175,55,0.04)';
+                  }
+                  if (isSel) {
+                    border = '#d4af37';
+                    bg = cell.pnl > 0 ? 'rgba(74,124,89,0.3)' : cell.pnl < 0 ? 'rgba(139,58,58,0.3)' : 'rgba(212,175,55,0.1)';
+                  } else if (isToday) {
+                    border = 'rgba(212,175,55,0.45)';
+                  }
+                }
+                return (
+                  <div
+                    key={ci}
+                    onClick={hasTrades ? () => onSelectDate(cell!.dateISO) : undefined}
+                    className="relative rounded-[10px] min-h-[112px] py-3 px-[13px] transition-[background,border-color] duration-200"
+                    style={{ background: bg, border: `1px solid ${border}`, cursor: hasTrades ? 'pointer' : 'default' }}
+                  >
+                    {cell && (
+                      <>
+                        <div className="text-right font-mono text-sm font-bold tabular-nums" style={{ color: isToday ? '#d4af37' : 'rgba(255,255,255,0.7)' }}>{cell.day}</div>
+                        {hasTrades && (
+                          <div className="absolute bottom-3 start-[13px] end-[13px]">
+                            <div className="font-mono text-lg font-extrabold tabular-nums" style={{ color: pnlColor(cell.pnl) }}>{usd(cell.pnl)}</div>
+                            <div className="text-[11px] text-white/40 mt-0.5">{cell.count} עסקאות</div>
                           </div>
-                          <div className="font-mono text-[9px] text-white/30">{cell.count} עסקאות</div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
               {/* Weekly summary column */}
-              <div className="rounded-lg p-2 min-h-[72px] flex flex-col justify-center items-center bg-[#1c1c1e]/40">
+              <div className="rounded-[10px] py-3 px-[13px] flex flex-col justify-center items-center text-center border border-[#1c1c1e]" style={{ background: 'linear-gradient(160deg, rgba(212,175,55,0.04), transparent)' }}>
                 {weekCount > 0 ? (
                   <>
-                    <div className={`font-mono text-sm ${weekPnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                      {weekPnl >= 0 ? '+' : '-'}${Math.abs(weekPnl).toFixed(0)}
-                    </div>
-                    <div className="font-mono text-[9px] text-white/30">{weekCount} עסקאות</div>
+                    <div className="font-mono text-[17px] font-extrabold tabular-nums" style={{ color: pnlColor(weekPnl) }}>{usd(weekPnl)}</div>
+                    <div className="text-[11px] text-white/40 mt-1">{weekCount} עסקאות</div>
                   </>
                 ) : (
-                  <span className="font-mono text-[10px] text-white/15">—</span>
+                  <span className="text-white/15 text-[10px]">—</span>
                 )}
               </div>
             </div>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

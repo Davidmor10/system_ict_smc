@@ -1,70 +1,50 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useLanguage } from '../../hooks/useLanguage';
-import { loadTrades, saveTrades, softDelete, todayISO, tradePnL } from '../../lib/journal';
+import { useEffect, useMemo, useState } from 'react';
+import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
+import { SESS, getActiveSessionIdx } from '../../lib/sessions';
 import TradeForm from '../../components/TradeForm';
 import AIInsightPanel from '../../components/AIInsightPanel';
 import JournalCalendar from '../../components/JournalCalendar';
+import JournalTradeCard from '../../components/JournalTradeCard';
 import EmptyState from '../../components/EmptyState';
 
-function TradeRow({ trade, onDelete }: { trade: TradeEntry; onDelete: (id: number) => void }) {
-  const pnl = tradePnL(trade);
-  const win  = trade.result === 'WIN';
-  const loss = trade.result === 'LOSS';
-  return (
-    <div className="flex items-center justify-between py-3 px-4 border-b border-white/[0.03] last:border-0 group hover:bg-white/[0.015] transition-colors">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${win ? 'bg-[#22c55e]' : loss ? 'bg-[#ef4444]' : trade.result === 'BE' ? 'bg-[#d4af37]' : 'bg-white/20'}`} />
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-sm font-bold text-white/90">{trade.symbol}{trade.contracts > 1 ? ` ×${trade.contracts}` : ''}</span>
-            <span className="font-mono text-xs text-white/40">{trade.direction}</span>
-            {trade.model && <span className="px-1.5 py-0.5 rounded-sm bg-[#1c1c1e] text-[10px] font-mono text-white/40">{trade.model}</span>}
-            {trade.session && <span className="font-mono text-[10px] text-white/30">{trade.session}</span>}
-          </div>
-          <div className="flex items-center gap-3 mt-0.5">
-            <span className="font-mono text-[10px] text-white/30">Entry {trade.entry}</span>
-            <span className="font-mono text-[10px] text-white/30">SL {trade.stop}</span>
-            <span className="font-mono text-[10px] text-white/30">TP {trade.target}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-4 shrink-0">
-        {typeof trade.tradeR === 'number' && (
-          <span className={`font-mono text-xs font-bold ${win ? 'text-[#22c55e]' : loss ? 'text-[#ef4444]' : 'text-white/40'}`}>
-            {trade.tradeR >= 0 ? '+' : ''}{trade.tradeR.toFixed(2)}R
-          </span>
-        )}
-        {pnl !== null && (
-          <span className={`font-mono text-sm font-bold tabular-nums ${pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-            {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
-          </span>
-        )}
-        <span className="font-mono text-[10px] text-white/30">{trade.time}</span>
-        <button
-          onClick={() => onDelete(trade.id)}
-          className="opacity-0 group-hover:opacity-100 font-mono text-[10px] text-white/30 hover:text-[#ef4444] transition-all"
-          aria-label="Delete trade"
-        >✕</button>
-      </div>
-    </div>
-  );
+const M_HEB = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const D_HEB = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
+
+function labelDate(dateISO: string): string {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  return `${d} ב${M_HEB[m - 1]} ${y}`;
+}
+function weekdayLabel(dateISO: string): string {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  return D_HEB[new Date(y, m - 1, d).getDay()];
 }
 
+const usd = (n: number) => {
+  const a = Math.abs(n).toLocaleString('en-US');
+  return n > 0 ? '+$' + a : n < 0 ? '-$' + a : '$0';
+};
+const pnlColor = (n: number) => (n > 0 ? '#4a7c59' : n < 0 ? '#8b3a3a' : 'rgba(255,255,255,0.4)');
+
 export default function JournalPage() {
-  const { lang } = useLanguage();
-  const en = lang === 'en';
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [nowLabel, setNowLabel] = useState('');
 
   useEffect(() => { setTrades(loadTrades()); }, []);
 
+  // Live-session pill: recompute the clock every 30s so it never goes stale on a long visit.
+  useEffect(() => {
+    const tick = () => setNowLabel(new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }));
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   function handleSave(trade: TradeEntry) {
-    // Persist immediately — TradeForm keeps its own post-save summary open and
-    // decides when to actually close (onDone) or reset for another entry.
     const updated = [trade, ...trades];
     saveTrades(updated);
     setTrades(updated);
@@ -76,28 +56,81 @@ export default function JournalPage() {
   }
 
   const today = todayISO();
-  const dates = [...new Set(trades.map(t => t.dateISO))].sort((a, b) => b.localeCompare(a));
+  const activeSessionIdx = getActiveSessionIdx();
+  const activeSession = activeSessionIdx >= 0 ? SESS[activeSessionIdx] : null;
 
-  const filtered = filter === 'all' ? trades : trades.filter(t => t.dateISO === filter);
-  const groupedDates = filter === 'all' ? dates : [filter];
+  const dates = useMemo(() => [...new Set(trades.map(t => t.dateISO))].sort((a, b) => b.localeCompare(a)), [trades]);
+  const shownDates = selectedDate ? dates.filter(d => d === selectedDate) : dates;
+
+  const stats = useMemo(() => computeStats(trades), [trades]);
+  const bestTrade = useMemo(() => {
+    const pnls = trades.map(tradePnL).filter((n): n is number => n !== null);
+    return pnls.length ? Math.max(...pnls) : 0;
+  }, [trades]);
+  const closed = trades.filter(t => t.result !== 'OPEN');
+  const wins = closed.filter(t => t.result === 'WIN').length;
+  const be = closed.filter(t => t.result === 'BE').length;
+
+  function selectDay(dateISO: string) {
+    setSelectedDate(cur => (cur === dateISO ? null : dateISO));
+  }
+  function setFilter(dateISO: string | null) {
+    setSelectedDate(dateISO);
+  }
 
   return (
-    <div className="flex-1 overflow-y-auto" dir={en ? 'ltr' : 'rtl'}>
-      <div className="px-8 max-[880px]:px-4 py-8 pb-24 max-w-4xl mx-auto space-y-6">
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className="flex-1 overflow-y-auto" dir="rtl">
+      {/* Header */}
+      <div className="py-11 px-[52px] max-[880px]:px-5 max-[880px]:py-7 border-b border-[#1c1c1e]" style={{ background: 'radial-gradient(80% 120% at 90% 0%, rgba(212,175,55,0.06), transparent 60%)' }}>
+        <div className="flex items-start justify-between gap-6 flex-wrap">
           <div>
-            <h1 className="font-serif text-3xl font-bold text-white">{en ? 'Journal' : 'יומן מסחר'}</h1>
-            <p className="font-mono text-xs text-white/30 mt-1 uppercase tracking-[0.18em]">{trades.length} total trades</p>
+            <div className="font-mono text-[11px] font-bold tracking-[0.34em] uppercase text-[#d4af37] mb-3.5">TRADING JOURNAL</div>
+            <h1 style={{ fontFamily: 'var(--serif)' }} className="text-[46px] max-[880px]:text-[32px] font-bold text-white leading-[1.02] m-0">יומן העסקאות</h1>
+            <p className="mt-3 text-[15px] text-white/55 max-w-[440px] leading-relaxed">מעקב, ניתוח ותובנות על ביצועי המסחר שלך — כל עסקה מתועדת עם ההקשר המלא של המושב וההטיה היומית.</p>
           </div>
-          <button
-            onClick={() => setShowForm(v => !v)}
-            className="px-5 py-2.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold tracking-[0.12em] uppercase hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.3)]"
-          >
-            {showForm ? (en ? '✕ Cancel' : '✕ ביטול') : (en ? '+ New Trade' : '+ עסקה חדשה')}
-          </button>
+          <div className="flex items-center gap-3.5 flex-wrap">
+            <div className="flex items-center gap-2.5 py-[9px] px-3.5 rounded-sm border" style={{ borderColor: activeSession ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.1)', background: activeSession ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.03)' }}>
+              <span className="w-[7px] h-[7px] rounded-full" style={{ background: activeSession ? '#d4af37' : 'rgba(255,255,255,0.3)', boxShadow: activeSession ? '0 0 8px rgba(212,175,55,0.7)' : 'none' }} />
+              <span className="font-mono text-xs font-bold tracking-[0.18em]" style={{ color: activeSession ? '#d4af37' : 'rgba(255,255,255,0.4)' }} dir="ltr">
+                {activeSession ? `${activeSession.he} · ${nowLabel}` : 'מחוץ לשעות מסחר'}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="inline-flex items-center gap-2 py-[13px] px-6 rounded-sm bg-[#d4af37] text-black text-sm font-bold hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.4)]"
+            >
+              <span className="font-mono text-base">{showForm ? '✕' : '+'}</span> {showForm ? 'ביטול' : 'עסקה חדשה'}
+            </button>
+          </div>
         </div>
+
+        {/* Summary strip */}
+        <div className="flex items-stretch mt-[34px] pt-7 border-t border-[#1c1c1e] flex-wrap gap-6">
+          <div className="flex-none pe-12 border-e border-[#1c1c1e]">
+            <div className="text-xs font-medium text-white/40 mb-2.5">רווח נקי כולל</div>
+            <div className="font-mono text-[44px] max-[880px]:text-[32px] font-black tabular-nums tracking-[-0.02em] leading-none" style={{ color: pnlColor(stats.totalPnL), textShadow: stats.totalPnL >= 0 ? '0 0 30px rgba(74,124,89,0.35)' : 'none' }}>
+              {usd(stats.totalPnL)}
+            </div>
+          </div>
+          <div className="flex-1 flex items-center ps-12 gap-14 flex-wrap">
+            <div>
+              <div className="text-xs font-medium text-white/40 mb-2.5">אחוז הצלחה</div>
+              <div className="font-mono text-[32px] font-black tabular-nums leading-none text-[#d4af37]" style={{ textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{stats.winRate.toFixed(0)}%</div>
+              <div className="text-[11px] text-white/40 mt-[7px]">{wins} נצחונות · {be} ללא שינוי</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-white/40 mb-2.5">יחס סיכון ממוצע</div>
+              <div className="font-mono text-[32px] font-black tabular-nums leading-none text-white">{stats.avgR.toFixed(2)}R</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-white/40 mb-2.5">העסקה המובילה</div>
+              <div className="font-mono text-[32px] font-black tabular-nums leading-none" style={{ color: pnlColor(bestTrade) }}>{usd(bestTrade)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="py-10 px-[52px] max-[880px]:px-5 max-[880px]:py-6 space-y-11">
 
         {/* Trade Form */}
         {showForm && (
@@ -114,69 +147,77 @@ export default function JournalPage() {
         {/* AI Insight */}
         {trades.length > 0 && <AIInsightPanel trades={trades} />}
 
-        {/* Monthly calendar */}
-        {trades.length > 0 && <JournalCalendar trades={trades} />}
-
-        {/* Date filter */}
-        {dates.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded-sm font-mono text-[10px] uppercase tracking-[0.14em] transition-colors ${filter === 'all' ? 'bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30' : 'text-white/40 border border-[#1c1c1e] hover:text-white/70'}`}
-            >
-              {en ? 'All' : 'הכל'}
-            </button>
-            {dates.slice(0, 7).map(d => (
-              <button
-                key={d}
-                onClick={() => setFilter(d)}
-                className={`px-3 py-1 rounded-sm font-mono text-[10px] tracking-[0.10em] transition-colors ${filter === d ? 'bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30' : 'text-white/40 border border-[#1c1c1e] hover:text-white/70'}`}
-              >
-                {d === today ? (en ? 'Today' : 'היום') : d}
-              </button>
-            ))}
-          </div>
+        {/* Monthly P&L calendar */}
+        {trades.length > 0 && (
+          <JournalCalendar trades={trades} selectedDate={selectedDate} onSelectDate={selectDay} />
         )}
 
-        {/* Grouped trade list */}
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon="◈"
-            title={en ? 'Your journal is empty — and so is your edge, until you log one' : 'היומן שלך ריק — וכך גם היתרון שלך, עד שתתעד עסקה אחת'}
-            description={en
-              ? 'Every trade you log sharpens the picture: your discipline score, your win rate by session, the patterns the AI surfaces. None of it exists until the first entry. It takes under a minute.'
-              : 'כל עסקה שאתה מתעד מחדדת את התמונה: ציון המשמעת שלך, אחוזי ההצלחה לפי סשן, הדפוסים שה-AI מזהה. שום דבר מזה לא קיים לפני העסקה הראשונה. זה לוקח פחות מדקה.'}
-            action={
-              <button
-                onClick={() => setShowForm(true)}
-                className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors"
-              >
-                {en ? '+ Log your first trade' : '+ הזן את העסקה הראשונה שלך'}
-              </button>
-            }
-          />
-        ) : (
-          groupedDates.map(date => {
-            const dayTrades = filtered.filter(t => t.dateISO === date);
-            if (dayTrades.length === 0) return null;
-            const dayPnl = dayTrades.map(tradePnL).filter((n): n is number => n !== null).reduce((a, b) => a + b, 0);
-            return (
-              <div key={date}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
-                    {date === today ? (en ? 'Today' : 'היום') : date}
-                  </span>
-                  <span className={`font-mono text-xs font-bold ${dayPnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                    {dayPnl >= 0 ? '+' : ''}${Math.abs(dayPnl).toFixed(0)}
-                  </span>
-                </div>
-                <div className="rounded-xl bg-[#0a0a0b] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
-                  {dayTrades.map(t => <TradeRow key={t.id} trade={t} onDelete={handleDelete} />)}
-                </div>
+        {/* Trade log */}
+        <section>
+          <div className="flex items-end justify-between mb-6 flex-wrap gap-4">
+            <div>
+              <div className="font-mono text-[11px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-[9px]">TRADE LOG</div>
+              <h2 style={{ fontFamily: 'var(--serif)' }} className="text-[30px] font-bold text-white m-0">פירוט העסקאות</h2>
+              <div className="mt-1.5 text-[13px] text-white/40">{selectedDate ? labelDate(selectedDate) : 'מציג את כל העסקאות'}</div>
+            </div>
+            {dates.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-white/40 me-1">סינון</span>
+                {dates.slice(0, 6).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setFilter(d)}
+                    className={`py-2 px-[15px] rounded-sm border font-mono text-xs font-bold tracking-[0.04em] transition-all duration-200 ${
+                      selectedDate === d ? 'bg-[#d4af37] text-black border-[#d4af37]' : 'text-white/55 border-[#2a2a2d] hover:text-white/80'
+                    }`}
+                  >
+                    {d === today ? 'היום' : d}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setFilter(null)}
+                  className={`py-2 px-[18px] rounded-sm border text-xs font-bold transition-all duration-200 ${
+                    !selectedDate ? 'bg-[#d4af37] text-black border-[#d4af37]' : 'text-white/55 border-[#2a2a2d] hover:text-white/80'
+                  }`}
+                >
+                  הכל
+                </button>
               </div>
-            );
-          })
-        )}
+            )}
+          </div>
+
+          {trades.length === 0 ? (
+            <EmptyState
+              icon="◈"
+              title="היומן שלך ריק — וכך גם היתרון שלך, עד שתתעד עסקה אחת"
+              description="כל עסקה שאתה מתעד מחדדת את התמונה: ציון המשמעת שלך, אחוזי ההצלחה לפי סשן, הדפוסים שה-AI מזהה. שום דבר מזה לא קיים לפני העסקה הראשונה. זה לוקח פחות מדקה."
+              action={
+                <button onClick={() => setShowForm(true)} className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
+                  + הזן את העסקה הראשונה שלך
+                </button>
+              }
+            />
+          ) : (
+            shownDates.map(date => {
+              const dayTrades = trades.filter(t => t.dateISO === date);
+              if (dayTrades.length === 0) return null;
+              const dayPnl = dayTrades.map(tradePnL).filter((n): n is number => n !== null).reduce((a, b) => a + b, 0);
+              return (
+                <div key={date} className="mt-9 first:mt-0">
+                  <div className="flex items-baseline gap-3.5 mb-[18px]">
+                    <span style={{ fontFamily: 'var(--serif)' }} className="text-[22px] font-bold text-white">{labelDate(date)}</span>
+                    <span className="h-px flex-1 bg-[#1c1c1e]" />
+                    <span className="text-[13px] text-white/40">{weekdayLabel(date)} · {dayTrades.length} עסקאות</span>
+                    <span className="font-mono text-[19px] font-extrabold tabular-nums" style={{ color: pnlColor(dayPnl) }}>{usd(dayPnl)}</span>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    {dayTrades.map(t => <JournalTradeCard key={t.id} trade={t} onDelete={handleDelete} />)}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </section>
       </div>
     </div>
   );
