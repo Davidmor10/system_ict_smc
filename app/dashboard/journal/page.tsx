@@ -84,16 +84,18 @@ export default function JournalPage() {
       dir="rtl"
       style={{
         background: `
-          radial-gradient(55% 45% at 12% 0%, rgba(212,175,55,0.045), transparent 65%),
-          radial-gradient(50% 40% at 100% 25%, rgba(122,143,168,0.035), transparent 65%),
-          radial-gradient(60% 50% at 50% 100%, rgba(212,175,55,0.03), transparent 70%),
+          radial-gradient(60% 70% at 0% 20%, rgba(212,175,55,0.05), transparent 72%),
+          radial-gradient(60% 70% at 100% 15%, rgba(122,143,168,0.045), transparent 72%),
+          radial-gradient(55% 65% at 0% 85%, rgba(122,143,168,0.035), transparent 70%),
+          radial-gradient(55% 65% at 100% 90%, rgba(212,175,55,0.04), transparent 70%),
+          radial-gradient(70% 50% at 50% 100%, rgba(212,175,55,0.03), transparent 72%),
           #050505
         `,
       }}
     >
       {/* Header */}
       <div className="border-b border-[#1c1c1e]">
-        <div className="max-w-[1320px] mx-auto py-11 px-10 max-[880px]:px-5 max-[880px]:py-7">
+        <div className="max-w-[1480px] mx-auto py-11 px-10 max-[880px]:px-5 max-[880px]:py-7">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div>
               <div className="font-mono text-[11px] font-bold tracking-[0.34em] uppercase text-[#d4af37] mb-3.5">TRADING JOURNAL</div>
@@ -143,7 +145,7 @@ export default function JournalPage() {
         </div>
       </div>
 
-      <div className="max-w-[1320px] mx-auto py-10 px-10 max-[880px]:px-5 max-[880px]:py-6 space-y-11">
+      <div className="max-w-[1480px] mx-auto py-10 px-10 max-[880px]:px-5 max-[880px]:py-6 space-y-11">
 
         {/* Trade Form */}
         {showForm && (
