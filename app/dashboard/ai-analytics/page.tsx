@@ -396,7 +396,6 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ HERO ══════════ */}
         <section className="relative overflow-hidden pt-12 sm:pt-[clamp(48px,5.5vw,80px)]">
-          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(150% 110% at 96% 0%,rgba(212,175,55,.11),transparent 62%)' }} />
           <div className="onyx-hero-sweep absolute inset-x-0 top-0 h-px pointer-events-none z-[2]" />
           <div className="relative">
             <Reveal className="grid grid-cols-1 min-[820px]:grid-cols-[clamp(240px,24vw,340px)_minmax(0,1fr)] gap-8 sm:gap-[clamp(32px,4vw,72px)] items-start mb-9 sm:mb-[clamp(38px,4vw,56px)]">
