@@ -219,7 +219,13 @@ export default function AiAnalyticsPage() {
   useEffect(() => {
     try {
       const h = localStorage.getItem('onyx_ai_weekly_report_history');
-      if (h) setReportHistory(JSON.parse(h));
+      if (h) {
+        const parsed = JSON.parse(h);
+        if (Array.isArray(parsed)) {
+          // Drop any entry written by the previous (fixed-field) report shape.
+          setReportHistory(parsed.filter(entry => Array.isArray(entry?.report?.paragraphs)));
+        }
+      }
     } catch {}
   }, []);
 
@@ -228,7 +234,14 @@ export default function AiAnalyticsPage() {
     const weekKey = isoWeekKey(todayISO());
     const cacheKey = 'onyx_ai_weekly_report_' + weekKey;
     const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { setWeeklyReport(JSON.parse(cached)); return; } catch {} }
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        // A cache written by the previous (fixed-field) report shape lacks
+        // `paragraphs` — discard it instead of crashing the page on it.
+        if (Array.isArray(parsed?.paragraphs)) { setWeeklyReport(parsed); return; }
+      } catch {}
+    }
     setWeeklyLoading(true);
     fetch('/api/ai/weekly-report', {
       method: 'POST',
@@ -237,7 +250,7 @@ export default function AiAnalyticsPage() {
     })
       .then(r => r.json())
       .then(({ report }: { report: WeeklyReport | null }) => {
-        if (!report) return;
+        if (!report || !Array.isArray(report.paragraphs) || report.paragraphs.length === 0) return;
         setWeeklyReport(report);
         try {
           localStorage.setItem(cacheKey, JSON.stringify(report));
