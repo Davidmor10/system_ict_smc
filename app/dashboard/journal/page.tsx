@@ -79,58 +79,71 @@ export default function JournalPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" dir="rtl">
+    <div
+      className="flex-1 overflow-y-auto"
+      dir="rtl"
+      style={{
+        background: `
+          radial-gradient(55% 45% at 12% 0%, rgba(212,175,55,0.045), transparent 65%),
+          radial-gradient(50% 40% at 100% 25%, rgba(122,143,168,0.035), transparent 65%),
+          radial-gradient(60% 50% at 50% 100%, rgba(212,175,55,0.03), transparent 70%),
+          #050505
+        `,
+      }}
+    >
       {/* Header */}
-      <div className="py-11 px-[52px] max-[880px]:px-5 max-[880px]:py-7 border-b border-[#1c1c1e]" style={{ background: 'radial-gradient(80% 120% at 90% 0%, rgba(212,175,55,0.06), transparent 60%)' }}>
-        <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div>
-            <div className="font-mono text-[11px] font-bold tracking-[0.34em] uppercase text-[#d4af37] mb-3.5">TRADING JOURNAL</div>
-            <h1 style={{ fontFamily: 'var(--serif)' }} className="text-[46px] max-[880px]:text-[32px] font-bold text-white leading-[1.02] m-0">יומן העסקאות</h1>
-            <p className="mt-3 text-[15px] text-white/55 max-w-[440px] leading-relaxed">מעקב, ניתוח ותובנות על ביצועי המסחר שלך — כל עסקה מתועדת עם ההקשר המלא של המושב וההטיה היומית.</p>
-          </div>
-          <div className="flex items-center gap-3.5 flex-wrap">
-            <div className="flex items-center gap-2.5 py-[9px] px-3.5 rounded-sm border" style={{ borderColor: activeSession ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.1)', background: activeSession ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.03)' }}>
-              <span className="w-[7px] h-[7px] rounded-full" style={{ background: activeSession ? '#d4af37' : 'rgba(255,255,255,0.3)', boxShadow: activeSession ? '0 0 8px rgba(212,175,55,0.7)' : 'none' }} />
-              <span className="font-mono text-xs font-bold tracking-[0.18em]" style={{ color: activeSession ? '#d4af37' : 'rgba(255,255,255,0.4)' }} dir="ltr">
-                {activeSession ? `${activeSession.he} · ${nowLabel}` : 'מחוץ לשעות מסחר'}
-              </span>
+      <div className="border-b border-[#1c1c1e]">
+        <div className="max-w-[1320px] mx-auto py-11 px-10 max-[880px]:px-5 max-[880px]:py-7">
+          <div className="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+              <div className="font-mono text-[11px] font-bold tracking-[0.34em] uppercase text-[#d4af37] mb-3.5">TRADING JOURNAL</div>
+              <h1 style={{ fontFamily: 'var(--serif)' }} className="text-[46px] max-[880px]:text-[32px] font-bold text-white leading-[1.02] m-0">יומן העסקאות</h1>
+              <p className="mt-3 text-[15px] text-white/55 max-w-[440px] leading-relaxed">מעקב, ניתוח ותובנות על ביצועי המסחר שלך — כל עסקה מתועדת עם ההקשר המלא של המושב וההטיה היומית.</p>
             </div>
-            <button
-              onClick={() => setShowForm(v => !v)}
-              className="inline-flex items-center gap-2 py-[13px] px-6 rounded-sm bg-[#d4af37] text-black text-sm font-bold hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.4)]"
-            >
-              <span className="font-mono text-base">{showForm ? '✕' : '+'}</span> {showForm ? 'ביטול' : 'עסקה חדשה'}
-            </button>
+            <div className="flex items-center gap-3.5 flex-wrap">
+              <div className="flex items-center gap-2.5 py-[9px] px-3.5 rounded-sm border" style={{ borderColor: activeSession ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.1)', background: activeSession ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.03)' }}>
+                <span className="w-[7px] h-[7px] rounded-full" style={{ background: activeSession ? '#d4af37' : 'rgba(255,255,255,0.3)', boxShadow: activeSession ? '0 0 8px rgba(212,175,55,0.7)' : 'none' }} />
+                <span className="font-mono text-xs font-bold tracking-[0.18em]" style={{ color: activeSession ? '#d4af37' : 'rgba(255,255,255,0.4)' }} dir="ltr">
+                  {activeSession ? `${activeSession.he} · ${nowLabel}` : 'מחוץ לשעות מסחר'}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowForm(v => !v)}
+                className="inline-flex items-center gap-2 py-[13px] px-6 rounded-sm bg-[#d4af37] text-black text-sm font-bold hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.4)]"
+              >
+                <span className="font-mono text-base">{showForm ? '✕' : '+'}</span> {showForm ? 'ביטול' : 'עסקה חדשה'}
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* Summary strip */}
-        <div className="flex items-stretch mt-[34px] pt-7 border-t border-[#1c1c1e] flex-wrap gap-6">
-          <div className="flex-none pe-12 border-e border-[#1c1c1e]">
-            <div className="text-xs font-medium text-white/40 mb-2.5">רווח נקי כולל</div>
-            <div className="font-mono text-[44px] max-[880px]:text-[32px] font-black tabular-nums tracking-[-0.02em] leading-none" style={{ color: pnlColor(stats.totalPnL), textShadow: stats.totalPnL >= 0 ? '0 0 30px rgba(74,124,89,0.35)' : 'none' }}>
-              {usd(stats.totalPnL)}
+          {/* Summary strip */}
+          <div className="flex items-stretch mt-[34px] pt-7 border-t border-[#1c1c1e] flex-wrap gap-6">
+            <div className="flex-none pe-12 border-e border-[#1c1c1e]">
+              <div className="text-xs font-medium text-white/40 mb-2.5">רווח נקי כולל</div>
+              <div className="font-mono text-[44px] max-[880px]:text-[32px] font-black tabular-nums tracking-[-0.02em] leading-none" style={{ color: pnlColor(stats.totalPnL), textShadow: stats.totalPnL >= 0 ? '0 0 30px rgba(74,124,89,0.35)' : 'none' }}>
+                {usd(stats.totalPnL)}
+              </div>
             </div>
-          </div>
-          <div className="flex-1 flex items-center ps-12 gap-14 flex-wrap">
-            <div>
-              <div className="text-xs font-medium text-white/40 mb-2.5">אחוז הצלחה</div>
-              <div className="font-mono text-[32px] font-black tabular-nums leading-none text-[#d4af37]" style={{ textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{stats.winRate.toFixed(0)}%</div>
-              <div className="text-[11px] text-white/40 mt-[7px]">{wins} נצחונות · {be} ללא שינוי</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-white/40 mb-2.5">יחס סיכון ממוצע</div>
-              <div className="font-mono text-[32px] font-black tabular-nums leading-none text-white">{stats.avgR.toFixed(2)}R</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-white/40 mb-2.5">העסקה המובילה</div>
-              <div className="font-mono text-[32px] font-black tabular-nums leading-none" style={{ color: pnlColor(bestTrade) }}>{usd(bestTrade)}</div>
+            <div className="flex-1 flex items-center ps-12 gap-14 flex-wrap">
+              <div>
+                <div className="text-xs font-medium text-white/40 mb-2.5">אחוז הצלחה</div>
+                <div className="font-mono text-[32px] font-black tabular-nums leading-none text-[#d4af37]" style={{ textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{stats.winRate.toFixed(0)}%</div>
+                <div className="text-[11px] text-white/40 mt-[7px]">{wins} נצחונות · {be} ללא שינוי</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-white/40 mb-2.5">יחס סיכון ממוצע</div>
+                <div className="font-mono text-[32px] font-black tabular-nums leading-none text-white">{stats.avgR.toFixed(2)}R</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-white/40 mb-2.5">העסקה המובילה</div>
+                <div className="font-mono text-[32px] font-black tabular-nums leading-none" style={{ color: pnlColor(bestTrade) }}>{usd(bestTrade)}</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="py-10 px-[52px] max-[880px]:px-5 max-[880px]:py-6 space-y-11">
+      <div className="max-w-[1320px] mx-auto py-10 px-10 max-[880px]:px-5 max-[880px]:py-6 space-y-11">
 
         {/* Trade Form */}
         {showForm && (
