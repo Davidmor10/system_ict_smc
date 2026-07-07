@@ -10,11 +10,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   addDaysISO, discoverPatterns, isoWeekKey, runFullAnalysis, startOfIsoWeek,
-  type ConfidenceLevel, type FullAnalysis,
+  type ConfidenceLevel, type FullAnalysis, type GroupPerformance,
 } from '../analytics';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { todayISO, type TradeEntry } from '../journal';
-import { generateHypothesisPhrasing, generatePatternPhrasing } from '../ai/insightPhrasing';
+import { SESS } from '../sessions';
+import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
   summarizeAnalysis, summarizeComparison, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
@@ -403,6 +404,104 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
     title: phrased.title, evidence: phrased.evidence, action: phrased.action,
     confidenceLevel: anchor.currentConfidenceLevel, sampleSize: anchor.currentSampleSize,
   };
+}
+
+// ── generatePersonalizedInsights ─────────────────────────────────────────────
+// Replaces the old fixed opportunity/warning/pattern 3-slot structure. There
+// is no rigid category schema here: it selects whatever the trader's own
+// persisted data actually supports (the current hypothesis if confident
+// enough, real recurring patterns, a genuine weakening pattern if one
+// exists) and phrases only that — never manufactures a "warning" just to
+// fill a slot that isn't backed by anything.
+
+export interface PersonalizedInsight {
+  subject: string;
+  text: string;
+  tone: 'positive' | 'caution' | 'neutral';
+}
+
+const MAX_PERSONALIZED_INSIGHTS = 4;
+const MAX_STRONG_PATTERNS_IN_PANEL = 2;
+
+function subjectLabelFor(subject: Record<string, string | number>, lang: 'he' | 'en'): string {
+  const parts: string[] = [];
+  if (subject.instrument) parts.push(String(subject.instrument));
+  if (subject.confirmation) parts.push(String(subject.confirmation));
+  if (subject.session) {
+    const s = SESS.find(x => x.key === subject.session);
+    parts.push(s ? (lang === 'he' ? s.he : s.en) : String(subject.session));
+  }
+  if (subject.direction) parts.push(subject.direction === 'LONG' ? (lang === 'he' ? 'לונג' : 'Long') : (lang === 'he' ? 'שורט' : 'Short'));
+  if (subject.hour !== undefined) parts.push(`${String(subject.hour).padStart(2, '0')}:00`);
+  return parts.join(' · ');
+}
+
+export async function generatePersonalizedInsights(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<PersonalizedInsight[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = getClient();
+
+  const profileRecord = await repo.getTraderProfile(supabase, userId);
+  let patternRows: PatternMemoryRow[];
+  let hypothesis: HypothesisState | null;
+
+  if (!profileRecord) {
+    const result = await refreshIntelligence(supabase, userId, lang);
+    patternRows = result.patternRows;
+    hypothesis = result.hypothesis;
+  } else {
+    [patternRows, hypothesis] = await Promise.all([
+      repo.getPatternMemory(supabase, userId),
+      repo.getHypothesis(supabase, userId),
+    ]);
+  }
+
+  interface Candidate { subject: string; tone: 'positive' | 'caution' | 'neutral'; metric: GroupPerformance; extra?: string }
+  const candidates: Candidate[] = [];
+
+  const hypothesisUsable = hypothesis
+    && hypothesis.status !== 'insufficient_data' && hypothesis.status !== 'invalidated'
+    && hypothesis.confidenceScore >= HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE;
+  const anchorPatternId = hypothesisUsable ? hypothesis!.supportingPatternIds[0] ?? null : null;
+
+  if (hypothesisUsable && hypothesis) {
+    const topMetric = Object.values(hypothesis.supportingMetrics)[0];
+    if (topMetric) {
+      candidates.push({
+        subject: lang === 'he' ? 'הקצה הנוכחי שלך' : 'Your current edge',
+        tone: hypothesis.status === 'weakening' ? 'caution' : 'positive',
+        metric: topMetric,
+        extra: `hypothesis status ${hypothesis.status}, confidence score ${hypothesis.confidenceScore}/100, built from ${Object.keys(hypothesis.supportingMetrics).length} corroborating pattern(s)`,
+      });
+    }
+  }
+
+  const strongPatterns = patternRows
+    .filter(p => p.patternId !== anchorPatternId && (p.status === 'active' || p.status === 'strengthening'))
+    .sort((a, b) => b.currentSampleSize - a.currentSampleSize)
+    .slice(0, MAX_STRONG_PATTERNS_IN_PANEL);
+  for (const p of strongPatterns) {
+    candidates.push({ subject: subjectLabelFor(p.subject, lang), tone: 'positive', metric: p.currentMetric });
+  }
+
+  const riskiestPattern = patternRows
+    .filter(p => p.status === 'weakening')
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+  if (riskiestPattern) {
+    candidates.push({ subject: subjectLabelFor(riskiestPattern.subject, lang), tone: 'caution', metric: riskiestPattern.currentMetric });
+  }
+
+  if (candidates.length === 0) return [];
+  const trimmed = candidates.slice(0, MAX_PERSONALIZED_INSIGHTS);
+
+  const phrased = await generateInsightsPhrasing(
+    trimmed.map(c => ({ subject: c.subject, metric: c.metric, extra: c.extra })),
+    lang,
+  );
+  if (!phrased) return [];
+
+  return trimmed
+    .map((c, i) => ({ subject: c.subject, text: phrased[i] ?? '', tone: c.tone }))
+    .filter(i => i.text.length > 0);
 }
 
 // ── Evolution Timeline ───────────────────────────────────────────────────────

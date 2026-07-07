@@ -8,17 +8,28 @@ import TypingDots from './TypingDots';
 import EmptyState from './EmptyState';
 import InsightText from './InsightText';
 
-interface AiInsight { type: string; tag_he: string; tag_en: string; text: string; }
+/** Mirrors app/lib/intelligence/service.ts's PersonalizedInsight — kept as a
+    local type (not imported) so this client component never pulls in
+    server-only AI SDK / Supabase modules. Deliberately no fixed category
+    field: `subject` is the real, specific thing the insight is about (e.g.
+    "MNQ · NY AM"), not a generic label like "opportunity"/"warning". */
+interface PersonalizedInsight { subject: string; text: string; tone: 'positive' | 'caution' | 'neutral'; }
 
-const META: Record<string, { fg: string; bg: string; bd: string; rail: string }> = {
-  opportunity: { fg: '#4a7c59', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)', rail: '#4a7c59' },
-  warning:     { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.25)', rail: '#d4af37' },
-  pattern:     { fg: '#7a8fa8', bg: 'rgba(255,255,255,.04)', bd: 'rgba(255,255,255,.08)', rail: '#7a8fa8' },
+const TONE_META: Record<PersonalizedInsight['tone'], { fg: string; bg: string; bd: string; rail: string }> = {
+  positive: { fg: '#4a7c59', bg: 'rgba(111,165,128,.1)', bd: 'rgba(111,165,128,.32)', rail: '#4a7c59' },
+  caution:  { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.25)', rail: '#d4af37' },
+  neutral:  { fg: '#7a8fa8', bg: 'rgba(255,255,255,.04)', bd: 'rgba(255,255,255,.08)', rail: '#7a8fa8' },
+};
+
+/** The insight count varies (no fixed 3-slot layout anymore) — static class
+    literals so Tailwind's build-time scanner can see and generate them. */
+const GRID_COLS_CLASS: Record<number, string> = {
+  1: '', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-2 lg:grid-cols-4',
 };
 
 export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   const { lang } = useLanguage();
-  const [insights, setInsights] = useState<AiInsight[]>([]);
+  const [insights, setInsights] = useState<PersonalizedInsight[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -34,7 +45,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       const res = await fetch('/api/ai/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades, lang }),
+        body: JSON.stringify({ lang }),
       });
       if (!res.ok) throw new Error(`Insights request failed: ${res.status}`);
       const data = await res.json();
@@ -60,8 +71,10 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
-        const parsed = JSON.parse(cached) as { insights: AiInsight[]; updatedAt: string };
-        if (Array.isArray(parsed.insights) && parsed.insights.length > 0) {
+        const parsed = JSON.parse(cached) as { insights: PersonalizedInsight[]; updatedAt: string };
+        // A cache written by the previous fixed-category shape lacks `tone` —
+        // discard it instead of crashing on TONE_META[undefined] at render time.
+        if (Array.isArray(parsed.insights) && parsed.insights.length > 0 && parsed.insights.every(i => i && typeof i.tone === 'string')) {
           setInsights(parsed.insights);
           setUpdatedAt(parsed.updatedAt);
           return;
@@ -104,13 +117,13 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       )}
 
       {!loading && insights.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-[#1c1c1e]">
+        <div className={`grid grid-cols-1 gap-px bg-[#1c1c1e] ${GRID_COLS_CLASS[Math.min(insights.length, 4)]}`}>
           {insights.map((ins, i) => {
-            const m = META[ins.type] ?? META.pattern;
+            const m = TONE_META[ins.tone] ?? TONE_META.neutral;
             return (
               <div key={i} className="bg-[#0d0d0f] py-[22px] px-6" style={{ borderTop: `3px solid ${m.rail}` }}>
                 <div className="flex items-center gap-2 text-sm font-bold mb-[11px]" style={{ color: m.fg }}>
-                  <span className="text-[8px]">◆</span>{lang === 'he' ? ins.tag_he : ins.tag_en}
+                  <span className="text-[8px]">◆</span>{ins.subject}
                 </div>
                 <InsightText text={ins.text} className="text-sm leading-[1.75] text-white/70" />
               </div>

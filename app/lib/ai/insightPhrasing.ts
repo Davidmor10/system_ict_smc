@@ -72,6 +72,52 @@ Rules:
   return { description: parsed.description, evidence: parsed.evidence };
 }
 
+export interface InsightPhrasingItem {
+  subject: string;
+  metric: GroupPerformance;
+  extra?: string;
+}
+
+/** Phrases a small batch of already-selected items (a hypothesis, recurring
+    patterns, a real risk pattern) into short, specific insights — one LLM
+    call for the whole batch instead of one per item. No forced category
+    names (no "opportunity"/"warning"/"pattern" schema): each insight is just
+    text, grounded only in the numbers given, in the same order as `items`. */
+export async function generateInsightsPhrasing(items: InsightPhrasingItem[], lang: 'he' | 'en'): Promise<string[] | null> {
+  if (items.length === 0) return [];
+  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const list = items
+    .map((it, i) => `${i + 1}. ${it.subject} — ${fmtMetric(it.subject, it.metric)}${it.extra ? ` (${it.extra})` : ''}`)
+    .join('\n');
+
+  const prompt = `You are Onyx, an experienced trading mentor reviewing a trader's own journal data. Write ${items.length} short, specific, personalized insight(s) for this trader — each grounded only in the exact numbers given below. Do not slot these into generic categories like "opportunity" or "warning" — just say what the data actually shows, in whatever way fits that specific data. You do NOT predict markets and NEVER give buy/sell signals.
+
+${langInstruction}
+
+ITEMS (already computed — cite only these numbers, keep the same order):
+${list}
+
+Produce exactly one JSON array of ${items.length} string(s), one per item above, in order, each 1-2 sentences:
+["<insight for item 1>", "<insight for item 2>", ...]
+
+Rules:
+- Every number must come directly from the data above. Never invent, round dramatically, or estimate.
+- Make each insight feel specific to this exact data, not a generic sentence that could apply to any trader.
+- Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
+- JSON only, no extra text.`;
+
+  const raw = await generateInsightText(prompt);
+  let parsed: unknown[] = [];
+  try {
+    const match = raw.match(/\[[\s\S]*\]/);
+    parsed = match ? JSON.parse(match[0]) : [];
+  } catch {
+    parsed = [];
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  return parsed.map(p => (typeof p === 'string' ? p : ''));
+}
+
 export interface PatternPhrasing {
   title: string;
   evidence: string;
