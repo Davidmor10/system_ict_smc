@@ -83,7 +83,10 @@ export type PatternKind =
   | 'confirmation+hour'
   | 'direction+hour'
   | 'instrument_best'
-  | 'session_vs_overall';
+  | 'session_vs_overall'
+  | 'emotion'
+  | 'confirmation_tag'
+  | 'confirmation_combo';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,
@@ -104,7 +107,16 @@ export interface FullAnalysis {
   performance: PerformanceSummary;
   instruments: GroupPerformance[];
   sessions: GroupPerformance[];
+  /** Breakdown by the trader's `model` tag (their own setup name). Named
+      `confirmations` for historical reasons — predates the structured
+      confirmation-tag field below. */
   confirmations: GroupPerformance[];
+  /** Breakdown by individual structured confirmation tag (SMT, IFVG, ...). */
+  confirmationTags: GroupPerformance[];
+  /** Breakdown by the exact combination of confirmation tags on a trade. */
+  confirmationCombos: GroupPerformance[];
+  /** Breakdown by self-reported emotional state at entry. */
+  emotions: GroupPerformance[];
   time: TimeSummary;
   direction: DirectionSummary;
   patterns: PatternCandidate[];

@@ -28,7 +28,10 @@ export function summarizeAnalysis(a: FullAnalysis): string {
 
   if (a.instruments.length) lines.push(`\nBY INSTRUMENT:\n${a.instruments.map(fmtGroup).join('\n')}`);
   if (a.sessions.length) lines.push(`\nBY SESSION:\n${a.sessions.map(fmtGroup).join('\n')}`);
-  if (a.confirmations.length) lines.push(`\nBY CONFIRMATION:\n${a.confirmations.map(fmtGroup).join('\n')}`);
+  if (a.confirmations.length) lines.push(`\nBY MODEL/SETUP:\n${a.confirmations.map(fmtGroup).join('\n')}`);
+  if (a.confirmationTags.length) lines.push(`\nBY CONFIRMATION TAG:\n${a.confirmationTags.map(fmtGroup).join('\n')}`);
+  if (a.confirmationCombos.length) lines.push(`\nBY CONFIRMATION COMBO:\n${a.confirmationCombos.map(fmtGroup).join('\n')}`);
+  if (a.emotions.length) lines.push(`\nBY EMOTIONAL STATE:\n${a.emotions.map(fmtGroup).join('\n')}`);
 
   lines.push(`\nBY DIRECTION:\n${fmtGroup(a.direction.long)}\n${fmtGroup(a.direction.short)}`);
 

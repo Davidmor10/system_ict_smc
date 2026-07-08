@@ -76,6 +76,34 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
     }
   }
 
+  // emotional state — how the trader's state at entry tracks with results
+  const emotionsSeen = new Set<string>();
+  for (const t of trades) if (t.emotionalState) emotionsSeen.add(t.emotionalState);
+  for (const e of emotionsSeen) {
+    const subset = trades.filter(t => t.emotionalState === e);
+    push('emotion', `emotion_${e}`, { emotion: e }, subset, `Emotion: ${e}`);
+  }
+
+  // confirmation tags — per single tag, and per exact multi-tag combo, so the
+  // trader sees both "SMT present at all" and "SMT+IFVG stacked together"
+  const tagsSeen = new Set<string>();
+  for (const t of trades) for (const c of t.confirmations ?? []) tagsSeen.add(c);
+  for (const tag of tagsSeen) {
+    const subset = trades.filter(t => (t.confirmations ?? []).includes(tag));
+    push('confirmation_tag', `conf_${tag}`, { confirmationTag: tag }, subset, `Confirmation: ${tag}`);
+  }
+  const comboGroups = new Map<string, TradeEntry[]>();
+  for (const t of trades) {
+    const tags = t.confirmations ?? [];
+    if (tags.length < 2) continue; // single tags are already covered above
+    const key = [...tags].sort().join('+');
+    const arr = comboGroups.get(key);
+    if (arr) arr.push(t); else comboGroups.set(key, [t]);
+  }
+  for (const [key, subset] of comboGroups) {
+    push('confirmation_combo', `combo_${key}`, { confirmationCombo: key }, subset, `Combo: ${key}`);
+  }
+
   // single-dimension standouts, in case combos stay too sparse for a while
   for (const g of analyzeInstruments(trades)) {
     if (g.trades < 3) continue;

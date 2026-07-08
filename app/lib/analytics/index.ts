@@ -12,6 +12,8 @@ import { analyzePerformance } from './performance';
 import { analyzeInstruments } from './instruments';
 import { analyzeSessions } from './sessions';
 import { analyzeConfirmations } from './confirmations';
+import { analyzeConfirmationTags, analyzeConfirmationCombos } from './confirmationTags';
+import { analyzeEmotions } from './emotions';
 import { analyzeTime } from './time';
 import { analyzeDirection } from './direction';
 import { discoverPatterns } from './patterns';
@@ -23,6 +25,9 @@ export function runFullAnalysis(trades: TradeEntry[]): FullAnalysis {
     instruments: analyzeInstruments(trades),
     sessions: analyzeSessions(trades),
     confirmations: analyzeConfirmations(trades),
+    confirmationTags: analyzeConfirmationTags(trades),
+    confirmationCombos: analyzeConfirmationCombos(trades),
+    emotions: analyzeEmotions(trades),
     time: analyzeTime(trades),
     direction: analyzeDirection(trades),
     patterns: discoverPatterns(trades),
@@ -33,6 +38,8 @@ export { analyzePerformance } from './performance';
 export { analyzeInstruments } from './instruments';
 export { analyzeSessions } from './sessions';
 export { analyzeConfirmations } from './confirmations';
+export { analyzeConfirmationTags, analyzeConfirmationCombos, comboKey } from './confirmationTags';
+export { analyzeEmotions } from './emotions';
 export { analyzeTime, hourOf, isoWeekKey, startOfIsoWeek, addDaysISO } from './time';
 export { analyzeDirection } from './direction';
 export { discoverPatterns } from './patterns';
