@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import Groq from "groq-sdk";
+import { logger } from "../logger";
 
 /** Single shared clients — every AI route in the app goes through these.
     Groq's constructor throws immediately on a missing key (unlike
@@ -27,6 +28,10 @@ const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flas
     with its own free quota, so it survives a total Gemini outage. */
 const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function generateInsightText(prompt: string): Promise<string> {
   let lastErr: unknown;
 
@@ -34,8 +39,10 @@ export async function generateInsightText(prompt: string): Promise<string> {
     try {
       const result = await genAI.models.generateContent({ model, contents: prompt });
       if (result.text) return result.text;
+      logger.warn('gemini returned no text', { model });
     } catch (err) {
       lastErr = err;
+      logger.warn('gemini model failed', { model, error: errMessage(err) });
     }
   }
 
@@ -47,10 +54,13 @@ export async function generateInsightText(prompt: string): Promise<string> {
       });
       const text = result.choices[0]?.message?.content;
       if (text) return text;
+      logger.warn('groq returned no text', { model });
     } catch (err) {
       lastErr = err;
+      logger.warn('groq model failed', { model, error: errMessage(err) });
     }
   }
 
+  logger.error('all AI providers failed', { error: errMessage(lastErr) });
   throw lastErr ?? new Error("All AI providers failed");
 }

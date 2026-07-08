@@ -11,6 +11,20 @@ import type { HypothesisStatus, PatternMemoryRow } from '../intelligence/types';
 import { fmtPF } from './factsBlock';
 import { generateInsightText } from './client';
 import { HEBREW_MENTOR_STYLE } from './styleGuide';
+import { logger } from '../logger';
+
+/** Wraps generateInsightText so a total provider failure (e.g. missing/
+    invalid API keys) is logged with which caller hit it and resolves to
+    null, instead of throwing uncaught up into the API route as an
+    unexplained 500. */
+async function tryGenerate(caller: string, prompt: string): Promise<string | null> {
+  try {
+    return await generateInsightText(prompt);
+  } catch (err) {
+    logger.error('AI text generation failed', { caller, error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
 
 function fmtMetric(label: string, g: GroupPerformance): string {
   return `${label}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}%, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, PnL $${g.totalPnl.toFixed(0)}`;
@@ -60,7 +74,9 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt);
+  const raw = await tryGenerate('generateHypothesisPhrasing', prompt);
+  if (raw === null) return null;
+
   let parsed: { description?: string; evidence?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
@@ -68,7 +84,10 @@ Rules:
   } catch {
     parsed = {};
   }
-  if (!parsed.description || !parsed.evidence) return null;
+  if (!parsed.description || !parsed.evidence) {
+    logger.warn('generateHypothesisPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
+    return null;
+  }
   return { description: parsed.description, evidence: parsed.evidence };
 }
 
@@ -106,7 +125,9 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt);
+  const raw = await tryGenerate('generateInsightsPhrasing', prompt);
+  if (raw === null) return null;
+
   let parsed: unknown[] = [];
   try {
     const match = raw.match(/\[[\s\S]*\]/);
@@ -114,7 +135,10 @@ Rules:
   } catch {
     parsed = [];
   }
-  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    logger.warn('generateInsightsPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
+    return null;
+  }
   return parsed.map(p => (typeof p === 'string' ? p : ''));
 }
 
@@ -153,7 +177,9 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt);
+  const raw = await tryGenerate('generatePatternPhrasing', prompt);
+  if (raw === null) return null;
+
   let parsed: { title?: string; evidence?: string; action?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
@@ -161,6 +187,9 @@ Rules:
   } catch {
     parsed = {};
   }
-  if (!parsed.title || !parsed.evidence || !parsed.action) return null;
+  if (!parsed.title || !parsed.evidence || !parsed.action) {
+    logger.warn('generatePatternPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
+    return null;
+  }
   return { title: parsed.title, evidence: parsed.evidence, action: parsed.action };
 }

@@ -15,6 +15,7 @@ import {
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { todayISO, type TradeEntry } from '../journal';
 import { SESS } from '../sessions';
+import { logger } from '../logger';
 import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
@@ -534,14 +535,20 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
     });
   }
 
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) {
+    logger.warn('generatePersonalizedInsights: no candidates found', { userId, patternRowCount: patternRows.length, builtFromTradeCount });
+    return [];
+  }
   const trimmed = candidates.slice(0, MAX_PERSONALIZED_INSIGHTS);
 
   const phrased = await generateInsightsPhrasing(
     trimmed.map(c => ({ subject: c.subject, metric: c.metric, extra: c.extra })),
     lang,
   );
-  if (!phrased) return [];
+  if (!phrased) {
+    logger.warn('generatePersonalizedInsights: phrasing failed, returning empty', { userId, candidateCount: trimmed.length });
+    return [];
+  }
 
   return trimmed
     .map((c, i) => ({ subject: c.subject, text: phrased[i] ?? '', tone: c.tone }))

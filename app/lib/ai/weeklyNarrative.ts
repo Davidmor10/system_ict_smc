@@ -1,5 +1,6 @@
 import type { ConfidenceLevel } from '../analytics';
 import { generateInsightText } from './client';
+import { logger } from '../logger';
 import { CHALLENGE_TRADER_STYLE, HEBREW_MENTOR_STYLE } from './styleGuide';
 
 export interface NarrativeFacts {
@@ -96,7 +97,14 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt);
+  let raw: string;
+  try {
+    raw = await generateInsightText(prompt);
+  } catch (err) {
+    logger.error('generateNarrativeText: AI generation failed', { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+
   let parsed: { paragraphs?: unknown } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
@@ -105,7 +113,10 @@ Rules:
     parsed = {};
   }
 
-  if (!Array.isArray(parsed.paragraphs)) return null;
+  if (!Array.isArray(parsed.paragraphs)) {
+    logger.warn('generateNarrativeText: unparseable model output', { raw: raw.slice(0, 300) });
+    return null;
+  }
   const paragraphs = parsed.paragraphs.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
   if (paragraphs.length < MIN_PARAGRAPHS) return null;
 
