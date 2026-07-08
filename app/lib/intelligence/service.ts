@@ -154,6 +154,52 @@ async function refreshIntelligence(supabase: SupabaseClient, userId: string, lan
   };
 }
 
+interface FreshIntelligence {
+  patternRows: PatternMemoryRow[];
+  hypothesis: HypothesisState | null;
+  profile: TraderProfile;
+  builtFromTradeCount: number;
+}
+
+/** Shared by generateDashboardPrimaryInsight and generatePersonalizedInsights:
+    a stored trader_profiles row existing is NOT the same as it being
+    current. If the profile was built (e.g. bootstrapped) before real trades
+    had synced — or trades were added/edited/removed since — its
+    built_from_trade_count no longer matches the actual closed-trade count,
+    and reading the stale stored pattern_memory/hypothesis forever would
+    silently freeze the whole insight pipeline. Re-runs the full refresh
+    whenever that mismatch is detected, not just on a true cold start. */
+async function getFreshIntelligence(
+  supabase: SupabaseClient,
+  userId: string,
+  lang: 'he' | 'en',
+  profileRecord: Awaited<ReturnType<typeof repo.getTraderProfile>>,
+): Promise<FreshIntelligence> {
+  if (!profileRecord) {
+    const result = await refreshIntelligence(supabase, userId, lang);
+    return {
+      patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
+      builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
+    };
+  }
+
+  const trades = await repo.getRecentTrades(supabase, userId);
+  const closedCount = trades.filter(t => t.result !== 'OPEN').length;
+  if (closedCount !== profileRecord.builtFromTradeCount) {
+    const result = await refreshIntelligence(supabase, userId, lang);
+    return {
+      patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
+      builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
+    };
+  }
+
+  const [patternRows, hypothesis] = await Promise.all([
+    repo.getPatternMemory(supabase, userId),
+    repo.getHypothesis(supabase, userId),
+  ]);
+  return { patternRows, hypothesis, profile: profileRecord.profile, builtFromTradeCount: profileRecord.builtFromTradeCount };
+}
+
 // ── buildTraderProfile / updateTraderProfile ────────────────────────────────
 // The profile is always a full recompute, never incrementally patched, so
 // these are documented aliases of the same operation, not two code paths.
@@ -327,21 +373,7 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
   const supabase = getClient();
 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
-  let patternRows: PatternMemoryRow[];
-  let hypothesis: HypothesisState | null;
-
-  if (!profileRecord) {
-    // Cold-start bootstrap: populate everything once so the dashboard
-    // doesn't stay empty until the user visits AI Analytics.
-    const result = await refreshIntelligence(supabase, userId, lang);
-    patternRows = result.patternRows;
-    hypothesis = result.hypothesis;
-  } else {
-    [patternRows, hypothesis] = await Promise.all([
-      repo.getPatternMemory(supabase, userId),
-      repo.getHypothesis(supabase, userId),
-    ]);
-  }
+  const { patternRows, hypothesis } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
 
   const hypothesisIsUsable = hypothesis
     && hypothesis.status !== 'insufficient_data'
@@ -468,25 +500,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
   const hadExistingProfile = !!profileRecord;
-  let patternRows: PatternMemoryRow[];
-  let hypothesis: HypothesisState | null;
-  let profile: TraderProfile;
-  let builtFromTradeCount: number;
-
-  if (!profileRecord) {
-    const result = await refreshIntelligence(supabase, userId, lang);
-    patternRows = result.patternRows;
-    hypothesis = result.hypothesis;
-    profile = result.profile;
-    builtFromTradeCount = result.trades.filter(t => t.result !== 'OPEN').length;
-  } else {
-    [patternRows, hypothesis] = await Promise.all([
-      repo.getPatternMemory(supabase, userId),
-      repo.getHypothesis(supabase, userId),
-    ]);
-    profile = profileRecord.profile;
-    builtFromTradeCount = profileRecord.builtFromTradeCount;
-  }
+  const { patternRows, hypothesis, profile, builtFromTradeCount } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
 
   interface Candidate { subject: string; tone: 'positive' | 'caution' | 'neutral'; metric: GroupPerformance; extra?: string }
   const candidates: Candidate[] = [];
