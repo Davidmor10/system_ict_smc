@@ -92,6 +92,13 @@ export function saveTrash(items: DeletedTradeEntry[]): void {
   } catch { /* non-fatal */ }
 }
 
+/** Best-effort mirror of a soft-delete/restore to the cloud copy — local
+    storage stays the source of truth regardless of whether this succeeds. */
+function syncTrashStateToCloud(id: number, method: 'DELETE' | 'PATCH'): void {
+  if (typeof window === 'undefined') return;
+  fetch(`/api/journal/${id}`, { method }).catch(() => {});
+}
+
 export function softDelete(trades: TradeEntry[], id: number): {
   updatedTrades: TradeEntry[];
   updatedTrash: DeletedTradeEntry[];
@@ -102,6 +109,7 @@ export function softDelete(trades: TradeEntry[], id: number): {
   const updatedTrash = [{ trade, deletedAt: new Date().toISOString() }, ...loadTrash()];
   saveTrades(updatedTrades);
   saveTrash(updatedTrash);
+  syncTrashStateToCloud(id, 'DELETE');
   return { updatedTrades, updatedTrash };
 }
 
@@ -115,6 +123,7 @@ export function restoreTrade(trades: TradeEntry[], trash: DeletedTradeEntry[], i
   const updatedTrash = trash.filter(i => i.trade.id !== id);
   saveTrades(updatedTrades);
   saveTrash(updatedTrash);
+  syncTrashStateToCloud(id, 'PATCH');
   return { updatedTrades, updatedTrash };
 }
 
@@ -233,7 +242,41 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   };
 }
 
-/** Read + migrate the journal from localStorage. Safe on the server (returns []). */
+// ── Cloud sync ───────────────────────────────────────────────────────────────
+// localStorage has always been the fast, source-of-truth read path (see
+// loadTrades below), but nothing ever actually pushed those trades up to
+// Supabase — the /api/journal PUT/POST routes existed and worked, but no
+// client code called them. Every server-side feature that reads trades via
+// clerk_id (cross-device sync, the Trader Intelligence System) saw zero
+// trades for any user whose data lived only in their browser. This pushes
+// the local journal to the cloud whenever it changes, and opportunistically
+// catches up stale/legacy local data on load — best-effort, never blocks
+// or breaks the local read/write path if the network call fails.
+
+const CLOUD_SYNC_KEY = 'onyx_last_cloud_sync';
+const CLOUD_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000; // throttle only the load-time catch-up, not real writes
+let cloudSyncInFlight = false;
+
+function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean }): void {
+  if (typeof window === 'undefined' || trades.length === 0 || cloudSyncInFlight) return;
+  if (opts.throttle) {
+    const last = Number(window.localStorage.getItem(CLOUD_SYNC_KEY) ?? 0);
+    if (Date.now() - last < CLOUD_SYNC_MIN_INTERVAL_MS) return;
+  }
+  cloudSyncInFlight = true;
+  fetch('/api/journal', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trades }),
+  })
+    .then(res => { if (res.ok) window.localStorage.setItem(CLOUD_SYNC_KEY, String(Date.now())); })
+    .catch(() => { /* best-effort — local storage remains the source of truth */ })
+    .finally(() => { cloudSyncInFlight = false; });
+}
+
+/** Read + migrate the journal from localStorage. Safe on the server (returns []).
+    Also opportunistically syncs to the cloud (throttled) so trades that were
+    only ever saved locally eventually reach Supabase. */
 export function loadTrades(): TradeEntry[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -241,7 +284,9 @@ export function loadTrades(): TradeEntry[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map(migrateTrade).filter((t): t is TradeEntry => t !== null);
+    const trades = parsed.map(migrateTrade).filter((t): t is TradeEntry => t !== null);
+    pushTradesToCloud(trades, { throttle: true });
+    return trades;
   } catch {
     return [];
   }
@@ -254,6 +299,7 @@ export function saveTrades(trades: TradeEntry[]): void {
   } catch {
     /* storage unavailable / quota — non-fatal */
   }
+  pushTradesToCloud(trades, { throttle: false });
 }
 
 // ── PnL & statistics ─────────────────────────────────────────────────────────
