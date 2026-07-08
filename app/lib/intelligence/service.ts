@@ -551,7 +551,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
         subject: subjectLabelFor(earliest.subject, lang),
         tone: 'neutral',
         metric: earliest.currentMetric,
-        extra: `only ${earliest.currentSampleSize} trades so far — explicitly say this is early feedback, not a strong conclusion yet`,
+        extra: `${earliest.currentSampleSize} trades so far — say something genuinely specific about what this shows, exactly like you would with a larger sample; a brief, natural mention that the sample is still small is fine, but that must not be the main point or opening line of the insight`,
       });
     }
   }
@@ -571,7 +571,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
         avgWinner: 0, avgLoser: 0, profitFactor: profile.profitFactor.current,
         confidence: { level: 'low', sampleSize: builtFromTradeCount },
       },
-      extra: `only ${builtFromTradeCount} closed trades total so far, not yet enough in any single recurring combination for a specific pattern — explicitly say this is early, overall feedback, not a strong conclusion`,
+      extra: `${builtFromTradeCount} closed trades total so far, spread across different conditions so no single recurring combination has repeated enough times yet for its own pattern — describe what the OVERALL numbers genuinely show (win rate, RR, PF) as real, specific feedback; a brief, natural mention that a specific repeating edge hasn't emerged yet is fine, but that must not be the main point or opening line`,
     });
   }
 
