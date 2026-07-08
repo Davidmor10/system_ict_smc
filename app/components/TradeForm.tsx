@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { TradeEntry, Direction, TradeResult, ConfirmationTag, EmotionalState } from '../lib/journal';
+import type { TradeEntry, Direction, TradeResult, EmotionalState } from '../lib/journal';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
@@ -18,16 +18,35 @@ const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שו
 const RESULT_HE: Record<TradeResult, string> = { OPEN: 'פתוחה', WIN: 'פרופיט', LOSS: 'הפסד', BE: 'ברייק איוון' };
 const BIAS_HE: Record<string, string> = { BULLISH: 'עולה', BEARISH: 'יורד', INDECISIVE: 'ניטרלי' };
 
-const CONFIRMATION_OPTIONS: { key: ConfirmationTag; label: string }[] = [
-  { key: 'FVG', label: 'FVG' },
-  { key: 'IFVG', label: 'IFVG' },
-  { key: 'SMT', label: 'SMT' },
-  { key: 'MSS', label: 'MSS' },
-  { key: 'LIQUIDITY_SWEEP', label: 'Liquidity Sweep' },
-  { key: 'ORDER_BLOCK', label: 'Order Block' },
-  { key: 'BREAKER', label: 'Breaker' },
-  { key: 'CISD', label: 'CISD' },
-];
+// The four the app ships with. Traders add their own on top of these (persisted
+// per-device in localStorage) — the field is stored as free `string[]`, so a
+// custom tag like "Silver Bullet" is a first-class confirmation just like these.
+const DEFAULT_CONFIRMATIONS = ['SMT', 'IFVG', 'CISD', 'ORDER_BLOCK'] as const;
+const CONFIRMATION_LABELS: Record<string, string> = { ORDER_BLOCK: 'Order Block' };
+const labelForConfirmation = (tag: string) => CONFIRMATION_LABELS[tag] ?? tag;
+
+const CONFIRMATIONS_STORAGE_KEY = 'onyx_confirmations';
+
+function loadCustomConfirmations(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CONFIRMATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string' && s.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomConfirmations(list: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CONFIRMATIONS_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore quota/serialization errors — custom tags are a convenience, not critical state */
+  }
+}
 
 const EMOTIONAL_STATE_OPTIONS: { key: EmotionalState; label: string }[] = [
   { key: 'CALM', label: 'רגוע' },
@@ -77,7 +96,7 @@ interface FormState {
   stop: string;
   target: string;
   exits: ExitRow[];
-  confirmations: ConfirmationTag[];
+  confirmations: string[];
   emotionalState: EmotionalState | '';
   model: string;
   notes: string;
@@ -217,14 +236,23 @@ export default function TradeForm({
   trades?: TradeEntry[];
 }) {
   const [form, setForm] = useState<FormState>(empty());
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
+  const [customConfirmations, setCustomConfirmations] = useState<string[]>([]);
+  const [newConfirmation, setNewConfirmation] = useState('');
   const [stage, setStage] = useState<SaveStage>('idle');
   const [summaryFacts, setSummaryFacts] = useState<string[]>([]);
 
   useEffect(() => {
     setPlaybookSetups(loadPlaybookSetups());
+    setCustomConfirmations(loadCustomConfirmations());
   }, []);
+
+  // Defaults first, then whatever the trader has added — de-duplicated so a
+  // custom tag can never shadow a built-in one.
+  const availableConfirmations = [
+    ...DEFAULT_CONFIRMATIONS,
+    ...customConfirmations.filter(c => !DEFAULT_CONFIRMATIONS.includes(c as typeof DEFAULT_CONFIRMATIONS[number])),
+  ];
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -264,11 +292,36 @@ export default function TradeForm({
   function setExit(i: number, field: keyof ExitRow, value: string) {
     setForm(prev => ({ ...prev, exits: prev.exits.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)) }));
   }
-  function toggleConfirmation(tag: ConfirmationTag) {
+  function toggleConfirmation(tag: string) {
     setForm(prev => ({
       ...prev,
       confirmations: prev.confirmations.includes(tag) ? prev.confirmations.filter(c => c !== tag) : [...prev.confirmations, tag],
     }));
+  }
+  function addCustomConfirmation() {
+    const tag = newConfirmation.trim();
+    if (!tag) return;
+    setNewConfirmation('');
+    // Case-insensitive dedupe against everything already offered; if it exists,
+    // just make sure it's selected rather than adding a near-duplicate.
+    const existing = availableConfirmations.find(c => c.toLowerCase() === tag.toLowerCase());
+    if (existing) {
+      setForm(prev => ({ ...prev, confirmations: prev.confirmations.includes(existing) ? prev.confirmations : [...prev.confirmations, existing] }));
+      return;
+    }
+    const updated = [...customConfirmations, tag];
+    setCustomConfirmations(updated);
+    saveCustomConfirmations(updated);
+    setForm(prev => ({ ...prev, confirmations: [...prev.confirmations, tag] }));
+  }
+  function removeCustomConfirmation(tag: string) {
+    const updated = customConfirmations.filter(c => c !== tag);
+    setCustomConfirmations(updated);
+    saveCustomConfirmations(updated);
+    setForm(prev => ({ ...prev, confirmations: prev.confirmations.filter(c => c !== tag) }));
+  }
+  function selectModel(name: string) {
+    setForm(prev => ({ ...prev, model: prev.model === name ? '' : name }));
   }
   function setEmotionalState(state: EmotionalState) {
     setForm(prev => ({ ...prev, emotionalState: prev.emotionalState === state ? '' : state }));
@@ -487,19 +540,75 @@ export default function TradeForm({
           )}
         </Group>
 
-        {/* ── CONFIRMATIONS — multi-select checkboxes, no free text ── */}
+        {/* ── MODEL / SETUP — the trader's own playbook models, sitting right beside
+            the generic confirmations so they can tag which of their built setups
+            this entry belonged to. Single-select. ── */}
+        <Group label="מודל / סטאפ" tone="muted">
+          {playbookSetups.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {playbookSetups.map(s => (
+                <button
+                  type="button" key={s.id}
+                  onClick={() => selectModel(s.name)}
+                  className={chipBtn(form.model === s.name)}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="font-mono text-[11px] text-white/30 leading-relaxed">
+              עדיין לא בנית מודלים משלך —{' '}
+              <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
+                בנה מודל בפלייבוק
+              </Link>{' '}
+              עם האישורים שלך, והוא יופיע כאן לבחירה.
+            </p>
+          )}
+        </Group>
+
+        {/* ── CONFIRMATIONS — built-in defaults + the trader's own tags, multi-select ── */}
         <Group label="אישורי הכניסה" tone="muted">
           <div className="flex flex-wrap gap-1.5">
-            {CONFIRMATION_OPTIONS.map(opt => (
-              <button
-                type="button" key={opt.key}
-                onClick={() => toggleConfirmation(opt.key)}
-                className={chipBtn(form.confirmations.includes(opt.key))}
-                dir="ltr"
-              >
-                {opt.label}
-              </button>
-            ))}
+            {availableConfirmations.map(tag => {
+              const isCustom = !DEFAULT_CONFIRMATIONS.includes(tag as typeof DEFAULT_CONFIRMATIONS[number]);
+              return (
+                <span key={tag} className="relative group/conf">
+                  <button
+                    type="button"
+                    onClick={() => toggleConfirmation(tag)}
+                    className={chipBtn(form.confirmations.includes(tag))}
+                    dir="ltr"
+                  >
+                    {labelForConfirmation(tag)}
+                  </button>
+                  {isCustom && (
+                    <button
+                      type="button"
+                      onClick={() => removeCustomConfirmation(tag)}
+                      aria-label={`מחק את האישור ${tag}`}
+                      className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-black border border-[#333] text-white/50 text-[9px] flex items-center justify-center opacity-0 group-hover/conf:opacity-100 hover:text-[#ef4444] hover:border-[#ef4444]/60 transition-all duration-150"
+                    >✕</button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 max-w-xs">
+            <input
+              value={newConfirmation}
+              onChange={e => setNewConfirmation(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomConfirmation(); } }}
+              placeholder="הוסף אישור משלך..."
+              className={inputCls}
+              dir="rtl"
+            />
+            <button
+              type="button"
+              onClick={addCustomConfirmation}
+              aria-label="הוסף אישור"
+              className="shrink-0 px-4 rounded-xl border border-[#d4af37]/30 text-[#d4af37]/70 hover:text-[#d4af37] hover:border-[#d4af37]/50 font-mono text-lg leading-none transition-colors duration-150"
+            >＋</button>
           </div>
         </Group>
 
@@ -552,44 +661,6 @@ export default function TradeForm({
             />
           </div>
         </Group>
-
-        {/* ── Advanced — collapsed by default; model tag, picked from the Playbook ── */}
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(v => !v)}
-          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/22 hover:text-white/45 transition-colors duration-150"
-        >
-          <span
-            className="inline-block transition-transform duration-200"
-            style={{ transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)' }}
-          >
-            ▾
-          </span>
-          {showAdvanced ? 'הסתר שדות מתקדמים' : 'הצג שדות מתקדמים'}
-        </button>
-
-        {showAdvanced && (
-          <div className="onyx-reveal space-y-5 pt-1 border-t border-white/[0.04]">
-            <Field label="מודל">
-              {playbookSetups.length > 0 ? (
-                <select value={form.model} onChange={e => set('model', e.target.value)} className={inputCls}>
-                  <option value="">{UNSPECIFIED_MODEL}</option>
-                  {playbookSetups.map(s => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="font-mono text-xs text-white/30">
-                  עדיין אין לך סטאפים בפלייבוק —{' '}
-                  <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
-                    הגדר אחד
-                  </Link>{' '}
-                  כדי לתייג עסקאות לפי מודל.
-                </p>
-              )}
-            </Field>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex gap-3 pt-1">

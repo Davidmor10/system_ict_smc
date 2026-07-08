@@ -51,25 +51,24 @@ export default function ScreenshotUpload({
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={e => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
-          className={`group flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed px-6 py-11 cursor-pointer transition-all duration-200 ${
-            dragOver ? 'border-[#d4af37]/70 bg-[#d4af37]/[0.05] scale-[1.006]' : 'border-white/10 hover:border-[#d4af37]/30 hover:bg-white/[0.015]'
+          className={`group flex items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-3.5 cursor-pointer transition-all duration-200 ${
+            dragOver ? 'border-[#d4af37]/70 bg-[#d4af37]/[0.05] scale-[1.004]' : 'border-white/10 hover:border-[#d4af37]/30 hover:bg-white/[0.015]'
           }`}
         >
           <span
-            className={`flex items-center justify-center w-11 h-11 rounded-full border transition-all duration-200 ${
+            className={`flex items-center justify-center w-7 h-7 shrink-0 rounded-full border transition-all duration-200 ${
               dragOver ? 'border-[#d4af37]/50 bg-[#d4af37]/10' : 'border-white/10 bg-white/[0.02] group-hover:border-[#d4af37]/25'
             }`}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className={dragOver ? 'text-[#d4af37]' : 'text-white/35 group-hover:text-[#d4af37]/60'} style={{ transition: 'color 200ms var(--ease-smooth)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className={dragOver ? 'text-[#d4af37]' : 'text-white/35 group-hover:text-[#d4af37]/60'} style={{ transition: 'color 200ms var(--ease-smooth)' }}>
               <path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               <path d="M12 15V4M12 4 8 8M12 4l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <span className="text-[13px] text-white/60 text-center">
-            {dragOver ? 'שחרר כדי לצרף' : 'גרור לכאן צילום מסך של הגרף'}
-          </span>
-          <span className="font-mono text-[10px] text-white/25 text-center max-w-[280px] leading-relaxed">
-            {dragOver ? '' : <>או <span className="text-[#d4af37]/60">לחץ לבחירה</span> — ראיות הופכות כל עסקה לקלה יותר לבדיקה</>}
+          <span className="text-[12px] text-white/50 text-center">
+            {dragOver
+              ? 'שחרר כדי לצרף'
+              : <>גרור צילום מסך או <span className="text-[#d4af37]/60">לחץ לבחירה</span></>}
           </span>
           <input
             ref={inputRef}
@@ -87,7 +86,7 @@ export default function ScreenshotUpload({
           {images.map((src, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <div key={i} className="relative group onyx-pop-in">
-              <img src={src} alt={`צילום מסך ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-white/[0.06]" />
+              <img src={src} alt={`צילום מסך ${i + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/[0.06]" />
               <button
                 type="button"
                 onClick={() => removeAt(i)}

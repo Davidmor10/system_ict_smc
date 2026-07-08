@@ -41,7 +41,7 @@ export const tradeEntrySchema = z.object({
     price: z.number().finite(),
     contracts: z.number().finite().min(0),
   })).max(50).optional(),
-  confirmations: z.array(z.enum(['FVG', 'IFVG', 'SMT', 'MSS', 'LIQUIDITY_SWEEP', 'ORDER_BLOCK', 'BREAKER', 'CISD'])).max(20).optional(),
+  confirmations: z.array(z.string().max(60)).max(40).optional(),
   emotionalState: z.enum(['CALM', 'CONFIDENT', 'STRESSED', 'FOMO', 'TIRED', 'ANGRY', 'IMPATIENT']).optional(),
 });
 

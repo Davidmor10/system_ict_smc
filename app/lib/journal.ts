@@ -27,9 +27,10 @@ export type Setup = 'REVERSAL' | 'CONTINUATION';
 export type IFVGConfirmation = 'IFVG_1M' | 'IFVG_2M' | 'IFVG_3M' | 'IFVG_5M';
 export type BiasAlignment = 'ALIGNED' | 'COUNTER';
 
-/** Multi-select entry confirmation types — checkboxes, not free text, so the
-    analytics engine can eventually mine which combinations actually work. */
-export type ConfirmationTag = 'FVG' | 'IFVG' | 'SMT' | 'MSS' | 'LIQUIDITY_SWEEP' | 'ORDER_BLOCK' | 'BREAKER' | 'CISD';
+/** Built-in entry-confirmation tags. The trader isn't limited to these — the
+    form lets them define their own, so `confirmations` is stored as free
+    `string[]`; this union only documents the defaults every account starts with. */
+export type ConfirmationTag = 'SMT' | 'IFVG' | 'CISD' | 'ORDER_BLOCK';
 
 /** Single-select emotional state at entry — feeds emotion-vs-performance analysis. */
 export type EmotionalState = 'CALM' | 'CONFIDENT' | 'STRESSED' | 'FOMO' | 'TIRED' | 'ANGRY' | 'IMPATIENT';
@@ -83,8 +84,8 @@ export interface TradeEntry {
       are computed from this once at save time — nothing downstream re-derives
       them from `exits`, so this field is optional purely for old-record compat. */
   exits?: TradeExit[];
-  /** Multi-select confirmation types present at entry. */
-  confirmations?: ConfirmationTag[];
+  /** Multi-select confirmation tags present at entry — built-in or trader-defined. */
+  confirmations?: string[];
   /** Trader's emotional state right before entering. */
   emotionalState?: EmotionalState;
 }
