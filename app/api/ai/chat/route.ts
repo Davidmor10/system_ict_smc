@@ -1,0 +1,52 @@
+import { auth } from '@clerk/nextjs/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { answerJournalQuestion, type ChatTurn } from '../../../lib/ai/chat';
+import { checkRateLimit } from '../../../lib/rateLimit';
+import { logSecurityEvent } from '../../../lib/securityLog';
+
+const chatSchema = z.object({
+  question: z.string().min(1).max(1000),
+  lang: z.enum(['he', 'en']).optional(),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().max(4000),
+  })).max(20).optional(),
+});
+
+export async function POST(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    logSecurityEvent('auth_failed', { route: '/api/ai/chat' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const limited = checkRateLimit(`ai:chat:${userId}`, 30, 60_000);
+  if (!limited.ok) {
+    logSecurityEvent('rate_limited', { route: '/api/ai/chat', userId });
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (body === null) {
+    logSecurityEvent('validation_failed', { route: '/api/ai/chat', userId, reason: 'invalid_json' });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const parsed = chatSchema.safeParse(body);
+  if (!parsed.success) {
+    logSecurityEvent('validation_failed', { route: '/api/ai/chat', userId });
+    return NextResponse.json({ error: 'Invalid chat payload' }, { status: 400 });
+  }
+
+  const lang = parsed.data.lang === 'en' ? 'en' : 'he';
+  const history = (parsed.data.history ?? []) as ChatTurn[];
+
+  try {
+    const result = await answerJournalQuestion(userId, parsed.data.question, lang, history);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error('[AI Chat]', err);
+    return NextResponse.json({ answer: null, reason: 'ai_unavailable' }, { status: 500 });
+  }
+}
