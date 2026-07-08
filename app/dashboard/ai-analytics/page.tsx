@@ -27,6 +27,11 @@ function fmtPF(n: number): string {
 
 const SESSION_HE: Record<string, string> = Object.fromEntries(SESS.map(s => [s.key, s.he]));
 const DIRECTION_HE: Record<string, string> = { LONG: 'לונג', SHORT: 'שורט' };
+const EMOTION_HE: Record<string, string> = {
+  CALM: 'רגוע', CONFIDENT: 'בטוח', STRESSED: 'לחוץ', FOMO: 'FOMO', TIRED: 'עייף', ANGRY: 'כועס', IMPATIENT: 'חסר סבלנות',
+};
+const CONFIRMATION_LABELS: Record<string, string> = { ORDER_BLOCK: 'Order Block' };
+const confLabel = (key: string) => CONFIRMATION_LABELS[key] ?? key;
 const WEEKDAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
@@ -152,6 +157,36 @@ function ConfidenceBadge({ level, sampleSize }: { level: ConfidenceLevel; sample
     >
       ביטחון {CONF_LABEL[level]} · n={sampleSize}
     </span>
+  );
+}
+
+/** One breakdown row — a labelled bar on the start side, trades/win-rate/net
+    stat cells on the end side. Shared by the confirmation-tag, combo and
+    emotion sections so they read identically. */
+function StatRow({ label, ltr, g }: { label: string; ltr?: boolean; g: GroupPerformance & { pct: number } }) {
+  return (
+    <div className="grid gap-6 sm:gap-9 items-center py-[22px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: 'minmax(0,1fr) clamp(200px,24vw,260px)' }}>
+      <div className="text-right">
+        <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 11 }}>◈</span><span className="font-mono text-base font-bold text-white" dir={ltr ? 'ltr' : 'rtl'}>{label}</span></div>
+        <HBar pct={g.pct} />
+      </div>
+      <div className="flex justify-between items-center">
+        <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">עסקאות</span><span className="num font-mono text-[19px] font-extrabold text-white">{g.trades}</span></div>
+        <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: '#6fa580' }}>{g.winRate.toFixed(0)}%</span></div>
+        <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">נטו</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span></div>
+      </div>
+    </div>
+  );
+}
+
+/** One labelled stat tile for the exit-management grid. */
+function ExitTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div className="bg-[#0a0a0b] px-5 py-6">
+      <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45 mb-3">{label}</span>
+      <span className="num font-mono font-extrabold leading-none" style={{ fontSize: 'clamp(26px,2.6vw,34px)', color: color ?? '#fff' }}>{value}</span>
+      {sub && <span className="block font-mono text-[11px] font-semibold text-white/40 mt-2.5">{sub}</span>}
+    </div>
   );
 }
 
@@ -288,6 +323,19 @@ export default function AiAnalyticsPage() {
       badge: sorted.length > 1 ? (i === 0 ? 'best' as const : i === sorted.length - 1 ? 'worst' as const : null) : null,
     }));
   }, [analysis.confirmations]);
+
+  // Confirmation-tag / combo / emotion breakdowns rank by sample size (most
+  // frequent first) and fill their bars by win-rate share — PnL sign is less
+  // meaningful for these slices than "how often, and how well".
+  const barRowsByWinRate = (groups: GroupPerformance[]) => {
+    const sorted = [...groups].sort((a, b) => b.trades - a.trades);
+    const max = Math.max(1, ...sorted.map(g => g.winRate));
+    return sorted.map(g => ({ ...g, pct: (g.winRate / max) * 100 }));
+  };
+  const confirmationTagRows = useMemo(() => barRowsByWinRate(analysis.confirmationTags), [analysis.confirmationTags]);
+  const comboRows = useMemo(() => barRowsByWinRate(analysis.confirmationCombos), [analysis.confirmationCombos]);
+  const emotionRows = useMemo(() => barRowsByWinRate(analysis.emotions), [analysis.emotions]);
+  const exits = analysis.exits;
 
   const topSession = useMemo(() => {
     if (analysis.sessions.length === 0) return null;
@@ -455,7 +503,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={1} total={6} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={9} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -498,7 +546,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 02 · SESSION + DIRECTION ══════════ */}
         <NumberedSection
-          index={2} total={6} eyebrow="Session &amp; Direction" title="סשן וכיוון"
+          index={2} total={9} eyebrow="Session &amp; Direction" title="סשן וכיוון"
           description="היכן הקצה חי — ולאיזה כיוון הוא נוטה."
         >
           {topSession ? (
@@ -559,7 +607,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={3} total={6} eyebrow="Time Signature" title="חתימת זמן"
+          index={3} total={9} eyebrow="Time Signature" title="חתימת זמן"
           description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי יום בשבוע, שעה בסשן, וחודש."
         >
           <div>
@@ -616,17 +664,17 @@ export default function AiAnalyticsPage() {
           </div>
         </NumberedSection>
 
-        {/* ══════════ 04 · CONFIRMATION TAGS ══════════ */}
+        {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={4} total={6} eyebrow="Confluence Tags" title="ניתוח אישורים"
+          index={4} total={9} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
-            confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות באישור/מודל ספציפי.'
+            confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
             : `לפי תגית המודל/הסטאפ שסימנת בכל עסקה — "${bestConf.key}" נושא את הרווח; "${worstConf.key}" חלש יותר.`
           }
         >
           {confirmationRows.length === 0 ? (
-            <p className="text-sm text-white/30">תייג עסקאות עם מודל/אישור בפלייבוק כדי לקבל ניתוח כאן.</p>
+            <p className="text-sm text-white/30">תייג עסקאות עם מודל/סטאפ מהפלייבוק כדי לקבל ניתוח כאן.</p>
           ) : (
             <div>
               {confirmationRows.map(g => (
@@ -646,9 +694,101 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 05 · PATTERN DETECTION ══════════ */}
+        {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={5} total={6} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={5} total={9} eyebrow="Confluence Tags" title="אישורי כניסה"
+          description={
+            confirmationTagRows.length === 0
+              ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
+              : 'לפי אישורי הכניסה שסימנת — כל אישור בפני עצמו, ואילו שילובים באמת עובדים ביחד.'
+          }
+        >
+          {confirmationTagRows.length === 0 ? (
+            <p className="text-sm text-white/30">סמן אישורי כניסה (SMT, IFVG, CISD...) בטופס העסקה כדי לראות מה באמת עובד.</p>
+          ) : (
+            <div>
+              {confirmationTagRows.map(g => <StatRow key={g.key} label={confLabel(g.key)} ltr g={g} />)}
+              {comboRows.filter(c => c.key.includes('+')).length > 0 && (
+                <div className="mt-9">
+                  <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#d4af37] mb-1">שילובי אישורים</span>
+                  <p className="text-[13px] text-white/45 mb-4 leading-relaxed">האם ערימת אישורים באמת משפרת את התוצאה — או שאתה מסבך בלי תמורה.</p>
+                  {comboRows.filter(c => c.key.includes('+')).map(g => (
+                    <StatRow key={g.key} label={g.key.split('+').map(confLabel).join(' + ')} ltr g={g} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
+        <NumberedSection
+          index={6} total={9} eyebrow="Psychology" title="מצב רגשי"
+          description={
+            emotionRows.length === 0
+              ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
+              : 'איך המצב הרגשי שלך לפני הכניסה משתקף בתוצאות — הפער שבין מסחר רגוע למסחר מתוך לחץ או FOMO.'
+          }
+        >
+          {emotionRows.length === 0 ? (
+            <p className="text-sm text-white/30">בחר מצב רגשי בטופס העסקה כדי לגלות איך רגש משפיע על הביצועים שלך.</p>
+          ) : (
+            <div>
+              {emotionRows.map(g => <StatRow key={g.key} label={EMOTION_HE[g.key] ?? g.key} g={g} />)}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
+        <NumberedSection
+          index={7} total={9} eyebrow="Exit Management" title="ניהול יציאות"
+          description={
+            exits.sampleSize === 0
+              ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
+              : 'איך אתה באמת יוצא — האם אתה חותך מנצחים מתחת לתוכנית שלך, וכמה אתה מוציא בחלקים.'
+          }
+        >
+          {exits.sampleSize === 0 ? (
+            <p className="text-sm text-white/30">אין עדיין עסקאות עם יציאות רשומות לניתוח.</p>
+          ) : (
+            <div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
+                <ExitTile
+                  label="מימוש היעד"
+                  value={exits.captureRatio === null ? '—' : `${Math.round(exits.captureRatio * 100)}%`}
+                  sub="מהיעד המתוכנן במנצחים"
+                  color={exits.captureRatio === null ? '#fff' : exits.captureRatio < 0.6 ? '#c98080' : exits.captureRatio < 0.9 ? '#d4af37' : '#6fa580'}
+                />
+                <ExitTile
+                  label="מנצחים שנחתכו"
+                  value={`${exits.winnersCutShort}/${exits.winnerCount}`}
+                  sub="נסגרו מתחת ל-60% מהיעד"
+                  color={exits.winnersCutShort > 0 ? '#d4af37' : '#6fa580'}
+                />
+                <ExitTile
+                  label="יציאות בחלקים"
+                  value={`${Math.round(exits.partialExitRate * 100)}%`}
+                  sub="מהעסקאות נסגרו בכמה שלבים"
+                />
+                <ExitTile
+                  label="R ממוצע"
+                  value={`${exits.avgWinnerR >= 0 ? '+' : ''}${exits.avgWinnerR.toFixed(2)}`}
+                  sub={`מנצח · מפסיד ${exits.avgLoserR.toFixed(2)}R`}
+                  color="#6fa580"
+                />
+              </div>
+              {exits.captureRatio !== null && exits.captureRatio < 0.7 && (
+                <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
+                  אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — סימן שאתה נוטה לחתוך מנצחים מוקדם. שווה לבחון האם להחזיק חלק מהפוזיציה קרוב יותר ליעד המקורי.
+                </p>
+              )}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 08 · PATTERN DETECTION ══════════ */}
+        <NumberedSection
+          index={8} total={9} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -670,9 +810,9 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 06 · WEEKLY REPORT ══════════ */}
+        {/* ══════════ 09 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={6} total={6} eyebrow="AI · Weekly Report" title="דוח שבועי"
+          index={9} total={9} eyebrow="AI · Weekly Report" title="דוח שבועי"
           description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא."
           extra={weeklyReport && <div className="mt-4"><ConfidenceBadge level={weeklyReport.confidenceLevel} sampleSize={weeklyReport.sampleSize} /></div>}
         >
