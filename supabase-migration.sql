@@ -27,6 +27,9 @@ create table if not exists journal_trades (
   trade_r        float8,
   pnl_usd        float8,
   screenshots    jsonb,       -- array of data-URL strings
+  exits          jsonb,       -- array of {price, contracts} partial/full exit legs
+  confirmations  jsonb,       -- array of ConfirmationTag strings (FVG/IFVG/SMT/MSS/...)
+  emotional_state text,       -- EmotionalState ('CALM'|'CONFIDENT'|'STRESSED'|...)
   deleted_at     timestamptz,
   primary key    (clerk_id, id)
 );
@@ -35,6 +38,9 @@ create index if not exists journal_trades_clerk_idx on journal_trades (clerk_id)
 -- Idempotent — adds the new columns to a journal_trades table created before this migration.
 alter table journal_trades add column if not exists contracts integer not null default 1;
 alter table journal_trades add column if not exists screenshots jsonb;
+alter table journal_trades add column if not exists exits jsonb;
+alter table journal_trades add column if not exists confirmations jsonb;
+alter table journal_trades add column if not exists emotional_state text;
 
 -- 2. User preferences
 create table if not exists user_preferences (

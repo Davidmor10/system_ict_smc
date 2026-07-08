@@ -22,8 +22,25 @@ export type TradeResult = 'OPEN' | 'WIN' | 'LOSS' | 'BE';
 export type Symbol = InstrumentKey;
 export type Direction = 'LONG' | 'SHORT';
 export type Setup = 'REVERSAL' | 'CONTINUATION';
+/** @deprecated superseded by ConfirmationTag/`confirmations[]` — kept only so old
+    records (which always had this defaulted to a fixed placeholder) keep loading. */
 export type IFVGConfirmation = 'IFVG_1M' | 'IFVG_2M' | 'IFVG_3M' | 'IFVG_5M';
 export type BiasAlignment = 'ALIGNED' | 'COUNTER';
+
+/** Multi-select entry confirmation types — checkboxes, not free text, so the
+    analytics engine can eventually mine which combinations actually work. */
+export type ConfirmationTag = 'FVG' | 'IFVG' | 'SMT' | 'MSS' | 'LIQUIDITY_SWEEP' | 'ORDER_BLOCK' | 'BREAKER' | 'CISD';
+
+/** Single-select emotional state at entry — feeds emotion-vs-performance analysis. */
+export type EmotionalState = 'CALM' | 'CONFIDENT' | 'STRESSED' | 'FOMO' | 'TIRED' | 'ANGRY' | 'IMPATIENT';
+
+/** One partial (or full) exit out of a position. A trade can have zero (still
+    OPEN), one, or several — real trading rarely closes a whole position at a
+    single price. */
+export interface TradeExit {
+  price: number;
+  contracts: number;
+}
 
 /** Free-text setup/model tag the trader assigns to a trade (their own naming). */
 export type IctModel = string;
@@ -62,6 +79,14 @@ export interface TradeEntry {
   pnlUsd?: number;
   /** Chart screenshots attached to this trade, as data URLs. */
   screenshots?: string[];
+  /** Partial/full exits. Absent or empty = still OPEN. `result`/`tradeR`/`pnlUsd`
+      are computed from this once at save time — nothing downstream re-derives
+      them from `exits`, so this field is optional purely for old-record compat. */
+  exits?: TradeExit[];
+  /** Multi-select confirmation types present at entry. */
+  confirmations?: ConfirmationTag[];
+  /** Trader's emotional state right before entering. */
+  emotionalState?: EmotionalState;
 }
 
 // ── Trash / Soft-delete ──────────────────────────────────────────────────────

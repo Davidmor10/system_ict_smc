@@ -14,9 +14,22 @@ function getIdtHourFloat(): number {
   return idt.getHours() + idt.getMinutes() / 60;
 }
 
+/** Pure: maps an arbitrary Israel-time hour (0-24) to a session index, or -1
+    if it falls outside every tracked window. Shared by "what session is it
+    right now" (getActiveSessionIdx) and "what session was a logged trade's
+    entry time in" (the trade form auto-detects instead of asking). */
+export function sessionIdxForHour(hourFloat: number): number {
+  return SESS.findIndex(s => hourFloat >= s.start && hourFloat < s.end);
+}
+
+/** Same as sessionIdxForHour but returns the key directly, or null. */
+export function sessionForHour(hourFloat: number): SessionKey | null {
+  const idx = sessionIdxForHour(hourFloat);
+  return idx >= 0 ? SESS[idx].key : null;
+}
+
 export function getActiveSessionIdx(): number {
-  const hf = getIdtHourFloat();
-  return SESS.findIndex(s => hf >= s.start && hf < s.end);
+  return sessionIdxForHour(getIdtHourFloat());
 }
 
 /** Returns the session key for "right now", or null if outside all tracked windows. */

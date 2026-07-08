@@ -2,24 +2,42 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { TradeEntry, Direction, TradeResult } from '../lib/journal';
+import type { TradeEntry, Direction, TradeResult, ConfirmationTag, EmotionalState } from '../lib/journal';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
-import { calcRR, calcPnL, calcRealizedR, calcPoints, calcTicks } from '../lib/calc/trade';
+import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import { SESS, getActiveSessionKey, type SessionKey } from '../lib/sessions';
+import { SESS, sessionForHour, getActiveSessionKey, type SessionKey } from '../lib/sessions';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
 
 const PLAYBOOK_STORAGE_KEY = 'onyx_playbook';
-/** IFVG confirmation timeframe is no longer surfaced to the trader — kept as a fixed default so
-    older analytics/exports that read TradeEntry.confirmation keep working. */
-const DEFAULT_CONFIRMATION = 'IFVG_2M' as const;
 
 const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שורט' };
-const RESULT_HE: Record<TradeResult, string> = { OPEN: 'עדיין רצה', WIN: 'טייק - TP', LOSS: 'הפסד - SL', BE: 'ברייק איוון - BE' };
+const RESULT_HE: Record<TradeResult, string> = { OPEN: 'פתוחה', WIN: 'פרופיט', LOSS: 'הפסד', BE: 'ברייק איוון' };
 const BIAS_HE: Record<string, string> = { BULLISH: 'עולה', BEARISH: 'יורד', INDECISIVE: 'ניטרלי' };
+
+const CONFIRMATION_OPTIONS: { key: ConfirmationTag; label: string }[] = [
+  { key: 'FVG', label: 'FVG' },
+  { key: 'IFVG', label: 'IFVG' },
+  { key: 'SMT', label: 'SMT' },
+  { key: 'MSS', label: 'MSS' },
+  { key: 'LIQUIDITY_SWEEP', label: 'Liquidity Sweep' },
+  { key: 'ORDER_BLOCK', label: 'Order Block' },
+  { key: 'BREAKER', label: 'Breaker' },
+  { key: 'CISD', label: 'CISD' },
+];
+
+const EMOTIONAL_STATE_OPTIONS: { key: EmotionalState; label: string }[] = [
+  { key: 'CALM', label: 'רגוע' },
+  { key: 'CONFIDENT', label: 'בטוח' },
+  { key: 'STRESSED', label: 'לחוץ' },
+  { key: 'FOMO', label: 'FOMO' },
+  { key: 'TIRED', label: 'עייף' },
+  { key: 'ANGRY', label: 'כועס' },
+  { key: 'IMPATIENT', label: 'חסר סבלנות' },
+];
 
 interface PlaybookSetup { id: string; name: string; }
 
@@ -36,14 +54,18 @@ function loadPlaybookSetups(): PlaybookSetup[] {
 }
 
 /* ── Every field maps to a specific future insight:
-   instrument/contracts/direction/result → win-rate + gross-PnL breakdowns, instrument-aware
-   entry/stop/target                    → RR distribution, planned-vs-realized edge, points/ticks
-   session                              → win-rate-by-session (drives the AI coach)
+   instrument/contracts/direction/exits → win-rate + gross-PnL breakdowns, realized PnL/R, exit behavior
+   entry/stop/target                    → planned RR, planned-vs-realized edge
+   session (auto-detected)              → win-rate-by-session (drives the AI coach)
    bias alignment (auto)                → the Discipline Score on the dashboard hero
    model                                → picked from the Playbook; drives per-model performance analytics
+   confirmations                        → which entry-confirmation combos actually work over time
+   emotional state                      → how emotion at entry correlates with results
    screenshots/notes                    → fed into the AI's pattern + psychology analysis
-   Setup checklist lives in the Playbook now, not on every trade — keeping the journal fast.
-   PnL is never typed in by hand — it's always derived from instrument spec × contracts. ── */
+   Nothing here is asked if the system can already compute it — result and session are
+   both derived, never chosen. PnL is never typed in by hand either. ── */
+
+interface ExitRow { price: string; contracts: string; }
 
 interface FormState {
   symbol: InstrumentKey;
@@ -54,9 +76,10 @@ interface FormState {
   entry: string;
   stop: string;
   target: string;
-  result: TradeResult;
+  exits: ExitRow[];
+  confirmations: ConfirmationTag[];
+  emotionalState: EmotionalState | '';
   model: string;
-  session: SessionKey | '';
   notes: string;
   screenshots: string[];
 }
@@ -72,9 +95,10 @@ function empty(): FormState {
     entry: '',
     stop: '',
     target: '',
-    result: 'OPEN',
+    exits: [],
+    confirmations: [],
+    emotionalState: '',
     model: '',
-    session: getActiveSessionKey() ?? '',
     notes: '',
     screenshots: [],
   };
@@ -115,20 +139,24 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
 
   if (trade.session && trade.session !== 'NONE') {
     const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
-    facts.push(`נוסף לסטטיסטיקת סשן ${label}.`);
+    facts.push(`זוהה אוטומטית כמושב ${label}.`);
   }
 
   const rr = calcRR(trade.entry, trade.stop, trade.target);
   if (rr !== null) facts.push(`ה-RR המתוכנן חושב אוטומטית: ${rr.toFixed(2)}R.`);
 
   if (trade.result === 'OPEN') {
-    facts.push('סומנה כפתוחה — עדכן את התוצאה כשהעסקה תיסגר.');
+    facts.push('סומנה כפתוחה — הוסף יציאה כשהעסקה תיסגר.');
   } else {
     const after = computeStats(allTrades);
     facts.push(`אחוז ההצלחה התעדכן ל-${after.winRate.toFixed(0)}%.`);
   }
 
   facts.push(trade.biasAlignment === 'ALIGNED' ? 'מיושרת עם הביאס של היום.' : 'נרשמה כנגד המגמה, לשים לב.');
+
+  if (trade.confirmations && trade.confirmations.length > 0) {
+    facts.push(`תויגה עם ${trade.confirmations.length} אישורי כניסה: ${trade.confirmations.join(', ')}.`);
+  }
 
   const instant = buildInstantInsight(trade, allTrades);
   if (instant) facts.push(instant);
@@ -161,8 +189,19 @@ const inputCls =
   'transition-all duration-150 tabular-nums focus:border-[#d4af37]/60 focus:ring-2 focus:ring-[#d4af37]/10';
 const toggleBtn = (active: boolean, activeCls: string) =>
   `flex-1 py-2.5 rounded-xl border font-mono text-sm font-bold transition-all duration-150 ${active ? activeCls : 'border-[#222] text-white/40 hover:text-white/70 hover:border-[#2a2a2d]'}`;
+const chipBtn = (active: boolean) =>
+  `py-2 px-3.5 rounded-lg border font-mono text-xs font-semibold transition-all duration-150 ${
+    active ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/40 hover:text-white/70 hover:border-[#2a2a2d]'
+  }`;
 
 type SaveStage = 'idle' | 'saving' | 'analyzing' | 'summary';
+
+/** Parses an "HH:MM..." string into a fractional hour, or null if malformed. */
+function parseHour(time: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(time);
+  if (!m) return null;
+  return parseInt(m[1], 10) + parseInt(m[2], 10) / 60;
+}
 
 export default function TradeForm({
   onSave,
@@ -200,23 +239,44 @@ export default function TradeForm({
     ? calcRR(entry, stop, target)
     : null;
 
-  const exitPrice = form.result === 'WIN' ? target : form.result === 'LOSS' ? stop : null;
-  const hasExit = exitPrice !== null && isFinite(entry) && isFinite(exitPrice);
+  // ── Exits — derives result/PnL/R automatically instead of asking for them ──
+  const parsedExits = form.exits
+    .map(e => ({ price: parseFloat(e.price), contracts: parseInt(e.contracts, 10) || 0 }))
+    .filter(e => isFinite(e.price) && e.contracts > 0);
+  const hasExits = parsedExits.length > 0;
+  const totalExitContracts = parsedExits.reduce((s, e) => s + e.contracts, 0);
+  const remainingContracts = Math.max(0, contracts - totalExitContracts);
 
-  const points = (form.result !== 'OPEN' && hasExit) ? calcPoints(entry, exitPrice!, form.direction) : form.result === 'BE' ? 0 : null;
-  const ticks  = (form.result !== 'OPEN' && hasExit) ? calcTicks(entry, exitPrice!, form.direction, form.symbol) : form.result === 'BE' ? 0 : null;
+  const weightedExitPrice = hasExits ? calcWeightedExitPrice(parsedExits) : null;
+  const realizedPnl = hasExits && isFinite(entry) ? calcMultiExitPnL(entry, parsedExits, form.direction, form.symbol) : null;
+  const realizedR = hasExits && isFinite(entry) && isFinite(stop) ? calcMultiExitRealizedR(entry, stop, parsedExits, form.direction) : null;
 
-  const pnl = (form.result !== 'OPEN' && form.result !== 'BE' && hasExit)
-    ? calcPnL(entry, exitPrice!, form.direction, form.symbol, contracts)
-    : form.result === 'BE' ? 0 : null;
+  const derivedResult: TradeResult = (hasExits && isFinite(entry) && isFinite(stop) && weightedExitPrice !== null)
+    ? inferResult(entry, stop, isFinite(target) ? target : null, weightedExitPrice, form.direction)
+    : 'OPEN';
 
-  const realizedR = (form.result !== 'OPEN' && isFinite(entry) && isFinite(stop))
-    ? (form.result === 'WIN' && isFinite(target) ? calcRealizedR(entry, target, stop, form.direction)
-      : form.result === 'LOSS' ? calcRealizedR(entry, stop, stop, form.direction)
-      : 0)
-    : null;
+  function addExit() {
+    setForm(prev => ({ ...prev, exits: [...prev.exits, { price: '', contracts: String(remainingContracts || contracts) }] }));
+  }
+  function removeExit(i: number) {
+    setForm(prev => ({ ...prev, exits: prev.exits.filter((_, idx) => idx !== i) }));
+  }
+  function setExit(i: number, field: keyof ExitRow, value: string) {
+    setForm(prev => ({ ...prev, exits: prev.exits.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)) }));
+  }
+  function toggleConfirmation(tag: ConfirmationTag) {
+    setForm(prev => ({
+      ...prev,
+      confirmations: prev.confirmations.includes(tag) ? prev.confirmations.filter(c => c !== tag) : [...prev.confirmations, tag],
+    }));
+  }
+  function setEmotionalState(state: EmotionalState) {
+    setForm(prev => ({ ...prev, emotionalState: prev.emotionalState === state ? '' : state }));
+  }
 
-  // Auto-derived — no extra click, just shown as context next to the manual session choice.
+  // Auto-derived — no extra click, just shown as context.
+  const entryHour: number | null = parseHour(form.time);
+  const autoSession: SessionKey | null = entryHour !== null ? sessionForHour(entryHour) : getActiveSessionKey();
   const declaredBias = getTodaysDeclaredBias();
   const alignment = computeBiasAlignment(declaredBias, form.direction);
 
@@ -234,15 +294,17 @@ export default function TradeForm({
       entry,
       stop,
       target,
-      result: form.result,
-      session: form.session || 'NONE',
+      result: derivedResult,
+      session: autoSession ?? 'NONE',
       bias: declaredBias ?? 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
-      confirmation: DEFAULT_CONFIRMATION,
       notes: form.notes,
       screenshots: form.screenshots.length ? form.screenshots : undefined,
+      exits: hasExits ? parsedExits : undefined,
+      confirmations: form.confirmations.length ? form.confirmations : undefined,
+      emotionalState: form.emotionalState || undefined,
       tradeR: realizedR ?? undefined,
-      pnlUsd: pnl ?? undefined,
+      pnlUsd: realizedPnl ?? undefined,
       biasAlignment: alignment,
     };
 
@@ -271,6 +333,7 @@ export default function TradeForm({
   }
 
   const rrColor = rr === null ? '#fff' : rr >= 2 ? '#22c55e' : rr >= 1 ? '#d4af37' : '#ef4444';
+  const resultColor = derivedResult === 'WIN' ? '#22c55e' : derivedResult === 'LOSS' ? '#ef4444' : derivedResult === 'BE' ? '#d4af37' : 'rgba(255,255,255,0.5)';
   const busy = stage !== 'idle';
 
   return (
@@ -295,7 +358,7 @@ export default function TradeForm({
             <Field label="תאריך">
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
             </Field>
-            <Field label="שעה">
+            <Field label="שעת כניסה">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
             </Field>
           </div>
@@ -331,7 +394,7 @@ export default function TradeForm({
           </div>
         </Group>
 
-        {/* ── EXECUTION — entry/stop/target, the resulting RR, and the outcome ── */}
+        {/* ── EXECUTION — entry/stop/target and the planned RR ── */}
         <Group label="ביצוע">
           <div className="grid grid-cols-3 gap-3">
             <Field label="כניסה">
@@ -351,73 +414,124 @@ export default function TradeForm({
                 <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">RR מתוכנן</span>
                 <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>{rr.toFixed(2)}R</span>
               </div>
-              {pnl !== null && (
+            </div>
+          )}
+        </Group>
+
+        {/* ── EXITS — one or more; result/PnL/R are derived, never chosen ── */}
+        <Group label="יציאות">
+          {form.exits.length === 0 ? (
+            <p className="font-mono text-[11px] text-white/25 leading-relaxed">
+              אין עדיין יציאות רשומות — העסקה תישמר כפתוחה. הוסף יציאה (חלקית או מלאה) כשתסגור אותה.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {form.exits.map((exitRow, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="number" step="0.25" placeholder="מחיר יציאה"
+                    value={exitRow.price} onChange={e => setExit(i, 'price', e.target.value)}
+                    className={inputCls}
+                  />
+                  <input
+                    type="number" min={1} step="1" placeholder="חוזים"
+                    value={exitRow.contracts} onChange={e => setExit(i, 'contracts', e.target.value)}
+                    className={inputCls + ' max-w-[92px]'}
+                  />
+                  <button
+                    type="button" onClick={() => removeExit(i)}
+                    aria-label="הסר יציאה"
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-white/25 hover:text-[#ef4444] transition-colors duration-150"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={addExit}
+            className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors duration-150"
+          >
+            ➕ הוסף יציאה נוספת
+          </button>
+
+          {hasExits && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 rounded-xl bg-white/[0.02]">
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד ממומש</span>
+                <span className="font-mono text-lg font-bold" style={{ color: (realizedPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {realizedPnl !== null ? `${realizedPnl >= 0 ? '+' : ''}$${Math.abs(realizedPnl).toFixed(0)}` : '—'}
+                </span>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">R ממומש</span>
+                <span className="font-mono text-lg font-bold text-white/80">{realizedR !== null ? `${realizedR.toFixed(2)}R` : '—'}</span>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">תוצאה</span>
+                <span className="font-mono text-sm font-bold" style={{ color: resultColor }}>{RESULT_HE[derivedResult]}</span>
+              </div>
+              {remainingContracts > 0 && (
                 <>
                   <div className="h-8 w-px bg-white/[0.08]" />
                   <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד גולמי</span>
-                    <span className="font-mono text-xl font-bold" style={{ color: pnl >= 0 ? '#22c55e' : '#ef4444' }}>
-                      {pnl >= 0 ? '+' : ''}${Math.abs(pnl).toFixed(0)}
-                    </span>
-                  </div>
-                </>
-              )}
-              {points !== null && (
-                <>
-                  <div className="h-8 w-px bg-white/[0.08]" />
-                  <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">נקודות · טיקים</span>
-                    <span className="font-mono text-sm font-bold text-white/70">
-                      {points >= 0 ? '+' : ''}{points.toFixed(2)} · {ticks! >= 0 ? '+' : ''}{Math.round(ticks!)}
-                    </span>
+                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">חוזים פתוחים</span>
+                    <span className="font-mono text-sm font-bold text-white/60">{remainingContracts}</span>
                   </div>
                 </>
               )}
             </div>
           )}
-
-          <Field label="תוצאה">
-            <div className="flex gap-1.5">
-              {(['OPEN', 'WIN', 'LOSS', 'BE'] as TradeResult[]).map(r => (
-                <button
-                  type="button"
-                  key={r}
-                  onClick={() => set('result', r)}
-                  className={`flex-1 py-2 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-[0.10em] transition-all duration-150 ${
-                    form.result === r
-                      ? r === 'WIN'  ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]'
-                      : r === 'LOSS' ? 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]'
-                      : r === 'BE'   ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]'
-                      :                'border-[#444] bg-[#1c1c1e] text-white/60'
-                      : 'border-[#222] text-white/30 hover:text-white/60'
-                  }`}
-                >
-                  {RESULT_HE[r]}
-                </button>
-              ))}
-            </div>
-          </Field>
         </Group>
 
-        {/* ── SESSION — explicit, manual; critical for analytics ── */}
-        <Group label="סשן">
-          <div className="flex gap-1.5">
-            {SESS.map(s => (
-              <button type="button" key={s.key} onClick={() => set('session', s.key)}
-                className={toggleBtn(form.session === s.key, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
-                {s.he}
+        {/* ── CONFIRMATIONS — multi-select checkboxes, no free text ── */}
+        <Group label="אישורי הכניסה" tone="muted">
+          <div className="flex flex-wrap gap-1.5">
+            {CONFIRMATION_OPTIONS.map(opt => (
+              <button
+                type="button" key={opt.key}
+                onClick={() => toggleConfirmation(opt.key)}
+                className={chipBtn(form.confirmations.includes(opt.key))}
+                dir="ltr"
+              >
+                {opt.label}
               </button>
             ))}
           </div>
+        </Group>
+
+        {/* ── EMOTIONAL STATE — single select ── */}
+        <Group label="מצב רגשי לפני הכניסה" tone="muted">
+          <div className="flex flex-wrap gap-1.5">
+            {EMOTIONAL_STATE_OPTIONS.map(opt => (
+              <button
+                type="button" key={opt.key}
+                onClick={() => setEmotionalState(opt.key)}
+                className={chipBtn(form.emotionalState === opt.key)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Group>
+
+        {/* ── Auto-detected context — informational only, nothing to choose ── */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-white/30">
+          <span>
+            מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? (SESS.find(s => s.key === autoSession)?.he ?? autoSession) : 'מחוץ לשעות מסחר'}</b>
+          </span>
           {declaredBias && (
-            <p className="font-mono text-[10px] text-white/30">
+            <span>
               הביאס של היום: <b className="text-white/60">{BIAS_HE[declaredBias] ?? declaredBias}</b>{' '}
               {alignment === 'ALIGNED'
-                ? <span className="text-[#22c55e]">✓ העסקה הזו מיושרת עם הביאס</span>
-                : <span className="text-[#d4af37]">⚠ העסקה הזו נגד המגמה</span>}
-            </p>
+                ? <span className="text-[#22c55e]">✓ מיושר</span>
+                : <span className="text-[#d4af37]">⚠ נגד המגמה</span>}
+            </span>
           )}
-        </Group>
+        </div>
 
         {/* ── SCREENSHOT — encouraged, always visible ── */}
         <Group label="צילום מסך" tone="muted">
@@ -431,7 +545,7 @@ export default function TradeForm({
             <textarea
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
-              placeholder="תאר את ה-setup, מה ראית בשוק, ואיזה confirmation נתן לך ביטחון להיכנס..."
+              placeholder="תאר את ה-setup, מה ראית בשוק, ומה עבר עליך מבחינה מנטלית..."
               className={inputCls + ' resize-none'}
               rows={3}
               dir="rtl"

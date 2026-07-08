@@ -101,3 +101,52 @@ export function inferResult(
   if (pts > 0) return 'WIN';
   return 'LOSS';
 }
+
+/** Structurally identical to journal.ts's TradeExit — not imported from there
+    to avoid a circular dependency (journal.ts already imports from this file). */
+interface ExitLeg {
+  price: number;
+  contracts: number;
+}
+
+/**
+ * Weighted realized PnL across every exit leg of a position — real trades
+ * rarely close at a single price. Reuses calcPnL per leg, same source of
+ * truth as a single-exit trade.
+ */
+export function calcMultiExitPnL(
+  entry: number,
+  exits: ExitLeg[],
+  direction: 'LONG' | 'SHORT',
+  symbol: string,
+): number {
+  return exits.reduce((sum, e) => sum + calcPnL(entry, e.price, direction, symbol, e.contracts), 0);
+}
+
+/**
+ * Contracts-weighted average realized R across every exit leg. Returns null
+ * only when there are no exits at all (nothing to weight).
+ */
+export function calcMultiExitRealizedR(
+  entry: number,
+  stopLoss: number,
+  exits: ExitLeg[],
+  direction: 'LONG' | 'SHORT',
+): number | null {
+  const totalContracts = exits.reduce((sum, e) => sum + e.contracts, 0);
+  if (totalContracts === 0) return null;
+  const weightedR = exits.reduce((sum, e) => {
+    const r = calcRealizedR(entry, e.price, stopLoss, direction);
+    return sum + (r ?? 0) * e.contracts;
+  }, 0);
+  return weightedR / totalContracts;
+}
+
+/** Contracts-weighted average exit price across every leg — the single price
+    inferResult() needs to classify a multi-exit trade as WIN/LOSS/BE. */
+export function calcWeightedExitPrice(exits: ExitLeg[]): number | null {
+  const totalContracts = exits.reduce((sum, e) => sum + e.contracts, 0);
+  if (totalContracts === 0) return null;
+  const weighted = exits.reduce((sum, e) => sum + e.price * e.contracts, 0);
+  return weighted / totalContracts;
+}
