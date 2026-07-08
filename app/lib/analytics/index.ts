@@ -43,6 +43,8 @@ export { analyzeConfirmations } from './confirmations';
 export { analyzeConfirmationTags, analyzeConfirmationCombos, comboKey } from './confirmationTags';
 export { analyzeEmotions } from './emotions';
 export { analyzeExits } from './exits';
+export { simulate, availableScenarios } from './whatif';
+export type { WhatIfResult, WhatIfMetric, WhatIfScenario, ScenarioKind } from './whatif';
 export { analyzeTime, hourOf, isoWeekKey, startOfIsoWeek, addDaysISO } from './time';
 export { analyzeDirection } from './direction';
 export { discoverPatterns } from './patterns';

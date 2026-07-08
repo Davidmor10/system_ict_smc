@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { runFullAnalysis, isoWeekKey } from '../../lib/analytics';
-import type { ConfidenceLevel, GroupPerformance } from '../../lib/analytics';
+import { runFullAnalysis, isoWeekKey, simulate, availableScenarios } from '../../lib/analytics';
+import type { ConfidenceLevel, GroupPerformance, WhatIfScenario } from '../../lib/analytics';
 import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
@@ -219,6 +219,7 @@ export default function AiAnalyticsPage() {
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [reportHistory, setReportHistory] = useState<{ weekKey: string; report: WeeklyReport }[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [whatIfId, setWhatIfId] = useState<string | null>(null);
 
   useEffect(() => { setTrades(loadTrades()); }, []);
 
@@ -336,6 +337,24 @@ export default function AiAnalyticsPage() {
   const comboRows = useMemo(() => barRowsByWinRate(analysis.confirmationCombos), [analysis.confirmationCombos]);
   const emotionRows = useMemo(() => barRowsByWinRate(analysis.emotions), [analysis.emotions]);
   const exits = analysis.exits;
+
+  // What-if simulator — scenarios meaningful for this journal + the selected run.
+  const scenarios = useMemo(() => availableScenarios(trades), [trades]);
+  const selectedScenario = scenarios.find(s => s.id === whatIfId) ?? null;
+  const whatIf = useMemo(
+    () => (selectedScenario ? simulate(trades, selectedScenario.predicate) : null),
+    [trades, selectedScenario],
+  );
+  const scenarioLabel = (s: WhatIfScenario): string => {
+    switch (s.kind) {
+      case 'excludeEmotion': return `בלי ${EMOTION_HE[s.value] ?? s.value}`;
+      case 'onlySession': return `רק ${SESSION_HE[s.value] ?? s.value}`;
+      case 'onlyDirection': return `רק ${DIRECTION_HE[s.value] ?? s.value}`;
+      case 'onlyBiasAligned': return 'רק מיושר עם הביאס';
+      case 'onlyConfirmation': return `רק עם ${confLabel(s.value)}`;
+      default: return s.value;
+    }
+  };
 
   const topSession = useMemo(() => {
     if (analysis.sessions.length === 0) return null;
@@ -503,7 +522,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={1} total={9} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={10} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -546,7 +565,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 02 · SESSION + DIRECTION ══════════ */}
         <NumberedSection
-          index={2} total={9} eyebrow="Session &amp; Direction" title="סשן וכיוון"
+          index={2} total={10} eyebrow="Session &amp; Direction" title="סשן וכיוון"
           description="היכן הקצה חי — ולאיזה כיוון הוא נוטה."
         >
           {topSession ? (
@@ -607,7 +626,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={3} total={9} eyebrow="Time Signature" title="חתימת זמן"
+          index={3} total={10} eyebrow="Time Signature" title="חתימת זמן"
           description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי יום בשבוע, שעה בסשן, וחודש."
         >
           <div>
@@ -666,7 +685,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={4} total={9} eyebrow="Model / Setup" title="מודל / סטאפ"
+          index={4} total={10} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
             confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
@@ -696,7 +715,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={5} total={9} eyebrow="Confluence Tags" title="אישורי כניסה"
+          index={5} total={10} eyebrow="Confluence Tags" title="אישורי כניסה"
           description={
             confirmationTagRows.length === 0
               ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
@@ -723,7 +742,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
         <NumberedSection
-          index={6} total={9} eyebrow="Psychology" title="מצב רגשי"
+          index={6} total={10} eyebrow="Psychology" title="מצב רגשי"
           description={
             emotionRows.length === 0
               ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
@@ -741,7 +760,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={7} total={9} eyebrow="Exit Management" title="ניהול יציאות"
+          index={7} total={10} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -788,7 +807,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 08 · PATTERN DETECTION ══════════ */}
         <NumberedSection
-          index={8} total={9} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={8} total={10} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -812,7 +831,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 09 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={9} total={9} eyebrow="AI · Weekly Report" title="דוח שבועי"
+          index={9} total={10} eyebrow="AI · Weekly Report" title="דוח שבועי"
           description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא."
           extra={weeklyReport && <div className="mt-4"><ConfidenceBadge level={weeklyReport.confidenceLevel} sampleSize={weeklyReport.sampleSize} /></div>}
         >
@@ -857,6 +876,75 @@ export default function AiAnalyticsPage() {
               <p className="mt-10 font-mono text-[11.5px] font-semibold text-[#52525b] leading-loose text-right">
                 אנליטיקת ה-AI היא רק עוד נקודת מבט של המערכת על היומן שלך — תמיד מומלץ להפעיל שיקול דעת עצמאי משלך. המסחר כרוך בסיכון משמעותי.
               </p>
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 10 · WHAT-IF SIMULATOR ══════════ */}
+        <NumberedSection
+          index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
+          description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — בלי FOMO, רק סשן אחד, רק מיושר עם הביאס. חישוב מדויק על העסקאות האמיתיות שלך, לא ניחוש."
+        >
+          {scenarios.length === 0 ? (
+            <p className="text-sm text-white/30">אין עדיין מספיק גיוון בעסקאות כדי להריץ תרחיש. תייג מצב רגשי / סשן / אישורים על יותר עסקאות.</p>
+          ) : (
+            <div>
+              <div className="flex flex-wrap gap-1.5 mb-6">
+                {scenarios.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setWhatIfId(prev => (prev === s.id ? null : s.id))}
+                    className={`py-2 px-3.5 rounded-lg border font-mono text-xs font-semibold transition-all duration-150 ${
+                      whatIfId === s.id ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/45 hover:text-white/75 hover:border-[#2a2a2d]'
+                    }`}
+                  >
+                    {scenarioLabel(s)}
+                  </button>
+                ))}
+              </div>
+
+              {!whatIf ? (
+                <p className="text-sm text-white/30">בחר תרחיש למעלה כדי לראות איך זה משנה את המספרים.</p>
+              ) : (
+                <div>
+                  {whatIf.confidence.level === 'low' && (
+                    <div className="mb-5 px-4 py-3 rounded-xl border border-[#d4af37]/25 bg-[#d4af37]/[0.05]">
+                      <span className="font-mono text-[12px] text-[#d4af37] leading-relaxed">
+                        ⚠ נותרו רק {whatIf.keptClosed} עסקאות מוכרעות בתרחיש הזה — דגימה קטנה מדי כדי להסיק מסקנה, רק כיוון ראשוני.
+                      </span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
+                    {([
+                      { label: 'אחוז הצלחה', actual: whatIf.actual.winRate, filtered: whatIf.filtered.winRate, suffix: '%', dec: 0 },
+                      { label: 'רווח/הפסד', actual: whatIf.actual.totalPnl, filtered: whatIf.filtered.totalPnl, money: true, dec: 0 },
+                      { label: 'פרופיט פקטור', actual: whatIf.actual.profitFactor, filtered: whatIf.filtered.profitFactor, dec: 2 },
+                      { label: 'R:R ממוצע', actual: whatIf.actual.avgRR, filtered: whatIf.filtered.avgRR, dec: 2 },
+                    ] as { label: string; actual: number; filtered: number; suffix?: string; money?: boolean; dec: number }[]).map(m => {
+                      const delta = m.filtered - m.actual;
+                      const better = delta >= 0;
+                      const fmt = (v: number) => !Number.isFinite(v) ? '∞' : m.money ? `${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(0)}` : `${v.toFixed(m.dec)}${m.suffix ?? ''}`;
+                      return (
+                        <div key={m.label} className="bg-[#0a0a0b] px-5 py-6">
+                          <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45 mb-3">{m.label}</span>
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="num font-mono text-white/35 text-sm line-through">{fmt(m.actual)}</span>
+                            <span className="num font-mono font-extrabold" style={{ fontSize: 'clamp(22px,2.2vw,30px)', color: better ? '#6fa580' : '#c98080' }}>{fmt(m.filtered)}</span>
+                          </div>
+                          {Number.isFinite(delta) && Math.abs(delta) > 0.001 && (
+                            <span className="block font-mono text-[11px] font-bold mt-2" style={{ color: better ? '#6fa580' : '#c98080' }}>
+                              {better ? '▲' : '▼'} {m.money ? `$${Math.abs(delta).toFixed(0)}` : `${Math.abs(delta).toFixed(m.dec)}${m.suffix ?? ''}`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-4 font-mono text-[12px] text-white/45 leading-relaxed text-right">
+                    התרחיש שומר {whatIf.keptTrades} עסקאות ({whatIf.keptClosed} מוכרעות) ומסיר {whatIf.removedTrades}. ההשוואה היא מול כלל היומן שלך.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </NumberedSection>
