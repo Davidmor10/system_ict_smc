@@ -13,6 +13,7 @@ import type { KnownFact, TraderProfile } from './types';
 
 const MIN_CONFIRMATION_WIN_RATE = 55;
 const EXIT_EARLY_RATIO_THRESHOLD = 0.7;
+const MIN_EXIT_WINNERS = 3;
 
 function sessionLabel(key: string): string {
   return SESS.find(s => s.key === key)?.he ?? key;
@@ -64,7 +65,18 @@ export function deriveKnownFacts(profile: TraderProfile, previousFacts: KnownFac
     const dirHe = profile.direction.edge === 'long' ? 'לונג' : 'שורט';
     candidates.push({ fact: `אתה חזק יותר בעסקאות ${dirHe}.`, sourceField: 'direction.edge', confidence: 'medium' });
   }
-  if (profile.exitBehavior.ratio !== null && profile.exitBehavior.ratio < EXIT_EARLY_RATIO_THRESHOLD) {
+  // Prefer the real capture ratio (from recorded exit legs) once there's a
+  // meaningful sample; fall back to the legacy proxy ratio otherwise.
+  const exitDetail = profile.exitBehavior.detail;
+  if (exitDetail.captureRatio !== null && exitDetail.winnerCount >= MIN_EXIT_WINNERS) {
+    if (exitDetail.captureRatio < EXIT_EARLY_RATIO_THRESHOLD) {
+      candidates.push({
+        fact: `אתה נוטה לחתוך מנצחים מוקדם — בממוצע אתה ממש רק ${Math.round(exitDetail.captureRatio * 100)}% מהיעד המתוכנן שלך בעסקאות מנצחות.`,
+        sourceField: 'exitBehavior',
+        confidence: exitDetail.winnerCount >= 10 ? 'high' : 'medium',
+      });
+    }
+  } else if (profile.exitBehavior.ratio !== null && profile.exitBehavior.ratio < EXIT_EARLY_RATIO_THRESHOLD) {
     candidates.push({
       fact: 'אתה נוטה לצאת מוקדם מעסקאות מרוויחות, מתחת לתוכנית המקורית שלך.',
       sourceField: 'exitBehavior',

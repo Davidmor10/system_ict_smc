@@ -81,7 +81,7 @@ export function deriveTraderProfile(
     winRate: { current: winRate, trend: computeTrend(winRate, previousProfile?.winRate.current ?? null, WIN_RATE_THRESHOLD) },
     avgRR: { current: avgRR, trend: computeTrend(avgRR, previousProfile?.avgRR.current ?? null, AVG_RR_THRESHOLD) },
     profitFactor: { current: profitFactor, trend: computeTrend(profitFactor, previousProfile?.profitFactor.current ?? null, PROFIT_FACTOR_THRESHOLD) },
-    exitBehavior: { ratio: exitRatio },
+    exitBehavior: { ratio: exitRatio, detail: analysis.exits },
     topConfirmations: analysis.confirmations.slice(0, MAX_CONFIRMATIONS),
     screenshotAvailability: {
       pct: closed.length > 0 ? (withScreenshots.length / closed.length) * 100 : 0,

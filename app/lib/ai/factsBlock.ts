@@ -35,6 +35,17 @@ export function summarizeAnalysis(a: FullAnalysis): string {
 
   lines.push(`\nBY DIRECTION:\n${fmtGroup(a.direction.long)}\n${fmtGroup(a.direction.short)}`);
 
+  const ex = a.exits;
+  if (ex.sampleSize > 0) {
+    lines.push(
+      `\nEXIT MANAGEMENT (${ex.sampleSize} trades with recorded exit legs): ` +
+      `avgWinnerR ${ex.avgWinnerR.toFixed(2)}, avgLoserR ${ex.avgLoserR.toFixed(2)}, ` +
+      `capture ratio ${ex.captureRatio === null ? 'n/a' : ex.captureRatio.toFixed(2)} (realized÷planned R on winners; <1 = cutting winners short), ` +
+      `${ex.winnersCutShort}/${ex.winnerCount} winners closed below 60% of planned target, ` +
+      `partial-exit rate ${(ex.partialExitRate * 100).toFixed(0)}%`
+    );
+  }
+
   if (a.time.bestHour) lines.push(`\nBest hour: ${fmtGroup(a.time.bestHour)}`);
   if (a.time.worstHour) lines.push(`Worst hour: ${fmtGroup(a.time.worstHour)}`);
   if (a.time.bestWeekday) lines.push(`Best weekday: ${fmtGroup(a.time.bestWeekday)}`);

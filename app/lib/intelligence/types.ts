@@ -7,7 +7,7 @@
 // analytics engine itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { ConfidenceLevel, GroupPerformance, PatternKind } from '../analytics';
+import type { ConfidenceLevel, ExitBehavior, GroupPerformance, PatternKind } from '../analytics';
 
 export type Trend = 'up' | 'down' | 'flat';
 
@@ -43,9 +43,11 @@ export interface TraderProfile {
   winRate: TrendValue;
   avgRR: TrendValue;
   profitFactor: TrendValue;
-  /** (avgWinner/avgLoser) / avgRR — well below 1 flags cutting winners short
-      relative to the trader's own plan. Null when avgRR isn't computable. */
-  exitBehavior: { ratio: number | null };
+  /** `ratio`: legacy proxy — (avgWinner/avgLoser)/avgRR, well below 1 flags
+      cutting winners short; null when avgRR isn't computable. `detail`: the
+      real exit-management stats from recorded exit legs (preferred once the
+      trader has multi-exit trades; sampleSize 0 means none yet). */
+  exitBehavior: { ratio: number | null; detail: ExitBehavior };
   topConfirmations: GroupPerformance[];
   screenshotAvailability: { pct: number; count: number; totalClosed: number };
   /** Up to 5 most recent non-empty notes, verbatim — never synthesized. */

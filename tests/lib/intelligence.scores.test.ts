@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { computeEdgeScore, computeLearningScore } from '../../app/lib/intelligence/scores';
 import type { PatternMemoryRow, ScoreSnapshot, TraderProfile } from '../../app/lib/intelligence/types';
-import type { ConfidenceLevel } from '../../app/lib/analytics';
+import type { ConfidenceLevel, ExitBehavior } from '../../app/lib/analytics';
+
+const EMPTY_EXIT: ExitBehavior = { sampleSize: 0, winnerCount: 0, captureRatio: null, winnersCutShort: 0, partialExitRate: 0, avgWinnerR: 0, avgLoserR: 0 };
 
 function profile(overrides: Partial<TraderProfile> = {}): TraderProfile {
   return {
     schemaVersion: 1, strongestInstrument: null, weakestInstrument: null, strongestSession: null, weakestSession: null,
     bestHour: null, worstHour: null, direction: { edge: 'none', longWinRate: 0, shortWinRate: 0 },
     winRate: { current: 60, trend: 'flat' }, avgRR: { current: 1.5, trend: 'flat' }, profitFactor: { current: 2, trend: 'flat' },
-    exitBehavior: { ratio: 1 }, topConfirmations: [], screenshotAvailability: { pct: 0, count: 0, totalClosed: 0 },
+    exitBehavior: { ratio: 1, detail: EMPTY_EXIT }, topConfirmations: [], screenshotAvailability: { pct: 0, count: 0, totalClosed: 0 },
     notesObservations: [], recurringConditions: [], changesVsPrevious: [],
     ...overrides,
   };

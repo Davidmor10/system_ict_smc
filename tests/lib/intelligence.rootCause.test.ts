@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { diagnoseRootCause } from '../../app/lib/intelligence/rootCause';
 import type { PeriodComparison, TraderProfile, Trend } from '../../app/lib/intelligence/types';
+import type { ExitBehavior } from '../../app/lib/analytics';
+
+const EMPTY_EXIT: ExitBehavior = { sampleSize: 0, winnerCount: 0, captureRatio: null, winnersCutShort: 0, partialExitRate: 0, avgWinnerR: 0, avgLoserR: 0 };
 
 function metric(current: number, prevWeek: number | null, trend: Trend) {
   return { current, prevWeek, baseline4wk: null, deltaVsPrevWeek: prevWeek !== null ? current - prevWeek : null, deltaVsBaseline: null, trend };
@@ -19,7 +22,7 @@ function profile(exitRatio: number | null): TraderProfile {
     schemaVersion: 1, strongestInstrument: null, weakestInstrument: null, strongestSession: null, weakestSession: null,
     bestHour: null, worstHour: null, direction: { edge: 'none', longWinRate: 0, shortWinRate: 0 },
     winRate: { current: 0, trend: 'flat' }, avgRR: { current: 0, trend: 'flat' }, profitFactor: { current: 0, trend: 'flat' },
-    exitBehavior: { ratio: exitRatio }, topConfirmations: [], screenshotAvailability: { pct: 0, count: 0, totalClosed: 0 },
+    exitBehavior: { ratio: exitRatio, detail: EMPTY_EXIT }, topConfirmations: [], screenshotAvailability: { pct: 0, count: 0, totalClosed: 0 },
     notesObservations: [], recurringConditions: [], changesVsPrevious: [],
   };
 }

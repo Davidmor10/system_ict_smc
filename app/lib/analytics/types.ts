@@ -61,6 +61,25 @@ export interface DirectionSummary {
   short: GroupPerformance;
 }
 
+/** How the trader actually gets out of positions, computed over closed trades
+    that have real exit legs recorded (pre-multi-exit trades are excluded —
+    they carry no honest exit signal). The headline is `captureRatio`: how much
+    of the planned move winners actually realize. */
+export interface ExitBehavior {
+  sampleSize: number;
+  winnerCount: number;
+  /** Mean realized R ÷ mean planned R across winners. Below 1 = capturing less
+      than the plan on winners (cutting them short). Null when no winner has a
+      computable planned R. */
+  captureRatio: number | null;
+  /** Winners whose realized R fell below 60% of their own planned R. */
+  winnersCutShort: number;
+  /** Fraction (0-1) of the sample closed in more than one leg (scaling out). */
+  partialExitRate: number;
+  avgWinnerR: number;
+  avgLoserR: number;
+}
+
 export interface TimeSummary {
   byHour: GroupPerformance[];
   byWeekday: GroupPerformance[];
@@ -117,6 +136,8 @@ export interface FullAnalysis {
   confirmationCombos: GroupPerformance[];
   /** Breakdown by self-reported emotional state at entry. */
   emotions: GroupPerformance[];
+  /** Real exit-management behavior derived from recorded exit legs. */
+  exits: ExitBehavior;
   time: TimeSummary;
   direction: DirectionSummary;
   patterns: PatternCandidate[];
