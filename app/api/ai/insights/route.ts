@@ -25,10 +25,13 @@ export async function POST(req: NextRequest) {
     // hypothesis (bootstrapping them on a cold start) — never a fixed
     // opportunity/warning/pattern template, and trades in the request body,
     // if any, are ignored.
-    const insights = await generatePersonalizedInsights(userId, lang);
-    return NextResponse.json({ insights });
+    const { insights, debug } = await generatePersonalizedInsights(userId, lang);
+    // `debug` is temporary — safe to return (counts/booleans/status strings
+    // only, never raw error text) and only meaningful while diagnosing why
+    // the panel comes back empty. Remove once resolved.
+    return NextResponse.json({ insights, debug });
   } catch (err) {
     console.error('[AI Insights]', err);
-    return NextResponse.json({ insights: [] }, { status: 500 });
+    return NextResponse.json({ insights: [], debug: { threw: err instanceof Error ? err.message : String(err) } }, { status: 500 });
   }
 }

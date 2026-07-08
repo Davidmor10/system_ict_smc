@@ -437,11 +437,37 @@ function subjectLabelFor(subject: Record<string, string | number>, lang: 'he' | 
   return parts.join(' · ');
 }
 
-export async function generatePersonalizedInsights(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<PersonalizedInsight[]> {
-  if (!isSupabaseConfigured()) return [];
+export interface PersonalizedInsightsDebug {
+  supabaseConfigured: boolean;
+  hadExistingProfile: boolean;
+  patternRowCount: number;
+  hypothesisStatus: string | null;
+  builtFromTradeCount: number;
+  candidateCount: number;
+  /** null = never reached the phrasing step (candidateCount was 0). */
+  phrasingSucceeded: boolean | null;
+}
+
+export interface PersonalizedInsightsResult {
+  insights: PersonalizedInsight[];
+  debug: PersonalizedInsightsDebug;
+}
+
+const EMPTY_DEBUG_NOT_CONFIGURED: PersonalizedInsightsDebug = {
+  supabaseConfigured: false, hadExistingProfile: false, patternRowCount: 0,
+  hypothesisStatus: null, builtFromTradeCount: 0, candidateCount: 0, phrasingSucceeded: null,
+};
+
+/** Temporary `debug` field on the response — this app has no live way to
+    inspect a specific user's server-side state (no working local Supabase
+    creds, no browser access to their session), so the diagnosis has to
+    travel back through the API response itself instead of Vercel logs. */
+export async function generatePersonalizedInsights(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<PersonalizedInsightsResult> {
+  if (!isSupabaseConfigured()) return { insights: [], debug: EMPTY_DEBUG_NOT_CONFIGURED };
   const supabase = getClient();
 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
+  const hadExistingProfile = !!profileRecord;
   let patternRows: PatternMemoryRow[];
   let hypothesis: HypothesisState | null;
   let profile: TraderProfile;
@@ -535,9 +561,14 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
     });
   }
 
+  const baseDebug = {
+    supabaseConfigured: true, hadExistingProfile, patternRowCount: patternRows.length,
+    hypothesisStatus: hypothesis?.status ?? null, builtFromTradeCount,
+  };
+
   if (candidates.length === 0) {
     logger.warn('generatePersonalizedInsights: no candidates found', { userId, patternRowCount: patternRows.length, builtFromTradeCount });
-    return [];
+    return { insights: [], debug: { ...baseDebug, candidateCount: 0, phrasingSucceeded: null } };
   }
   const trimmed = candidates.slice(0, MAX_PERSONALIZED_INSIGHTS);
 
@@ -547,12 +578,14 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
   );
   if (!phrased) {
     logger.warn('generatePersonalizedInsights: phrasing failed, returning empty', { userId, candidateCount: trimmed.length });
-    return [];
+    return { insights: [], debug: { ...baseDebug, candidateCount: trimmed.length, phrasingSucceeded: false } };
   }
 
-  return trimmed
+  const insights = trimmed
     .map((c, i) => ({ subject: c.subject, text: phrased[i] ?? '', tone: c.tone }))
     .filter(i => i.text.length > 0);
+
+  return { insights, debug: { ...baseDebug, candidateCount: trimmed.length, phrasingSucceeded: true } };
 }
 
 // ── Evolution Timeline ───────────────────────────────────────────────────────
