@@ -490,6 +490,25 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
     candidates.push({ subject: subjectLabelFor(riskiestPattern.subject, lang), tone: 'caution', metric: riskiestPattern.currentMetric });
   }
 
+  // Early in a trader's history, every fresh pattern legitimately sits at
+  // 'insufficient_data' (below the medium-confidence sample-size floor) —
+  // that's correct, not a bug, but it must not mean the panel shows nothing.
+  // Fall back to the single largest-sample pattern available, however
+  // tentative, and tell the phrasing prompt to treat it as early feedback.
+  if (candidates.length === 0) {
+    const earliest = patternRows
+      .filter(p => p.status !== 'disappeared')
+      .sort((a, b) => b.currentSampleSize - a.currentSampleSize)[0];
+    if (earliest) {
+      candidates.push({
+        subject: subjectLabelFor(earliest.subject, lang),
+        tone: 'neutral',
+        metric: earliest.currentMetric,
+        extra: `only ${earliest.currentSampleSize} trades so far — explicitly say this is early feedback, not a strong conclusion yet`,
+      });
+    }
+  }
+
   if (candidates.length === 0) return [];
   const trimmed = candidates.slice(0, MAX_PERSONALIZED_INSIGHTS);
 

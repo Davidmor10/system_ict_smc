@@ -73,7 +73,6 @@ const STR = {
     pMaxK: 'מקסימום עסקאות', pNoteK: 'תזכורת אישית',
     pNotePh: 'כתוב תזכורת — תישמר ברשימה למטה',
     pSaveK: 'שמור תוכנית', pSavedK: 'נשמר', pDirtyK: 'שינויים שלא נשמרו',
-    disclaimer: 'נתוני דמו · למחקר ולמטרות לימוד בלבד',
     stTradingK: 'סטטוס מסחר', stTradingV: 'מוכן', stRiskK: 'סטטוס סיכון',
     stRiskV: 'בתוך הגבולות', stDiscK: 'משמעת', stDiscV: 'רצף 6 ימים',
     stHealthK: 'בריאות החשבון', stHealthV: 'חזקה',
@@ -113,7 +112,6 @@ const STR = {
     pMaxK: 'MAX TRADES', pNoteK: 'PERSONAL REMINDER',
     pNotePh: 'Write a reminder — it will be saved below',
     pSaveK: 'Save plan', pSavedK: 'Saved', pDirtyK: 'Unsaved changes',
-    disclaimer: 'Demo data · For research and educational use only',
     stTradingK: 'TRADING STATUS', stTradingV: 'READY', stRiskK: 'RISK STATUS',
     stRiskV: 'WITHIN LIMITS', stDiscK: 'DISCIPLINE', stDiscV: '6-DAY STREAK',
     stHealthK: 'ACCOUNT HEALTH', stHealthV: 'STRONG',
@@ -656,10 +654,7 @@ export default function DashboardView() {
                 <span className="dp-perf-label">{s.perf}</span>
                 {!isEmpty && <span className="dp-perf-hint">{s.perfHint}</span>}
                 <span className="dp-perf-spacer" />
-                {isEmpty
-                  ? <span className="dp-perf-disclaimer" style={{ color: 'var(--w40)' }}>{s.emptyPerfTitle}</span>
-                  : <span className="dp-perf-disclaimer">{s.disclaimer}</span>
-                }
+                {isEmpty && <span className="dp-perf-disclaimer" style={{ color: 'var(--w40)' }}>{s.emptyPerfTitle}</span>}
               </div>
               {isEmpty ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 0 48px', gap: 18 }}>

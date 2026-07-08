@@ -30,7 +30,6 @@ export const DICT = {
   weekly_outlook:       { en: 'Weekly Outlook',         he: 'מבט שבועי'                      },
   eco_none:             { en: 'No high-impact events today', he: 'אין אירועים משמעותיים היום' },
   fcst:                 { en: 'Fcst:',                  he: 'תחזית:'                         },
-  demo_note:            { en: 'Demo — connect live API',he: 'דמו — חבר API חי'              },
 
   ev_ism:               { en: 'ISM Services PMI',       he: 'PMI שירותים ISM'               },
   ev_fomc_min:          { en: 'FOMC Minutes',           he: 'פרוטוקול FOMC'                 },
@@ -157,7 +156,6 @@ export const DICT = {
   cta_sub:              { en: 'Choose your plan and start trading with institutional tools.', he: 'בחר את המסלול שלך והתחל לסחור עם הכלים של המוסדיים.' },
   cta_upgrade:          { en: 'Subscribe & Upgrade the System', he: 'לרכישת מנוי ושדרוג המערכת' },
   dock_sub:             { en: 'Upgrade · Onyx Trading',   he: 'שדרוג · Onyx Trading'          },
-  demo_disclaimer:      { en: 'Demo data · For research and educational use only', he: 'נתוני הדגמה · לשימוש מחקרי וחינוכי בלבד' },
 
   // ── Pricing tiers ────────────────────────────────────────────────
   tier_premium_name:    { en: 'PREMIUM Plan',             he: 'מנוי PREMIUM'                  },
