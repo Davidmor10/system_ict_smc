@@ -443,16 +443,22 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
   let patternRows: PatternMemoryRow[];
   let hypothesis: HypothesisState | null;
+  let profile: TraderProfile;
+  let builtFromTradeCount: number;
 
   if (!profileRecord) {
     const result = await refreshIntelligence(supabase, userId, lang);
     patternRows = result.patternRows;
     hypothesis = result.hypothesis;
+    profile = result.profile;
+    builtFromTradeCount = result.trades.filter(t => t.result !== 'OPEN').length;
   } else {
     [patternRows, hypothesis] = await Promise.all([
       repo.getPatternMemory(supabase, userId),
       repo.getHypothesis(supabase, userId),
     ]);
+    profile = profileRecord.profile;
+    builtFromTradeCount = profileRecord.builtFromTradeCount;
   }
 
   interface Candidate { subject: string; tone: 'positive' | 'caution' | 'neutral'; metric: GroupPerformance; extra?: string }
@@ -507,6 +513,25 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
         extra: `only ${earliest.currentSampleSize} trades so far — explicitly say this is early feedback, not a strong conclusion yet`,
       });
     }
+  }
+
+  // Deeper last resort: the trader's trades are spread thin enough that no
+  // single instrument/session/hour combo ever crossed discoverPatterns'
+  // 3-trade floor, so pattern_memory is entirely empty. The trader profile's
+  // overall numbers only need >=1 closed trade to exist at all, so build one
+  // honest, low-confidence insight from those instead of showing nothing.
+  if (candidates.length === 0 && builtFromTradeCount > 0) {
+    candidates.push({
+      subject: lang === 'he' ? 'הביצועים הכוללים שלך' : 'Your overall performance',
+      tone: 'neutral',
+      metric: {
+        key: 'overall', label: 'overall', trades: builtFromTradeCount, wins: 0, losses: 0,
+        winRate: profile.winRate.current, totalPnl: 0, avgRR: profile.avgRR.current,
+        avgWinner: 0, avgLoser: 0, profitFactor: profile.profitFactor.current,
+        confidence: { level: 'low', sampleSize: builtFromTradeCount },
+      },
+      extra: `only ${builtFromTradeCount} closed trades total so far, not yet enough in any single recurring combination for a specific pattern — explicitly say this is early, overall feedback, not a strong conclusion`,
+    });
   }
 
   if (candidates.length === 0) return [];
