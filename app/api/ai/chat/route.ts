@@ -8,7 +8,7 @@ import { logSecurityEvent } from '../../../lib/securityLog';
 const chatSchema = z.object({
   question: z.string().min(1).max(1000),
   lang: z.enum(['he', 'en']).optional(),
-  chatId: z.string().uuid().optional(),
+  chatId: z.string().uuid().nullish(),
   history: z.array(z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string().max(4000),
