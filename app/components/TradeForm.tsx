@@ -11,6 +11,7 @@ import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
+import { checkTrade, type GuardianWarning } from '../lib/guardian/checkTrade';
 
 const PLAYBOOK_STORAGE_KEY = 'onyx_playbook';
 
@@ -241,6 +242,7 @@ export default function TradeForm({
   const [newConfirmation, setNewConfirmation] = useState('');
   const [stage, setStage] = useState<SaveStage>('idle');
   const [summaryFacts, setSummaryFacts] = useState<string[]>([]);
+  const [guardWarnings, setGuardWarnings] = useState<GuardianWarning[]>([]);
 
   useEffect(() => {
     setPlaybookSetups(loadPlaybookSetups());
@@ -333,10 +335,9 @@ export default function TradeForm({
   const declaredBias = getTodaysDeclaredBias();
   const alignment = computeBiasAlignment(declaredBias, form.direction);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
-
+  /** Builds the trade record and runs the save animation flow. Called either
+      directly (no warnings) or after the trader dismisses the guardian panel. */
+  function performSave() {
     const trade: TradeEntry = {
       id: Date.now(),
       dateISO: form.date,
@@ -362,6 +363,7 @@ export default function TradeForm({
     };
 
     const priorTrades = trades;
+    setGuardWarnings([]);
 
     // A short, active sequence — saving, then a quick read, then proof the system used it —
     // so logging a trade feels like the system did work, not like a form reset.
@@ -372,6 +374,24 @@ export default function TradeForm({
       setStage('analyzing');
       setTimeout(() => setStage('summary'), 700);
     }, 450);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
+
+    // Discipline guardian — surface any evidence-backed concern before saving.
+    // Never blocks: if warnings exist, show them and let the trader decide.
+    const warnings = checkTrade(
+      { symbol: form.symbol, direction: form.direction, session: autoSession, emotionalState: form.emotionalState || undefined, biasAlignment: alignment },
+      trades,
+      todayISO(),
+    );
+    if (warnings.length > 0) {
+      setGuardWarnings(warnings);
+      return;
+    }
+    performSave();
   }
 
   function logAnother() {
@@ -681,6 +701,45 @@ export default function TradeForm({
           )}
         </div>
       </form>
+
+      {/* ── Discipline Guardian — evidence-backed pre-save warnings; never blocks ── */}
+      {guardWarnings.length > 0 && stage === 'idle' && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-black/70 backdrop-blur-[3px] p-4" dir="rtl">
+          <div className="onyx-pop-in w-full max-w-md rounded-2xl border border-[#d4af37]/25 bg-[#0a0a0b] p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="text-[#d4af37] text-lg leading-none">⚠</span>
+              <h3 className="font-serif text-lg font-bold text-white">רגע לפני ששומרים</h3>
+            </div>
+            <p className="text-[13px] text-white/45 mb-4 leading-relaxed">
+              לפי הנתונים שלך, שווה לשים לב לדברים הבאים. ההחלטה בידיים שלך.
+            </p>
+            <ul className="space-y-2.5 mb-6">
+              {guardWarnings.map(w => (
+                <li key={w.id} className="flex items-start gap-2.5">
+                  <span className="mt-[3px] shrink-0" style={{ color: w.severity === 'high' ? '#ef4444' : w.severity === 'caution' ? '#d4af37' : 'rgba(255,255,255,0.4)' }}>●</span>
+                  <span className="text-[13.5px] text-white/75 leading-relaxed">{w.text}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setGuardWarnings([])}
+                className="flex-1 py-3 rounded-xl border border-white/10 text-white/60 hover:text-white hover:border-white/20 font-mono text-[12px] font-bold uppercase tracking-[0.12em] transition-all duration-150"
+              >
+                חזור ובדוק
+              </button>
+              <button
+                type="button"
+                onClick={performSave}
+                className="flex-1 py-3 rounded-xl bg-[#d4af37]/90 text-black hover:bg-[#d4af37] font-mono text-[12px] font-bold uppercase tracking-[0.12em] transition-all duration-150"
+              >
+                שמור בכל זאת
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Save flow overlay — saving → analyzed → immediate feedback ── */}
       {busy && (
