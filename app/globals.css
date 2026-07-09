@@ -394,3 +394,46 @@ html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
   0%, 60%, 100% { opacity: .25; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-2px); }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Landing — premium motion utilities
+   ═══════════════════════════════════════════════════════ */
+
+/* Gentle floating for hero cards / panels */
+@keyframes onyx-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.onyx-float       { animation: onyx-float 6.5s ease-in-out infinite; }
+.onyx-float-slow  { animation: onyx-float 9s   ease-in-out infinite; }
+.onyx-float-delay { animation-delay: -3.2s; }
+
+/* Soft pulsing gold border-glow for the featured panel */
+@keyframes onyx-border-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(212,175,55,.12), 0 0 44px -14px rgba(212,175,55,.20); }
+  50%      { box-shadow: 0 0 0 1px rgba(212,175,55,.28), 0 0 66px -10px rgba(212,175,55,.40); }
+}
+.onyx-glow { animation: onyx-border-glow 4.8s ease-in-out infinite; }
+
+/* Horizontal shimmer for connector lines / progress */
+@keyframes onyx-shimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+.onyx-shimmer {
+  background-image: linear-gradient(90deg, transparent, rgba(212,175,55,.55), transparent);
+  background-size: 42% 100%;
+  background-repeat: no-repeat;
+  animation: onyx-shimmer 3.2s linear infinite;
+}
+
+/* Slow conic sweep behind hero mockups */
+@keyframes onyx-orbit {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.onyx-orbit { animation: onyx-orbit 26s linear infinite; }
+
+/* Card lift used across landing feature/ecosystem cards */
+.card-lift { transition: transform 260ms var(--ease-expo-out), border-color 260ms var(--ease-smooth), background-color 260ms var(--ease-smooth); }
+.card-lift:hover { transform: translateY(-5px); border-color: rgba(212,175,55,.4); }
