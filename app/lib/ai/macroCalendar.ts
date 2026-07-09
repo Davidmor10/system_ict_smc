@@ -95,8 +95,6 @@ export function sessionKeyForTime(hhmm: string): SessionKey | null {
 
 // ── Prompt block (pure) ──────────────────────────────────────────────────────
 
-const IMPACT_ORDER: Record<Impact, number> = { High: 0, Medium: 1, Low: 2, Holiday: 3 };
-
 function line(e: MacroEvent): string {
   const sess = sessionKeyForTime(e.timeIsrael);
   const sessTag = sess ? ` (${SESS.find(s => s.key === sess)!.en} session)` : '';
@@ -104,27 +102,44 @@ function line(e: MacroEvent): string {
   return `${time}${sessTag} — ${e.impact.toUpperCase()} · ${e.currency} · ${e.title}`;
 }
 
+/** What the coach leads with by default: high-impact US-dollar releases and
+    bank holidays. Everything else (other currencies, low/medium impact) is
+    kept only as optional context the coach mentions only if asked. */
+export function isPrimaryEvent(e: MacroEvent): boolean {
+  return (e.impact === 'High' && e.currency === 'USD') || e.impact === 'Holiday';
+}
+
 /** Builds the real-macro-events block the model is allowed to cite for
-    "what's today / this week" questions. Empty string when there's nothing. */
+    "what's today / this week" questions. High-impact USD events and bank
+    holidays are the headline; other events are listed separately as optional.
+    Empty string when there's nothing at all. */
 export function buildMacroBlock(events: MacroEvent[], today: string): string {
   if (!events.length) return '';
   const todays = events
     .filter(e => e.dateIsrael === today)
     .sort((a, b) => a.timeIsrael.localeCompare(b.timeIsrael));
+  const todayPrimary = todays.filter(isPrimaryEvent);
+  const todayOther = todays.filter(e => !isPrimaryEvent(e));
 
-  const weekAhead = events
-    .filter(e => e.dateIsrael > today && (e.impact === 'High' || e.impact === 'Medium'))
+  const weekPrimary = events
+    .filter(e => e.dateIsrael > today && isPrimaryEvent(e))
     .sort((a, b) => (a.dateIsrael + a.timeIsrael).localeCompare(b.dateIsrael + b.timeIsrael))
     .slice(0, 12);
 
   const parts: string[] = [];
-  parts.push(todays.length
-    ? `TODAY (${today}, Israel time):\n${todays.map(e => `• ${line(e)}`).join('\n')}`
-    : `TODAY (${today}, Israel time): no scheduled macro events.`);
-  if (weekAhead.length) {
-    parts.push(`LATER THIS WEEK (higher-impact, Israel time):\n${weekAhead
+  parts.push(todayPrimary.length
+    ? `TODAY (${today}, Israel time) — HIGH-IMPACT USD EVENTS & BANK HOLIDAYS (this is what matters, lead with these):\n${todayPrimary.map(e => `• ${line(e)}`).join('\n')}`
+    : `TODAY (${today}, Israel time): no high-impact USD events or bank holidays scheduled.`);
+
+  if (weekPrimary.length) {
+    parts.push(`LATER THIS WEEK — high-impact USD events & bank holidays (Israel time):\n${weekPrimary
       .map(e => `• ${e.dateIsrael} ${line(e)}`).join('\n')}`);
   }
+
+  if (todayOther.length) {
+    parts.push(`OTHER EVENTS TODAY — lower priority (other currencies or lower impact). Do NOT bring these up unless the trader explicitly asks about them:\n${todayOther.map(e => `• ${line(e)}`).join('\n')}`);
+  }
+
   return parts.join('\n\n');
 }
 
@@ -132,7 +147,7 @@ export function buildMacroBlock(events: MacroEvent[], today: string): string {
     session, returns a natural-language hint for the model to weave in once.
     Returns '' when there's no meaningful overlap. Pure. */
 export function computeMacroOverlap(events: MacroEvent[], analysis: FullAnalysis, today: string): string {
-  const todaysHigh = events.filter(e => e.dateIsrael === today && e.impact === 'High' && sessionKeyForTime(e.timeIsrael));
+  const todaysHigh = events.filter(e => e.dateIsrael === today && e.impact === 'High' && e.currency === 'USD' && sessionKeyForTime(e.timeIsrael));
   if (!todaysHigh.length) return '';
 
   const sessions = analysis.sessions.filter(g => g.confidence.sampleSize >= 6);

@@ -58,6 +58,33 @@ describe('buildMacroBlock', () => {
   it('returns empty string when there are no events', () => {
     expect(buildMacroBlock([], today)).toBe('');
   });
+
+  it('leads with high-impact USD events + bank holidays and pushes everything else to OTHER', () => {
+    const mixed: MacroEvent[] = [
+      { title: 'CPI m/m', currency: 'USD', impact: 'High', dateIsrael: today, timeIsrael: '15:30' },
+      { title: 'German ZEW', currency: 'EUR', impact: 'High', dateIsrael: today, timeIsrael: '12:00' },   // other currency → OTHER
+      { title: 'Crude Oil Inventories', currency: 'USD', impact: 'Medium', dateIsrael: today, timeIsrael: '17:30' }, // low priority → OTHER
+      { title: 'Bank Holiday', currency: 'JPY', impact: 'Holiday', dateIsrael: today, timeIsrael: '' },     // holiday → primary
+    ];
+    const block = buildMacroBlock(mixed, today);
+    const head = block.slice(0, block.indexOf('OTHER EVENTS'));
+    // Primary section leads with the USD high-impact report and the bank holiday.
+    expect(head).toContain('CPI m/m');
+    expect(head).toContain('Bank Holiday');
+    expect(head).not.toContain('German ZEW');
+    expect(head).not.toContain('Crude Oil Inventories');
+    // The rest is demoted to an explicitly-optional OTHER section.
+    expect(block).toContain('OTHER EVENTS TODAY');
+    expect(block).toContain('German ZEW');
+    expect(block).toContain('Crude Oil Inventories');
+  });
+
+  it('says the day is quiet when no USD high-impact events or holidays are scheduled', () => {
+    const otherOnly: MacroEvent[] = [{ title: 'German ZEW', currency: 'EUR', impact: 'High', dateIsrael: today, timeIsrael: '12:00' }];
+    const block = buildMacroBlock(otherOnly, today);
+    expect(block).toContain('no high-impact USD events or bank holidays scheduled');
+    expect(block).toContain('OTHER EVENTS TODAY');
+  });
 });
 
 describe('computeMacroOverlap', () => {
