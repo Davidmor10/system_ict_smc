@@ -3,14 +3,21 @@ import { NextResponse } from 'next/server';
 import { getStripe, isStripeConfigured } from '../../../lib/stripe/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/supabase/server';
 
-// Stripe → Supabase subscription sync. Drives the binary 'pro'/'free' role:
-//   • checkout.session.completed   → upgrade to 'pro', store customer/sub IDs
-//   • customer.subscription.updated → 'pro' while active/trialing, else downgrade
+// Stripe → Supabase subscription sync. Drives the tiered role from the plan the
+// user actually purchased (tier is stamped in Stripe metadata by /api/checkout):
+//   • checkout.session.completed   → upgrade to the purchased tier's role
+//   • customer.subscription.updated → that role while active/trialing, else 'free'
 //   • customer.subscription.deleted → auto-downgrade to 'free'
 // Signature-verified against the raw body; never trusts an unsigned payload.
 
-// Stripe statuses that still entitle Pro access.
-const PRO_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing']);
+// Stripe statuses that still entitle paid access.
+const PAID_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing']);
+
+// The 'deluxe' tier unlocks everything; any other paid tier ('premium'/'pro')
+// grants 'pro'. Defaults to 'pro' so a paying customer is never left at 'free'.
+function roleForTier(tier: string | null | undefined): 'pro' | 'deluxe' {
+  return tier === 'deluxe' ? 'deluxe' : 'pro';
+}
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SIGNING_SECRET;
@@ -51,7 +58,7 @@ export async function POST(req: Request) {
         const { error } = await supabase
           .from('profiles')
           .update({
-            role: 'pro',
+            role: roleForTier(s.metadata?.tier),
             stripe_customer_id: typeof s.customer === 'string' ? s.customer : null,
             stripe_subscription_id: typeof s.subscription === 'string' ? s.subscription : null,
             subscription_status: 'active',
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription;
-        const isPro = event.type !== 'customer.subscription.deleted' && PRO_STATUSES.has(sub.status);
+        const paid = event.type !== 'customer.subscription.deleted' && PAID_STATUSES.has(sub.status);
         const clerkId = sub.metadata?.clerk_id;
         const customerId = typeof sub.customer === 'string' ? sub.customer : null;
 
@@ -73,7 +80,7 @@ export async function POST(req: Request) {
         const query = supabase
           .from('profiles')
           .update({
-            role: isPro ? 'pro' : 'free',
+            role: paid ? roleForTier(sub.metadata?.tier) : 'free',
             subscription_status: event.type === 'customer.subscription.deleted' ? 'canceled' : sub.status,
           });
 

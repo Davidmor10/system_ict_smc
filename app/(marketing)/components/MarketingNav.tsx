@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { useMarketingLang } from './LangProvider';
 
 const NAV_LINKS = [
-  { he: 'מנוע הפרקטל', href: '/fractal-engine' },
   { he: "פיצ'רים",     href: '/features' },
   { he: 'ביצועים',     href: '/performance' },
   { he: 'מנוי',        href: '/pricing' },

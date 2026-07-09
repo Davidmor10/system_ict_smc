@@ -3,6 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLanguage } from '../hooks/useLanguage';
+import { usePlan, type Role } from './PlanProvider';
+
+function IconLock() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
 
 function IconGrid() {
   return (
@@ -68,15 +78,16 @@ function getActive(pathname: string): string {
 export default function MobileNav() {
   const pathname = usePathname();
   const { t } = useLanguage();
+  const { canAccess } = usePlan();
   const active = getActive(pathname);
 
-  const tabs = [
-    { id: 'dashboard',     href: '/dashboard',              Icon: IconGrid,   label: t('nav_workspace')    },
-    { id: 'journal',       href: '/dashboard/journal',      Icon: IconBook,   label: t('nav_journal')      },
-    { id: 'ai-analytics',  href: '/dashboard/ai-analytics', Icon: IconChart,  label: t('nav_ai_analytics') },
-    { id: 'coach',         href: '/dashboard/coach',        Icon: IconChat,   label: t('nav_coach')        },
-    { id: 'playbook',      href: '/dashboard/playbook',     Icon: IconPlay,   label: t('nav_playbook')     },
-    { id: 'rules',         href: '/dashboard/rules',        Icon: IconShield, label: t('nav_rules')        },
+  const tabs: { id: string; href: string; Icon: () => React.JSX.Element; label: string; min: Role }[] = [
+    { id: 'dashboard',     href: '/dashboard',              Icon: IconGrid,   label: t('nav_workspace'),    min: 'free'   },
+    { id: 'journal',       href: '/dashboard/journal',      Icon: IconBook,   label: t('nav_journal'),      min: 'pro'    },
+    { id: 'playbook',      href: '/dashboard/playbook',     Icon: IconPlay,   label: t('nav_playbook'),     min: 'pro'    },
+    { id: 'rules',         href: '/dashboard/rules',        Icon: IconShield, label: t('nav_rules'),        min: 'pro'    },
+    { id: 'ai-analytics',  href: '/dashboard/ai-analytics', Icon: IconChart,  label: t('nav_ai_analytics'), min: 'deluxe' },
+    { id: 'coach',         href: '/dashboard/coach',        Icon: IconChat,   label: t('nav_coach'),        min: 'deluxe' },
   ];
 
   return (
@@ -94,17 +105,21 @@ export default function MobileNav() {
         paddingBottom: 'calc(9px + env(safe-area-inset-bottom, 0px))',
       }}
     >
-      {tabs.map(({ id, href, Icon, label }) => {
-        const isActive = active === id;
+      {tabs.map(({ id, href, Icon, label, min }) => {
+        const locked = !canAccess(min);
+        const isActive = !locked && active === id;
         return (
           <Link
             key={id}
-            href={href}
+            href={locked ? '/checkout' : href}
             className="relative flex flex-col items-center justify-center gap-[5px] active:scale-90 transition-transform duration-150"
-            style={{ color: isActive ? '#d4af37' : 'rgba(255,255,255,.4)' }}
+            style={{ color: isActive ? '#d4af37' : locked ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.4)' }}
           >
-            <span style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(212,175,55,.5))' : 'none', transition: 'filter 250ms', display: 'block' }}>
+            <span className="relative" style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(212,175,55,.5))' : 'none', transition: 'filter 250ms', display: 'block' }}>
               <Icon />
+              {locked && (
+                <span className="absolute -top-1.5 -right-1.5 text-[#d4af37]/60"><IconLock /></span>
+              )}
             </span>
             <span className="font-mono text-[8px] font-bold uppercase tracking-[0.10em] leading-none">{label}</span>
             <span

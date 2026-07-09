@@ -11,6 +11,7 @@ export const DICT = {
   nav_journal:          { en: 'Journal',                he: 'יומן'                           },
   nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
+  nav_locked_hint:      { en: 'Upgrade to unlock',      he: 'שדרג כדי לפתוח'                 },
   sys_account:          { en: 'Account',                he: 'חשבון'                          },
   brand_sub:            { en: 'Journal',                he: 'יומן'                           },
 

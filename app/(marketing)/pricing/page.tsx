@@ -23,9 +23,8 @@ const PLANS = [
     features: [
       { text: { he: 'חשבון חינמי להיכרות עם המערכת',          en: 'Free account to explore the system'            } as BiStr, on: true  },
       { text: { he: 'טעימה מהביצועים הציבוריים והדאשבורד',     en: 'Taste of public performance & dashboard'       } as BiStr, on: true  },
-      { text: { he: 'עדכוני שוק וציר סשנים בזמן אמת',          en: 'Market updates & live session axis'            } as BiStr, on: true  },
-      { text: { he: 'ללא גישה למנוע הפרקטל וקביעת ביאס',       en: 'No access to Fractal Engine & bias'            } as BiStr, on: false },
-      { text: { he: 'ללא יומן מסחר ונעילת הגנה',               en: 'No trade journal & risk lock'                  } as BiStr, on: false },
+      { text: { he: 'ללא יומן מסחר, סטאפים וחוקים',            en: 'No journal, setups or rules'                   } as BiStr, on: false },
+      { text: { he: 'ללא סטטיסטיקות ומאמן AI',                 en: 'No statistics or AI coach'                     } as BiStr, on: false },
     ],
     cta:      { he: 'התחל בחינם',               en: 'Get Started Free'       } as BiStr,
     href:     '/sign-up',
@@ -40,11 +39,11 @@ const PLANS = [
     amtColor: '#fff',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'גישה מלאה למנוע הפרקטל וקביעת הביאס היומי', en: 'Full access to Fractal Engine & daily bias'   } as BiStr, on: true  },
-      { text: { he: 'יומן מסחר מלא + נעילת הגנה',                 en: 'Full trade journal + risk lock'               } as BiStr, on: true  },
-      { text: { he: 'עד 5 עסקאות ביומן בכל שבוע',                 en: 'Up to 5 journal trades per week'              } as BiStr, on: true  },
-      { text: { he: 'ציר סשנים חי ועדכוני שוק בזמן אמת',          en: 'Live session axis & real-time updates'        } as BiStr, on: true  },
-      { text: { he: 'ללא גישה לעמוד הסטטיסטיקה והאנליטיקס',       en: 'No access to statistics & analytics page'     } as BiStr, on: false },
+      { text: { he: 'גישה מלאה לדאשבורד ולניתוח יומן המסחר',      en: 'Full dashboard access & journal analysis'     } as BiStr, on: true  },
+      { text: { he: 'יומן מסחר מלא',                              en: 'Full trade journal'                           } as BiStr, on: true  },
+      { text: { he: 'ספר הסטאפים והחוקים פתוח',                   en: 'Setups & rules unlocked'                      } as BiStr, on: true  },
+      { text: { he: 'ללא עמוד הסטטיסטיקה והאנליטיקס',             en: 'No statistics & analytics page'               } as BiStr, on: false },
+      { text: { he: 'ללא מאמן ה-AI',                              en: 'No AI coach'                                  } as BiStr, on: false },
     ],
     cta:      { he: 'הצטרף ל-PRO',              en: 'Join PRO'              } as BiStr,
     href:     '/checkout?plan=pro',
@@ -60,8 +59,8 @@ const PLANS = [
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
       { text: { he: 'כל מה שיש ב-PRO — בלי שום הגבלה',           en: 'Everything in PRO — with no limits'           } as BiStr, on: true  },
-      { text: { he: 'עסקאות ללא הגבלה ביומן המסחר',               en: 'Unlimited trades in the journal'              } as BiStr, on: true  },
-      { text: { he: 'גישה מלאה לעמוד הסטטיסטיקה והאנליטיקס',     en: 'Full access to statistics & analytics'        } as BiStr, on: true  },
+      { text: { he: 'עמוד הסטטיסטיקה והאנליטיקס המלא',            en: 'Full statistics & analytics page'             } as BiStr, on: true  },
+      { text: { he: 'מאמן ה-AI ואנליטיקת ה-AI',                  en: 'AI coach & AI analytics'                      } as BiStr, on: true  },
       { text: { he: 'כל הפיצ׳רים פתוחים, נוכחיים ועתידיים',       en: 'All features open, current and future'        } as BiStr, on: true  },
       { text: { he: 'תמיכה מועדפת ועדיפות בעדכונים',              en: 'Priority support & update priority'           } as BiStr, on: true  },
     ],
@@ -77,12 +76,12 @@ const PLANS = [
 type TableRow = { feat: BiStr; b: CellV; p: CellV; d: CellV };
 
 const TABLE_ROWS: TableRow[] = [
-  { feat: { he: 'מנוע הפרקטל וקביעת ביאס',        en: 'Fractal Engine & bias'          }, b: 'cross', p: 'check', d: 'check'   },
-  { feat: { he: 'ציר סשנים חי וזמן אמת',            en: 'Live session axis & real time'  }, b: 'check', p: 'check', d: 'check'   },
-  { feat: { he: 'יומן מסחר ונעילת הגנה',            en: 'Trade journal & risk lock'      }, b: 'cross', p: 'check', d: 'check'   },
-  { feat: { he: 'עסקאות ביומן בשבוע',               en: 'Journal trades per week'        }, b: 'dash',  p: '—',     d: '—'       }, // overridden per lang below
-  { feat: { he: 'עמוד סטטיסטיקה ואנליטיקס',         en: 'Statistics & analytics'         }, b: 'cross', p: 'cross', d: 'check'   },
   { feat: { he: 'טעימה מהביצועים הציבוריים',         en: 'Public performance preview'     }, b: 'check', p: 'check', d: 'check'   },
+  { feat: { he: 'גישה לדאשבורד',                     en: 'Dashboard access'               }, b: 'dash',  p: 'check', d: 'check'   }, // basic cell overridden to "taste" per lang
+  { feat: { he: 'יומן מסחר',                         en: 'Trade journal'                  }, b: 'cross', p: 'check', d: 'check'   },
+  { feat: { he: 'סטאפים וחוקים',                     en: 'Setups & rules'                 }, b: 'cross', p: 'check', d: 'check'   },
+  { feat: { he: 'עמוד סטטיסטיקה ואנליטיקס',         en: 'Statistics & analytics'         }, b: 'cross', p: 'cross', d: 'check'   },
+  { feat: { he: 'מאמן AI ואנליטיקת AI',              en: 'AI coach & analytics'           }, b: 'cross', p: 'cross', d: 'check'   },
   { feat: { he: 'תמיכה',                             en: 'Support'                        }, b: '—',     p: '—',     d: '—'       }, // overridden per lang below
 ];
 
@@ -95,8 +94,8 @@ const I18N = {
     en: 'Choose the level<br>that fits <span style="color:var(--gold)">your pace.</span>',
   },
   hero_sub: {
-    he: 'כל המסלולים נותנים לך את אותו מנוע פרקטל מדויק. ההבדל הוא רק כמה רחוק אתה רוצה לקחת את זה — כמה עסקאות, אילו ניתוחים מתקדמים, וכמה עומק סטטיסטי. תמיד אפשר לשדרג, ואין התחייבות.',
-    en: 'Every plan gives you the same precise Fractal Engine. The difference is only how far you want to take it — how many trades, which advanced analyses, and how much statistical depth. Always upgradeable, no commitment.',
+    he: 'כל המסלולים בנויים על אותו לב מערכת. ההבדל הוא רק כמה רחוק אתה לוקח את זה — מהיכרות ראשונית, דרך יומן וניתוח מלא, ועד כל הסטטיסטיקות והבינה של המערכת. תמיד אפשר לשדרג, ואין התחייבות.',
+    en: "Every plan is built on the same core. The difference is only how far you take it — from a first look, through the full journal and analysis, to every statistic and the AI intelligence. Always upgradeable, no commitment.",
   },
   pop:      { he: 'הכי פופולרי',   en: 'Most Popular' },
 
@@ -105,10 +104,8 @@ const I18N = {
   tbl_h2:     { he: 'השוואה מלאה',   en: 'Full Comparison' },
   tbl_sub:    { he: 'בדיוק מה מקבלים בכל מסלול', en: 'Exactly what you get in each plan' },
   tbl_col0:   { he: 'פיצ׳ר',          en: 'Feature'          },
-  // trades row text
-  r4_p: { he: 'עד 5',       en: 'Up to 5'  },
-  r4_d: { he: 'ללא הגבלה',  en: 'Unlimited'},
-  r4_b: { he: '—',          en: '—'        },
+  // dashboard row — basic gets a "taste"
+  r_dash_b: { he: 'טעימה', en: 'Taste' },
   // support row text
   r7_b: { he: 'בסיסית',         en: 'Basic'          },
   r7_p: { he: 'מהירה',           en: 'Fast'           },
@@ -120,8 +117,8 @@ const I18N = {
   faq_sub:    { he: 'מה שכדאי לדעת לפני שמצטרפים', en: 'What you should know before joining' },
   faq_q1: { he: 'מה ההבדל המרכזי בין PRO ל-DELUXE?', en: 'What\'s the main difference between PRO and DELUXE?' },
   faq_a1: {
-    he: 'ב-PRO אתה מקבל את כל לב המערכת — מנוע הפרקטל, הביאס היומי והיומן — אבל עם תקרה של 5 עסקאות בשבוע וללא גישה לעמוד הסטטיסטיקה. ב-DELUXE אין שום תקרה: עסקאות ללא הגבלה וגישה מלאה לכל האנליטיקס.',
-    en: 'With PRO you get the full heart of the system — Fractal Engine, daily bias, and journal — but with a cap of 5 trades per week and no access to the statistics page. With DELUXE there are no caps: unlimited trades and full access to all analytics.',
+    he: 'ב-PRO אתה מקבל גישה מלאה לדאשבורד, ליומן המסחר, לסטאפים ולחוקים — כל מה שצריך כדי לתעד ולנהל את המסחר. ב-DELUXE נפתח גם עמוד הסטטיסטיקה והאנליטיקס, אנליטיקת ה-AI ומאמן ה-AI — כלומר כל שכבת הבינה של המערכת.',
+    en: 'With PRO you get full access to the dashboard, the trade journal, setups and rules — everything you need to log and manage your trading. With DELUXE the statistics & analytics page, AI analytics and the AI coach open up too — the entire intelligence layer of the system.',
   },
   faq_q2: { he: 'אפשר לשדרג מ-PRO ל-DELUXE באמצע?', en: 'Can I upgrade from PRO to DELUXE mid-cycle?' },
   faq_a2: {
@@ -135,8 +132,8 @@ const I18N = {
   },
   faq_q4: { he: 'מה כולל החשבון החינמי?', en: 'What does the free account include?' },
   faq_a4: {
-    he: 'BASIC נותן לך להיכנס, להכיר את הממשק, לראות את ציר הסשנים ולקבל טעימה מהביצועים הציבוריים — בלי גישה למנוע הפרקטל או ליומן.',
-    en: 'BASIC lets you sign in, explore the interface, view the session axis, and get a taste of the public performance numbers — without access to the Fractal Engine or journal.',
+    he: 'BASIC נותן לך להיכנס, להכיר את הממשק ולקבל טעימה מהביצועים הציבוריים ומהדאשבורד — בלי גישה ליומן המסחר, לסטאפים, לחוקים או לשכבת ה-AI.',
+    en: 'BASIC lets you sign in, explore the interface, and get a taste of the public performance and dashboard — without access to the trade journal, setups, rules, or the AI layer.',
   },
 
   // CTA
@@ -364,13 +361,11 @@ function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; 
   // Override text-only cells per lang
   const resolveCell = (row: TableRow, col: 'b' | 'p' | 'd'): CellV => {
     const v = row[col];
-    // Row 4 (trades per week)
-    if (row.feat.en === 'Journal trades per week') {
-      if (col === 'b') return t('r4_b');
-      if (col === 'p') return t('r4_p');
-      if (col === 'd') return t('r4_d');
+    // Dashboard row — basic is a limited "taste"
+    if (row.feat.en === 'Dashboard access' && col === 'b') {
+      return t('r_dash_b');
     }
-    // Row 7 (support)
+    // Support row
     if (row.feat.en === 'Support') {
       if (col === 'b') return t('r7_b');
       if (col === 'p') return t('r7_p');

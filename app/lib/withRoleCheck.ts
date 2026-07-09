@@ -1,20 +1,20 @@
 import { redirect } from 'next/navigation';
-import { getUserRole, type Role } from './getUserRole';
+import { getUserRole, ROLE_RANK, type Role } from './getUserRole';
 
-const RANK: Record<Role, number> = { free: 0, pro: 1 };
-
-// Server-side guard. Call at the top of a Server Component / Route Handler /
-// Server Action to restrict access. Redirects insufficient roles to the
-// upgrade funnel; returns the resolved role when access is granted.
-export async function withRoleCheck(required: Role): Promise<Role> {
+// Server-side guard. Call at the top of a Server Component (e.g. a route-segment
+// layout), Route Handler, or Server Action to restrict access by plan. Access
+// is ranked (deluxe ⊇ pro ⊇ free); an insufficient plan is redirected to the
+// upgrade funnel. Returns the resolved role when access is granted.
+export async function requirePlan(required: Role): Promise<Role> {
   const role = await getUserRole();
-  if (RANK[role] < RANK[required]) {
+  if (ROLE_RANK[role] < ROLE_RANK[required]) {
     redirect('/checkout');
   }
   return role;
 }
 
-// Convenience guard for Pro-only surfaces.
+// Back-compat aliases.
+export const withRoleCheck = requirePlan;
 export async function requirePro(): Promise<void> {
-  await withRoleCheck('pro');
+  await requirePlan('pro');
 }
