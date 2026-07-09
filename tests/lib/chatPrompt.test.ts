@@ -35,6 +35,13 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('Teach, don\'t summarize');
   });
 
+  it('forbids Markdown output and inventing macro events', () => {
+    const prompt = buildChatPrompt(facts, [], 'q', 'he');
+    expect(prompt).toContain('PLAIN TEXT');
+    expect(prompt).toContain('never write **like this**');
+    expect(prompt).toContain('NEVER invent a macro event');
+  });
+
   it('injects the real macro-events block when one is provided', () => {
     const macro = 'TODAY (2026-07-09, Israel time):\n• 15:30 — HIGH · USD · CPI m/m';
     const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he', macro);
