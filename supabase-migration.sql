@@ -275,12 +275,23 @@ create table if not exists coach_chats (
 );
 create index if not exists coach_chats_clerk_idx on coach_chats (clerk_id, updated_at desc);
 
+-- 16. Macro calendar cache — one row per Israel calendar day, holding that day's
+-- fetch of the (public, ForexFactory-sourced FairEconomy) economic calendar feed
+-- so the coach reads real macro events without re-fetching per request. Global,
+-- not per-user: no clerk_id. Refreshed at most once per Israel day.
+create table if not exists macro_calendar_cache (
+  day         date        primary key,   -- Israel calendar day this snapshot was fetched for
+  payload     jsonb       not null,      -- normalized MacroEvent[] for the week
+  fetched_at  timestamptz not null default now()
+);
+
 alter table trader_profiles     enable row level security;
 alter table pattern_memory      enable row level security;
 alter table weekly_ai_reports   enable row level security;
 alter table ai_insight_history  enable row level security;
 alter table trader_hypotheses   enable row level security;
 alter table coach_chats         enable row level security;
+alter table macro_calendar_cache enable row level security;
 
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)

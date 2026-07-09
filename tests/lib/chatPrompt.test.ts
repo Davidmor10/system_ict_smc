@@ -22,21 +22,34 @@ describe('buildFactsContext', () => {
 describe('buildChatPrompt', () => {
   const facts = 'OVERALL: 10 trades, winRate 60%';
 
-  it('embeds the facts, the question, and the hard precision rules', () => {
+  it('embeds the facts, the question, the mentor-voice rules and the precision guardrails', () => {
     const prompt = buildChatPrompt(facts, [], 'מה הסשן הכי טוב שלי?', 'he');
     expect(prompt).toContain(facts);
     expect(prompt).toContain('מה הסשן הכי טוב שלי?');
     // Precision guardrails for personal-journal claims must still be present.
-    expect(prompt).toContain('Use ONLY the statistics above');
+    expect(prompt).toContain('ONLY the statistics above');
     expect(prompt).toContain('sample size');
-    expect(prompt).toContain('never predict what the market will do next');
+    expect(prompt).toContain('never predict what the market will do');
+    // Mentor-voice rules (the whole point of the redesign) must be present.
+    expect(prompt).toContain('no bullet-dumping');
+    expect(prompt).toContain('Teach, don\'t summarize');
   });
 
-  it('allows general trading-world answers but forbids inventing live market data', () => {
-    const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he');
-    expect(prompt).toContain('general trading-world knowledge');
-    expect(prompt).toContain('live economic calendar');
-    expect(prompt).toContain('you do NOT have any live market data');
+  it('injects the real macro-events block when one is provided', () => {
+    const macro = 'TODAY (2026-07-09, Israel time):\n• 15:30 — HIGH · USD · CPI m/m';
+    const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he', macro);
+    expect(prompt).toContain(macro);
+    expect(prompt).toContain('Israel time');
+  });
+
+  it('is honest when no macro data is loaded', () => {
+    const prompt = buildChatPrompt(facts, [], 'מה יש היום?', 'he');
+    expect(prompt).toContain("live economic calendar couldn't be loaded");
+  });
+
+  it('weaves in a personal-overlap hint when provided', () => {
+    const prompt = buildChatPrompt(facts, [], 'כדאי לסחור היום?', 'he', 'some macro', 'CPI overlaps your weakest session');
+    expect(prompt).toContain('CPI overlaps your weakest session');
   });
 
   it('falls back to an explicit no-data note when the facts block is empty', () => {

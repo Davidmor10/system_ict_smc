@@ -12,11 +12,12 @@
 
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { getRecentTrades, getTraderProfile, getHypothesis } from '../intelligence/repository';
-import { runFullAnalysis } from '../analytics';
+import { runFullAnalysis, type FullAnalysis } from '../analytics';
 import { summarizeKnownFacts } from './factsBlock';
 import { generateInsightText } from './client';
 import { buildFactsContext, buildChatPrompt, type ChatTurn } from './chatPrompt';
 import { createCoachChat, getCoachChat, saveCoachChatMessages, deriveChatTitle } from './coachChats';
+import { getMacroEvents, buildMacroBlock, computeMacroOverlap, israelToday } from './macroCalendar';
 import { logger } from '../logger';
 
 export type { ChatTurn } from './chatPrompt';
@@ -59,16 +60,21 @@ export async function answerCoachQuestion(
 ): Promise<ChatResult> {
   const supabase = isSupabaseConfigured() ? createServerSupabaseClient() : null;
 
+  // Real macro calendar (Israel time) — runs regardless of journal data, and
+  // in parallel with everything else. Never throws; [] on any failure.
+  const macroPromise = getMacroEvents(supabase);
+
   // Journal facts — best effort. Missing or too-few trades no longer blocks the
   // coach; the prompt is told to admit it has no journal data for personal
   // questions, and general questions don't need it at all.
   let facts = '';
   let closedCount = 0;
+  let analysis: FullAnalysis | null = null;
   if (supabase) {
     const trades = await getRecentTrades(supabase, userId);
     closedCount = trades.filter(t => t.result !== 'OPEN').length;
     if (closedCount >= MIN_CLOSED_TRADES) {
-      const analysis = runFullAnalysis(trades);
+      analysis = runFullAnalysis(trades);
       const [profileRecord, hypothesis] = await Promise.all([
         getTraderProfile(supabase, userId),
         getHypothesis(supabase, userId),
@@ -83,6 +89,13 @@ export async function answerCoachQuestion(
     }
   }
 
+  // Macro block + personal overlap (today's high-impact events vs the trader's
+  // weakest session). Israel time throughout.
+  const today = israelToday();
+  const macroEvents = await macroPromise;
+  const macroBlock = buildMacroBlock(macroEvents, today);
+  const overlapHint = analysis ? computeMacroOverlap(macroEvents, analysis, today) : '';
+
   // History: the server-stored chat is the source of truth. Fall back to what
   // the client sent only when Supabase isn't configured.
   let existing: ChatTurn[] = fallbackHistory;
@@ -94,7 +107,7 @@ export async function answerCoachQuestion(
     else resolvedChatId = null; // stale/foreign id — start a fresh chat instead
   }
 
-  const prompt = buildChatPrompt(facts, existing, question, lang);
+  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint);
 
   let answer: string;
   try {
