@@ -29,10 +29,26 @@ describe('buildChatPrompt', () => {
     // Precision guardrails for personal-journal claims must still be present.
     expect(prompt).toContain('ONLY the statistics above');
     expect(prompt).toContain('sample size');
-    expect(prompt).toContain('never predict what the market will do');
+    expect(prompt).toContain('predict what the market will do');
     // Mentor-voice rules (the whole point of the redesign) must be present.
     expect(prompt).toContain('no bullet-dumping');
     expect(prompt).toContain('Teach, don\'t summarize');
+  });
+
+  it('frames personal answers as a data investigation, not generic advice', () => {
+    const prompt = buildChatPrompt(facts, [], 'האם אני לוקח יותר מדי עסקאות?', 'he');
+    // Must forbid the generic "go check the data" cop-out and demand confidence tiers.
+    expect(prompt).toContain('צריך לבדוק את הנתונים');           // named as a thing NOT to say
+    expect(prompt).toContain('כרגע אין לי מספיק נתונים כדי לקבוע את זה');
+    expect(prompt).toContain('data investigator');
+    expect(prompt).toContain('sample size');
+  });
+
+  it('bans inventing experience level or unsupported emotional reasons', () => {
+    const prompt = buildChatPrompt(facts, [], 'q', 'he');
+    expect(prompt).toContain('אתה עדיין בתהליך למידה');          // named as a thing NOT to say
+    expect(prompt).toContain('experience level');
+    expect(prompt).toContain('recorded emotional state');
   });
 
   it('forbids Markdown output and inventing macro events', () => {
