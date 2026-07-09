@@ -26,10 +26,22 @@ describe('buildChatPrompt', () => {
     const prompt = buildChatPrompt(facts, [], 'מה הסשן הכי טוב שלי?', 'he');
     expect(prompt).toContain(facts);
     expect(prompt).toContain('מה הסשן הכי טוב שלי?');
-    // Precision guardrails must be present in the instruction.
-    expect(prompt).toContain('Answer ONLY from the statistics above');
+    // Precision guardrails for personal-journal claims must still be present.
+    expect(prompt).toContain('Use ONLY the statistics above');
     expect(prompt).toContain('sample size');
-    expect(prompt).toContain('Never predict the market');
+    expect(prompt).toContain('never predict what the market will do next');
+  });
+
+  it('allows general trading-world answers but forbids inventing live market data', () => {
+    const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he');
+    expect(prompt).toContain('general trading-world knowledge');
+    expect(prompt).toContain('live economic calendar');
+    expect(prompt).toContain('you do NOT have any live market data');
+  });
+
+  it('falls back to an explicit no-data note when the facts block is empty', () => {
+    const prompt = buildChatPrompt('', [], 'מה זה FVG?', 'he');
+    expect(prompt).toContain('No journal data available for this trader yet');
   });
 
   it('omits the conversation block when there is no history', () => {

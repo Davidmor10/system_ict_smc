@@ -1,13 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { answerJournalQuestion, type ChatTurn } from '../../../lib/ai/chat';
+import { answerCoachQuestion, type ChatTurn } from '../../../lib/ai/chat';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 
 const chatSchema = z.object({
   question: z.string().min(1).max(1000),
   lang: z.enum(['he', 'en']).optional(),
+  chatId: z.string().uuid().optional(),
   history: z.array(z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string().max(4000),
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   const history = (parsed.data.history ?? []) as ChatTurn[];
 
   try {
-    const result = await answerJournalQuestion(userId, parsed.data.question, lang, history);
+    const result = await answerCoachQuestion(userId, parsed.data.question, lang, parsed.data.chatId ?? null, history);
     return NextResponse.json(result);
   } catch (err) {
     console.error('[AI Chat]', err);

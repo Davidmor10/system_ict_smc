@@ -261,11 +261,26 @@ create table if not exists ai_insight_history (
 create index if not exists ai_insight_history_clerk_idx on ai_insight_history (clerk_id);
 create index if not exists ai_insight_history_clerk_created_idx on ai_insight_history (clerk_id, created_at desc);
 
+-- 15. Coach Chats — the AI Coach's multi-session chat history. One row per chat,
+-- the full message list stored as jsonb (same "structured blob in a jsonb
+-- column" convention as weekly_ai_reports.narrative). The "אחרונים" list is just
+-- these rows for a user ordered by updated_at — no separate messages table.
+create table if not exists coach_chats (
+  id          uuid        primary key default gen_random_uuid(),
+  clerk_id    text        not null,
+  title       text        not null default 'שיחה חדשה',
+  messages    jsonb       not null default '[]'::jsonb,  -- [{role:'user'|'assistant', content:string}]
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists coach_chats_clerk_idx on coach_chats (clerk_id, updated_at desc);
+
 alter table trader_profiles     enable row level security;
 alter table pattern_memory      enable row level security;
 alter table weekly_ai_reports   enable row level security;
 alter table ai_insight_history  enable row level security;
 alter table trader_hypotheses   enable row level security;
+alter table coach_chats         enable row level security;
 
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)
