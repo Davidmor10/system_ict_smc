@@ -28,7 +28,7 @@ export async function DELETE(
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('journal_trades')
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('clerk_id', userId)
     .eq('id', Number(id));
 
@@ -62,7 +62,7 @@ export async function PATCH(
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('journal_trades')
-    .update({ deleted_at: null })
+    .update({ deleted_at: null, updated_at: new Date().toISOString() })
     .eq('clerk_id', userId)
     .eq('id', Number(id));
 

@@ -43,6 +43,8 @@ export const tradeEntrySchema = z.object({
   })).max(50).optional(),
   confirmations: z.array(z.string().max(60)).max(40).optional(),
   emotionalState: z.enum(['CALM', 'CONFIDENT', 'STRESSED', 'FOMO', 'TIRED', 'ANGRY', 'IMPATIENT']).optional(),
+  /** Epoch-ms of the last edit — drives cross-device newest-wins merge. */
+  updatedAt: z.number().finite().optional(),
 });
 
 export const tradesArraySchema = z.array(tradeEntrySchema).max(5000);

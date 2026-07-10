@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats } from '../../lib/journal';
+import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { SESS, getActiveSessionIdx } from '../../lib/sessions';
 import TradeForm from '../../components/TradeForm';
@@ -34,7 +34,13 @@ export default function JournalPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
 
-  useEffect(() => { setTrades(loadTrades()); }, []);
+  // Instant paint from the local cache, then reconcile with the cloud (pulls in
+  // trades logged on other devices, propagates deletes) — the fix for the
+  // journal appearing empty after re-login / on a new device.
+  useEffect(() => {
+    setTrades(loadTrades());
+    hydrateTradesFromCloud().then(setTrades).catch(() => { /* keep local */ });
+  }, []);
 
   // Live-session pill: recompute the clock every 30s so it never goes stale on a long visit.
   useEffect(() => {

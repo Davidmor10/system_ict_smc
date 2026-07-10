@@ -275,6 +275,26 @@ create table if not exists coach_chats (
 );
 create index if not exists coach_chats_clerk_idx on coach_chats (clerk_id, updated_at desc);
 
+-- 15b. User Collections — one generic per-user KV store for every client-side
+-- collection that used to live only in localStorage: setups, trading rules,
+-- rule violations, the daily plan, reminders/focus, preferences and lockout.
+-- `kind` is the namespace (e.g. 'setups', 'rules', 'violations', 'prefs',
+-- 'lockout', 'dashboard', 'daily_plan:2026-07-10'); `data` is the full value
+-- (array or object) — always written as a full replace, so there are no
+-- partial-row merges server-side. Every read/write is scoped by clerk_id.
+create table if not exists user_collections (
+  clerk_id   text        not null,
+  kind       text        not null,
+  data       jsonb       not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (clerk_id, kind)
+);
+create index if not exists user_collections_clerk_idx on user_collections (clerk_id);
+
+-- Merge support for the journal: a per-trade edit timestamp so cross-device
+-- hydration can let the newest edit win (idempotent).
+alter table journal_trades add column if not exists updated_at timestamptz;
+
 -- 16. Macro calendar cache — one row per Israel calendar day, holding that day's
 -- fetch of the (public, ForexFactory-sourced FairEconomy) economic calendar feed
 -- so the coach reads real macro events without re-fetching per request. Global,
@@ -292,6 +312,7 @@ alter table ai_insight_history  enable row level security;
 alter table trader_hypotheses   enable row level security;
 alter table coach_chats         enable row level security;
 alter table macro_calendar_cache enable row level security;
+alter table user_collections    enable row level security;
 
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)

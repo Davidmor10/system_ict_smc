@@ -47,6 +47,7 @@ export type TradeRow = {
   confirmations: string[] | null;
   emotional_state: string | null;
   deleted_at: string | null;
+  updated_at: string | null;
 };
 
 export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | null } {
@@ -75,6 +76,7 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     exits: row.exits ?? undefined,
     confirmations: row.confirmations ?? undefined,
     emotionalState: (row.emotional_state as EmotionalState) ?? undefined,
+    updatedAt: row.updated_at ? Date.parse(row.updated_at) : undefined,
     deletedAt: row.deleted_at,
   };
 }
@@ -107,6 +109,7 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     confirmations: trade.confirmations ?? null,
     emotional_state: trade.emotionalState ?? null,
     deleted_at: null,
+    updated_at: trade.updatedAt ? new Date(trade.updatedAt).toISOString() : new Date().toISOString(),
   };
 }
 

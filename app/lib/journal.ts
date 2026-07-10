@@ -12,6 +12,7 @@
 
 import { type InstrumentKey, isKnownInstrument, pointValue } from './instruments';
 import { calcPnL, calcRR } from './calc/trade';
+import { mergeById, active, type Syncable } from './sync/merge';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -88,6 +89,9 @@ export interface TradeEntry {
   confirmations?: string[];
   /** Trader's emotional state right before entering. */
   emotionalState?: EmotionalState;
+  /** Epoch-ms of the last edit. Set by saveTrades when a trade's content
+      changes; drives the cross-device newest-wins merge on hydration. */
+  updatedAt?: number;
 }
 
 // ── Trash / Soft-delete ──────────────────────────────────────────────────────
@@ -318,14 +322,84 @@ export function loadTrades(): TradeEntry[] {
   }
 }
 
+/** Content signature that ignores updatedAt — so a save only bumps the stamp of
+    trades whose actual content changed, not every trade on every write. */
+function tradeSig(t: TradeEntry): string {
+  const { updatedAt: _u, ...rest } = t;
+  return JSON.stringify(rest);
+}
+
+/** Assigns updatedAt=now to trades that are new or whose content changed vs the
+    currently-stored copy; unchanged trades keep their existing stamp. */
+function stampChanged(trades: TradeEntry[]): TradeEntry[] {
+  const prev = new Map<number, string>();
+  try {
+    const raw = window.localStorage.getItem(JOURNAL_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(arr)) for (const t of arr) prev.set(t.id, tradeSig(t));
+  } catch { /* ignore */ }
+  const now = Date.now();
+  return trades.map(t => {
+    const unchanged = typeof t.updatedAt === 'number' && prev.get(t.id) === tradeSig(t);
+    return unchanged ? t : { ...t, updatedAt: now };
+  });
+}
+
 export function saveTrades(trades: TradeEntry[]): void {
   if (typeof window === 'undefined') return;
+  const stamped = stampChanged(trades);
   try {
-    window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(trades));
+    window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(stamped));
   } catch {
     /* storage unavailable / quota — non-fatal */
   }
-  pushTradesToCloud(trades, { throttle: false });
+  pushTradesToCloud(stamped, { throttle: false });
+}
+
+/** Writes trades to localStorage WITHOUT re-stamping — used by hydration, whose
+    trades already carry the authoritative updatedAt from the merge. */
+function writeTradesLocal(trades: TradeEntry[]): void {
+  try { window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(trades)); } catch { /* non-fatal */ }
+}
+
+/** Cross-device hydration: pull every trade from Supabase, merge with the local
+    cache (newest updatedAt wins, deduped by id, cloud deletes propagate), write
+    the visible result back to localStorage, and push anything the cloud was
+    missing. Returns the visible trades. Never throws — falls back to the local
+    cache on any failure. This is the fix for "journal empties on a new device":
+    loadTrades() only ever read localStorage; nothing pulled the cloud down. */
+export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
+  if (typeof window === 'undefined') return [];
+  const local = loadTrades();
+  let cloud: (TradeEntry & { deletedAt?: string | null })[];
+  try {
+    const res = await fetch('/api/journal');
+    if (!res.ok) return local;
+    const data = await res.json().catch(() => ({}));
+    cloud = Array.isArray(data?.trades) ? data.trades : [];
+  } catch {
+    return local;
+  }
+
+  type S = Syncable & { trade: TradeEntry };
+  const localS: S[] = local.map(t => ({ id: t.id, updatedAt: t.updatedAt ?? 0, deleted: false, trade: t }));
+  const cloudS: S[] = cloud.map(t => ({
+    id: t.id,
+    updatedAt: t.updatedAt ?? 0,
+    deleted: !!t.deletedAt,
+    trade: t,
+  }));
+
+  const merged = mergeById(localS, cloudS);
+  const visible = active(merged).map(m => {
+    const { deletedAt: _d, ...clean } = m.trade as TradeEntry & { deletedAt?: string | null };
+    return clean as TradeEntry;
+  });
+
+  writeTradesLocal(visible);
+  // Seed/repair the cloud with anything only local had (best-effort).
+  pushTradesToCloud(visible, { throttle: false });
+  return visible;
 }
 
 // ── PnL & statistics ─────────────────────────────────────────────────────────
