@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
 import { groupByKey, loadTrades, UNSPECIFIED_MODEL } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
+import { hydrateList, commitList } from '../../lib/sync/collections';
 
 const STORAGE_KEY = 'onyx_playbook';
 
 interface ChecklistItem { text: string; required: boolean; }
-interface Setup { id: string; name: string; description: string; checklist: ChecklistItem[]; tags: string[]; }
+interface Setup { id: string; name: string; description: string; checklist: ChecklistItem[]; tags: string[]; updatedAt?: number; deleted?: boolean; }
 
 function emptySetup(): Setup {
   return { id: Date.now().toString(), name: '', description: '', checklist: [], tags: [] };
@@ -177,14 +178,17 @@ export default function PlaybookPage() {
   const [trades, setTrades] = useState<TradeEntry[]>([]);
 
   useEffect(() => {
+    // Instant paint from cache, then reconcile with the cloud (cross-device).
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) try { setSetups(JSON.parse(raw)); } catch { /* ignore */ }
+    if (raw) try { setSetups((JSON.parse(raw) as Setup[]).filter(s => !s.deleted)); } catch { /* ignore */ }
+    hydrateList<Setup>('setups', STORAGE_KEY).then(setSetups).catch(() => { /* keep local */ });
     setTrades(loadTrades());
   }, []);
 
   function persist(updated: Setup[]) {
     setSetups(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    // commitList stamps changes, tombstones removals, writes local + pushes cloud.
+    void commitList<Setup>('setups', STORAGE_KEY, updated);
   }
 
   function saveEdit() {

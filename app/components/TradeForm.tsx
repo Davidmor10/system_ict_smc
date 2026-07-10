@@ -59,7 +59,7 @@ const EMOTIONAL_STATE_OPTIONS: { key: EmotionalState; label: string }[] = [
   { key: 'IMPATIENT', label: 'חסר סבלנות' },
 ];
 
-interface PlaybookSetup { id: string; name: string; }
+interface PlaybookSetup { id: string; name: string; deleted?: boolean }
 
 function loadPlaybookSetups(): PlaybookSetup[] {
   if (typeof window === 'undefined') return [];
@@ -67,7 +67,9 @@ function loadPlaybookSetups(): PlaybookSetup[] {
     const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((s): s is PlaybookSetup => !!s?.name) : [];
+    // The playbook store now keeps soft-delete tombstones for cross-device sync —
+    // never offer a deleted setup in the picker.
+    return Array.isArray(parsed) ? parsed.filter((s): s is PlaybookSetup => !!s?.name && !s?.deleted) : [];
   } catch {
     return [];
   }

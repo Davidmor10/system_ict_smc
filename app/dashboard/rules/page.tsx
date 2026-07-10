@@ -3,12 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
 import { loadTrades, todayISO } from '../../lib/journal';
+import { hydrateList, commitList } from '../../lib/sync/collections';
 
 const STORAGE_KEY = 'onyx_trading_rules';
 const VIOLATIONS_KEY = 'onyx_rule_violations';
 
-interface Rule { id: string; text: string; category: 'discipline' | 'entry' | 'exit' | 'risk'; isActive: boolean; }
-interface Violation { ruleId: string; date: string; tradeNote?: string; }
+interface Rule { id: string; text: string; category: 'discipline' | 'entry' | 'exit' | 'risk'; isActive: boolean; updatedAt?: number; deleted?: boolean; }
+interface Violation { id: string; ruleId: string; date: string; tradeNote?: string; updatedAt?: number; deleted?: boolean; }
+
+function ensureVioIds(list: unknown): Violation[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((v, i) => (v?.id ? v : { ...v, id: `${v?.ruleId ?? 'v'}-${v?.date ?? ''}-${i}-${Math.random().toString(36).slice(2, 8)}` })) as Violation[];
+}
 
 const CATEGORIES: Rule['category'][] = ['discipline', 'entry', 'exit', 'risk'];
 const CATEGORY_COLORS: Record<Rule['category'], string> = {
@@ -114,20 +120,30 @@ export default function RulesPage() {
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
+    // Instant paint from cache, then cloud reconcile (cross-device).
     const r = localStorage.getItem(STORAGE_KEY);
-    if (r) try { setRules(JSON.parse(r)); } catch { /* ignore */ }
+    if (r) try { setRules((JSON.parse(r) as Rule[]).filter(x => !x.deleted)); } catch { /* ignore */ }
+    // Legacy violations had no id — migrate before hydrating so the merge can
+    // dedupe them (multiple same-rule/day violations must survive as distinct).
     const v = localStorage.getItem(VIOLATIONS_KEY);
-    if (v) try { setViolations(JSON.parse(v)); } catch { /* ignore */ }
+    if (v) try {
+      const migrated = ensureVioIds(JSON.parse(v));
+      localStorage.setItem(VIOLATIONS_KEY, JSON.stringify(migrated));
+      setViolations(migrated.filter(x => !x.deleted));
+    } catch { /* ignore */ }
+
+    hydrateList<Rule>('rules', STORAGE_KEY).then(setRules).catch(() => {});
+    hydrateList<Violation>('violations', VIOLATIONS_KEY).then(setViolations).catch(() => {});
   }, []);
 
   function persistRules(updated: Rule[]) {
     setRules(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    void commitList<Rule>('rules', STORAGE_KEY, updated);
   }
 
   function persistViolations(updated: Violation[]) {
     setViolations(updated);
-    localStorage.setItem(VIOLATIONS_KEY, JSON.stringify(updated));
+    void commitList<Violation>('violations', VIOLATIONS_KEY, updated);
   }
 
   function addRule() {
@@ -147,7 +163,7 @@ export default function RulesPage() {
   }
 
   function logViolation(ruleId: string) {
-    persistViolations([...violations, { ruleId, date: todayISO() }]);
+    persistViolations([...violations, { id: `${ruleId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ruleId, date: todayISO() }]);
   }
 
   const today = todayISO();

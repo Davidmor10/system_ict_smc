@@ -101,6 +101,35 @@ export async function saveList<T extends Syncable>(kind: string, localKey: strin
   await pushCollection(kind, items);
 }
 
+/** Content signature that ignores sync metadata (updatedAt/deleted). */
+function sigOf<T extends Syncable>(t: T): string {
+  const { updatedAt: _u, deleted: _d, ...rest } = t as Syncable & Record<string, unknown>;
+  return JSON.stringify(rest);
+}
+
+/** Reconcile the UI's new ACTIVE list against the stored (tombstoned) list:
+    stamp new/changed items with a fresh updatedAt, tombstone anything the UI
+    dropped (so the delete propagates instead of a peer resurrecting it), then
+    persist the full store and push. The page keeps working with plain active
+    arrays — this hides the tombstone bookkeeping. */
+export async function commitList<T extends Syncable>(kind: string, localKey: string, nextActive: T[]): Promise<void> {
+  const store = readLocalArray<T>(localKey);
+  const prevById = new Map(store.map(s => [String(s.id), s]));
+  const now = Date.now();
+  const nextIds = new Set(nextActive.map(t => String(t.id)));
+
+  const stamped = nextActive.map(t => {
+    const prev = prevById.get(String(t.id));
+    const changed = !prev || prev.deleted || sigOf(prev) !== sigOf(t);
+    return changed ? { ...t, updatedAt: now, deleted: false } : t;
+  });
+  const removed = store
+    .filter(s => !nextIds.has(String(s.id)))
+    .map(s => (s.deleted ? s : { ...s, deleted: true, updatedAt: now }));
+
+  await saveList(kind, localKey, [...stamped, ...removed] as T[]);
+}
+
 // ── Single-object docs (preferences, lockout, a day's plan) ──────────────────
 
 function readLocalDoc<T>(localKey: string): (T & { updatedAt?: number }) | null {
