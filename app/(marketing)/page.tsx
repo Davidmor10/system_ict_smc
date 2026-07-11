@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useMarketingLang } from './components/LangProvider';
+import SplashIntro from '../components/SplashIntro';
 
 // ─── I18N ─────────────────────────────────────────────────────────────────────
 
@@ -749,6 +750,7 @@ export default function HomePage() {
 
   return (
     <>
+      <SplashIntro />
       <Hero          t={t} tl={tl} rtl={rtl} />
       <Problem       t={t} rtl={rtl} />
       <Ecosystem     t={t} rtl={rtl} />
