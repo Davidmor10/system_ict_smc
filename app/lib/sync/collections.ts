@@ -154,8 +154,71 @@ export async function saveDoc<T extends object>(kind: string, localKey: string, 
   await pushCollection(kind, stamped);
 }
 
-/** Call once on app mount to flush any queued writes when connectivity returns. */
-export function initSyncListeners(): void {
+// ── Dashboard state (name, reminders, today's plan/focus) as one doc ─────────
+// These live across many localStorage keys (some per-date). Rather than sync
+// each, we snapshot the relevant keys as raw strings into a single 'dashboard'
+// doc and reconcile newest-wins. Raw-string values are format-agnostic, so no
+// per-key parsing. Regenerable AI caches (onyx_ai_*) are deliberately excluded.
+
+const DASH_DOC_KEY = 'onyx_dash_doc';
+const DASH_PREFIXES = ['onyx_dash_', 'onyx_focus_'];
+const DASH_EXACT = ['onyx_user_name'];
+const DASH_EXCLUDE = new Set([DASH_DOC_KEY]);
+
+function snapshotDashboard(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const k = window.localStorage.key(i);
+    if (!k || DASH_EXCLUDE.has(k) || k.startsWith('onyx_ai_')) continue;
+    if (DASH_EXACT.includes(k) || DASH_PREFIXES.some(p => k.startsWith(p))) {
+      const v = window.localStorage.getItem(k);
+      if (v != null) out[k] = v;
+    }
+  }
+  return out;
+}
+
+let dashTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced push of the current dashboard snapshot (coalesces keystrokes). */
+export function pushDashboard(): void {
   if (typeof window === 'undefined') return;
+  if (dashTimer) clearTimeout(dashTimer);
+  dashTimer = setTimeout(() => {
+    const doc = { keys: snapshotDashboard(), updatedAt: Date.now() };
+    writeLocal(DASH_DOC_KEY, doc);
+    void pushCollection('dashboard', doc);
+  }, 800);
+}
+
+/** Pull the cloud dashboard doc; if it's newer than the local snapshot, apply
+    its keys into localStorage and return true (caller should re-read). If local
+    is newer, push it up. */
+export async function hydrateDashboard(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const shadow = readLocalDoc<{ keys?: Record<string, string> }>(DASH_DOC_KEY);
+  void flushPending();
+  const cloudRaw = await fetchCloud('dashboard');
+  const cloud = (cloudRaw && typeof cloudRaw === 'object' && !Array.isArray(cloudRaw))
+    ? cloudRaw as { keys?: Record<string, string>; updatedAt?: number } : null;
+  const localTs = shadow?.updatedAt ?? 0;
+  const cloudTs = cloud?.updatedAt ?? 0;
+  if (cloud?.keys && cloudTs > localTs) {
+    for (const [k, v] of Object.entries(cloud.keys)) {
+      try { window.localStorage.setItem(k, v); } catch { /* quota */ }
+    }
+    writeLocal(DASH_DOC_KEY, cloud);
+    return true;
+  }
+  if (shadow && localTs > cloudTs) void pushCollection('dashboard', shadow);
+  return false;
+}
+
+let listenersBound = false;
+/** Flush any queued writes when connectivity returns. Safe to call repeatedly —
+    the listener is bound at most once. */
+export function initSyncListeners(): void {
+  if (typeof window === 'undefined' || listenersBound) return;
+  listenersBound = true;
   window.addEventListener('online', () => { void flushPending(); });
 }

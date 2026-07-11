@@ -4,7 +4,8 @@ import './dp.css';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../hooks/useLanguage';
-import { loadTrades } from '../lib/journal';
+import { loadTrades, hydrateTradesFromCloud } from '../lib/journal';
+import { hydrateDashboard, pushDashboard, initSyncListeners } from '../lib/sync/collections';
 import { SESS, getActiveSessionIdx } from '../lib/sessions';
 import TypingDots from './TypingDots';
 import Tooltip from './Tooltip';
@@ -186,8 +187,10 @@ export default function DashboardView() {
     document.documentElement.dir = L === 'he' ? 'rtl' : 'ltr';
   }, [L]);
 
-  /* ── Load localStorage on mount ──────────────────────────────── */
+  /* ── Load localStorage on mount, then reconcile with the cloud ── */
+  const dashSyncReadyRef = useRef(false);
   useEffect(() => {
+    const applyLocal = () => {
     try {
       const v = localStorage.getItem('onyx_dash_var');
       if (v === 'A' || v === 'B') setVariation(v);
@@ -233,8 +236,28 @@ export default function DashboardView() {
       const t = loadTrades();
       setTrades(t);
     } catch {}
+    };
+
+    applyLocal(); // instant paint from the local cache
+    initSyncListeners(); // retry queued writes the moment we're back online
+    // Reconcile with the cloud: pull dashboard state + trades logged elsewhere.
+    Promise.all([hydrateDashboard(), hydrateTradesFromCloud().catch(() => null)])
+      .then(([dashChanged, merged]) => {
+        if (dashChanged) applyLocal();
+        if (merged) setTrades(merged);
+        dashSyncReadyRef.current = true;
+      })
+      .catch(() => { dashSyncReadyRef.current = true; });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ── Push dashboard state up when it changes (after the first cloud
+        reconcile, so we never overwrite the cloud with stale defaults). ── */
+  useEffect(() => {
+    if (!dashSyncReadyRef.current) return;
+    pushDashboard(); // debounced inside
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variation, reminders, saved, plan, focus, userName]);
 
   /* ── Fetch today's single strongest AI discovery for the hero block ── */
   useEffect(() => {
