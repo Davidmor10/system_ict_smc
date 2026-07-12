@@ -18,6 +18,7 @@ import { generateCoachText } from './client';
 import { buildFactsContext, buildChatPrompt, type ChatTurn } from './chatPrompt';
 import { createCoachChat, getCoachChat, saveCoachChatMessages, deriveChatTitle } from './coachChats';
 import { getMacroEvents, buildMacroBlock, computeMacroOverlap, israelToday } from './macroCalendar';
+import { extractResponse } from './coachOutput';
 import { logger } from '../logger';
 
 export type { ChatTurn } from './chatPrompt';
@@ -111,7 +112,7 @@ export async function answerCoachQuestion(
 
   let answer: string;
   try {
-    answer = (await generateCoachText(prompt)).trim();
+    answer = extractResponse(await generateCoachText(prompt));
   } catch (err) {
     logger.error('chat coach generation failed', { error: err instanceof Error ? err.message : String(err) });
     return { answer: null, reason: 'ai_unavailable', chatId: resolvedChatId ?? undefined };

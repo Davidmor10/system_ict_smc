@@ -46,6 +46,21 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('no live market feed');
   });
 
+  it('carries the professional-precision corrections and CoT output contract', () => {
+    const prompt = buildChatPrompt(facts, [], 'מה ההבדל בין BOS ל-CHoCH?', 'he');
+    // Precision corrections for the exact mistakes we saw.
+    expect(prompt).toContain('PROFESSIONAL PRECISION');
+    expect(prompt).toContain('the manipulation leg) is BAIT, not confirmation');
+    expect(prompt).toContain('shifts rate-cut/hike expectations'); // NFP mechanism
+    expect(prompt).toContain('Correlation is not causation');
+    // Chain-of-thought contract: think privately, answer inside <response>.
+    expect(prompt).toContain('<thinking>');
+    expect(prompt).toContain('<response>');
+    // Multi-question handling + banned filler.
+    expect(prompt).toContain('answer each one separately under its own short heading');
+    expect(prompt).toContain('השוק מורכב ודינמי'); // named as banned filler
+  });
+
   it('frames personal answers as a data investigation, not generic advice', () => {
     const prompt = buildChatPrompt(facts, [], 'האם אני לוקח יותר מדי עסקאות?', 'he');
     // Must forbid the generic "go check the data" cop-out and demand confidence tiers.
