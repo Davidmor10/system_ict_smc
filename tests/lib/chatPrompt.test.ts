@@ -35,6 +35,17 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('Teach, don\'t summarize');
   });
 
+  it('grounds ICT/SMC expertise and welcomes broad trading-world topics', () => {
+    const prompt = buildChatPrompt(facts, [], 'מה זה IFVG?', 'he');
+    expect(prompt).toContain('DOMAIN EXPERTISE');
+    expect(prompt).toContain('IFVG');
+    expect(prompt).toContain('SMT divergence');
+    // Broadened scope: geopolitics / economic news are explicitly in-scope.
+    expect(prompt).toContain('geopolitics');
+    // ...but the honesty guardrails still hold.
+    expect(prompt).toContain('no live market feed');
+  });
+
   it('frames personal answers as a data investigation, not generic advice', () => {
     const prompt = buildChatPrompt(facts, [], 'האם אני לוקח יותר מדי עסקאות?', 'he');
     // Must forbid the generic "go check the data" cop-out and demand confidence tiers.
