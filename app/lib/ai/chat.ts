@@ -19,6 +19,7 @@ import { buildFactsContext, buildChatPrompt, type ChatTurn } from './chatPrompt'
 import { createCoachChat, getCoachChat, saveCoachChatMessages, deriveChatTitle } from './coachChats';
 import { getMacroEvents, buildMacroBlock, computeMacroOverlap, israelToday } from './macroCalendar';
 import { extractResponse } from './coachOutput';
+import { retrieveKnowledge, renderKnowledge } from './kb';
 import { logger } from '../logger';
 
 export type { ChatTurn } from './chatPrompt';
@@ -108,7 +109,10 @@ export async function answerCoachQuestion(
     else resolvedChatId = null; // stale/foreign id — start a fresh chat instead
   }
 
-  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint);
+  // Layer 1 — retrieve book-depth knowledge for the concepts this question
+  // touches (injected only when relevant; never the whole KB).
+  const knowledgeBlock = renderKnowledge(retrieveKnowledge(question));
+  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock);
 
   let answer: string;
   try {

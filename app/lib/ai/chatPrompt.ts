@@ -37,6 +37,9 @@ export function buildChatPrompt(
   /** Optional pre-computed note: today's high-impact events overlap the
       trader's weakest session. Empty when there's no meaningful overlap. */
   overlapHint = '',
+  /** Retrieved knowledge-base entries for the concepts this question touches
+      (from kb/retrieveKnowledge). Empty when nothing matched. */
+  knowledgeBlock = '',
 ): string {
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const recent = history
@@ -62,7 +65,7 @@ ${ICT_SMC_EXPERTISE}
 ${TRADING_PRECISION}
 
 ${CHALLENGE_TRADER_STYLE}
-
+${knowledgeBlock.trim() ? `\n${knowledgeBlock}\n` : ''}
 THE TRADER'S COMPUTED JOURNAL STATISTICS — the ONLY source for any claim about THIS trader's own numbers (you never see raw trades, only these):
 ${factsBlock}
 
