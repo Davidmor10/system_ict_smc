@@ -437,3 +437,20 @@ html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
 /* Card lift used across landing feature/ecosystem cards */
 .card-lift { transition: transform 260ms var(--ease-expo-out), border-color 260ms var(--ease-smooth), background-color 260ms var(--ease-smooth); }
 .card-lift:hover { transform: translateY(-5px); border-color: rgba(212,175,55,.4); }
+
+/* ═══════════════════════════════════════════════════════════
+   AI Coach — prompt pills, send + danger glow
+   ═══════════════════════════════════════════════════════ */
+.onyx-pill {
+  transition: color 300ms ease-out, border-color 300ms ease-out, box-shadow 300ms ease-out, background-color 300ms ease-out;
+}
+.onyx-pill:hover {
+  color: #fff;
+  border-color: rgba(212,175,55,.45);
+  box-shadow: 0 0 24px -6px rgba(212,175,55,.35);
+}
+
+.onyx-send:not(:disabled)        { box-shadow: 0 0 22px -8px rgba(212,175,55,.5); }
+.onyx-send:not(:disabled):hover  { box-shadow: 0 0 34px -6px rgba(212,175,55,.7); }
+
+.onyx-danger:hover { box-shadow: 0 0 30px -6px rgba(139,58,58,.75); background: #a04545; }
