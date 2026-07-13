@@ -44,6 +44,7 @@ export default function CoachPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inputFocused, setInputFocused] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ChatSummary | null>(null);
+  const [search, setSearch] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -146,8 +147,10 @@ export default function CoachPage() {
   }
 
   const isEmpty = messages.length === 0;
-  const pinnedChats = chats.filter(c => pinnedIds.includes(c.id));
-  const recentChats = chats.filter(c => !pinnedIds.includes(c.id));
+  const q = search.trim().toLowerCase();
+  const matchQ = (c: ChatSummary) => !q || c.title.toLowerCase().includes(q);
+  const pinnedChats = chats.filter(c => pinnedIds.includes(c.id) && matchQ(c));
+  const recentChats = chats.filter(c => !pinnedIds.includes(c.id) && matchQ(c));
 
   // ── One chat row, shared by the Pinned and Recents lists ──────────────
   function ChatRow(c: ChatSummary) {
@@ -168,7 +171,11 @@ export default function CoachPage() {
         onMouseEnter={e => { if (!pinned && !active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
         onMouseLeave={e => { if (!pinned && !active) e.currentTarget.style.background = 'transparent'; }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${active || pinned ? 'text-[#d4af37]' : 'text-white/35'}`}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+        {pinned ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#d4af37]"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${active ? 'text-[#d4af37]' : 'text-white/35'}`}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+        )}
         <p className={`min-w-0 flex-1 truncate text-[13px] font-bold ${active ? 'text-white' : 'text-zinc-300'}`}>{c.title}</p>
 
         {/* hover actions — pin + delete */}
@@ -199,9 +206,29 @@ export default function CoachPage() {
 
   // ── Sidebar body — shared by the desktop rail and the mobile drawer ───
   const sidebarBody = (
-    <div className="flex flex-col h-full w-[260px] pt-14">
+    <div className="flex flex-col h-full w-[260px]">
+      {/* Top row — inline collapse toggle + search */}
+      <div className="px-3 pt-3 flex items-center gap-2">
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="shrink-0 w-9 h-9 grid place-items-center rounded-lg text-white/55 hover:text-[#d4af37] hover:bg-white/[0.05] transition-all duration-300"
+          aria-label="הסתר שיחות"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /></svg>
+        </button>
+        <div className="flex-1 flex items-center gap-2 px-3 h-9 rounded-lg bg-black/40 border border-[#1c1c1e]">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/35"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="חיפוש שיחות"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[12.5px] font-bold text-white placeholder-white/35"
+          />
+        </div>
+      </div>
+
       {/* Single new-chat button — full width, bold, above the lists */}
-      <div className="px-3 pb-2">
+      <div className="px-3 pt-2 pb-1">
         <button
           onClick={newChat}
           className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37] font-black text-[13.5px] hover:bg-[#d4af37]/16 hover:border-[#d4af37]/50 transition-all duration-300"
@@ -251,10 +278,10 @@ export default function CoachPage() {
         <div className="flex flex-col gap-0.5">
           {recentChats.length === 0 && pinnedChats.length === 0 ? (
             <p className="text-white/35 text-[12px] font-bold text-center px-4 py-8 leading-relaxed">
-              אין עדיין שיחות שמורות.<br />כל שיחה חדשה תישמר כאן.
+              {q ? 'לא נמצאו שיחות.' : <>אין עדיין שיחות שמורות.<br />כל שיחה חדשה תישמר כאן.</>}
             </p>
           ) : recentChats.length === 0 ? (
-            <p className="text-white/30 text-[11.5px] font-bold text-center px-4 py-4">אין שיחות אחרונות.</p>
+            <p className="text-white/30 text-[11.5px] font-bold text-center px-4 py-4">{q ? 'אין תוצאות באחרונים.' : 'אין שיחות אחרונות.'}</p>
           ) : recentChats.map(ChatRow)}
         </div>
       </div>
@@ -263,15 +290,17 @@ export default function CoachPage() {
 
   return (
     <div className="flex-1 flex min-h-0 relative" dir="rtl">
-      {/* Fixed collapse toggle — physical top-left corner of the page */}
-      <button
-        onClick={() => setSidebarOpen(v => !v)}
-        className="absolute top-3 left-3 z-50 w-9 h-9 grid place-items-center rounded-lg bg-black/50 border border-[#1c1c1e] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/40 backdrop-blur-md transition-all duration-300"
-        style={{ backdropFilter: 'blur(10px) saturate(140%)' }}
-        aria-label={sidebarOpen ? 'הסתר שיחות' : 'הצג שיחות'}
-      >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /></svg>
-      </button>
+      {/* Floating re-open toggle — shown only while the rail is collapsed */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="absolute top-3 left-3 z-50 w-9 h-9 grid place-items-center rounded-lg bg-black/50 border border-[#1c1c1e] text-white/60 hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all duration-300"
+          style={{ backdropFilter: 'blur(10px) saturate(140%)' }}
+          aria-label="הצג שיחות"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /></svg>
+        </button>
+      )}
 
       {/* Conversation column */}
       <div className="flex-1 flex flex-col min-h-0 relative bg-[#050505] overflow-hidden">
