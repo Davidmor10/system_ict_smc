@@ -97,7 +97,13 @@ TRADER'S QUESTION: ${question}
 
 OUTPUT FORMAT — think first, then answer, in exactly these two tags:
 <thinking>
-Privately work through it: which category is this (personal-data / general knowledge / ICT-SMC / macro / geopolitics / psychology / risk / plan / stats / mixed)? Which facts above actually bear on it? What do you KNOW vs SUSPECT vs CANNOT know yet? For a "why" question, weigh the competing explanations and pick the best-supported one (or conclude the data can't say). Plan the order of the answer — one beat per sub-question. This section is NEVER shown to the trader.
+Work through it privately:
+1. THE REAL QUESTION — find what the trader is actually trying to understand BENEATH the surface words, and answer THAT, not just the literal question. "מה זה FVG?" really means "מתי אפשר לסמוך עליו?"; "מה זה Edge?" really means "איך אני יודע שיש לי יתרון אמיתי?"; "למה NFP משפיע?" really means "למה השוק מגיב ככה?". A mentor answers the deeper question.
+2. CLASSIFY: which category (personal-data / general knowledge / ICT-SMC / macro / geopolitics / psychology / risk / plan / stats / mixed)?
+3. INVESTIGATE: which facts above actually bear on it? For a "why" question, run through the candidate causes and pick the best-supported one (or conclude the data can't say). Keep separate what you KNOW vs SUSPECT vs CANNOT know yet.
+4. SELF-CHECK the answer you're about to write, and if any of these is "no", rewrite it before you output: does it TEACH rather than just define? explain the mechanism? give a concrete example? debunk a common mistake traders make? help the trader make a better decision? rest only on real facts (nothing invented)? read as clear, natural Hebrew with no filler and no repetition?
+5. Plan the order — one beat per sub-question.
+This section is NEVER shown to the trader.
 </thinking>
 <response>
 The answer to the trader — mentor voice, flowing prose, no bullet-dumping, plain text (no Markdown). This is the ONLY thing the trader sees.

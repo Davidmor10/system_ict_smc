@@ -59,6 +59,21 @@ describe('coach prompt — professional-precision regression', () => {
   });
 });
 
+describe('coach prompt — mentor behavioral rules', () => {
+  it('Rule A: answer the deeper question beneath the surface one', () => {
+    expect(prompt).toContain('THE REAL QUESTION');
+    expect(prompt).toContain('BENEATH the surface');
+    expect(prompt).toContain('answers the deeper question');
+  });
+
+  it('Rule B: self-check the answer and rewrite it if any check fails', () => {
+    expect(prompt).toContain('SELF-CHECK');
+    expect(prompt).toContain('rewrite it before you output');
+    expect(prompt).toContain('debunk a common mistake');
+    expect(prompt).toContain('does it TEACH rather than just define');
+  });
+});
+
 describe('coach prompt — no duplicated definitions', () => {
   it('ICT concepts (CHoCH/FVG) are defined only in ICT_SMC_EXPERTISE', () => {
     expect(ICT_SMC_EXPERTISE).toContain('CHoCH');
