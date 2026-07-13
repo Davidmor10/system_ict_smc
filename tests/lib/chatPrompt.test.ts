@@ -36,7 +36,7 @@ describe('buildChatPrompt', () => {
   });
 
   it('grounds ICT/SMC expertise and welcomes broad trading-world topics', () => {
-    const prompt = buildChatPrompt(facts, [], 'מה זה IFVG?', 'he');
+    const prompt = buildChatPrompt(facts, [], 'מה זה IFVG?', 'he', '', '', '', ['SMC_TECHNICAL']);
     expect(prompt).toContain('DOMAIN EXPERTISE');
     expect(prompt).toContain('IFVG');
     expect(prompt).toContain('SMT divergence');
@@ -47,7 +47,7 @@ describe('buildChatPrompt', () => {
   });
 
   it('carries the professional-precision corrections and CoT output contract', () => {
-    const prompt = buildChatPrompt(facts, [], 'מה ההבדל בין BOS ל-CHoCH?', 'he');
+    const prompt = buildChatPrompt(facts, [], 'מה ההבדל בין BOS ל-CHoCH?', 'he', '', '', '', ['SMC_TECHNICAL', 'MACRO_NEWS']);
     // Precision corrections for the exact mistakes we saw.
     expect(prompt).toContain('PROFESSIONAL PRECISION');
     expect(prompt).toContain('the manipulation leg) is BAIT, not confirmation');
@@ -77,8 +77,8 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('recorded emotional state');
   });
 
-  it('forbids Markdown output and inventing macro events', () => {
-    const prompt = buildChatPrompt(facts, [], 'q', 'he');
+  it('forbids Markdown output (base) and inventing macro events (macro block)', () => {
+    const prompt = buildChatPrompt(facts, [], 'q', 'he', '', '', '', ['MACRO_NEWS']);
     expect(prompt).toContain('PLAIN TEXT');
     expect(prompt).toContain('never write **like this**');
     expect(prompt).toContain('NEVER invent a macro event');
@@ -86,18 +86,18 @@ describe('buildChatPrompt', () => {
 
   it('injects the real macro-events block when one is provided', () => {
     const macro = 'TODAY (2026-07-09, Israel time):\n• 15:30 — HIGH · USD · CPI m/m';
-    const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he', macro);
+    const prompt = buildChatPrompt(facts, [], 'אילו דוחות חשובים היום?', 'he', macro, '', '', ['MACRO_NEWS']);
     expect(prompt).toContain(macro);
     expect(prompt).toContain('Israel time');
   });
 
   it('is honest when no macro data is loaded', () => {
-    const prompt = buildChatPrompt(facts, [], 'מה יש היום?', 'he');
+    const prompt = buildChatPrompt(facts, [], 'מה יש היום?', 'he', '', '', '', ['MACRO_NEWS']);
     expect(prompt).toContain("live economic calendar couldn't be loaded");
   });
 
   it('weaves in a personal-overlap hint when provided', () => {
-    const prompt = buildChatPrompt(facts, [], 'כדאי לסחור היום?', 'he', 'some macro', 'CPI overlaps your weakest session');
+    const prompt = buildChatPrompt(facts, [], 'כדאי לסחור היום?', 'he', 'some macro', 'CPI overlaps your weakest session', '', ['MACRO_NEWS']);
     expect(prompt).toContain('CPI overlaps your weakest session');
   });
 
@@ -116,5 +116,51 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('RECENT CONVERSATION');
     expect(prompt).toContain('msg9');   // most recent kept
     expect(prompt).not.toContain('msg0'); // oldest dropped (only last 6 kept)
+  });
+});
+
+describe('buildChatPrompt — modular assembly (Question Router)', () => {
+  const facts = 'OVERALL: 10 trades, winRate 60%';
+
+  it('omits domain/macro/discretion/psych blocks for an unclassified question', () => {
+    const prompt = buildChatPrompt(facts, [], 'q', 'he'); // no categories
+    // Heavy domain blocks are NOT injected — this is the whole anti-bloat point.
+    expect(prompt).not.toContain('DOMAIN EXPERTISE');       // ICT_SMC_EXPERTISE
+    expect(prompt).not.toContain('PROFESSIONAL PRECISION'); // TRADING_PRECISION
+    expect(prompt).not.toContain('MACRO CALENDAR');         // macro rules
+    expect(prompt).not.toContain('TRADER DISCRETION');      // DISCRETION_OVERRIDE
+    expect(prompt).not.toContain('TRADING PSYCHOLOGY');     // PSYCHOLOGY_NOTE
+    // But the base always stays.
+    expect(prompt).toContain('data investigator');
+    expect(prompt).toContain('HOW TO STRUCTURE THE ANSWER');
+  });
+
+  it('injects ONLY the ICT block for a purely technical question', () => {
+    const prompt = buildChatPrompt(facts, [], 'q', 'he', '', '', '', ['SMC_TECHNICAL']);
+    expect(prompt).toContain('DOMAIN EXPERTISE');
+    expect(prompt).not.toContain('PROFESSIONAL PRECISION');
+    expect(prompt).not.toContain('MACRO CALENDAR');
+  });
+
+  it('injects the discretion override, prioritizing the trader edge over textbook', () => {
+    const prompt = buildChatPrompt(facts, [], 'מתי כדאי לשבור כלל?', 'he', '', '', '', ['TRADER_DISCRETION']);
+    expect(prompt).toContain('TRADER DISCRETION');
+    expect(prompt).toContain('overrides rigid textbook');
+    expect(prompt).toContain("trader's OWN edge");
+  });
+
+  it('injects the psychology note for a psychology question', () => {
+    const prompt = buildChatPrompt(facts, [], 'איך מתמודדים עם FOMO?', 'he', '', '', '', ['GENERAL_PSYCHOLOGY']);
+    expect(prompt).toContain('TRADING PSYCHOLOGY');
+  });
+
+  it('places the teaching structure LAST — right before the question, after every rule block', () => {
+    const prompt = buildChatPrompt(facts, [], 'THE_QUESTION_MARKER', 'he', '', '', '', ['SMC_TECHNICAL', 'MACRO_NEWS']);
+    const teachIdx = prompt.indexOf('HOW TO STRUCTURE THE ANSWER');
+    const qIdx = prompt.indexOf('THE_QUESTION_MARKER');
+    const ictIdx = prompt.indexOf('DOMAIN EXPERTISE');
+    expect(teachIdx).toBeGreaterThan(0);
+    expect(qIdx).toBeGreaterThan(teachIdx);      // teaching structure comes just before the question
+    expect(teachIdx).toBeGreaterThan(ictIdx);    // and after the heavy domain blocks
   });
 });

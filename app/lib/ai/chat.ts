@@ -20,6 +20,7 @@ import { createCoachChat, getCoachChat, saveCoachChatMessages, deriveChatTitle }
 import { getMacroEvents, buildMacroBlock, computeMacroOverlap, israelToday } from './macroCalendar';
 import { extractResponse } from './coachOutput';
 import { retrieveKnowledge, renderKnowledge } from './kb';
+import { classifyQuestion } from './router';
 import { logger } from '../logger';
 
 export type { ChatTurn } from './chatPrompt';
@@ -109,10 +110,14 @@ export async function answerCoachQuestion(
     else resolvedChatId = null; // stale/foreign id — start a fresh chat instead
   }
 
+  // Pre-flight router — deterministically classify the question so the prompt
+  // injects ONLY the rule blocks it needs (fights Lost-in-the-Middle).
+  const categories = classifyQuestion(question);
+
   // Layer 1 — retrieve book-depth knowledge for the concepts this question
   // touches (injected only when relevant; never the whole KB).
   const knowledgeBlock = renderKnowledge(retrieveKnowledge(question));
-  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock);
+  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock, categories);
 
   let answer: string;
   try {

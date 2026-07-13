@@ -5,7 +5,9 @@ import { ICT_SMC_EXPERTISE, TRADING_PRECISION } from '../../app/lib/ai/styleGuid
 // Regression guards: prove the corrected definitions stay in the prompt and the
 // old shallow/wrong habits can't silently creep back. These fail loudly if
 // someone edits the prompt back toward the mistakes real testing surfaced.
-const prompt = buildChatPrompt('OVERALL: 30 trades, winRate 60%', [], 'שאלה', 'he');
+// Build with both technical + macro flags so the domain blocks these guards
+// assert on are actually injected (the router gates them per-question now).
+const prompt = buildChatPrompt('OVERALL: 30 trades, winRate 60%', [], 'שאלה', 'he', '', '', '', ['SMC_TECHNICAL', 'MACRO_NEWS']);
 
 describe('coach prompt — professional-precision regression', () => {
   it('BOS/CHoCH: structure-based, continuation vs first break against — never "just a slowdown"', () => {
