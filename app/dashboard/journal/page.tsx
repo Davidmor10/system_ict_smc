@@ -9,6 +9,7 @@ import AIInsightPanel from '../../components/AIInsightPanel';
 import JournalCalendar from '../../components/JournalCalendar';
 import JournalTradeCard from '../../components/JournalTradeCard';
 import EmptyState from '../../components/EmptyState';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const M_HEB = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const D_HEB = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
@@ -33,6 +34,7 @@ export default function JournalPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<TradeEntry | null>(null);
 
   // Instant paint from the local cache, then reconcile with the cloud (pulls in
   // trades logged on other devices, propagates deletes) — the fix for the
@@ -232,7 +234,7 @@ export default function JournalPage() {
                     <span className="font-mono text-[19px] font-extrabold tabular-nums" style={{ color: pnlColor(dayPnl) }}>{usd(dayPnl)}</span>
                   </div>
                   <div className="flex flex-col gap-4">
-                    {dayTrades.map(t => <JournalTradeCard key={t.id} trade={t} onDelete={handleDelete} />)}
+                    {dayTrades.map(t => <JournalTradeCard key={t.id} trade={t} onDelete={() => setDeleteTarget(t)} />)}
                   </div>
                 </div>
               );
@@ -240,6 +242,18 @@ export default function JournalPage() {
           )}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="למחוק עסקה?"
+        message={deleteTarget
+          ? <>העסקה ב-<span className="text-white">{deleteTarget.symbol}</span> ({deleteTarget.direction === 'LONG' ? 'לונג' : 'שורט'}) מ-<span className="text-white">{labelDate(deleteTarget.dateISO)}</span> תימחק לצמיתות. אי אפשר לשחזר אותה.</>
+          : ''}
+        confirmLabel="מחק"
+        cancelLabel="ביטול"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget.id); setDeleteTarget(null); }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

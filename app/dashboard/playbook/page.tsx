@@ -5,6 +5,7 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { groupByKey, loadTrades, UNSPECIFIED_MODEL } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { hydrateList, commitList } from '../../lib/sync/collections';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const STORAGE_KEY = 'onyx_playbook';
 
@@ -176,6 +177,7 @@ export default function PlaybookPage() {
   const [editing, setEditing] = useState<Setup | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [trades, setTrades] = useState<TradeEntry[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Setup | null>(null);
 
   useEffect(() => {
     // Instant paint from cache, then reconcile with the cloud (cross-device).
@@ -253,12 +255,25 @@ export default function PlaybookPage() {
                 setup={s}
                 stats={statsBySetup.get(s.name) as { winRate: number; tradeCount: number; totalPnl: number; avgR: number } | undefined}
                 onEdit={() => { setEditing(s); setIsNew(false); }}
-                onDelete={() => deleteSetup(s.id)}
+                onDelete={() => setDeleteTarget(s)}
               />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={en ? 'Delete setup?' : 'למחוק Setup?'}
+        message={en
+          ? <>This will permanently delete the setup <span className="text-white">“{deleteTarget?.name || 'Unnamed Setup'}”</span>.</>
+          : <>ה-Setup <span className="text-white">״{deleteTarget?.name || 'ללא שם'}״</span> יימחק לצמיתות. אי אפשר לשחזר אותו.</>}
+        confirmLabel={en ? 'Delete' : 'מחק'}
+        cancelLabel={en ? 'Cancel' : 'ביטול'}
+        dir={en ? 'ltr' : 'rtl'}
+        onConfirm={() => { if (deleteTarget) deleteSetup(deleteTarget.id); setDeleteTarget(null); }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

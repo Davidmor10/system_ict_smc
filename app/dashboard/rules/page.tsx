@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
 import { loadTrades, todayISO } from '../../lib/journal';
 import { hydrateList, commitList } from '../../lib/sync/collections';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const STORAGE_KEY = 'onyx_trading_rules';
 const VIOLATIONS_KEY = 'onyx_rule_violations';
@@ -118,6 +119,7 @@ export default function RulesPage() {
   const [newText, setNewText] = useState('');
   const [newCategory, setNewCategory] = useState<Rule['category']>('discipline');
   const [showAdd, setShowAdd] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
 
   useEffect(() => {
     // Instant paint from cache, then cloud reconcile (cross-device).
@@ -273,7 +275,7 @@ export default function RulesPage() {
                     rule={rule}
                     violations={violations}
                     onToggle={() => toggleRule(rule.id)}
-                    onDelete={() => deleteRule(rule.id)}
+                    onDelete={() => setDeleteTarget(rule)}
                     onViolate={() => logViolation(rule.id)}
                   />
                 ))}
@@ -282,6 +284,19 @@ export default function RulesPage() {
           ))
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={en ? 'Delete rule?' : 'למחוק חוק?'}
+        message={en
+          ? <>This will permanently delete the rule <span className="text-white">“{deleteTarget?.text}”</span>.</>
+          : <>החוק <span className="text-white">״{deleteTarget?.text}״</span> יימחק לצמיתות. אי אפשר לשחזר אותו.</>}
+        confirmLabel={en ? 'Delete' : 'מחק'}
+        cancelLabel={en ? 'Cancel' : 'ביטול'}
+        dir={en ? 'ltr' : 'rtl'}
+        onConfirm={() => { if (deleteTarget) deleteRule(deleteTarget.id); setDeleteTarget(null); }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
