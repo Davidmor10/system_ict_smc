@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, tradedHours, hourScenario } from '../../lib/analytics';
-import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind } from '../../lib/analytics';
+import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios } from '../../lib/analytics';
+import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind, RuleForWhatIf } from '../../lib/analytics';
 import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
@@ -220,9 +220,16 @@ export default function AiAnalyticsPage() {
   const [reportHistory, setReportHistory] = useState<{ weekKey: string; report: WeeklyReport }[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
-  const [hourStart, setHourStart] = useState<number | null>(null);
+  const [hourStartMin, setHourStartMin] = useState<number | null>(null);
+  const [rules, setRules] = useState<{ id: string; text: string }[]>([]);
+  const [violations, setViolations] = useState<{ ruleId: string; date: string }[]>([]);
 
-  useEffect(() => { setTrades(loadTrades()); }, []);
+  useEffect(() => {
+    setTrades(loadTrades());
+    // Rules + their per-day violations power the "חוקים" what-if scenarios.
+    try { const r = localStorage.getItem('onyx_trading_rules'); if (r) setRules((JSON.parse(r) as { id: string; text: string; deleted?: boolean }[]).filter(x => !x.deleted)); } catch { /* ignore */ }
+    try { const v = localStorage.getItem('onyx_rule_violations'); if (v) setViolations((JSON.parse(v) as { ruleId: string; date: string; deleted?: boolean }[]).filter(x => !x.deleted)); } catch { /* ignore */ }
+  }, []);
 
   const analysis = useMemo(() => runFullAnalysis(trades), [trades]);
   const hasEnoughData = trades.filter(t => t.result !== 'OPEN').length >= 3;
@@ -341,9 +348,17 @@ export default function AiAnalyticsPage() {
 
   // What-if simulator — scenarios meaningful for this journal, plus the user's
   // own custom 1-hour window (built on the fly from the picker below).
-  const baseScenarios = useMemo(() => availableScenarios(trades), [trades]);
-  const hours = useMemo(() => tradedHours(trades), [trades]);
-  const customHour = hourStart != null ? hourScenario(hourStart) : null;
+  const rulesForWhatIf = useMemo<RuleForWhatIf[]>(
+    () => rules.map(r => ({ id: r.id, text: r.text, violationDates: violations.filter(v => v.ruleId === r.id).map(v => v.date) })),
+    [rules, violations],
+  );
+  const ruleTextById = useMemo(() => new Map(rules.map(r => [r.id, r.text])), [rules]);
+  const baseScenarios = useMemo(
+    () => [...availableScenarios(trades), ...ruleScenarios(trades, rulesForWhatIf)],
+    [trades, rulesForWhatIf],
+  );
+  const hourCapable = useMemo(() => timedTradeCount(trades) >= 2, [trades]);
+  const customHour = hourStartMin != null ? hourScenario(hourStartMin) : null;
   const scenarios = customHour ? [...baseScenarios, customHour] : baseScenarios;
   const selectedScenario = scenarios.find(s => s.id === whatIfId) ?? null;
   const whatIf = useMemo(
@@ -351,27 +366,32 @@ export default function AiAnalyticsPage() {
     [trades, selectedScenario],
   );
   const pad2 = (n: number) => String(n).padStart(2, '0');
+  const fmtMin = (m: number) => `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
   const scenarioLabel = (s: WhatIfScenario): string => {
     switch (s.kind) {
       case 'excludeEmotion': return `בלי ${EMOTION_HE[s.value] ?? s.value}`;
-      case 'onlyEmotion': return `רק ${EMOTION_HE[s.value] ?? s.value}`;
-      case 'onlyNoEmotion': return 'רק בלי רגש מסומן';
-      case 'onlySession': return `רק ${SESSION_HE[s.value] ?? s.value}`;
-      case 'onlySymbol': return `רק ${s.value}`;
-      case 'onlyDirection': return `רק ${DIRECTION_HE[s.value] ?? s.value}`;
-      case 'onlyBiasAligned': return 'רק מיושר עם הביאס';
-      case 'onlyConfirmation': return `רק עם ${confLabel(s.value)}`;
-      case 'onlyHour': { const h = Number(s.value); return `רק ${pad2(h)}:00–${pad2((h + 1) % 24)}:00`; }
+      case 'onlyEmotion': return EMOTION_HE[s.value] ?? s.value;
+      case 'onlyNoEmotion': return 'בלי רגש מסומן';
+      case 'onlySession': return SESSION_HE[s.value] ?? s.value;
+      case 'onlySymbol': return s.value;
+      case 'onlySetup': return s.value;
+      case 'onlyDirection': return DIRECTION_HE[s.value] ?? s.value;
+      case 'onlyBiasAligned': return 'מיושר עם הביאס';
+      case 'onlyConfirmation': return `עם ${confLabel(s.value)}`;
+      case 'cleanRuleDays': return 'ימים ללא הפרות';
+      case 'excludeRuleDay': return `בלי ימים שהפרת: ${ruleTextById.get(s.value) ?? ''}`;
+      case 'onlyHour': { const m = Number(s.value); return `${fmtMin(m)}–${fmtMin((m + 60) % 1440)}`; }
       default: return s.value;
     }
   };
   // Grouping of scenario pills by dimension — the panel reads as a tailored list.
   const SCENARIO_GROUP: Record<ScenarioKind, string> = {
-    onlyDirection: 'כיוון', onlySymbol: 'נכס', onlySession: 'סשן',
+    onlyDirection: 'כיוון', onlySymbol: 'נכס', onlySetup: 'סטאפ', onlySession: 'סשן',
     onlyEmotion: 'רגש', excludeEmotion: 'רגש', onlyNoEmotion: 'רגש',
+    cleanRuleDays: 'חוקים', excludeRuleDay: 'חוקים',
     onlyConfirmation: 'אישור', onlyBiasAligned: 'ביאס', onlyHour: 'שעה',
   };
-  const GROUP_ORDER = ['כיוון', 'נכס', 'סשן', 'שעה', 'רגש', 'אישור', 'ביאס'];
+  const GROUP_ORDER = ['כיוון', 'נכס', 'סטאפ', 'סשן', 'שעה', 'רגש', 'חוקים', 'אישור', 'ביאס'];
 
   const topSession = useMemo(() => {
     if (analysis.sessions.length === 0) return null;
@@ -902,34 +922,34 @@ export default function AiAnalyticsPage() {
           index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
-          {baseScenarios.length === 0 && hours.length <= 1 ? (
+          {baseScenarios.length === 0 && !hourCapable ? (
             <p className="text-sm text-white/30">אין עדיין מספיק גיוון בעסקאות כדי להריץ תרחיש. תייג מצב רגשי / אישורים ותעד עסקאות בסשנים, נכסים ושעות שונים.</p>
           ) : (
             <div>
               <div className="flex flex-col gap-4 mb-6">
                 {GROUP_ORDER.map(group => {
                   if (group === 'שעה') {
-                    if (hours.length <= 1) return null;
-                    const active = hourStart != null && whatIfId === `hour_${hourStart}`;
+                    if (!hourCapable) return null;
+                    const active = hourStartMin != null && whatIfId === `hour_${hourStartMin}`;
+                    const endMin = hourStartMin != null ? (hourStartMin + 60) % 1440 : null;
+                    const inputCls = `py-2 px-3 rounded-lg border bg-[#0a0a0b] font-mono text-xs font-semibold outline-none transition-colors [color-scheme:dark] ${active ? 'border-[#d4af37]/60 text-[#d4af37]' : 'border-[#222] text-white/70 hover:border-[#2a2a2d]'}`;
+                    const pickStart = (v: string) => {
+                      if (!v) { setHourStartMin(null); if (whatIfId?.startsWith('hour_')) setWhatIfId(null); return; }
+                      const [h, mi] = v.split(':').map(Number); const m = h * 60 + mi;
+                      setHourStartMin(m); setWhatIfId(`hour_${m}`);
+                    };
+                    const pickEnd = (v: string) => {
+                      if (!v) { setHourStartMin(null); if (whatIfId?.startsWith('hour_')) setWhatIfId(null); return; }
+                      const [h, mi] = v.split(':').map(Number); const m = (h * 60 + mi - 60 + 1440) % 1440;
+                      setHourStartMin(m); setWhatIfId(`hour_${m}`);
+                    };
                     return (
                       <div key="שעה">
-                        <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">שעה</span>
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <select
-                            value={hourStart ?? ''}
-                            onChange={e => {
-                              const v = e.target.value;
-                              if (v === '') { setHourStart(null); if (whatIfId?.startsWith('hour_')) setWhatIfId(null); }
-                              else { const h = Number(v); setHourStart(h); setWhatIfId(`hour_${h}`); }
-                            }}
-                            className={`py-2 px-3 rounded-lg border bg-[#0a0a0b] font-mono text-xs font-semibold outline-none transition-colors ${active ? 'border-[#d4af37]/60 text-[#d4af37]' : 'border-[#222] text-white/60 hover:border-[#2a2a2d]'}`}
-                          >
-                            <option value="">בחר שעת התחלה</option>
-                            {hours.map(({ hour, count }) => <option key={hour} value={hour}>{pad2(hour)}:00 · {count} עסקאות</option>)}
-                          </select>
-                          {hourStart != null && (
-                            <span className="font-mono text-xs font-semibold text-[#d4af37]" dir="ltr">→ {pad2((hourStart + 1) % 24)}:00</span>
-                          )}
+                        <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">שעה · חלון של שעה, לבחירתך</span>
+                        <div className="flex items-center gap-2.5 flex-wrap" dir="ltr">
+                          <input type="time" step={60} aria-label="שעת התחלה" value={hourStartMin != null ? fmtMin(hourStartMin) : ''} onChange={e => pickStart(e.target.value)} className={inputCls} />
+                          <span className="font-mono text-xs text-white/30">→</span>
+                          <input type="time" step={60} aria-label="שעת סיום" value={endMin != null ? fmtMin(endMin) : ''} onChange={e => pickEnd(e.target.value)} className={inputCls} />
                         </div>
                       </div>
                     );

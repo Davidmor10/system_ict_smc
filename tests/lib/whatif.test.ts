@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simulate, availableScenarios, tradedHours, hourScenario } from '../../app/lib/analytics/whatif';
+import { simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios } from '../../app/lib/analytics/whatif';
 import { makeTrade } from '../helpers/trade';
 
 describe('simulate', () => {
@@ -89,21 +89,60 @@ describe('availableScenarios', () => {
     expect(onlyEs).toBeTruthy();
     expect(two.filter(onlyEs.predicate)).toHaveLength(2);
   });
+
+  it('offers "only setup X" per ICT model with >=2 trades and something to remove', () => {
+    const trades = [makeTrade({ model: 'FVG' }), makeTrade({ model: 'FVG' }), makeTrade({ model: 'OTE' })];
+    const s = availableScenarios(trades).find(x => x.kind === 'onlySetup' && x.value === 'FVG')!;
+    expect(s).toBeTruthy();
+    expect(trades.filter(s.predicate)).toHaveLength(2);
+    // a single model everywhere → nothing to remove → not offered
+    const allFvg = [makeTrade({ model: 'FVG' }), makeTrade({ model: 'FVG' })];
+    expect(availableScenarios(allFvg).some(x => x.kind === 'onlySetup')).toBe(false);
+  });
 });
 
-describe('custom hour window', () => {
-  it('tradedHours lists distinct entry hours with counts, sorted', () => {
-    const trades = [
-      makeTrade({ time: '16:05' }), makeTrade({ time: '16:59' }),
-      makeTrade({ time: '09:30' }),
-    ];
-    expect(tradedHours(trades)).toEqual([{ hour: 9, count: 1 }, { hour: 16, count: 2 }]);
+describe('custom time window', () => {
+  it('timedTradeCount counts trades with a parseable entry time', () => {
+    expect(timedTradeCount([makeTrade({ time: '16:05' }), makeTrade({ time: '' }), makeTrade({ time: '09:30' })])).toBe(2);
   });
 
-  it('hourScenario keeps only trades entered in that one-hour window', () => {
+  it('hourScenario keeps trades in [start, start+60) with minute precision', () => {
     const trades = [makeTrade({ time: '16:05' }), makeTrade({ time: '16:45' }), makeTrade({ time: '17:00' })];
-    const s = hourScenario(16);
+    const s = hourScenario(16 * 60); // 16:00 → window 16:00–17:00
     expect(s.kind).toBe('onlyHour');
     expect(trades.filter(s.predicate)).toHaveLength(2); // 17:00 is the next window
+
+    // custom start 16:03 → 16:03–17:03, so 17:00 is now inside, 16:00 would be out
+    const custom = hourScenario(16 * 60 + 3);
+    const t2 = [makeTrade({ time: '16:00' }), makeTrade({ time: '16:30' }), makeTrade({ time: '17:00' }), makeTrade({ time: '17:03' })];
+    expect(t2.filter(custom.predicate).map(t => t.time)).toEqual(['16:30', '17:00']);
+  });
+
+  it('hourScenario wraps past midnight', () => {
+    const s = hourScenario(23 * 60 + 30); // 23:30 → 00:30
+    const trades = [makeTrade({ time: '23:45' }), makeTrade({ time: '00:15' }), makeTrade({ time: '01:00' })];
+    expect(trades.filter(s.predicate).map(t => t.time)).toEqual(['23:45', '00:15']);
+  });
+});
+
+describe('ruleScenarios', () => {
+  it('compares clean days vs. days a rule was broken', () => {
+    const trades = [makeTrade({ dateISO: '2026-07-01' }), makeTrade({ dateISO: '2026-07-02' })];
+    const rules = [{ id: 'r1', text: 'no revenge trading', violationDates: ['2026-07-02'] }];
+    const scns = ruleScenarios(trades, rules);
+
+    const clean = scns.find(s => s.kind === 'cleanRuleDays')!;
+    expect(clean).toBeTruthy();
+    expect(trades.filter(clean.predicate).map(t => t.dateISO)).toEqual(['2026-07-01']);
+
+    const xr = scns.find(s => s.kind === 'excludeRuleDay' && s.value === 'r1')!;
+    expect(xr).toBeTruthy();
+    expect(trades.filter(xr.predicate).map(t => t.dateISO)).toEqual(['2026-07-01']);
+  });
+
+  it('offers nothing when no traded day has a violation', () => {
+    const trades = [makeTrade({ dateISO: '2026-07-01' }), makeTrade({ dateISO: '2026-07-02' })];
+    const rules = [{ id: 'r1', text: 'x', violationDates: ['2026-06-30'] }]; // a day with no trades
+    expect(ruleScenarios(trades, rules)).toHaveLength(0);
   });
 });

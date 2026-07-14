@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeEntry, Direction } from '../journal';
+import { UNSPECIFIED_MODEL } from '../journal';
 import { runFullAnalysis } from './index';
 import { confidenceFor } from './confidence';
 import { normSession } from './metrics';
@@ -38,9 +39,12 @@ export type ScenarioKind =
   | 'onlyNoEmotion'
   | 'onlySession'
   | 'onlySymbol'
+  | 'onlySetup'
   | 'onlyDirection'
   | 'onlyBiasAligned'
   | 'onlyConfirmation'
+  | 'cleanRuleDays'
+  | 'excludeRuleDay'
   | 'onlyHour';
 
 export interface WhatIfScenario {
@@ -143,6 +147,18 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
     }
   }
 
+  // One ICT setup model — per model that has enough trades and something to
+  // remove (mirrors the emotion "only" logic; ignores untagged models).
+  const models = new Set<string>();
+  for (const t of trades) if (t.model && t.model !== UNSPECIFIED_MODEL) models.add(t.model);
+  for (const m of models) {
+    const isM = (t: TradeEntry) => t.model === m;
+    const countM = trades.filter(isM).length;
+    if (countM >= MIN_ONLY && countM < trades.length) {
+      scenarios.push({ id: `setup_${m}`, kind: 'onlySetup', value: m, predicate: isM });
+    }
+  }
+
   // Only one direction — only if both directions are present.
   const dirs = new Set(trades.map(t => t.direction));
   if (dirs.size > 1) {
@@ -169,21 +185,57 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
   return scenarios;
 }
 
-/** Distinct entry hours present in the journal (0–23), each with its trade count,
-    sorted. Feeds the custom 1-hour What-If picker so the user only ever picks an
-    hour they actually trade in. */
-export function tradedHours(trades: TradeEntry[]): { hour: number; count: number }[] {
-  const m = new Map<number, number>();
-  for (const t of trades) {
-    const h = hourOf(t);
-    if (h >= 0) m.set(h, (m.get(h) ?? 0) + 1);
-  }
-  return [...m.entries()].map(([hour, count]) => ({ hour, count })).sort((a, b) => a.hour - b.hour);
+/** Minutes-of-day (0–1439) of a trade's `HH:mm` entry time, or -1 if unparseable. */
+function minutesOf(t: TradeEntry): number {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t.time || '');
+  if (!m) return -1;
+  const h = +m[1], mi = +m[2];
+  return h >= 0 && h <= 23 && mi >= 0 && mi <= 59 ? h * 60 + mi : -1;
 }
 
-/** A user-defined "only this one-hour window" scenario, e.g. start 16 → keeps
-    trades entered in [16:00, 17:00). Built on the fly from the picker, not
-    auto-listed, since the trader chooses the hour. */
-export function hourScenario(hour: number): WhatIfScenario {
-  return { id: `hour_${hour}`, kind: 'onlyHour', value: String(hour), predicate: t => hourOf(t) === hour };
+/** How many trades carry a parseable entry time — gates whether the custom
+    time-window control is worth showing at all. */
+export function timedTradeCount(trades: TradeEntry[]): number {
+  return trades.reduce((n, t) => n + (hourOf(t) >= 0 ? 1 : 0), 0);
+}
+
+/** A user-defined 1-hour window starting at `startMin` (minutes of day, so
+    16:03 → 963). Keeps trades entered in [start, start+60), wrapping past
+    midnight. Built on the fly from the picker — the trader chooses the time. */
+export function hourScenario(startMin: number): WhatIfScenario {
+  const end = (startMin + 60) % 1440;
+  const inWindow = (m: number) => (end > startMin ? m >= startMin && m < end : m >= startMin || m < end);
+  return { id: `hour_${startMin}`, kind: 'onlyHour', value: String(startMin), predicate: t => { const m = minutesOf(t); return m >= 0 && inWindow(m); } };
+}
+
+export interface RuleForWhatIf {
+  id: string;
+  text: string;
+  /** Dates (YYYY-MM-DD) this rule was marked violated. */
+  violationDates: string[];
+}
+
+/** Rule-compliance scenarios. Violations are logged per DAY (not per trade), so
+    these compare trades on clean days against days a rule was broken: a general
+    "days with no violations at all", plus one "exclude days you broke X" per
+    rule that was actually violated on a day you traded. */
+export function ruleScenarios(trades: TradeEntry[], rules: RuleForWhatIf[]): WhatIfScenario[] {
+  const out: WhatIfScenario[] = [];
+  const tradeDates = new Set(trades.map(t => t.dateISO));
+  const allViolated = new Set<string>();
+  for (const r of rules) for (const d of r.violationDates) allViolated.add(d);
+
+  const hasDirty = [...tradeDates].some(d => allViolated.has(d));
+  const hasClean = [...tradeDates].some(d => !allViolated.has(d));
+  if (hasDirty && hasClean) {
+    out.push({ id: 'clean_days', kind: 'cleanRuleDays', value: '', predicate: t => !allViolated.has(t.dateISO) });
+  }
+  for (const r of rules) {
+    const vd = new Set(r.violationDates);
+    const affected = [...tradeDates].filter(d => vd.has(d)).length;
+    if (affected > 0 && affected < tradeDates.size) {
+      out.push({ id: `xrule_${r.id}`, kind: 'excludeRuleDay', value: r.id, predicate: t => !vd.has(t.dateISO) });
+    }
+  }
+  return out;
 }
