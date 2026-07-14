@@ -34,17 +34,32 @@ export interface WhatIfResult {
 
 export type ScenarioKind =
   | 'excludeEmotion'
+  | 'onlyEmotion'
+  | 'onlyNoEmotion'
   | 'onlySession'
+  | 'onlySymbol'
   | 'onlyDirection'
   | 'onlyBiasAligned'
-  | 'onlyConfirmation';
+  | 'onlyConfirmation'
+  | 'onlyHour';
 
 export interface WhatIfScenario {
   id: string;
   kind: ScenarioKind;
-  /** The subject value (an emotion key, session key, direction, or tag). Empty for onlyBiasAligned. */
+  /** The subject value (an emotion key, session key, symbol, direction, tag, or
+      start-hour). Empty for onlyBiasAligned / onlyNoEmotion. */
   value: string;
   predicate: (t: TradeEntry) => boolean;
+}
+
+/** Minimum trades an "only X" slice must have to be worth offering on its own —
+    below this it's just noise (the low-confidence banner still fires either way). */
+const MIN_ONLY = 2;
+
+/** Entry hour (0–23) of a trade from its `HH:mm` time, or -1 when unparseable. */
+function hourOf(t: TradeEntry): number {
+  const h = parseInt((t.time || '').slice(0, 2), 10);
+  return Number.isFinite(h) && h >= 0 && h <= 23 ? h : -1;
 }
 
 function metricOf(trades: TradeEntry[]): WhatIfMetric {
@@ -87,14 +102,25 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
   const has = (pred: (t: TradeEntry) => boolean) => trades.some(pred);
   const hasNot = (pred: (t: TradeEntry) => boolean) => trades.some(t => !pred(t));
 
-  // Exclude an emotional state — only if some trades have it and some don't.
+  // Emotional state — three angles per tagged emotion:
+  //   • "בלי X"  (exclude)  — needs a mix (some X, some not)
+  //   • "רק X"   (only)     — needs ≥MIN_ONLY of X, and some non-X to remove
+  // plus "רק בלי רגש מסומן" when some trades were left untagged.
   const emotions = new Set<string>();
-  for (const t of trades) if (t.emotionalState) emotions.add(t.emotionalState);
+  let tagged = 0, untagged = 0;
+  for (const t of trades) { if (t.emotionalState) { emotions.add(t.emotionalState); tagged++; } else untagged++; }
   for (const e of emotions) {
     const isE = (t: TradeEntry) => t.emotionalState === e;
+    const countE = trades.filter(isE).length;
     if (has(isE) && hasNot(isE)) {
       scenarios.push({ id: `xemotion_${e}`, kind: 'excludeEmotion', value: e, predicate: t => t.emotionalState !== e });
     }
+    if (countE >= MIN_ONLY && countE < trades.length) {
+      scenarios.push({ id: `oemotion_${e}`, kind: 'onlyEmotion', value: e, predicate: isE });
+    }
+  }
+  if (untagged >= MIN_ONLY && tagged > 0) {
+    scenarios.push({ id: 'noEmotion', kind: 'onlyNoEmotion', value: '', predicate: t => !t.emotionalState });
   }
 
   // Only one session — offered per session when more than one session exists.
@@ -103,6 +129,17 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
   if (sessions.size > 1) {
     for (const s of sessions) {
       scenarios.push({ id: `session_${s}`, kind: 'onlySession', value: s, predicate: t => normSession(t.session) === s });
+    }
+  }
+
+  // Only one instrument — offered per symbol when more than one was traded.
+  const symbols = new Set(trades.map(t => t.symbol));
+  if (symbols.size > 1) {
+    for (const sym of symbols) {
+      const isSym = (t: TradeEntry) => t.symbol === sym;
+      if (trades.filter(isSym).length >= MIN_ONLY) {
+        scenarios.push({ id: `symbol_${sym}`, kind: 'onlySymbol', value: sym, predicate: isSym });
+      }
     }
   }
 
@@ -130,4 +167,23 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
   }
 
   return scenarios;
+}
+
+/** Distinct entry hours present in the journal (0–23), each with its trade count,
+    sorted. Feeds the custom 1-hour What-If picker so the user only ever picks an
+    hour they actually trade in. */
+export function tradedHours(trades: TradeEntry[]): { hour: number; count: number }[] {
+  const m = new Map<number, number>();
+  for (const t of trades) {
+    const h = hourOf(t);
+    if (h >= 0) m.set(h, (m.get(h) ?? 0) + 1);
+  }
+  return [...m.entries()].map(([hour, count]) => ({ hour, count })).sort((a, b) => a.hour - b.hour);
+}
+
+/** A user-defined "only this one-hour window" scenario, e.g. start 16 → keeps
+    trades entered in [16:00, 17:00). Built on the fly from the picker, not
+    auto-listed, since the trader chooses the hour. */
+export function hourScenario(hour: number): WhatIfScenario {
+  return { id: `hour_${hour}`, kind: 'onlyHour', value: String(hour), predicate: t => hourOf(t) === hour };
 }

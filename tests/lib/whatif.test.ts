@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simulate, availableScenarios } from '../../app/lib/analytics/whatif';
+import { simulate, availableScenarios, tradedHours, hourScenario } from '../../app/lib/analytics/whatif';
 import { makeTrade } from '../helpers/trade';
 
 describe('simulate', () => {
@@ -55,5 +55,55 @@ describe('availableScenarios', () => {
 
     const allAligned = [makeTrade({ biasAlignment: 'ALIGNED' }), makeTrade({ biasAlignment: 'ALIGNED' })];
     expect(availableScenarios(allAligned).some(s => s.kind === 'onlyBiasAligned')).toBe(false);
+  });
+
+  it('offers "only emotion X" when it has >=2 trades and something to remove', () => {
+    const trades = [
+      makeTrade({ emotionalState: 'FOMO' }), makeTrade({ emotionalState: 'FOMO' }),
+      makeTrade({ emotionalState: 'STRESSED' }),
+    ];
+    const onlyFomo = availableScenarios(trades).find(s => s.kind === 'onlyEmotion' && s.value === 'FOMO')!;
+    expect(onlyFomo).toBeTruthy();
+    expect(trades.filter(onlyFomo.predicate)).toHaveLength(2);
+    // STRESSED has only 1 trade → below the min, not offered as "only".
+    expect(availableScenarios(trades).some(s => s.kind === 'onlyEmotion' && s.value === 'STRESSED')).toBe(false);
+    // and never when every trade shares the one emotion (nothing to remove)
+    const allFomo = [makeTrade({ emotionalState: 'FOMO' }), makeTrade({ emotionalState: 'FOMO' })];
+    expect(availableScenarios(allFomo).some(s => s.kind === 'onlyEmotion')).toBe(false);
+  });
+
+  it('offers "only untagged emotion" when some trades are left untagged', () => {
+    const trades = [
+      makeTrade({ emotionalState: 'FOMO' }),
+      makeTrade({ emotionalState: undefined }), makeTrade({ emotionalState: undefined }),
+    ];
+    expect(availableScenarios(trades).some(s => s.kind === 'onlyNoEmotion')).toBe(true);
+  });
+
+  it('offers "only symbol X" only when more than one instrument was traded', () => {
+    const oneSym = [makeTrade({ symbol: 'ES' }), makeTrade({ symbol: 'ES' })];
+    expect(availableScenarios(oneSym).some(s => s.kind === 'onlySymbol')).toBe(false);
+
+    const two = [makeTrade({ symbol: 'ES' }), makeTrade({ symbol: 'ES' }), makeTrade({ symbol: 'NQ' }), makeTrade({ symbol: 'NQ' })];
+    const onlyEs = availableScenarios(two).find(s => s.kind === 'onlySymbol' && s.value === 'ES')!;
+    expect(onlyEs).toBeTruthy();
+    expect(two.filter(onlyEs.predicate)).toHaveLength(2);
+  });
+});
+
+describe('custom hour window', () => {
+  it('tradedHours lists distinct entry hours with counts, sorted', () => {
+    const trades = [
+      makeTrade({ time: '16:05' }), makeTrade({ time: '16:59' }),
+      makeTrade({ time: '09:30' }),
+    ];
+    expect(tradedHours(trades)).toEqual([{ hour: 9, count: 1 }, { hour: 16, count: 2 }]);
+  });
+
+  it('hourScenario keeps only trades entered in that one-hour window', () => {
+    const trades = [makeTrade({ time: '16:05' }), makeTrade({ time: '16:45' }), makeTrade({ time: '17:00' })];
+    const s = hourScenario(16);
+    expect(s.kind).toBe('onlyHour');
+    expect(trades.filter(s.predicate)).toHaveLength(2); // 17:00 is the next window
   });
 });

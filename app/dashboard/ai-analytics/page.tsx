@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { runFullAnalysis, isoWeekKey, simulate, availableScenarios } from '../../lib/analytics';
-import type { ConfidenceLevel, GroupPerformance, WhatIfScenario } from '../../lib/analytics';
+import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, tradedHours, hourScenario } from '../../lib/analytics';
+import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind } from '../../lib/analytics';
 import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
@@ -220,6 +220,7 @@ export default function AiAnalyticsPage() {
   const [reportHistory, setReportHistory] = useState<{ weekKey: string; report: WeeklyReport }[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
+  const [hourStart, setHourStart] = useState<number | null>(null);
 
   useEffect(() => { setTrades(loadTrades()); }, []);
 
@@ -338,23 +339,39 @@ export default function AiAnalyticsPage() {
   const emotionRows = useMemo(() => barRowsByWinRate(analysis.emotions), [analysis.emotions]);
   const exits = analysis.exits;
 
-  // What-if simulator — scenarios meaningful for this journal + the selected run.
-  const scenarios = useMemo(() => availableScenarios(trades), [trades]);
+  // What-if simulator — scenarios meaningful for this journal, plus the user's
+  // own custom 1-hour window (built on the fly from the picker below).
+  const baseScenarios = useMemo(() => availableScenarios(trades), [trades]);
+  const hours = useMemo(() => tradedHours(trades), [trades]);
+  const customHour = hourStart != null ? hourScenario(hourStart) : null;
+  const scenarios = customHour ? [...baseScenarios, customHour] : baseScenarios;
   const selectedScenario = scenarios.find(s => s.id === whatIfId) ?? null;
   const whatIf = useMemo(
     () => (selectedScenario ? simulate(trades, selectedScenario.predicate) : null),
     [trades, selectedScenario],
   );
+  const pad2 = (n: number) => String(n).padStart(2, '0');
   const scenarioLabel = (s: WhatIfScenario): string => {
     switch (s.kind) {
       case 'excludeEmotion': return `בלי ${EMOTION_HE[s.value] ?? s.value}`;
+      case 'onlyEmotion': return `רק ${EMOTION_HE[s.value] ?? s.value}`;
+      case 'onlyNoEmotion': return 'רק בלי רגש מסומן';
       case 'onlySession': return `רק ${SESSION_HE[s.value] ?? s.value}`;
+      case 'onlySymbol': return `רק ${s.value}`;
       case 'onlyDirection': return `רק ${DIRECTION_HE[s.value] ?? s.value}`;
       case 'onlyBiasAligned': return 'רק מיושר עם הביאס';
       case 'onlyConfirmation': return `רק עם ${confLabel(s.value)}`;
+      case 'onlyHour': { const h = Number(s.value); return `רק ${pad2(h)}:00–${pad2((h + 1) % 24)}:00`; }
       default: return s.value;
     }
   };
+  // Grouping of scenario pills by dimension — the panel reads as a tailored list.
+  const SCENARIO_GROUP: Record<ScenarioKind, string> = {
+    onlyDirection: 'כיוון', onlySymbol: 'נכס', onlySession: 'סשן',
+    onlyEmotion: 'רגש', excludeEmotion: 'רגש', onlyNoEmotion: 'רגש',
+    onlyConfirmation: 'אישור', onlyBiasAligned: 'ביאס', onlyHour: 'שעה',
+  };
+  const GROUP_ORDER = ['כיוון', 'נכס', 'סשן', 'שעה', 'רגש', 'אישור', 'ביאס'];
 
   const topSession = useMemo(() => {
     if (analysis.sessions.length === 0) return null;
@@ -883,24 +900,61 @@ export default function AiAnalyticsPage() {
         {/* ══════════ 10 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
           index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
-          description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — בלי FOMO, רק סשן אחד, רק מיושר עם הביאס. חישוב מדויק על העסקאות האמיתיות שלך, לא ניחוש."
+          description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
-          {scenarios.length === 0 ? (
-            <p className="text-sm text-white/30">אין עדיין מספיק גיוון בעסקאות כדי להריץ תרחיש. תייג מצב רגשי / סשן / אישורים על יותר עסקאות.</p>
+          {baseScenarios.length === 0 && hours.length <= 1 ? (
+            <p className="text-sm text-white/30">אין עדיין מספיק גיוון בעסקאות כדי להריץ תרחיש. תייג מצב רגשי / אישורים ותעד עסקאות בסשנים, נכסים ושעות שונים.</p>
           ) : (
             <div>
-              <div className="flex flex-wrap gap-1.5 mb-6">
-                {scenarios.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setWhatIfId(prev => (prev === s.id ? null : s.id))}
-                    className={`py-2 px-3.5 rounded-lg border font-mono text-xs font-semibold transition-all duration-150 ${
-                      whatIfId === s.id ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/45 hover:text-white/75 hover:border-[#2a2a2d]'
-                    }`}
-                  >
-                    {scenarioLabel(s)}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-4 mb-6">
+                {GROUP_ORDER.map(group => {
+                  if (group === 'שעה') {
+                    if (hours.length <= 1) return null;
+                    const active = hourStart != null && whatIfId === `hour_${hourStart}`;
+                    return (
+                      <div key="שעה">
+                        <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">שעה</span>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <select
+                            value={hourStart ?? ''}
+                            onChange={e => {
+                              const v = e.target.value;
+                              if (v === '') { setHourStart(null); if (whatIfId?.startsWith('hour_')) setWhatIfId(null); }
+                              else { const h = Number(v); setHourStart(h); setWhatIfId(`hour_${h}`); }
+                            }}
+                            className={`py-2 px-3 rounded-lg border bg-[#0a0a0b] font-mono text-xs font-semibold outline-none transition-colors ${active ? 'border-[#d4af37]/60 text-[#d4af37]' : 'border-[#222] text-white/60 hover:border-[#2a2a2d]'}`}
+                          >
+                            <option value="">בחר שעת התחלה</option>
+                            {hours.map(({ hour, count }) => <option key={hour} value={hour}>{pad2(hour)}:00 · {count} עסקאות</option>)}
+                          </select>
+                          {hourStart != null && (
+                            <span className="font-mono text-xs font-semibold text-[#d4af37]" dir="ltr">→ {pad2((hourStart + 1) % 24)}:00</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  const items = baseScenarios.filter(s => SCENARIO_GROUP[s.kind] === group);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={group}>
+                      <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">{group}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {items.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setWhatIfId(prev => (prev === s.id ? null : s.id))}
+                            className={`py-2 px-3.5 rounded-lg border font-mono text-xs font-semibold transition-all duration-150 ${
+                              whatIfId === s.id ? 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]' : 'border-[#222] text-white/45 hover:text-white/75 hover:border-[#2a2a2d]'
+                            }`}
+                          >
+                            {scenarioLabel(s)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {!whatIf ? (
