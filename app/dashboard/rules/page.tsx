@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
@@ -10,6 +10,7 @@ import { SESS } from '../../lib/sessions';
 import { INSTRUMENT_KEYS } from '../../lib/instruments';
 import { AUTO_SUPPORTED } from '../../lib/rules/engine';
 import { computeRulePerformance, type RulePerformance } from '../../lib/rules/performance';
+import { computeRuleStats, type RuleStatsResult, type PeriodCompliance } from '../../lib/rules/stats';
 import {
   ruleTitle, ruleVerification, ruleSeverity, upsertCheck,
   type Rule, type RuleCheck, type RuleCategory, type ConditionType, type ConditionValue, type RuleScope, type RuleSeverity, type VerificationMode,
@@ -226,6 +227,88 @@ function Pill({ active, color, onClick, children }: { active: boolean; color?: s
   );
 }
 
+// ── Statistics sub-view ──────────────────────────────────────────────────────
+const rateColor = (r: number | null) => (r == null ? '#52525b' : r >= 80 ? '#22c55e' : r >= 60 ? '#d4af37' : '#ef4444');
+
+function ComplianceCard({ label, p, mode }: { label: string; p: PeriodCompliance; mode: 'count' | 'rate' }) {
+  const color = rateColor(p.rate);
+  return (
+    <div className="flex-1 min-w-[150px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">{label}</p>
+      {p.evaluated === 0 ? (
+        <><p className="font-serif text-2xl font-bold text-white/30">—</p><p className="font-mono text-[10px] text-white/30 mt-1">אין עדיין נתונים</p></>
+      ) : mode === 'count' ? (
+        <>
+          <p className="font-serif text-3xl font-bold" style={{ color }}>{p.followed}<span className="text-white/30 text-xl">/{p.evaluated}</span></p>
+          <p className="font-mono text-[10px] text-white/30 mt-1">חוקים שנשמרו · {p.violated} הופרו</p>
+        </>
+      ) : (
+        <>
+          <p className="font-serif text-3xl font-bold" style={{ color }}>{Math.round(p.rate!)}%</p>
+          <p className="font-mono text-[10px] text-white/30 mt-1">מבוסס על {p.evaluated} בדיקות · {p.violated} הפרות</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StatsView({ stats }: { stats: RuleStatsResult }) {
+  const trend = stats.weekTrend;
+  return (
+    <div className="space-y-6" dir="rtl">
+      <div className="flex gap-3 flex-wrap">
+        <ComplianceCard label="היום" p={stats.today} mode="count" />
+        <ComplianceCard label="השבוע" p={stats.week} mode="rate" />
+        <ComplianceCard label="החודש" p={stats.month} mode="rate" />
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
+        <div className="flex-1 min-w-[150px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">מגמה שבועית</p>
+          {trend == null
+            ? <p className="font-mono text-[12px] text-white/30 mt-1">אין מספיק נתונים להשוואה</p>
+            : <p className="font-serif text-2xl font-bold" style={{ color: trend >= 0 ? '#22c55e' : '#ef4444' }}>{trend >= 0 ? '▲' : '▼'} {Math.abs(Math.round(trend))} נק׳</p>}
+          <p className="font-mono text-[10px] text-white/30 mt-1">מול השבוע הקודם</p>
+        </div>
+        <div className="flex-1 min-w-[150px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">רצף ימים נקי</p>
+          <p className="font-serif text-3xl font-bold" style={{ color: stats.streak >= 3 ? '#22c55e' : '#d4af37' }}>{stats.streak}</p>
+          <p className="font-mono text-[10px] text-white/30 mt-1">ימים ללא הפרה</p>
+        </div>
+      </div>
+
+      {/* Daily compliance — last 14 days */}
+      <div className="px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">14 הימים האחרונים</p>
+        <div className="flex items-end gap-1.5 h-16" dir="ltr">
+          {stats.daily.map(d => (
+            <div
+              key={d.date}
+              className="flex-1 rounded-t-sm min-h-[6px]"
+              style={{ height: d.rate == null ? 8 : 12 + (d.rate / 100) * 52, background: rateColor(d.rate), opacity: d.rate == null ? 0.25 : 0.85 }}
+              title={`${d.date}: ${d.rate == null ? 'אין נתונים' : Math.round(d.rate) + '%'}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {stats.topBroken.length > 0 && (
+        <div className="px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">החוקים שהופרו הכי הרבה (30 יום)</p>
+          <div className="space-y-2">
+            {stats.topBroken.map(b => (
+              <div key={b.ruleId} className="flex items-center justify-between gap-3">
+                <span className="text-[13px] text-white/70 truncate">{b.title}</span>
+                <span className="font-mono text-[12px] font-bold text-[#c98080] shrink-0">{b.violated} הפרות</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RulesPage() {
   const { lang } = useLanguage();
   const en = lang === 'en';
@@ -238,6 +321,7 @@ export default function RulesPage() {
   const [draft, setDraft] = useState<Rule>(emptyDraft());
   const [formError, setFormError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
+  const [view, setView] = useState<'rules' | 'stats'>('rules');
 
   function emptyDraftReset() { setDraft(emptyDraft()); setShowAdvanced(false); setFormError(''); }
 
@@ -314,6 +398,11 @@ export default function RulesPage() {
     { key: '__other', label: en ? 'Other' : 'אחר', color: '#8b8b8b', rules: rules.filter(r => !knownCats.includes(r.category)) },
   ].filter(g => g.rules.length > 0);
 
+  const stats = useMemo(
+    () => computeRuleStats(rules, trades, userChecks, today, violations),
+    [rules, trades, userChecks, violations, today],
+  );
+
   const cv = draft.conditionValue ?? {};
   const setCV = (patch: Partial<ConditionValue>) => setDraft(d => ({ ...d, conditionValue: { ...(d.conditionValue ?? {}), ...patch } }));
   const toggleArr = (key: 'sessions' | 'symbols' | 'tags', val: string) =>
@@ -330,7 +419,7 @@ export default function RulesPage() {
             <h1 className="font-serif text-3xl font-bold text-white">{en ? 'Rules' : 'חוקי מסחר'}</h1>
             <p className="font-mono text-xs text-white/30 mt-1 uppercase tracking-[0.18em]">{activeRules.length} active rules</p>
           </div>
-          {!showAdd && (
+          {view === 'rules' && !showAdd && (
             <button
               onClick={() => { emptyDraftReset(); setShowAdd(true); }}
               className="px-5 py-2.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold tracking-[0.12em] uppercase hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.3)]"
@@ -340,8 +429,28 @@ export default function RulesPage() {
           )}
         </div>
 
+        {/* View tabs — rules list vs. compliance statistics */}
+        <div className="flex gap-2">
+          {([['rules', en ? 'Rules' : 'חוקים'], ['stats', en ? 'Stats' : 'סטטיסטיקה']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className="px-4 py-2 rounded-sm font-mono text-[11px] font-bold uppercase tracking-[0.14em] border transition-colors"
+              style={{
+                borderColor: view === key ? 'rgba(212,175,55,0.5)' : '#1c1c1e',
+                color: view === key ? '#d4af37' : 'rgba(255,255,255,0.4)',
+                background: view === key ? 'rgba(212,175,55,0.08)' : 'transparent',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'stats' && <StatsView stats={stats} />}
+
         {/* Daily compliance */}
-        {activeRules.length > 0 && (
+        {view === 'rules' && activeRules.length > 0 && (
           <div className="flex gap-3 flex-wrap">
             <div className="flex-1 min-w-[140px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Today&apos;s Discipline</p>
@@ -357,7 +466,7 @@ export default function RulesPage() {
         )}
 
         {/* Add rule form — short by default, advanced fields reveal on demand */}
-        {showAdd && (
+        {view === 'rules' && showAdd && (
           <div className="border border-[#d4af37]/20 rounded-sm bg-[#0a0a0b] p-5 space-y-5" dir="rtl">
             {/* Name */}
             <div>
@@ -483,7 +592,7 @@ export default function RulesPage() {
         )}
 
         {/* Rules list grouped by category */}
-        {rules.length === 0 && !showAdd ? (
+        {view === 'rules' && (rules.length === 0 && !showAdd ? (
           <div className="py-20 text-center border border-[#1c1c1e] rounded-sm">
             <p className="font-mono text-sm text-white/20">{en ? 'No rules yet' : 'אין חוקים עדיין'}</p>
             <button onClick={() => { emptyDraftReset(); setShowAdd(true); }} className="mt-4 font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors">
@@ -515,7 +624,7 @@ export default function RulesPage() {
               </div>
             </div>
           ))
-        )}
+        ))}
       </div>
 
       <ConfirmDialog
