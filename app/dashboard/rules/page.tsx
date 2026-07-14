@@ -321,7 +321,6 @@ export default function RulesPage() {
   const [draft, setDraft] = useState<Rule>(emptyDraft());
   const [formError, setFormError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
-  const [view, setView] = useState<'rules' | 'stats'>('rules');
 
   function emptyDraftReset() { setDraft(emptyDraft()); setShowAdvanced(false); setFormError(''); }
 
@@ -388,9 +387,7 @@ export default function RulesPage() {
   }
 
   const today = todayISO();
-  const todayViolationCount = violations.filter(v => v.date === today).length;
   const activeRules = rules.filter(r => r.isActive);
-  const complianceToday = activeRules.length > 0 ? Math.round(((activeRules.length - todayViolationCount) / activeRules.length) * 100) : 100;
 
   const knownCats = CAT_META.map(m => m.key as string);
   const groups = [
@@ -419,7 +416,7 @@ export default function RulesPage() {
             <h1 className="font-serif text-3xl font-bold text-white">{en ? 'Rules' : 'חוקי מסחר'}</h1>
             <p className="font-mono text-xs text-white/30 mt-1 uppercase tracking-[0.18em]">{activeRules.length} active rules</p>
           </div>
-          {view === 'rules' && !showAdd && (
+          {!showAdd && (
             <button
               onClick={() => { emptyDraftReset(); setShowAdd(true); }}
               className="px-5 py-2.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold tracking-[0.12em] uppercase hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.3)]"
@@ -429,44 +426,19 @@ export default function RulesPage() {
           )}
         </div>
 
-        {/* View tabs — rules list vs. compliance statistics */}
-        <div className="flex gap-2">
-          {([['rules', en ? 'Rules' : 'חוקים'], ['stats', en ? 'Stats' : 'סטטיסטיקה']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setView(key)}
-              className="px-4 py-2 rounded-sm font-mono text-[11px] font-bold uppercase tracking-[0.14em] border transition-colors"
-              style={{
-                borderColor: view === key ? 'rgba(212,175,55,0.5)' : '#1c1c1e',
-                color: view === key ? '#d4af37' : 'rgba(255,255,255,0.4)',
-                background: view === key ? 'rgba(212,175,55,0.08)' : 'transparent',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {view === 'stats' && <StatsView stats={stats} />}
-
-        {/* Daily compliance */}
-        {view === 'rules' && activeRules.length > 0 && (
-          <div className="flex gap-3 flex-wrap">
-            <div className="flex-1 min-w-[140px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Today&apos;s Discipline</p>
-              <p className="font-serif text-3xl font-bold" style={{ color: complianceToday >= 80 ? '#22c55e' : complianceToday >= 60 ? '#d4af37' : '#ef4444' }}>{complianceToday}%</p>
-              <p className="font-mono text-[10px] text-white/30 mt-1">{todayViolationCount} violations today</p>
+        {/* Compliance statistics — inline on the same page, always visible */}
+        {rules.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#d4af37]/80">{en ? 'Statistics' : 'סטטיסטיקה'}</span>
             </div>
-            <div className="flex-1 min-w-[140px] px-5 py-4 border border-[#1c1c1e] rounded-sm bg-[#0a0a0b]">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2">Active Rules</p>
-              <p className="font-serif text-3xl font-bold text-white">{activeRules.length}</p>
-              <p className="font-mono text-[10px] text-white/30 mt-1">{rules.length - activeRules.length} paused</p>
-            </div>
+            <StatsView stats={stats} />
           </div>
         )}
 
         {/* Add rule form — short by default, advanced fields reveal on demand */}
-        {view === 'rules' && showAdd && (
+        {showAdd && (
           <div className="border border-[#d4af37]/20 rounded-sm bg-[#0a0a0b] p-5 space-y-5" dir="rtl">
             {/* Name */}
             <div>
@@ -592,7 +564,7 @@ export default function RulesPage() {
         )}
 
         {/* Rules list grouped by category */}
-        {view === 'rules' && (rules.length === 0 && !showAdd ? (
+        {rules.length === 0 && !showAdd ? (
           <div className="py-20 text-center border border-[#1c1c1e] rounded-sm">
             <p className="font-mono text-sm text-white/20">{en ? 'No rules yet' : 'אין חוקים עדיין'}</p>
             <button onClick={() => { emptyDraftReset(); setShowAdd(true); }} className="mt-4 font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors">
@@ -624,7 +596,7 @@ export default function RulesPage() {
               </div>
             </div>
           ))
-        ))}
+        )}
       </div>
 
       <ConfirmDialog
