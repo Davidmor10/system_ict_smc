@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRuleStats } from '../../app/lib/rules/stats';
+import { computeRuleStats, computeRuleHistory } from '../../app/lib/rules/stats';
 import type { Rule, RuleCheck } from '../../app/lib/rules/types';
 import { makeTrade } from '../helpers/trade';
 
@@ -62,5 +62,36 @@ describe('computeRuleStats', () => {
     expect(s.today.evaluated).toBe(0);
     expect(s.today.rate).toBeNull();
     expect(s.topBroken).toHaveLength(0);
+  });
+});
+
+describe('computeRuleHistory', () => {
+  it('reports last kept / last broken, the streak, and recent violations', () => {
+    const rule = manualRule('a');
+    const checks = [
+      check('a', TODAY, 'followed'),
+      check('a', '2026-07-13', 'followed'),
+      check('a', '2026-07-11', 'violated'),
+      check('a', '2026-07-09', 'violated'),
+    ];
+    const h = computeRuleHistory(rule, [], checks, TODAY);
+    expect(h.lastFollowed).toBe(TODAY);
+    expect(h.lastViolated).toBe('2026-07-11');
+    expect(h.streak).toBe(2); // today + 13th, stopped by the 11th
+    expect(h.recentViolations.map(v => v.date)).toEqual(['2026-07-11', '2026-07-09']);
+  });
+
+  it('carries the engine evidence for an automatic rule violation', () => {
+    const rule = autoRule('x', { symbols: ['ES'] });
+    const trades = [makeTrade({ id: 1, dateISO: TODAY, symbol: 'NQ' })];
+    const h = computeRuleHistory(rule, trades, [], TODAY);
+    expect(h.lastViolated).toBe(TODAY);
+    expect(h.recentViolations[0].evidence).toContain('NQ');
+    expect(h.streak).toBe(0);
+  });
+
+  it('is empty for a rule with no signal at all', () => {
+    const h = computeRuleHistory(manualRule('a'), [], [], TODAY);
+    expect(h).toEqual({ lastFollowed: null, lastViolated: null, streak: 0, recentViolations: [] });
   });
 });

@@ -52,17 +52,85 @@ function daysRange(todayISO: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => isoMinusDays(todayISO, count - 1 - i));
 }
 
-function ruleDayStatus(rule: Rule, dayTrades: TradeEntry[], reported: 'followed' | 'violated' | undefined): DayRuleStatus {
+/** A manual report for one (rule, day), carrying its evidence line. */
+interface Reported { status: 'followed' | 'violated'; evidence: string }
+
+/** One rule's status on one day, with the evidence behind it. Automatic rules are
+    judged from that day's trades (any violation makes the day a violation);
+    manual rules from the stored report. */
+function ruleDayDetail(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined): { status: DayRuleStatus; evidence: string } {
   if (rule.verificationMode === 'automatic' && rule.conditionType) {
-    let anyFollowed = false;
+    let followedEvidence = '';
     for (const t of dayTrades) {
-      const st = checkRule(rule, t, dayTrades).status;
-      if (st === 'violated') return 'violated';
-      if (st === 'followed') anyFollowed = true;
+      const r = checkRule(rule, t, dayTrades);
+      if (r.status === 'violated') return { status: 'violated', evidence: r.evidence };
+      if (r.status === 'followed' && !followedEvidence) followedEvidence = r.evidence;
     }
-    return anyFollowed ? 'followed' : 'no_data';
+    return followedEvidence ? { status: 'followed', evidence: followedEvidence } : { status: 'no_data', evidence: '' };
   }
-  return reported ?? 'no_data';
+  return reported ? { status: reported.status, evidence: reported.evidence } : { status: 'no_data', evidence: '' };
+}
+
+function ruleDayStatus(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined): DayRuleStatus {
+  return ruleDayDetail(rule, dayTrades, reported).status;
+}
+
+/** Shared lookup tables both the period rollup and the per-rule history need. */
+function buildContext(trades: TradeEntry[], userChecks: RuleCheck[], legacyViolations: { ruleId: string; date: string }[]) {
+  const byDay = new Map<string, TradeEntry[]>();
+  for (const t of trades) { const a = byDay.get(t.dateISO); if (a) a.push(t); else byDay.set(t.dateISO, [t]); }
+
+  // Legacy day-violations first, then newer user checks override them.
+  const reported = new Map<string, Reported>();
+  for (const v of legacyViolations) reported.set(`${v.ruleId}:${v.date}`, { status: 'violated', evidence: 'דווח ידנית כהופר' });
+  for (const c of userChecks) {
+    if (c.date && (c.status === 'followed' || c.status === 'violated')) {
+      reported.set(`${c.ruleId}:${c.date}`, { status: c.status, evidence: c.evidence || '' });
+    }
+  }
+  return { byDay, reported };
+}
+
+export interface RuleHistory {
+  /** Most recent day the rule was kept / broken (ISO), or null within the lookback. */
+  lastFollowed: string | null;
+  lastViolated: string | null;
+  /** Consecutive kept days back from today, stopping at the first violation. */
+  streak: number;
+  /** Most recent violations with their evidence, newest first (max 3). */
+  recentViolations: { date: string; evidence: string }[];
+}
+
+/** Per-rule timeline — powers the streak / last-kept / last-broken line and the
+    "recent violations" list on the rule card. Pure; derived, never stored. */
+export function computeRuleHistory(
+  rule: Rule,
+  trades: TradeEntry[],
+  userChecks: RuleCheck[],
+  todayISO: string,
+  legacyViolations: { ruleId: string; date: string }[] = [],
+  lookbackDays = 90,
+): RuleHistory {
+  const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
+  let lastFollowed: string | null = null;
+  let lastViolated: string | null = null;
+  let streak = 0;
+  let streakBroken = false;
+  const recentViolations: { date: string; evidence: string }[] = [];
+
+  for (let i = 0; i < lookbackDays; i++) {
+    const date = isoMinusDays(todayISO, i);
+    const d = ruleDayDetail(rule, byDay.get(date) ?? [], reported.get(`${rule.id}:${date}`));
+    if (d.status === 'violated') {
+      if (!lastViolated) lastViolated = date;
+      if (recentViolations.length < 3) recentViolations.push({ date, evidence: d.evidence });
+      streakBroken = true;
+    } else if (d.status === 'followed') {
+      if (!lastFollowed) lastFollowed = date;
+      if (!streakBroken) streak++;
+    }
+  }
+  return { lastFollowed, lastViolated, streak, recentViolations };
 }
 
 export function computeRuleStats(
@@ -73,17 +141,7 @@ export function computeRuleStats(
   legacyViolations: { ruleId: string; date: string }[] = [],
 ): RuleStatsResult {
   const active = rules.filter(r => r.isActive);
-
-  const byDay = new Map<string, TradeEntry[]>();
-  for (const t of trades) { const a = byDay.get(t.dateISO); if (a) a.push(t); else byDay.set(t.dateISO, [t]); }
-
-  // Manual report status per (ruleId, date). Legacy day-violations first, then
-  // newer user checks override them.
-  const reported = new Map<string, 'followed' | 'violated'>();
-  for (const v of legacyViolations) reported.set(`${v.ruleId}:${v.date}`, 'violated');
-  for (const c of userChecks) {
-    if (c.date && (c.status === 'followed' || c.status === 'violated')) reported.set(`${c.ruleId}:${c.date}`, c.status);
-  }
+  const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
   const lookup = (ruleId: string, date: string) => reported.get(`${ruleId}:${date}`);
 
   const period = (days: string[]): PeriodCompliance => {
