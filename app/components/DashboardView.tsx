@@ -728,12 +728,12 @@ export default function DashboardView() {
               {/* Open tasks */}
               <div className="panel dp-pad">
                 <span className="dp-zone-title">{s.tasksK}</span>
-                <div className="dp-rem-box" style={{ marginTop: 12 }}>
+                <div className="dp-tasks-list">
                   {reminders.map(r => (
-                    <div key={r.id} className="dp-reminder-chip">
-                      <button className={`dp-reminder-check${r.done ? ' done' : ''}`} onClick={() => toggleReminder(r.id)}>{r.done ? '✓' : ''}</button>
-                      <span className={`dp-reminder-text${r.done ? ' done' : ''}`}>{r.text}</span>
-                      <button className="dp-reminder-del" onClick={() => deleteReminder(r.id)}>×</button>
+                    <div key={r.id} className={`dp-reminder-chip${r.done ? ' done' : ''}`} onClick={() => toggleReminder(r.id)}>
+                      <span className="dp-reminder-box"><span className="dp-reminder-check">{r.done ? '✓' : ''}</span></span>
+                      <span className="dp-reminder-text">{r.text}</span>
+                      <button className="dp-reminder-del" onClick={e => { e.stopPropagation(); deleteReminder(r.id); }}>×</button>
                     </div>
                   ))}
                 </div>
