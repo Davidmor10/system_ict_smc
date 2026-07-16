@@ -2,7 +2,7 @@ import type { TradeEntry, Direction } from '../journal';
 import { INSTRUMENT_KEYS } from '../instruments';
 import { SESS } from '../sessions';
 import { computeGroupPerformance, normSession } from './metrics';
-import { hourOf } from './time';
+import { hourOf, weekdayOf } from './time';
 import { analyzeInstruments } from './instruments';
 import { analyzeSessions } from './sessions';
 import type { PatternCandidate } from './types';
@@ -102,6 +102,26 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
   }
   for (const [key, subset] of comboGroups) {
     push('confirmation_combo', `combo_${key}`, { confirmationCombo: key }, subset, `Combo: ${key}`);
+  }
+
+  // bias alignment — trades taken with vs against the trader's own stated bias
+  for (const ba of ['ALIGNED', 'COUNTER'] as const) {
+    const subset = trades.filter(t => t.biasAlignment === ba);
+    push('bias_alignment', `bias_${ba}`, { biasAlignment: ba }, subset, `Bias: ${ba}`);
+  }
+
+  // setup — the trader's structured setup tag (reversal vs continuation)
+  for (const s of ['REVERSAL', 'CONTINUATION'] as const) {
+    const subset = trades.filter(t => t.setup === s);
+    push('setup', `setup_${s}`, { setup: s }, subset, `Setup: ${s}`);
+  }
+
+  // weekday — day of week the trade was taken
+  const weekdaysSeen = new Set<number>();
+  for (const t of trades) weekdaysSeen.add(weekdayOf(t));
+  for (const w of weekdaysSeen) {
+    const subset = trades.filter(t => weekdayOf(t) === w);
+    push('weekday', `weekday_${w}`, { weekday: w }, subset, `Weekday: ${w}`);
   }
 
   // single-dimension standouts, in case combos stay too sparse for a while

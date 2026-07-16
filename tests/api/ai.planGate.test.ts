@@ -45,6 +45,7 @@ const coachChatByIdRoute = await import('../../app/api/ai/coach/chats/[id]/route
 const insightsRoute = await import('../../app/api/ai/insights/route');
 const patternRoute = await import('../../app/api/ai/pattern-insights/route');
 const weeklyRoute = await import('../../app/api/ai/weekly-report/route');
+const strengthsRoute = await import('../../app/api/ai/strengths/route');
 
 function post(body: unknown = { lang: 'he' }) {
   return new Request('http://x', { method: 'POST', body: JSON.stringify(body) });
@@ -97,6 +98,12 @@ describe('AI APIs — free plan is rejected with 403 on every paid surface', () 
   it('POST /api/ai/weekly-report → 403', async () => {
     expect((await weeklyRoute.POST(post() as never)).status).toBe(403);
   });
+
+  it('POST /api/ai/strengths → 403', async () => {
+    const res = await strengthsRoute.POST(post() as never);
+    expect(res.status).toBe(403);
+    expect((await res.json()).requiredPlan).toBe('deluxe');
+  });
 });
 
 describe('AI APIs — a sufficient plan passes the gate', () => {
@@ -125,6 +132,18 @@ describe('AI APIs — a sufficient plan passes the gate', () => {
     const res = await coachChatsRoute.GET();
     expect(res.status).toBe(200);
   });
+
+  it('deluxe user passes the strengths gate (not 403) with no trades yet', async () => {
+    currentUserId = 'user_deluxe';
+    const res = await strengthsRoute.POST(post() as never);
+    expect(res.status).not.toBe(403);
+    expect((await res.json()).strengths).toEqual([]);
+  });
+
+  it('pro user is still below the deluxe strengths surface (403)', async () => {
+    currentUserId = 'user_pro';
+    expect((await strengthsRoute.POST(post() as never)).status).toBe(403);
+  });
 });
 
 describe('AI APIs — unauthenticated requests still 401 before any plan logic', () => {
@@ -135,5 +154,6 @@ describe('AI APIs — unauthenticated requests still 401 before any plan logic',
     expect((await insightsRoute.POST(post() as never)).status).toBe(401);
     expect((await patternRoute.POST(post() as never)).status).toBe(401);
     expect((await weeklyRoute.POST(post() as never)).status).toBe(401);
+    expect((await strengthsRoute.POST(post() as never)).status).toBe(401);
   });
 });

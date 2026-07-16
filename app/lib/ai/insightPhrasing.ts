@@ -142,6 +142,68 @@ Rules:
   return parsed.map(p => (typeof p === 'string' ? p : ''));
 }
 
+export interface StrengthPhrasingItem {
+  /** Already Hebrew (or English, per lang) — built deterministically before
+      this call, so the model never has to translate a field identifier. */
+  subjectLabel: string;
+  metric: GroupPerformance;
+  baseline: number;
+  trend: 'up' | 'flat' | 'down';
+}
+
+/** Phrases a batch of already-confirmed recurring strengths (each one already
+    verified by pattern_memory to outperform the trader's own baseline) for the
+    "מה באמת עובד לך" section — one LLM call for the whole batch. Distinct from
+    generateInsightsPhrasing: every item here is a genuine, above-baseline edge,
+    so the prompt leans on trend (strengthening/stable/weakening) rather than a
+    fresh discovery framing. */
+export async function generateWorkingStrengthsPhrasing(items: StrengthPhrasingItem[], lang: 'he' | 'en'): Promise<string[] | null> {
+  if (items.length === 0) return [];
+  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const trendWord = (t: StrengthPhrasingItem['trend']) =>
+    t === 'up' ? 'strengthening — recent performance is improving'
+    : t === 'down' ? 'weakening — recent performance has declined'
+    : 'stable — holding steady over the sample';
+  const list = items
+    .map((it, i) => `${i + 1}. "${it.subjectLabel}" — ${fmtMetric(it.subjectLabel, it.metric)}, overall baseline winRate ${it.baseline.toFixed(0)}%, recent trend: ${trendWord(it.trend)}`)
+    .join('\n');
+
+  const prompt = `You are Onyx, an experienced trading mentor reviewing a futures day-trader's own journal. Below are ${items.length} genuine recurring strengths already confirmed in this trader's data — each one already verified to outperform their overall baseline win rate. Write one short, evidence-based sentence per strength explaining why it holds up and what its recent trend means. You do NOT predict markets and NEVER give buy/sell signals.
+
+${langInstruction}
+Write in natural, conversational language with no unnecessary jargon. Do NOT mix in English words beyond the trader's own ICT-style tags already embedded in the subject label (e.g. SMT, IFVG, CISD, Order Block, instrument tickers) — keep those exactly as given, never translate or alter them, but every other word must be in the target language.
+
+STRENGTHS (already computed — cite only these numbers, keep the same order):
+${list}
+
+Produce exactly one JSON array of ${items.length} string(s), one per strength above, in order, each ONE short sentence (max ~25 words):
+["<explanation for strength 1>", ...]
+
+Rules:
+- Every number must come directly from the data above. Never invent, round dramatically, or estimate.
+- If the trend is "weakening", say so plainly — mention that recent performance has declined and it's worth checking what changed. Never soften this into vague reassurance.
+- If the trend is "strengthening", say the pattern has been getting stronger recently.
+- If the trend is "stable", emphasize consistency/reliability across the sample rather than describing a change.
+- Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
+- JSON only, no extra text.`;
+
+  const raw = await tryGenerate('generateWorkingStrengthsPhrasing', prompt);
+  if (raw === null) return null;
+
+  let parsed: unknown[] = [];
+  try {
+    const match = raw.match(/\[[\s\S]*\]/);
+    parsed = match ? JSON.parse(match[0]) : [];
+  } catch {
+    parsed = [];
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    logger.warn('generateWorkingStrengthsPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
+    return null;
+  }
+  return parsed.map(p => (typeof p === 'string' ? p : ''));
+}
+
 export interface PatternPhrasing {
   title: string;
   evidence: string;
