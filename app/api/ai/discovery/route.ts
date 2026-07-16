@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateDashboardPrimaryInsight } from '../../../lib/intelligence/service';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
     logSecurityEvent('rate_limited', { route: '/api/ai/discovery', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  // The dashboard's "AI insight of the day" is a Deluxe surface — enforced at
+  // the API too, not just by the client no longer calling it on a lower plan.
+  const denied = await requirePlanApi('deluxe', '/api/ai/discovery');
+  if (denied) return denied;
 
   try {
     const body = await req.json().catch(() => ({}));

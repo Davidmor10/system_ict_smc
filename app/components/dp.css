@@ -368,6 +368,21 @@
 .dp-ai-waiting { display: flex; align-items: center; gap: 11px; padding: 10px 0; }
 .dp-ai-waiting-text { font-family: var(--ff-mono); font-size: 13px; font-weight: 600; color: var(--w40); }
 
+/* ── AI hero, locked (free/pro) — real card blurred behind an upgrade CTA ── */
+.dp-ai-locked-body { position: relative; min-height: 150px; }
+.dp-ai-locked-blur { filter: blur(6px); pointer-events: none; user-select: none; opacity: .45; }
+.dp-ai-locked-overlay { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center;
+                        justify-content: center; gap: 10px; text-align: center; padding: 12px;
+                        background: radial-gradient(60% 80% at 50% 40%, rgba(5,5,5,.35), rgba(5,5,5,.82)); border-radius: 10px; }
+.dp-ai-locked-icon { color: var(--gold); font-size: 18px; }
+.dp-ai-locked-title { font-family: var(--ff-serif); font-size: 19px; font-weight: 800; color: #fff; }
+.dp-ai-locked-text { font-family: var(--ff-mono); font-size: 12px; font-weight: 600; color: var(--w55); max-width: 42ch; line-height: 1.55; }
+.dp-ai-locked-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 10px 20px; border-radius: 8px;
+                    background: var(--gold); color: #000; font-family: var(--ff-mono); font-size: 12px; font-weight: 800;
+                    letter-spacing: .1em; text-transform: uppercase; text-decoration: none;
+                    box-shadow: 0 0 28px -8px rgba(212,175,55,.5); transition: box-shadow .28s var(--ease), transform .2s var(--ease); }
+.dp-ai-locked-cta:hover { box-shadow: 0 0 40px -6px rgba(212,175,55,.7); transform: translateY(-1px); }
+
 /* ── Mission control ────────────────────────────────────────────── */
 .dp-mission-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .dp-mission-dirty { font-family: var(--ff-mono); font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--gold); }
