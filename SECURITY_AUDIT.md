@@ -2,6 +2,8 @@
 
 **תאריך:** 2026-07-16 · **היקף:** כל הקוד בריפו (‎~17,800 שורות TS/TSX, 15 נתיבי API, סכימת DB, קונפיגורציה)
 
+> **עדכון (אותו יום):** ממצאים 1–6 תוקנו בענף זה. פירוט התיקון מופיע בתוך כל ממצא. מצב אחרי התיקונים: **242/242 טסטים עוברים** (נוספו 11 טסטים לאכיפת תוכנית), tsc נקי, ‏0 שגיאות lint, ה-build עובר וכל דפי ה-dashboard מרונדרים דינמית.
+
 ---
 
 ## תוצאה כללית: המערכת במצב טוב מאוד לשחרור ✅
@@ -38,21 +40,33 @@
 ולקבל את פיצ'רי ה-Deluxe בחינם — עקיפת מונטיזציה + שריפת מכסת ה-AI (Gemini/Groq) שלך.
 **תיקון מוצע:** helper בסגנון `requirePlanApi('deluxe')` שמחזיר `403` (לא redirect) ולהוסיפו בראש כל נתיב AI, וכן `requirePlanApi('pro')` על journal/collections אם רלוונטי עסקית.
 
+> ✅ **תוקן:** נוסף `requirePlanApi(role, route)` ב-`withRoleCheck.ts` שמחזיר 403 ורושם אירוע `plan_denied`. נאכף: `chat` + `coach/chats*` + `pattern-insights` + `weekly-report` ב-**deluxe**; `insights` ב-**pro** (עמוד היומן). `discovery` ו-`macro` נשארו לכל משתמש מחובר בכוונה — הם חלק מחוויית הדשבורד החינמית (DashboardView קורא להם ללא תנאי). מכוסה ב-11 טסטים חדשים (`tests/api/ai.planGate.test.ts`).
+
 ### 2. 🟠 בינוני — דפי ה-dashboard נאפים כ-Static כשה-build רץ בלי מפתחות Clerk
 בפלט ה-build כל `/dashboard/*` מסומן `○ (Static)`. הסיבה: `getUserContext` בודק `process.env.CLERK_SECRET_KEY` **לפני** קריאה ל-`auth()`, כך שבסביבת build בלי המפתח אף API דינמי לא נקרא — ו-Next מקפיא את תוצאת ה-guard בזמן build. התוצאה של build כזה: ה-redirect ל-`/checkout` נאפה לכולם (נכשל-סגור, אין דליפת מידע — אבל האתר שבור למנויים). ב-Vercel עם env מוגדר זה הופך לדינמי, אבל האבטחה לא צריכה להיות תלויה בהרכב ה-env בזמן build.
 **תיקון מוצע:** לאלץ הערכה פר-בקשה — `await connection()` (מ-`next/server`) או קריאת `cookies()` בתחילת `getUserContext()`, לפני בדיקת ה-env.
 
+> ✅ **תוקן:** `await connection()` נוסף בראש `getUserContext()` (הדרך הנתמכת ב-Next 16 — ה-segment config‏ `dynamic` הוסר בגרסה זו). אומת ב-build: כל `/dashboard/*` עבר מ-`○ Static` ל-`ƒ Dynamic` גם כשה-build רץ בלי מפתחות.
+
 ### 3. 🟡 נמוך — `/api/ai/insights` מחזיר טקסט שגיאה פנימי ללקוח
 ב-catch: `debug: { threw: err.message }` — דולף פרטים פנימיים (שמות מודלים, הודעות ספקים). ההערה בקוד כבר מגדירה את `debug` כזמני. **תיקון:** להסיר את השדה או להחזיר קוד סטטוס קבוע בלבד.
+
+> ✅ **תוקן:** `debug` הוסר מהתשובה לגמרי (גם ממסלול ההצלחה); האבחון נרשם עכשיו ללוג בצד שרת בלבד (`logger.info('insights empty', ...)`). גם פאנל ה-"temp debug info" הוסר מ-`AIInsightPanel.tsx`.
 
 ### 4. 🟡 נמוך — צילומי מסך לא מאומתים בשרת כתמונה
 `screenshots` מקבל כל מחרוזת עד 2MB. הלקוח מסנן `image/*`, אבל קריאת API ישירה יכולה לאחסן מחרוזת שרירותית שמוזרקת ל-`<img src>` (self-XSS בלבד — רק הבעלים רואה, ו-CSP מגביל). **תיקון (hardening):** ולידציה בסכימה: `^data:image\/(png|jpe?g|webp|gif);base64,`.
 
+> ✅ **תוקן:** הסכימה דורשת כעת `^data:image\//` (כל mime של תמונה — כולל HEIC מאייפון, כדי לא לשבור שמירות קיימות). בנוסף `id` בסכימת הטרייד הוקשח ל-`.int()` ו-`/api/journal/[id]` מחזיר 400 על id לא-מספרי במקום 500.
+
 ### 5. 🟡 נמוך — `success_url` של Stripe נבנה מכותרת `Origin` של הבקשה
 ב-`/api/checkout`: `req.headers.get('origin') ?? NEXT_PUBLIC_APP_URL`. הכותרת בשליטת הלקוח; בתרחיש קצה זה מאפשר לכוון את החזרה מ-Stripe לדומיין זר. **תיקון:** להעדיף `NEXT_PUBLIC_APP_URL` תמיד, או לאמת את ה-origin מול allowlist.
 
+> ✅ **תוקן:** הסדר הוחלף — `NEXT_PUBLIC_APP_URL` קודם, כותרת `Origin` רק כ-fallback לסביבות פיתוח. חובה להגדיר את המשתנה בפרודקשן (נוסף ל-`.env.example`).
+
 ### 6. 🟡 נמוך — עדכוני תלויות
 `npm audit`: 3 moderate — כולם `postcss` ישן שמצורף בתוך `next` (XSS בזמן build בלבד, לא ב-runtime; אין fix ישיר). קיימת גרסה `next@16.2.10` (אתם על 16.2.7) ו-`@clerk/nextjs@7.5.19` (אתם על 7.4.3). **מומלץ לעדכן ולהריץ שוב את הטסטים.**
+
+> ✅ **תוקן (חלקית):** עודכנו `next@16.2.10`, ‏`eslint-config-next@16.2.10`, ‏`@clerk/nextjs@7.5.19` — כל הטסטים, tsc וה-build עברו אחרי העדכון. אזהרות ה-`postcss` הטרנזיטיביות נותרו (מצורפות בתוך next, בזמן build בלבד, אין fix זמין). הערה: ‏eslint-config-next החדש מפעיל חוקי React Compiler חדשים שסימנו ~20 דפוסים קיימים ב-UI — הורדו ל-warning ב-`eslint.config.mjs` עם הערה, לניקוי מסודר אחרי השחרור.
 
 ### 7. ⚪ הערות (לא חוסם שחרור)
 - **CSP** כולל `'unsafe-inline' 'unsafe-eval'` ב-script-src — מתועד ומודע; מעבר ל-nonce הוא שיפור עתידי.
@@ -65,8 +79,9 @@
 
 ## צ'קליסט לפני עלייה לאוויר
 
-- [ ] לוודא שכל משתני הסביבה מוגדרים ב-Vercel **גם לסביבת ה-build** (בגלל ממצא 2)
+- [ ] לוודא שכל משתני הסביבה מוגדרים ב-Vercel (רשימה מלאה ב-`.env.example`), כולל `NEXT_PUBLIC_APP_URL`
 - [ ] להגדיר את ה-webhooks בדשבורדים: Stripe → `/api/webhooks/stripe`, Clerk → `/api/webhooks/clerk`, ולהעתיק את ה-signing secrets
-- [ ] לתקן לפחות את ממצאים 1–3 (אכיפת plan ב-API, רינדור דינמי, הסרת debug)
-- [ ] לעדכן `next` ו-`@clerk/nextjs` ולהריץ `npm test && npm run build`
+- [x] לתקן את ממצאים 1–3 (אכיפת plan ב-API, רינדור דינמי, הסרת debug) — ✅ בוצע
+- [x] לעדכן `next` ו-`@clerk/nextjs` ולהריץ `npm test && npm run build` — ✅ בוצע (242/242)
 - [ ] בדיקת עשן ידנית בפרודקשן: הרשמה → שדרוג בתשלום (מצב test של Stripe) → ביטול מנוי → לוודא ירידה ל-free
+- [ ] אחרי השחרור: לנקות בהדרגה את אזהרות ה-React-Compiler החדשות (`react-hooks/set-state-in-effect` ועוד — ראו `eslint.config.mjs`)

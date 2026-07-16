@@ -33,9 +33,6 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  // Temporary — shown directly in the panel so the empty-result cause is
-  // visible without DevTools/Vercel access. Remove once resolved.
-  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null);
 
   const closedCount = trades.filter(t => t.result !== 'OPEN').length;
   const cacheKey = 'onyx_ai_insights_' + todayISO();
@@ -44,7 +41,6 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
     if (trades.length < 3) return;
     setLoading(true);
     setError(false);
-    setDebugInfo(null);
     try {
       const res = await fetch('/api/ai/insights', {
         method: 'POST',
@@ -57,7 +53,6 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       const stamp = new Date().toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
       setInsights(fetched);
       setUpdatedAt(stamp);
-      if (fetched.length === 0 && data.debug) setDebugInfo(data.debug);
       try {
         localStorage.setItem(cacheKey, JSON.stringify({ insights: fetched, updatedAt: stamp }));
       } catch { /* storage unavailable — non-fatal */ }
@@ -156,12 +151,6 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
             >
               → נתח את הביצועים שלי
             </button>
-          )}
-          {debugInfo && (
-            <div dir="ltr" className="mt-4 rounded-lg border border-white/10 bg-black/40 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30 mb-1.5">temp debug info</p>
-              <pre className="font-mono text-[10px] text-white/50 whitespace-pre-wrap break-all">{JSON.stringify(debugInfo, null, 2)}</pre>
-            </div>
           )}
         </div>
       )}

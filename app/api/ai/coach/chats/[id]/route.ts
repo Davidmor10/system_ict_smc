@@ -5,6 +5,7 @@ import { getCoachChat, deleteCoachChat } from '../../../../../lib/ai/coachChats'
 import { checkRateLimit } from '../../../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../../../lib/securityLog';
 import { logger } from '../../../../../lib/logger';
+import { requirePlanApi } from '../../../../../lib/withRoleCheck';
 
 /** GET /api/ai/coach/chats/[id] — a single chat with its full message list. */
 export async function GET(
@@ -22,6 +23,9 @@ export async function GET(
     logSecurityEvent('rate_limited', { route: '/api/ai/coach/chats/[id] GET', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  const denied = await requirePlanApi('deluxe', '/api/ai/coach/chats/[id] GET');
+  if (denied) return denied;
 
   if (!isSupabaseConfigured()) return NextResponse.json({ chat: null });
 
@@ -52,6 +56,9 @@ export async function DELETE(
     logSecurityEvent('rate_limited', { route: '/api/ai/coach/chats/[id] DELETE', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  const denied = await requirePlanApi('deluxe', '/api/ai/coach/chats/[id] DELETE');
+  if (denied) return denied;
 
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 

@@ -46,7 +46,9 @@ export async function POST(req: Request) {
     customerId = data?.stripe_customer_id ?? undefined;
   }
 
-  const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
+  // Prefer the configured app URL — the Origin header is caller-controlled,
+  // and it decides where Stripe sends the user back after payment.
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? '';
 
   try {
     const session = await getStripe().checkout.sessions.create({

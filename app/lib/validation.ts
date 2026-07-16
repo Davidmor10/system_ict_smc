@@ -15,8 +15,15 @@ const MAX_TEXT = 2000;
 const MAX_SCREENSHOTS = 10;
 const MAX_SCREENSHOT_LEN = 2_000_000; // generous bound for a base64 data-URL image
 
+// Screenshots are only ever produced by FileReader.readAsDataURL on an image
+// file, so anything that isn't a data:image/* URL is a forged request — reject
+// it before it can be stored and echoed back into an <img src>.
+const screenshotSchema = z.string().max(MAX_SCREENSHOT_LEN).regex(/^data:image\//);
+
 export const tradeEntrySchema = z.object({
-  id: z.number(),
+  // Trade ids are Date.now() values — always integers; the DB column is a
+  // bigint, so a fractional id would fail there with an opaque 500 anyway.
+  id: z.number().int(),
   dateISO: z.string().max(20),
   time: z.string().max(20),
   symbol: z.enum(INSTRUMENT_KEYS),
@@ -36,7 +43,7 @@ export const tradeEntrySchema = z.object({
   biasAlignment: z.enum(['ALIGNED', 'COUNTER']).optional(),
   tradeR: z.number().finite().optional(),
   pnlUsd: z.number().finite().optional(),
-  screenshots: z.array(z.string().max(MAX_SCREENSHOT_LEN)).max(MAX_SCREENSHOTS).optional(),
+  screenshots: z.array(screenshotSchema).max(MAX_SCREENSHOTS).optional(),
   exits: z.array(z.object({
     price: z.number().finite(),
     contracts: z.number().finite().min(0),

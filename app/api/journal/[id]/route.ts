@@ -25,12 +25,17 @@ export async function DELETE(
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const { id } = await params;
+  const idNum = Number(id);
+  if (!Number.isSafeInteger(idNum)) {
+    logSecurityEvent('validation_failed', { route: '/api/journal/[id] DELETE', userId, reason: 'non_numeric_id' });
+    return NextResponse.json({ error: 'Invalid trade id' }, { status: 400 });
+  }
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('journal_trades')
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('clerk_id', userId)
-    .eq('id', Number(id));
+    .eq('id', idNum);
 
   if (error) {
     logger.error('journal DELETE failed', { userId, error: error.message });
@@ -59,12 +64,17 @@ export async function PATCH(
   if (!isSupabaseConfigured()) return NextResponse.json({ ok: true });
 
   const { id } = await params;
+  const idNum = Number(id);
+  if (!Number.isSafeInteger(idNum)) {
+    logSecurityEvent('validation_failed', { route: '/api/journal/[id] PATCH', userId, reason: 'non_numeric_id' });
+    return NextResponse.json({ error: 'Invalid trade id' }, { status: 400 });
+  }
   const supabase = createServerSupabaseClient();
   const { error } = await supabase
     .from('journal_trades')
     .update({ deleted_at: null, updated_at: new Date().toISOString() })
     .eq('clerk_id', userId)
-    .eq('id', Number(id));
+    .eq('id', idNum);
 
   if (error) {
     logger.error('journal PATCH failed', { userId, error: error.message });

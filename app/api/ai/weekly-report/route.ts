@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateWeeklyDeepAnalysis } from '../../../lib/intelligence/service';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
     logSecurityEvent('rate_limited', { route: '/api/ai/weekly-report', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  // AI-analytics surface — Deluxe only, enforced at the API as well.
+  const denied = await requirePlanApi('deluxe', '/api/ai/weekly-report');
+  if (denied) return denied;
 
   try {
     const body = await req.json().catch(() => ({}));
