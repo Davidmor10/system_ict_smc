@@ -11,6 +11,7 @@ import { INSTRUMENT_KEYS } from '../../lib/instruments';
 import { AUTO_SUPPORTED } from '../../lib/rules/engine';
 import { computeRulePerformance, type RulePerformance } from '../../lib/rules/performance';
 import { computeRuleStats, computeRuleHistory, type RuleStatsResult, type RuleHistory } from '../../lib/rules/stats';
+import { ruleImpact, ruleConfidence, confidenceLabel, ruleInsight, dashboardRuleInsights } from '../../lib/rules/insight';
 import {
   ruleTitle, ruleVerification, ruleSeverity, upsertCheck,
   type Rule, type RuleCheck, type RuleCategory, type ConditionType, type ConditionValue, type RuleScope, type RuleSeverity, type VerificationMode,
@@ -85,12 +86,19 @@ const SCOPE_META: { key: RuleScope; he: string }[] = [
 
 const CONFIRMATION_TAGS = ['SMT', 'IFVG', 'CISD', 'ORDER_BLOCK'];
 const M_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const M_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** "16 ביולי 2026" / "July 16, 2026" — built straight from the ISO parts (no
+    Date() round-trip), so it can never drift a day from `todayISO()` across
+    timezones. */
+function todayLabel(iso: string, en: boolean): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return en ? `${M_EN[m - 1]} ${d}, ${y}` : `${d} ב${M_HE[m - 1]} ${y}`;
+}
 const shortDate = (iso: string | null) => { if (!iso) return '—'; const p = iso.split('-'); return `${Number(p[2])} ${M_HE[Number(p[1]) - 1]}`; };
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
 const sessionHe = (key: string) => SESS.find(s => s.key === key)?.he ?? key;
-const CONF_LABEL: Record<string, string> = { low: 'ביטחון נמוך', medium: 'ביטחון בינוני', high: 'ביטחון גבוה' };
 const fmtR = (r: number) => `${r >= 0 ? '+' : '-'}${Math.abs(r).toFixed(1)}R`;
 
 function conditionValueComplete(ct: ConditionType, cv: ConditionValue = {}): boolean {
@@ -123,16 +131,6 @@ function conditionSummary(rule: Rule): string | null {
     case 'required_confirmations': return `אישורים נדרשים: ${(cv.tags ?? []).join(', ')}`;
     default: return null;
   }
-}
-
-/** Association strength between keeping the rule and results — only ever shown
-    once both sides clear the sample gate. Never presented as causation. */
-function impactOf(perf: RulePerformance): { label: string; color: string } | null {
-  if (!perf.hasEnough || perf.followedAvgR == null || perf.violatedAvgR == null) return null;
-  const delta = perf.followedAvgR - perf.violatedAvgR;
-  if (delta >= 1.5) return { label: 'פער גדול', color: GOLD };
-  if (delta >= 0.5) return { label: 'פער בינוני', color: 'rgba(255,255,255,0.7)' };
-  return { label: 'פער קטן', color: 'rgba(255,255,255,0.4)' };
 }
 
 function perfSummaryOf(perf: RulePerformance): string {
@@ -197,10 +195,11 @@ function Pill({ active, color, onClick, children }: { active: boolean; color?: s
 }
 
 // ── Rule card (accordion) ────────────────────────────────────────────────────
-function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand, onToggleActive, onDelete, onReport }: {
+function RuleCard({ rule, perf, history, trades, expanded, todayReported, onToggleExpand, onToggleActive, onDelete, onReport }: {
   rule: Rule;
   perf: RulePerformance;
   history: RuleHistory;
+  trades: TradeEntry[];
   expanded: boolean;
   todayReported: 'followed' | 'violated' | null;
   onToggleExpand: () => void;
@@ -213,7 +212,9 @@ function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand
   const mode = ruleVerification(rule);
   const isCritical = ruleSeverity(rule) === 'critical';
   const summary = conditionSummary(rule);
-  const impact = impactOf(perf);
+  const impact = ruleImpact(perf);
+  const confidence = ruleConfidence(perf);
+  const insight = ruleInsight(rule, perf, history.violationDates, trades);
   const total = perf.followedTrades + perf.violatedTrades;
   const notAutoCheckable = mode === 'automatic' && rule.conditionType != null && !AUTO_SUPPORTED.includes(rule.conditionType);
 
@@ -238,7 +239,7 @@ function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand
             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sev.color }} />
             <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: sev.color }}>{sev.he}</span>
             <Badge>{catLabel(rule.category)}</Badge>
-            {impact && <span className="font-mono text-[10px] font-bold tracking-[0.1em]" style={{ color: impact.color }}>· {impact.label}</span>}
+            <span className="font-mono text-[10px] font-bold tracking-[0.1em]" style={{ color: impact.color }}>· {impact.label}</span>
           </div>
           <span className="font-mono text-[12px] font-semibold text-white/55">{perfSummaryOf(perf)}</span>
           <span className="font-mono text-[11px] font-semibold text-white/40">
@@ -289,7 +290,7 @@ function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand
                     <Metric label="הופר" value={String(perf.violatedTrades)} tone="white" />
                     <Metric label="R ממוצע · נשמר" value={fmtR(perf.followedAvgR)} tone="long" />
                     <Metric label="R ממוצע · הופר" value={fmtR(perf.violatedAvgR)} tone="short" />
-                    <Metric label="רמת ביטחון" value={CONF_LABEL[perf.confidence.level]} tone="gold" />
+                    <Metric label="רמת ביטחון" value={confidenceLabel(confidence)} tone="gold" />
                   </div>
                   <p className="m-0 font-mono text-[11px] text-white/35">מבוסס על {perf.sampleSize} עסקאות מוכרעות.</p>
                 </>
@@ -298,6 +299,7 @@ function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand
                   <div className="flex flex-wrap gap-9">
                     <Metric label="נשמר" value={String(perf.followedTrades)} tone="white" />
                     <Metric label="הופר" value={String(perf.violatedTrades)} tone="white" />
+                    <Metric label="רמת ביטחון" value={confidenceLabel(confidence)} tone="gold" />
                   </div>
                   <p className="m-0 font-mono text-[12px] text-white/40">עדיין אין מספיק נתונים להשוואה אמינה. (מבוסס על {perf.sampleSize} עסקאות מוכרעות)</p>
                 </>
@@ -319,6 +321,15 @@ function RuleCard({ rule, perf, history, expanded, todayReported, onToggleExpand
                 ))}
               </div>
             )}
+
+            {/* AI insight — one sentence, grounded only in this rule's own numbers */}
+            <div className="rounded-lg p-4" style={{ background: 'rgba(212,175,55,.08)', border: '1px solid rgba(212,175,55,.22)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span style={{ color: GOLD, fontSize: 12 }}>◈</span>
+                <Kicker>תובנת AI</Kicker>
+              </div>
+              <p className="m-0 text-[13.5px] leading-relaxed text-[#c0c0c0]">{insight.text}</p>
+            </div>
 
             {/* Manual reporting — only for user-report rules */}
             {mode === 'user_report' && (
@@ -469,6 +480,12 @@ export default function RulesPage() {
   const activeRules = rules.filter(r => r.isActive);
   const stats = useMemo(() => computeRuleStats(rules, trades, userChecks, today, violations), [rules, trades, userChecks, violations, today]);
 
+  // Dashboard-wide insights — computed over every rule's own performance, not
+  // just the currently-filtered list, so switching a filter chip never changes
+  // what the sidebar says about the rule set as a whole.
+  const perfByRuleId = useMemo(() => new Map(rules.map(r => [r.id, computeRulePerformance(r, trades, userChecks)])), [rules, trades, userChecks]);
+  const dashboardInsights = useMemo(() => dashboardRuleInsights(rules, perfByRuleId, catLabel), [rules, perfByRuleId]);
+
   // Filter chips — only categories the trader actually uses.
   const usedCats = CAT_META.filter(m => rules.some(r => r.category === m.key));
   const chips: { key: string; label: string }[] = [
@@ -497,6 +514,14 @@ export default function RulesPage() {
 
   return (
     <div className="flex-1 overflow-y-auto" dir={en ? 'ltr' : 'rtl'}>
+      {/* ── Topbar ── */}
+      <div className="sticky top-0 z-30 flex items-center justify-between gap-5 px-6 sm:px-12 h-16 bg-[rgba(5,5,5,.82)] backdrop-blur-md border-b max-[880px]:hidden" style={{ borderColor: BORDER }}>
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">
+          {en ? <>Discipline <span className="text-white/20 mx-1.5">/</span> Trading Rules</> : <>משמעת <span className="text-white/20 mx-1.5">/</span> חוקי מסחר</>}
+        </span>
+        <span className="font-mono text-[11px] font-semibold text-white/35" dir={en ? 'ltr' : 'rtl'}>{todayLabel(today, en)}</span>
+      </div>
+
       <div className="max-w-[1440px] mx-auto px-12 py-14 pb-32 max-[880px]:px-5 max-[880px]:py-7 max-[880px]:pb-24 flex flex-col gap-12 max-[880px]:gap-10">
 
         {/* ── Hero ── */}
@@ -654,7 +679,13 @@ export default function RulesPage() {
                   {formError && <p className="m-0 font-mono text-[11px] text-[#c98080]">{formError}</p>}
 
                   <div className="flex items-center gap-2.5 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                    <button onClick={saveNewRule} className="px-5 py-2 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold uppercase tracking-[0.12em] hover:bg-[#e3c768] transition-colors">צור חוק</button>
+                    <button
+                      onClick={saveNewRule}
+                      disabled={!(draft.title ?? '').trim()}
+                      className="px-5 py-2 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold uppercase tracking-[0.12em] hover:bg-[#e3c768] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#d4af37] transition-colors"
+                    >
+                      צור חוק
+                    </button>
                     <button onClick={() => { setShowAdd(false); emptyDraftReset(); }} className="px-5 py-2 rounded-sm border text-white/40 font-mono text-xs uppercase tracking-[0.12em] hover:text-white/70 transition-colors" style={{ borderColor: BORDER }}>ביטול</button>
                   </div>
                 </div>
@@ -716,6 +747,7 @@ export default function RulesPage() {
                       rule={rule}
                       perf={computeRulePerformance(rule, trades, userChecks)}
                       history={computeRuleHistory(rule, trades, userChecks, today, violations)}
+                      trades={trades}
                       expanded={expandedId === rule.id}
                       todayReported={(() => { const c = userChecks.find(x => x.ruleId === rule.id && x.date === today); return c && c.status !== 'unknown' ? c.status : null; })()}
                       onToggleExpand={() => setExpandedId(id => (id === rule.id ? null : rule.id))}
@@ -730,8 +762,19 @@ export default function RulesPage() {
           </div>
 
           {/* ── Sticky discipline sidebar ── */}
-          <div className="flex flex-col gap-5 min-w-0 lg:sticky lg:top-6">
+          <div className="flex flex-col gap-5 min-w-0 lg:sticky lg:top-[88px]">
             <DisciplinePanel stats={stats} />
+
+            {dashboardInsights.length > 0 && (
+              <div className="flex flex-col gap-3 p-6 rounded-xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                <Kicker>תובנות</Kicker>
+                <div className="flex flex-col gap-2.5">
+                  {dashboardInsights.map((text, i) => (
+                    <p key={i} className="m-0 text-[13.5px] leading-relaxed text-[#c0c0c0]">{text}</p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {stats.topBroken.length > 0 && (
               <div className="flex flex-col gap-4 p-6 rounded-xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
@@ -757,6 +800,10 @@ export default function RulesPage() {
           </div>
 
         </div>
+
+        <p className="m-0 font-mono text-[11px] text-white/30 text-center">
+          {en ? 'Demo data · for research and educational purposes only.' : 'נתוני הדגמה · לצרכי מחקר ולימוד בלבד.'}
+        </p>
       </div>
 
       <ConfirmDialog

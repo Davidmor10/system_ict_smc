@@ -92,6 +92,19 @@ describe('computeRuleHistory', () => {
 
   it('is empty for a rule with no signal at all', () => {
     const h = computeRuleHistory(manualRule('a'), [], [], TODAY);
-    expect(h).toEqual({ lastFollowed: null, lastViolated: null, streak: 0, recentViolations: [] });
+    expect(h).toEqual({ lastFollowed: null, lastViolated: null, streak: 0, recentViolations: [], violationDates: [] });
+  });
+
+  it('collects every violation date within the lookback, not just the 3 shown in recentViolations', () => {
+    const rule = manualRule('a');
+    const checks = [
+      check('a', '2026-07-11', 'violated'),
+      check('a', '2026-07-09', 'violated'),
+      check('a', '2026-07-06', 'violated'),
+      check('a', '2026-07-03', 'violated'),
+    ];
+    const h = computeRuleHistory(rule, [], checks, TODAY);
+    expect(h.recentViolations).toHaveLength(3);
+    expect(h.violationDates).toEqual(['2026-07-11', '2026-07-09', '2026-07-06', '2026-07-03']);
   });
 });
