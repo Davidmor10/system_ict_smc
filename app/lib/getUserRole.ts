@@ -3,8 +3,9 @@ import { connection } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from './supabase/server';
 
 // Three real tiers. Access is strictly ranked: deluxe ⊇ pro ⊇ free.
-//   free   — explore + public performance only (a taste of the dashboard)
-//   pro    — dashboard, journal, setups (playbook) and rules
+//   free   — dashboard, journal, setups (playbook) and rules, all without
+//            the paid AI tools (e.g. the journal's AI insight panel)
+//   pro    — adds the AI tools embedded in those free-tier pages
 //   deluxe — everything (adds statistics, AI analytics and the AI coach)
 export type Role = 'free' | 'pro' | 'deluxe';
 export const ROLE_RANK: Record<Role, number> = { free: 0, pro: 1, deluxe: 2 };

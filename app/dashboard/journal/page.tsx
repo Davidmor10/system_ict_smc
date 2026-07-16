@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { SESS, getActiveSessionIdx } from '../../lib/sessions';
+import { usePlan } from '../../components/PlanProvider';
 import TradeForm from '../../components/TradeForm';
 import AIInsightPanel from '../../components/AIInsightPanel';
 import JournalCalendar from '../../components/JournalCalendar';
@@ -30,6 +31,7 @@ const usd = (n: number) => {
 const pnlColor = (n: number) => (n > 0 ? '#4a7c59' : n < 0 ? '#8b3a3a' : 'rgba(255,255,255,0.4)');
 
 export default function JournalPage() {
+  const { canAccess } = usePlan();
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -167,8 +169,8 @@ export default function JournalPage() {
           </div>
         )}
 
-        {/* AI Insight */}
-        {trades.length > 0 && <AIInsightPanel trades={trades} />}
+        {/* AI Insight — a Pro+ tool; free users get the journal itself but not this */}
+        {trades.length > 0 && canAccess('pro') && <AIInsightPanel trades={trades} />}
 
         {/* Monthly P&L calendar */}
         {trades.length > 0 && (

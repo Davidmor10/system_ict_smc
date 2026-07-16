@@ -11,11 +11,11 @@ const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const NAV: { href: string; key: DictKey; min: Role }[] = [
   { href: '/dashboard',              key: 'nav_workspace',    min: 'free'   },
-  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'pro'    },
+  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'free'   },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'deluxe' },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe' },
-  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'pro'    },
-  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'pro'    },
+  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free'   },
+  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free'   },
 ];
 
 function LockIcon() {
