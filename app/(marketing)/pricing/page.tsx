@@ -22,9 +22,8 @@ const PLANS = [
     unit:     null as BiStr | null,
     features: [
       { text: { he: 'חשבון חינמי להיכרות עם המערכת',          en: 'Free account to explore the system'            } as BiStr, on: true  },
-      { text: { he: 'טעימה מהביצועים הציבוריים והדאשבורד',     en: 'Taste of public performance & dashboard'       } as BiStr, on: true  },
-      { text: { he: 'ללא יומן מסחר, סטאפים וחוקים',            en: 'No journal, setups or rules'                   } as BiStr, on: false },
-      { text: { he: 'ללא סטטיסטיקות ומאמן AI',                 en: 'No statistics or AI coach'                     } as BiStr, on: false },
+      { text: { he: 'דאשבורד, יומן מסחר, סטאפים וחוקים — גישה מלאה', en: 'Dashboard, trade journal, setups & rules — full access' } as BiStr, on: true  },
+      { text: { he: 'ללא ניתוח AI ביומן, סטטיסטיקות או מאמן AI', en: 'No AI journal analysis, statistics or AI coach' } as BiStr, on: false },
     ],
     cta:      { he: 'התחל בחינם',               en: 'Get Started Free'       } as BiStr,
     href:     '/sign-up',
@@ -39,9 +38,8 @@ const PLANS = [
     amtColor: '#fff',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'גישה מלאה לדאשבורד ולניתוח יומן המסחר',      en: 'Full dashboard access & journal analysis'     } as BiStr, on: true  },
-      { text: { he: 'יומן מסחר מלא',                              en: 'Full trade journal'                           } as BiStr, on: true  },
-      { text: { he: 'ספר הסטאפים והחוקים פתוח',                   en: 'Setups & rules unlocked'                      } as BiStr, on: true  },
+      { text: { he: 'כל מה שיש ב-BASIC',                          en: 'Everything in BASIC'                          } as BiStr, on: true  },
+      { text: { he: 'ניתוח AI אוטומטי על ביצועי היומן שלך',        en: 'Automatic AI analysis of your journal'        } as BiStr, on: true  },
       { text: { he: 'ללא עמוד הסטטיסטיקה והאנליטיקס',             en: 'No statistics & analytics page'               } as BiStr, on: false },
       { text: { he: 'ללא מאמן ה-AI',                              en: 'No AI coach'                                  } as BiStr, on: false },
     ],
@@ -78,8 +76,8 @@ type TableRow = { feat: BiStr; b: CellV; p: CellV; d: CellV };
 const TABLE_ROWS: TableRow[] = [
   { feat: { he: 'טעימה מהביצועים הציבוריים',         en: 'Public performance preview'     }, b: 'check', p: 'check', d: 'check'   },
   { feat: { he: 'גישה לדאשבורד',                     en: 'Dashboard access'               }, b: 'dash',  p: 'check', d: 'check'   }, // basic cell overridden to "taste" per lang
-  { feat: { he: 'יומן מסחר',                         en: 'Trade journal'                  }, b: 'cross', p: 'check', d: 'check'   },
-  { feat: { he: 'סטאפים וחוקים',                     en: 'Setups & rules'                 }, b: 'cross', p: 'check', d: 'check'   },
+  { feat: { he: 'יומן מסחר, סטאפים וחוקים',          en: 'Trade journal, setups & rules'  }, b: 'check', p: 'check', d: 'check'   },
+  { feat: { he: 'ניתוח AI על עסקאות היומן',          en: 'AI analysis of journal trades'  }, b: 'cross', p: 'check', d: 'check'   },
   { feat: { he: 'עמוד סטטיסטיקה ואנליטיקס',         en: 'Statistics & analytics'         }, b: 'cross', p: 'cross', d: 'check'   },
   { feat: { he: 'מאמן AI ואנליטיקת AI',              en: 'AI coach & analytics'           }, b: 'cross', p: 'cross', d: 'check'   },
   { feat: { he: 'תמיכה',                             en: 'Support'                        }, b: '—',     p: '—',     d: '—'       }, // overridden per lang below
@@ -117,8 +115,8 @@ const I18N = {
   faq_sub:    { he: 'מה שכדאי לדעת לפני שמצטרפים', en: 'What you should know before joining' },
   faq_q1: { he: 'מה ההבדל המרכזי בין PRO ל-DELUXE?', en: 'What\'s the main difference between PRO and DELUXE?' },
   faq_a1: {
-    he: 'ב-PRO אתה מקבל גישה מלאה לדאשבורד, ליומן המסחר, לסטאפים ולחוקים — כל מה שצריך כדי לתעד ולנהל את המסחר. ב-DELUXE נפתח גם עמוד הסטטיסטיקה והאנליטיקס, אנליטיקת ה-AI ומאמן ה-AI — כלומר כל שכבת הבינה של המערכת.',
-    en: 'With PRO you get full access to the dashboard, the trade journal, setups and rules — everything you need to log and manage your trading. With DELUXE the statistics & analytics page, AI analytics and the AI coach open up too — the entire intelligence layer of the system.',
+    he: 'כבר ב-BASIC החינמי יש לך גישה מלאה לדאשבורד, ליומן המסחר, לסטאפים ולחוקים — כל מה שצריך כדי לתעד ולנהל את המסחר. ב-PRO מתווסף ניתוח AI אוטומטי על העסקאות שבתיעדת ביומן. ב-DELUXE נפתח גם עמוד הסטטיסטיקה והאנליטיקס, אנליטיקת ה-AI ומאמן ה-AI — כלומר כל שכבת הבינה של המערכת.',
+    en: 'Even the free BASIC plan gives you full access to the dashboard, the trade journal, setups and rules — everything you need to log and manage your trading. PRO adds automatic AI analysis of the trades you log in your journal. DELUXE opens up the statistics & analytics page, AI analytics and the AI coach too — the entire intelligence layer of the system.',
   },
   faq_q2: { he: 'אפשר לשדרג מ-PRO ל-DELUXE באמצע?', en: 'Can I upgrade from PRO to DELUXE mid-cycle?' },
   faq_a2: {
@@ -132,8 +130,8 @@ const I18N = {
   },
   faq_q4: { he: 'מה כולל החשבון החינמי?', en: 'What does the free account include?' },
   faq_a4: {
-    he: 'BASIC נותן לך להיכנס, להכיר את הממשק ולקבל טעימה מהביצועים הציבוריים ומהדאשבורד — בלי גישה ליומן המסחר, לסטאפים, לחוקים או לשכבת ה-AI.',
-    en: 'BASIC lets you sign in, explore the interface, and get a taste of the public performance and dashboard — without access to the trade journal, setups, rules, or the AI layer.',
+    he: 'BASIC נותן לך גישה מלאה וחינמית לדאשבורד, ליומן המסחר, לסטאפים ולחוקים. מה שנשאר לתשלום זו שכבת הבינה המלאכותית: ניתוח AI אוטומטי על היומן ב-PRO, ועמוד הסטטיסטיקה, אנליטיקת ה-AI ומאמן ה-AI ב-DELUXE.',
+    en: 'BASIC gives you full, free access to the dashboard, the trade journal, setups and rules. What stays paid is the AI intelligence layer: automatic AI journal analysis on PRO, and the statistics page, AI analytics and the AI coach on DELUXE.',
   },
 
   // CTA

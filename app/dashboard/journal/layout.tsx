@@ -1,8 +1,8 @@
 import { requirePlan } from '../../lib/withRoleCheck';
 
-// PRO+ only. Runs server-side on every navigation into this segment; a lower
-// plan is redirected to /checkout before the page renders.
+// FREE+ (open to every signed-in user). The AI insight panel inside the page
+// itself still gates on 'pro' — this layout no longer restricts the journal.
 export default async function JournalGuard({ children }: { children: React.ReactNode }) {
-  await requirePlan('pro');
+  await requirePlan('free');
   return <>{children}</>;
 }
