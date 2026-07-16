@@ -4,6 +4,7 @@ import './dp.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '../hooks/useLanguage';
+import { usePlan } from './PlanProvider';
 import { loadTrades, hydrateTradesFromCloud } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { hydrateDashboard, pushDashboard, initSyncListeners } from '../lib/sync/collections';
@@ -72,6 +73,9 @@ const STR = {
     aiThinking: 'מנתח את היומן שלך',
     aiOpenCoach: 'פתח את המאמן',
     aiDisc: 'התובנות מבוססות על היומן האישי שלך ואינן ייעוץ או המלצת מסחר.',
+    aiLockedTitle: 'תובנת ה-AI של היום נעולה',
+    aiLockedText: 'המערכת מזהה עבורך את הדפוס החזק ביותר ביומן שלך ומציגה אותו כאן, יום אחרי יום.',
+    aiLockedCta: 'שדרוג ל-Deluxe',
 
     // Performance
     pnlToday: 'P&L היום', pnlWeek: 'P&L השבוע', pnlMonth: 'P&L החודש',
@@ -126,6 +130,9 @@ const STR = {
     aiThinking: 'Analyzing your journal',
     aiOpenCoach: 'Open the coach',
     aiDisc: 'Insights are based on your own journal and are not financial or trading advice.',
+    aiLockedTitle: "Today's AI insight is locked",
+    aiLockedText: 'The system finds the strongest pattern in your journal and surfaces it here, day after day.',
+    aiLockedCta: 'Upgrade to Deluxe',
 
     pnlToday: "TODAY'S P&L", pnlWeek: "THIS WEEK'S P&L", pnlMonth: "THIS MONTH'S P&L",
     winRate: 'WIN RATE', profitFactor: 'PROFIT FACTOR', avgR: 'AVG R',
@@ -196,6 +203,8 @@ export default function DashboardView() {
   const { lang } = useLanguage();
   const L = lang as Lang;
   const s = STR[L];
+  const { role } = usePlan();
+  const isDeluxe = role === 'deluxe';
 
   /* ── State ────────────────────────────────────────────────────── */
   const [asset,     setAsset]     = useState<AssetKey>('ES');
@@ -304,8 +313,10 @@ export default function DashboardView() {
   }, []);
 
   /* ── Today's single strongest AI discovery — the hero ─────────── */
+  // Deluxe-only: a free/pro user never triggers this network call at all —
+  // the card below renders a locked teaser for them instead.
   useEffect(() => {
-    if (trades.length < 3) { setDiscovery(null); return; }
+    if (!isDeluxe || trades.length < 3) { setDiscovery(null); return; }
     const cacheKey = 'onyx_ai_discovery_' + todayKey();
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { setDiscovery(JSON.parse(cached)); return; } catch {} }
@@ -541,7 +552,20 @@ export default function DashboardView() {
                     <span className="dp-ai-sub">{s.aiHeroSub}</span>
                   </div>
 
-                  {discoveryLoading && !discovery ? (
+                  {!isDeluxe ? (
+                    <div className="dp-ai-locked-body">
+                      <div aria-hidden className="dp-ai-locked-blur">
+                        <h2 className="dp-ai-title">{s.aiHeroK}</h2>
+                        <p className="dp-ai-block-text" style={{ maxWidth: 560 }}>{s.aiWaitingText}</p>
+                      </div>
+                      <div className="dp-ai-locked-overlay">
+                        <span className="dp-ai-locked-icon">◈</span>
+                        <span className="dp-ai-locked-title">{s.aiLockedTitle}</span>
+                        <span className="dp-ai-locked-text">{s.aiLockedText}</span>
+                        <Link href="/checkout" className="dp-ai-locked-cta">{s.aiLockedCta} →</Link>
+                      </div>
+                    </div>
+                  ) : discoveryLoading && !discovery ? (
                     <div className="dp-ai-waiting">
                       <TypingDots /><span className="dp-ai-waiting-text">{s.aiThinking}</span>
                     </div>
