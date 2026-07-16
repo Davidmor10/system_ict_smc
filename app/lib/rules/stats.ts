@@ -99,6 +99,10 @@ export interface RuleHistory {
   streak: number;
   /** Most recent violations with their evidence, newest first (max 3). */
   recentViolations: { date: string; evidence: string }[];
+  /** Every violation date within the lookback, newest first — uncapped (unlike
+      `recentViolations`), so pattern detection (e.g. "clusters after a loss")
+      has the full picture, not just the 3 dates the UI lists. */
+  violationDates: string[];
 }
 
 /** Per-rule timeline — powers the streak / last-kept / last-broken line and the
@@ -117,6 +121,7 @@ export function computeRuleHistory(
   let streak = 0;
   let streakBroken = false;
   const recentViolations: { date: string; evidence: string }[] = [];
+  const violationDates: string[] = [];
 
   for (let i = 0; i < lookbackDays; i++) {
     const date = isoMinusDays(todayISO, i);
@@ -124,13 +129,14 @@ export function computeRuleHistory(
     if (d.status === 'violated') {
       if (!lastViolated) lastViolated = date;
       if (recentViolations.length < 3) recentViolations.push({ date, evidence: d.evidence });
+      violationDates.push(date);
       streakBroken = true;
     } else if (d.status === 'followed') {
       if (!lastFollowed) lastFollowed = date;
       if (!streakBroken) streak++;
     }
   }
-  return { lastFollowed, lastViolated, streak, recentViolations };
+  return { lastFollowed, lastViolated, streak, recentViolations, violationDates };
 }
 
 export function computeRuleStats(
