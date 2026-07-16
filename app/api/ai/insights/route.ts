@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generatePersonalizedInsights } from '../../../lib/intelligence/service';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
+import { logger } from '../../../lib/logger';
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -17,6 +19,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 
+  // Rendered on the journal page — Pro and up, enforced at the API as well.
+  const denied = await requirePlanApi('pro', '/api/ai/insights');
+  if (denied) return denied;
+
   try {
     const body = await req.json().catch(() => ({}));
     const lang = body?.lang === 'en' ? 'en' : 'he';
@@ -26,12 +32,12 @@ export async function POST(req: NextRequest) {
     // opportunity/warning/pattern template, and trades in the request body,
     // if any, are ignored.
     const { insights, debug } = await generatePersonalizedInsights(userId, lang);
-    // `debug` is temporary — safe to return (counts/booleans/status strings
-    // only, never raw error text) and only meaningful while diagnosing why
-    // the panel comes back empty. Remove once resolved.
-    return NextResponse.json({ insights, debug });
+    // Diagnostics stay server-side in the logs; the client only ever gets
+    // the insights themselves.
+    if (insights.length === 0) logger.info('insights empty', { userId, ...debug });
+    return NextResponse.json({ insights });
   } catch (err) {
     console.error('[AI Insights]', err);
-    return NextResponse.json({ insights: [], debug: { threw: err instanceof Error ? err.message : String(err) } }, { status: 500 });
+    return NextResponse.json({ insights: [] }, { status: 500 });
   }
 }

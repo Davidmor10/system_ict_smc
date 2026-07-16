@@ -8,7 +8,6 @@ const antiFlash = `(function(){try{var l=localStorage.getItem('onyx_landing_lang
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <MarketingLangProvider>
-      {/* eslint-disable-next-line @next/next/no-before-interactive-script-component */}
       <script dangerouslySetInnerHTML={{ __html: antiFlash }} />
       <MarketingNav />
       <main className="min-h-screen" style={{ background: 'var(--bg)', color: '#fff' }}>

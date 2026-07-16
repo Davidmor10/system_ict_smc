@@ -20,6 +20,20 @@ interface WeeklyReport {
   sampleSize: number;
   weekKey?: string;
 }
+type StrengthTrend = 'up' | 'flat' | 'down';
+interface WorkingStrength {
+  id: string;
+  name: string;
+  metric: GroupPerformance;
+  baseline: number;
+  delta: number;
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+  trend: StrengthTrend;
+  history: { at: string; winRate: number; sampleSize: number }[];
+  isLowData: boolean;
+  explanation: string;
+}
 
 function fmtPF(n: number): string {
   return Number.isFinite(n) ? n.toFixed(2) : '∞';
@@ -41,6 +55,54 @@ const CONF_META: Record<ConfidenceLevel, { fg: string; bg: string; bd: string }>
   medium: { fg: '#6fa580', bg: 'rgba(74,124,89,.08)',  bd: 'rgba(74,124,89,.4)'  },
   high:   { fg: '#6fa580', bg: 'rgba(74,124,89,.14)',  bd: 'rgba(74,124,89,.6)'  },
 };
+
+const TREND_LABEL: Record<StrengthTrend, string> = { up: 'מתחזק', flat: 'יציב', down: 'נחלש' };
+const TREND_META: Record<StrengthTrend, { fg: string; bg: string; bd: string; arrow: string }> = {
+  up:   { fg: '#6fa580', bg: 'rgba(74,124,89,.1)',   bd: 'rgba(74,124,89,.45)',  arrow: '▲' },
+  flat: { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.4)', arrow: '●' },
+  down: { fg: '#c98080', bg: 'rgba(139,58,58,.1)',   bd: 'rgba(139,58,58,.45)', arrow: '▼' },
+};
+
+function TrendBadge({ trend }: { trend: StrengthTrend }) {
+  const m = TREND_META[trend];
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-sm shrink-0"
+      style={{ color: m.fg, background: m.bg, border: `1px solid ${m.bd}` }}
+    >
+      {m.arrow} {TREND_LABEL[trend]}
+    </span>
+  );
+}
+
+/** Small win-rate-over-time trend chart from the pattern's own rolling history
+    (already tracked server-side across visits) — a genuine "did this improve
+    or fade" chart, never a single-session guess. Skipped entirely when fewer
+    than 3 snapshots exist, so it never renders a flat, meaningless line. */
+function StrengthHistoryChart({ history }: { history: WorkingStrength['history'] }) {
+  const [ref, visible] = useInView<HTMLDivElement>();
+  if (history.length < 3) return null;
+  const max = Math.max(1, ...history.map(h => h.winRate));
+  return (
+    <div ref={ref} className="flex gap-1 items-end h-[34px] mt-4" dir="ltr">
+      {history.map((h, i) => {
+        const pct = Math.max(6, (h.winRate / max) * 100);
+        const isLast = i === history.length - 1;
+        return (
+          <div
+            key={h.at + i}
+            title={`${h.winRate.toFixed(0)}% · n=${h.sampleSize}`}
+            style={{
+              flex: 1, height: visible ? `${pct}%` : '0%', borderRadius: '2px 2px 0 0',
+              background: isLast ? '#d4af37' : 'rgba(255,255,255,.16)',
+              transition: `height .7s var(--ease-expo-out) ${i * 40}ms`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 /* ══════════ Animation primitives — mirrors the reference design's
    scroll-reveal / count-up / bar-fill behavior ══════════ */
@@ -215,6 +277,8 @@ export default function AiAnalyticsPage() {
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [patternInsights, setPatternInsights] = useState<PatternInsight[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(false);
+  const [workingStrengths, setWorkingStrengths] = useState<WorkingStrength[]>([]);
+  const [strengthsLoading, setStrengthsLoading] = useState(false);
   const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [reportHistory, setReportHistory] = useState<{ weekKey: string; report: WeeklyReport }[]>([]);
@@ -256,6 +320,30 @@ export default function AiAnalyticsPage() {
       })
       .catch(() => {})
       .finally(() => setPatternsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades.length]);
+
+  // ── Working strengths — "מה באמת עובד לך" (AI-phrased, cached per day) ──
+  useEffect(() => {
+    if (!hasEnoughData) { setWorkingStrengths([]); return; }
+    const cacheKey = 'onyx_ai_strengths_' + todayISO();
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { setWorkingStrengths(JSON.parse(cached)); return; } catch {} }
+    setStrengthsLoading(true);
+    fetch('/api/ai/strengths', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang: 'he' }),
+    })
+      .then(r => r.json())
+      .then(({ strengths }) => {
+        if (Array.isArray(strengths)) {
+          setWorkingStrengths(strengths);
+          try { localStorage.setItem(cacheKey, JSON.stringify(strengths)); } catch {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setStrengthsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades.length]);
 
@@ -479,6 +567,7 @@ export default function AiAnalyticsPage() {
   const worstInst = instrumentRows[instrumentRows.length - 1];
   const bestConf = confirmationRows[0];
   const worstConf = confirmationRows[confirmationRows.length - 1];
+  const maxStrengthWinRate = Math.max(1, ...workingStrengths.map(s => s.metric.winRate));
 
   return (
     <div
@@ -559,7 +648,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={1} total={10} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={11} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -602,7 +691,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 02 · SESSION + DIRECTION ══════════ */}
         <NumberedSection
-          index={2} total={10} eyebrow="Session &amp; Direction" title="סשן וכיוון"
+          index={2} total={11} eyebrow="Session &amp; Direction" title="סשן וכיוון"
           description="היכן הקצה חי — ולאיזה כיוון הוא נוטה."
         >
           {topSession ? (
@@ -663,7 +752,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={3} total={10} eyebrow="Time Signature" title="חתימת זמן"
+          index={3} total={11} eyebrow="Time Signature" title="חתימת זמן"
           description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי יום בשבוע, שעה בסשן, וחודש."
         >
           <div>
@@ -722,7 +811,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={4} total={10} eyebrow="Model / Setup" title="מודל / סטאפ"
+          index={4} total={11} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
             confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
@@ -752,7 +841,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={5} total={10} eyebrow="Confluence Tags" title="אישורי כניסה"
+          index={5} total={11} eyebrow="Confluence Tags" title="אישורי כניסה"
           description={
             confirmationTagRows.length === 0
               ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
@@ -779,7 +868,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
         <NumberedSection
-          index={6} total={10} eyebrow="Psychology" title="מצב רגשי"
+          index={6} total={11} eyebrow="Psychology" title="מצב רגשי"
           description={
             emotionRows.length === 0
               ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
@@ -797,7 +886,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={7} total={10} eyebrow="Exit Management" title="ניהול יציאות"
+          index={7} total={11} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -842,9 +931,57 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 08 · PATTERN DETECTION ══════════ */}
+        {/* ══════════ 08 · WORKING STRENGTHS ══════════ */}
         <NumberedSection
-          index={8} total={10} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={8} total={11} eyebrow="AI · הדפוסים שעובדים" title="מה באמת עובד לך"
+          description="המערכת מזהה באופן אוטומטי אילו דפוסים חוזרים על עצמם ומייצרים עבורך את התוצאות הטובות ביותר."
+        >
+          {strengthsLoading ? (
+            <div className="flex items-center gap-2.5 py-6"><TypingDots /><span className="text-sm text-white/30">מאתר את מה שעובד לך...</span></div>
+          ) : workingStrengths.length === 0 ? (
+            <p className="text-sm text-white/30 py-2">עדיין אין מספיק נתונים כדי להסיק מסקנה אמינה.</p>
+          ) : (
+            <div className="flex flex-col gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
+              {workingStrengths.map(s => (
+                <Reveal key={s.id} className="bg-[#0a0a0b] p-6">
+                  <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <span style={{ color: '#d4af37', fontSize: 11 }}>◈</span>
+                      <span className="font-mono text-base font-bold text-white">{s.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {!s.isLowData && <TrendBadge trend={s.trend} />}
+                      <ConfidenceBadge level={s.confidenceLevel} sampleSize={s.sampleSize} />
+                    </div>
+                  </div>
+
+                  <HBar pct={(s.metric.winRate / maxStrengthWinRate) * 100} />
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] mt-5 rounded-[3px] overflow-hidden">
+                    <ExitTile label="אחוז הצלחה" value={`${s.metric.winRate.toFixed(0)}%`} sub={`${s.sampleSize} עסקאות`} color="#6fa580" />
+                    <ExitTile label="R ממוצע" value={`${s.metric.avgRR >= 0 ? '+' : ''}${s.metric.avgRR.toFixed(2)}`} />
+                    <ExitTile label="Profit Factor" value={fmtPF(s.metric.profitFactor)} color="#d4af37" />
+                    <ExitTile
+                      label="רווח מצטבר"
+                      value={`${s.metric.totalPnl >= 0 ? '+' : '-'}$${Math.abs(s.metric.totalPnl).toFixed(0)}`}
+                      color={s.metric.totalPnl >= 0 ? '#6fa580' : '#c98080'}
+                    />
+                  </div>
+
+                  <StrengthHistoryChart history={s.history} />
+
+                  <div className="mt-5 pt-5 border-t border-[#1c1c1e]">
+                    <InsightText text={s.explanation} className="text-[15px] font-medium text-[#c0c0c0] leading-relaxed" />
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
+        <NumberedSection
+          index={9} total={11} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -866,9 +1003,9 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 09 · WEEKLY REPORT ══════════ */}
+        {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={9} total={10} eyebrow="AI · Weekly Report" title="דוח שבועי"
+          index={10} total={11} eyebrow="AI · Weekly Report" title="דוח שבועי"
           description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא."
           extra={weeklyReport && <div className="mt-4"><ConfidenceBadge level={weeklyReport.confidenceLevel} sampleSize={weeklyReport.sampleSize} /></div>}
         >
@@ -917,9 +1054,9 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 10 · WHAT-IF SIMULATOR ══════════ */}
+        {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
-          index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
+          index={11} total={11} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
           {baseScenarios.length === 0 && !hourCapable ? (

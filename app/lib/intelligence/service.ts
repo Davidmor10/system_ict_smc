@@ -16,7 +16,7 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/se
 import { todayISO, type TradeEntry } from '../journal';
 import { SESS } from '../sessions';
 import { logger } from '../logger';
-import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing } from '../ai/insightPhrasing';
+import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing, generateWorkingStrengthsPhrasing } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
   summarizeAnalysis, summarizeComparison, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
@@ -34,7 +34,7 @@ import { diagnoseRootCause } from './rootCause';
 import { buildEvolutionTimeline, type WeeklyHypothesisRecord } from './evolutionTimeline';
 import type {
   EvolutionEntry, HypothesisState, KnownFact, PatternMemoryRow, PatternMemorySubjectSummary,
-  PeriodComparison, ScoreSnapshot, TraderProfile,
+  PatternStatus, PeriodComparison, ScoreSnapshot, TraderProfile,
 } from './types';
 
 /** Dashboard "today's discovery" shape — mirrors the local interface already
@@ -456,16 +456,45 @@ export interface PersonalizedInsight {
 const MAX_PERSONALIZED_INSIGHTS = 4;
 const MAX_STRONG_PATTERNS_IN_PANEL = 2;
 
+// Confirmation tags are the trader's own short ICT-style acronyms (SMT, IFVG,
+// CISD) — kept verbatim, same convention as HEBREW_MENTOR_STYLE's "instrument
+// tickers and confirmation tags stay exactly as typed" rule. Only the one tag
+// with a real English phrase gets expanded.
+const CONFIRMATION_TAG_LABEL: Record<string, string> = { ORDER_BLOCK: 'Order Block' };
+const confirmationTagLabel = (tag: string) => CONFIRMATION_TAG_LABEL[tag] ?? tag;
+
+const EMOTION_HE: Record<string, string> = {
+  CALM: 'רגוע', CONFIDENT: 'בטוח', STRESSED: 'לחוץ', FOMO: 'FOMO', TIRED: 'עייף', ANGRY: 'כועס', IMPATIENT: 'חסר סבלנות',
+};
+const EMOTION_EN: Record<string, string> = {
+  CALM: 'Calm', CONFIDENT: 'Confident', STRESSED: 'Stressed', FOMO: 'FOMO', TIRED: 'Tired', ANGRY: 'Angry', IMPATIENT: 'Impatient',
+};
+const WEEKDAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const WEEKDAY_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function subjectLabelFor(subject: Record<string, string | number>, lang: 'he' | 'en'): string {
   const parts: string[] = [];
   if (subject.instrument) parts.push(String(subject.instrument));
   if (subject.confirmation) parts.push(String(subject.confirmation));
+  if (subject.confirmationTag) parts.push(confirmationTagLabel(String(subject.confirmationTag)));
+  if (subject.confirmationCombo) parts.push(String(subject.confirmationCombo).split('+').map(confirmationTagLabel).join(' + '));
   if (subject.session) {
     const s = SESS.find(x => x.key === subject.session);
     parts.push(s ? (lang === 'he' ? s.he : s.en) : String(subject.session));
   }
   if (subject.direction) parts.push(subject.direction === 'LONG' ? (lang === 'he' ? 'לונג' : 'Long') : (lang === 'he' ? 'שורט' : 'Short'));
   if (subject.hour !== undefined) parts.push(`${String(subject.hour).padStart(2, '0')}:00`);
+  if (subject.emotion) parts.push((lang === 'he' ? EMOTION_HE : EMOTION_EN)[String(subject.emotion)] ?? String(subject.emotion));
+  if (subject.biasAlignment) {
+    parts.push(subject.biasAlignment === 'ALIGNED' ? (lang === 'he' ? 'עם הביאס' : 'With the bias') : (lang === 'he' ? 'נגד הביאס' : 'Against the bias'));
+  }
+  if (subject.setup) {
+    parts.push(subject.setup === 'REVERSAL' ? (lang === 'he' ? 'סטאפ היפוך' : 'Reversal setup') : (lang === 'he' ? 'סטאפ המשך' : 'Continuation setup'));
+  }
+  if (subject.weekday !== undefined) {
+    const w = Number(subject.weekday);
+    parts.push(lang === 'he' ? `ימי ${WEEKDAY_HE[w]}` : `${WEEKDAY_EN[w]}s`);
+  }
   return parts.join(' · ');
 }
 
@@ -600,6 +629,121 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
     .filter(i => i.text.length > 0);
 
   return { insights, debug: { ...baseDebug, candidateCount: trimmed.length, phrasingSucceeded: true } };
+}
+
+// ── generateWorkingStrengths ──────────────────────────────────────────────────
+// "מה באמת עובד לך" — the flagship AI-analytics section. Unlike
+// generatePersonalizedInsights (picks ONE best-supported story for the
+// dashboard), this surfaces every genuine, above-baseline recurring pattern
+// pattern_memory currently tracks for the trader, each with its own real
+// trend (strengthening/stable/weakening — the same status pattern_memory
+// already maintains across visits, not a single-session guess) so the trader
+// sees the full set of things that actually work, not just the single
+// headline pattern.
+
+export type StrengthTrend = 'up' | 'flat' | 'down';
+
+export interface WorkingStrength {
+  id: string;
+  /** Deterministic Hebrew/English label built from the pattern's subject —
+      never AI-generated, so it never disappears if phrasing fails. */
+  name: string;
+  metric: GroupPerformance;
+  baseline: number;
+  delta: number;
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+  trend: StrengthTrend;
+  /** Up to 12 rolling snapshots (win rate + sample size over time) already
+      tracked by pattern_memory — powers a small trend chart, never invented. */
+  history: { at: string; winRate: number; sampleSize: number }[];
+  /** True when confidence is still too low to claim a trend at all — the
+      explanation is then a fixed disclaimer, never an AI-invented conclusion. */
+  isLowData: boolean;
+  explanation: string;
+}
+
+const MAX_WORKING_STRENGTHS = 6;
+/** Percentage points above the trader's own baseline win rate required to
+    count as a genuine strength — never invented, always measured against
+    the same baseline pattern_memory already stores per row. */
+const MIN_STRENGTH_DELTA = 5;
+const CONF_RANK: Record<ConfidenceLevel, number> = { low: 0, medium: 1, high: 2 };
+
+function trendForStatus(status: PatternStatus): StrengthTrend {
+  if (status === 'strengthening') return 'up';
+  if (status === 'weakening') return 'down';
+  return 'flat';
+}
+
+const LOW_DATA_DISCLAIMER: Record<'he' | 'en', string> = {
+  he: 'עדיין אין מספיק נתונים כדי להסיק מסקנה אמינה.',
+  en: 'Not enough data yet for a reliable conclusion.',
+};
+
+export async function generateWorkingStrengths(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<WorkingStrength[]> {
+  if (!isSupabaseConfigured()) return [];
+  const supabase = getClient();
+
+  const profileRecord = await repo.getTraderProfile(supabase, userId);
+  const { patternRows } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
+
+  // A "strength" is a pattern that's both still live and genuinely above the
+  // trader's own baseline — never a weak or negative slice, no matter how
+  // large its sample. discoverPatterns deliberately crosses many dimensions
+  // (instrument+session, instrument_best, hour+instrument, ...), so the exact
+  // same underlying trades can surface under several different pattern kinds
+  // at once — dedupe by the metric's own fingerprint (identical sample size +
+  // win rate + PnL is, in practice, the same subset) before capping, so the
+  // trader never sees the same 10 trades presented as 3 "different" strengths.
+  const seenFingerprints = new Set<string>();
+  const strengths = patternRows
+    .filter(p => p.status !== 'disappeared' && p.delta >= MIN_STRENGTH_DELTA)
+    .filter(p => {
+      const fp = `${p.currentSampleSize}:${p.currentMetric.winRate.toFixed(2)}:${p.currentMetric.totalPnl.toFixed(2)}`;
+      if (seenFingerprints.has(fp)) return false;
+      seenFingerprints.add(fp);
+      return true;
+    })
+    .sort((a, b) => {
+      const tierDiff = CONF_RANK[b.currentConfidenceLevel] - CONF_RANK[a.currentConfidenceLevel];
+      return tierDiff !== 0 ? tierDiff : b.delta - a.delta;
+    })
+    .slice(0, MAX_WORKING_STRENGTHS);
+
+  if (strengths.length === 0) return [];
+
+  // Patterns still at 'insufficient_data' get a fixed disclaimer instead of an
+  // AI-phrased trend claim — nothing to send to the model for those.
+  const toPhrase = strengths.filter(p => p.status !== 'insufficient_data');
+  const phrased = toPhrase.length > 0
+    ? await generateWorkingStrengthsPhrasing(
+        toPhrase.map(p => ({
+          subjectLabel: subjectLabelFor(p.subject, lang),
+          metric: p.currentMetric,
+          baseline: p.baselineWinRate,
+          trend: trendForStatus(p.status),
+        })),
+        lang,
+      )
+    : [];
+  const explanationById = new Map(toPhrase.map((p, i) => [p.patternId, phrased?.[i] ?? '']));
+
+  return strengths
+    .map((p): WorkingStrength => ({
+      id: p.patternId,
+      name: subjectLabelFor(p.subject, lang),
+      metric: p.currentMetric,
+      baseline: p.baselineWinRate,
+      delta: p.delta,
+      confidenceLevel: p.currentConfidenceLevel,
+      sampleSize: p.currentSampleSize,
+      trend: trendForStatus(p.status),
+      history: p.history.map(h => ({ at: h.at, winRate: h.winRate, sampleSize: h.sampleSize })),
+      isLowData: p.status === 'insufficient_data',
+      explanation: p.status === 'insufficient_data' ? LOW_DATA_DISCLAIMER[lang] : (explanationById.get(p.patternId) ?? ''),
+    }))
+    .filter(s => s.explanation.length > 0);
 }
 
 // ── Evolution Timeline ───────────────────────────────────────────────────────

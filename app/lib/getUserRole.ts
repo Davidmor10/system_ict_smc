@@ -1,4 +1,5 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { connection } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from './supabase/server';
 
 // Three real tiers. Access is strictly ranked: deluxe ⊇ pro ⊇ free.
@@ -27,6 +28,15 @@ export async function getUserRole(): Promise<Role> {
 }
 
 export async function getUserContext(): Promise<UserContext> {
+  // Force per-request evaluation. Without this, a build that runs with
+  // CLERK_SECRET_KEY unset never touches a request-time API on this path
+  // (the env check below short-circuits before auth() reads headers), so
+  // Next would happily prerender the gated dashboard segments with the
+  // build-time role baked in. connection() stalls prerendering here and
+  // guarantees the role — and every requirePlan() gate built on it — is
+  // resolved on the live request, regardless of the build environment.
+  await connection();
+
   let userId: string | null = null;
 
   try {

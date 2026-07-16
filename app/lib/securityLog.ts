@@ -10,7 +10,7 @@
 // which requires an account decision, not just code.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type SecurityEvent = 'auth_failed' | 'rate_limited' | 'validation_failed';
+type SecurityEvent = 'auth_failed' | 'rate_limited' | 'validation_failed' | 'plan_denied';
 
 export function logSecurityEvent(event: SecurityEvent, details: Record<string, unknown>) {
   console.warn(JSON.stringify({ security_event: event, ts: new Date().toISOString(), ...details }));

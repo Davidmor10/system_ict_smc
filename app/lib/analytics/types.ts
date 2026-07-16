@@ -105,7 +105,10 @@ export type PatternKind =
   | 'session_vs_overall'
   | 'emotion'
   | 'confirmation_tag'
-  | 'confirmation_combo';
+  | 'confirmation_combo'
+  | 'bias_alignment'
+  | 'setup'
+  | 'weekday';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,

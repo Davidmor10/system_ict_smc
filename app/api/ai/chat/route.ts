@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { answerCoachQuestion, type ChatTurn } from '../../../lib/ai/chat';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 const chatSchema = z.object({
   question: z.string().min(1).max(1000),
@@ -27,6 +28,11 @@ export async function POST(req: NextRequest) {
     logSecurityEvent('rate_limited', { route: '/api/ai/chat', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  // The coach is a Deluxe surface — enforce it at the API, not only in the
+  // page layout, so a direct fetch can't use paid AI on a free plan.
+  const denied = await requirePlanApi('deluxe', '/api/ai/chat');
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   if (body === null) {

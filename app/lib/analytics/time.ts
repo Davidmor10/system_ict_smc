@@ -17,7 +17,7 @@ export function hourOf(t: TradeEntry): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-function weekdayOf(t: TradeEntry): number {
+export function weekdayOf(t: TradeEntry): number {
   return parseLocalDate(t.dateISO).getDay();
 }
 

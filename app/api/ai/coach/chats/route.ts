@@ -5,6 +5,7 @@ import { listCoachChats } from '../../../../lib/ai/coachChats';
 import { checkRateLimit } from '../../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../../lib/securityLog';
 import { logger } from '../../../../lib/logger';
+import { requirePlanApi } from '../../../../lib/withRoleCheck';
 
 /** GET /api/ai/coach/chats — the "אחרונים" list (summaries, newest first). */
 export async function GET() {
@@ -19,6 +20,10 @@ export async function GET() {
     logSecurityEvent('rate_limited', { route: '/api/ai/coach/chats GET', userId });
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
+
+  // Coach chats belong to the Deluxe coach surface — enforced at the API too.
+  const denied = await requirePlanApi('deluxe', '/api/ai/coach/chats GET');
+  if (denied) return denied;
 
   if (!isSupabaseConfigured()) return NextResponse.json({ chats: [] });
 
