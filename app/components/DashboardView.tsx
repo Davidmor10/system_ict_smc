@@ -13,6 +13,7 @@ import type { Rule, RuleCheck } from '../lib/rules/types';
 import TypingDots from './TypingDots';
 import Tooltip from './Tooltip';
 import InsightText from './InsightText';
+import { usePlan } from './PlanProvider';
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const SPEC = {
@@ -72,6 +73,9 @@ const STR = {
     aiThinking: 'מנתח את היומן שלך',
     aiOpenCoach: 'פתח את המאמן',
     aiDisc: 'התובנות מבוססות על היומן האישי שלך ואינן ייעוץ או המלצת מסחר.',
+    aiLockedTitle: 'תובנת AI — פיצ׳ר Deluxe',
+    aiLockedText: 'ניתוח AI יומי של היומן שלך נעול. שדרג ל-Deluxe כדי להפעיל אותו.',
+    aiLockedCta: 'שדרוג ל-Deluxe ←',
 
     // Performance
     pnlToday: 'P&L היום', pnlWeek: 'P&L השבוע', pnlMonth: 'P&L החודש',
@@ -126,6 +130,9 @@ const STR = {
     aiThinking: 'Analyzing your journal',
     aiOpenCoach: 'Open the coach',
     aiDisc: 'Insights are based on your own journal and are not financial or trading advice.',
+    aiLockedTitle: 'AI Insight — Deluxe feature',
+    aiLockedText: 'Daily AI analysis of your journal is locked. Upgrade to Deluxe to unlock it.',
+    aiLockedCta: 'Upgrade to Deluxe ←',
 
     pnlToday: "TODAY'S P&L", pnlWeek: "THIS WEEK'S P&L", pnlMonth: "THIS MONTH'S P&L",
     winRate: 'WIN RATE', profitFactor: 'PROFIT FACTOR', avgR: 'AVG R',
@@ -196,6 +203,7 @@ export default function DashboardView() {
   const { lang } = useLanguage();
   const L = lang as Lang;
   const s = STR[L];
+  const { role } = usePlan();
 
   /* ── State ────────────────────────────────────────────────────── */
   const [asset,     setAsset]     = useState<AssetKey>('ES');
@@ -305,6 +313,8 @@ export default function DashboardView() {
 
   /* ── Today's single strongest AI discovery — the hero ─────────── */
   useEffect(() => {
+    // Deluxe-only feature — FREE (and any role below Deluxe) never fetches it.
+    if (role !== 'deluxe') { setDiscovery(null); return; }
     if (trades.length < 3) { setDiscovery(null); return; }
     const cacheKey = 'onyx_ai_discovery_' + todayKey();
     const cached = localStorage.getItem(cacheKey);
@@ -324,7 +334,7 @@ export default function DashboardView() {
       .catch(() => {})
       .finally(() => setDiscoveryLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades]);
+  }, [trades, role]);
 
   /* ── Derived ─────────────────────────────────────────────────── */
   const activeSessionIdx = getActiveSessionIdx();
@@ -541,7 +551,20 @@ export default function DashboardView() {
                     <span className="dp-ai-sub">{s.aiHeroSub}</span>
                   </div>
 
-                  {discoveryLoading && !discovery ? (
+                  {role !== 'deluxe' ? (
+                    <div className="dp-ai-locked">
+                      <div className="dp-ai-locked-preview" aria-hidden="true">
+                        <h2 className="dp-ai-title">{s.aiWaiting}</h2>
+                        <p className="dp-ai-block-text" style={{ maxWidth: 560 }}>{s.aiWaitingText}</p>
+                      </div>
+                      <div className="dp-ai-locked-overlay">
+                        <span className="dp-ai-locked-icon">🔒</span>
+                        <span className="dp-ai-locked-title">{s.aiLockedTitle}</span>
+                        <span className="dp-ai-locked-text">{s.aiLockedText}</span>
+                        <Link href="/checkout" className="dp-ai-locked-cta">{s.aiLockedCta}</Link>
+                      </div>
+                    </div>
+                  ) : discoveryLoading && !discovery ? (
                     <div className="dp-ai-waiting">
                       <TypingDots /><span className="dp-ai-waiting-text">{s.aiThinking}</span>
                     </div>
