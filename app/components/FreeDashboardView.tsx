@@ -202,10 +202,14 @@ export default function FreeDashboardView() {
   const dailyDelta = pctDelta(todayStats.totalPnL, yesterdayStats.totalPnL);
   const streak = useMemo(() => computeStreak(trades), [trades]);
 
-  /* ── Macro — grouped by weekday (Mon-Fri of the current Israel week) ── */
+  /* ── Macro — USD only, high (red) or low (white) impact only, grouped by
+     weekday (Mon-Fri of the current Israel week). Medium (gold) and Holiday
+     (steel) tiers, and every non-USD currency, are filtered out entirely —
+     per request, this list is deliberately narrow, not "everything ranked". ── */
   const macroByDate = useMemo(() => {
     const map = new Map<string, MacroEventLite[]>();
     for (const e of macroWeek ?? []) {
+      if (e.currency !== 'USD' || (e.impact !== 'High' && e.impact !== 'Low')) continue;
       const arr = map.get(e.dateIsrael);
       if (arr) arr.push(e); else map.set(e.dateIsrael, [e]);
     }
@@ -359,7 +363,7 @@ export default function FreeDashboardView() {
           </section>
 
           <section>
-            <SectionHead n={3} title="אירועי מאקרו" sub="השבוע" />
+            <SectionHead n={3} title="אירועי מאקרו" sub="רק חדשות בסיכון גבוה של USD" />
             <div className="fd-macro-week">
               {weekDates.map((iso, i) => {
                 const events = macroByDate.get(iso) ?? [];
