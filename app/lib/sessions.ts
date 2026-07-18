@@ -37,3 +37,44 @@ export function getActiveSessionKey(): SessionKey | null {
   const idx = getActiveSessionIdx();
   return idx >= 0 ? SESS[idx].key : null;
 }
+
+export interface SessionStatus {
+  /** 'live' when `now` falls inside a session's window, else 'next'. */
+  kind: 'live' | 'next';
+  idx: number;
+  /** Seconds until that session ends (if live) or starts (if next). Always > 0. */
+  secondsLeft: number;
+}
+
+/** Seconds from `now`'s wall-clock time to the next occurrence of `targetHour`
+    (0-24) today, wrapping to tomorrow if that hour has already passed. Reads
+    only getHours/getMinutes/getSeconds, so it works whether `now` is a real
+    Date or the "Israel wall-clock in a Date object" trick used below. */
+function secondsUntilHour(now: Date, targetHour: number): number {
+  const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const targetSec = targetHour * 3600;
+  const diff = targetSec - nowSec;
+  return diff > 0 ? diff : diff + 24 * 3600;
+}
+
+/** Pure: which session is live (and seconds until it ends), or — if none is —
+    the soonest upcoming one (and seconds until it starts). `now`'s hour/minute/
+    second are read as-is; callers pass Israel wall-clock time. */
+export function sessionStatusForDate(now: Date): SessionStatus {
+  const hourFloat = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  const liveIdx = sessionIdxForHour(hourFloat);
+  if (liveIdx >= 0) {
+    return { kind: 'live', idx: liveIdx, secondsLeft: secondsUntilHour(now, SESS[liveIdx].end) };
+  }
+  let best = { idx: 0, wait: Infinity };
+  SESS.forEach((s, i) => {
+    const wait = secondsUntilHour(now, s.start);
+    if (wait < best.wait) best = { idx: i, wait };
+  });
+  return { kind: 'next', idx: best.idx, secondsLeft: best.wait };
+}
+
+/** sessionStatusForDate() against the real current Israel time. */
+export function getSessionStatus(): SessionStatus {
+  return sessionStatusForDate(new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })));
+}
