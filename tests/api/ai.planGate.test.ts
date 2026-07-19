@@ -109,7 +109,7 @@ describe('AI APIs — free plan is rejected with 403 on every paid surface', () 
   it('POST /api/ai/discovery → 403 (the dashboard "AI insight of the day" card)', async () => {
     const res = await discoveryRoute.POST(post() as never);
     expect(res.status).toBe(403);
-    expect((await res.json()).requiredPlan).toBe('deluxe');
+    expect((await res.json()).requiredPlan).toBe('pro');
   });
 });
 
@@ -154,6 +154,11 @@ describe('AI APIs — a sufficient plan passes the gate', () => {
 
   it('deluxe user passes the discovery gate (not 403)', async () => {
     currentUserId = 'user_deluxe';
+    expect((await discoveryRoute.POST(post() as never)).status).not.toBe(403);
+  });
+
+  it('pro user also passes the discovery gate (not 403) — it is a pro surface, not deluxe-only', async () => {
+    currentUserId = 'user_pro';
     expect((await discoveryRoute.POST(post() as never)).status).not.toBe(403);
   });
 });
