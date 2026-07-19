@@ -12,6 +12,7 @@
   --gold-45:        rgba(212,175,55,.45);
   --bull:           #6fa580;
   --bear:           #c98080;
+  --ff-red:         #e5484d;   /* ForexFactory "red folder" — USD high-impact macro only */
   --w90:            rgba(255,255,255,.90);
   --w70:            rgba(255,255,255,.70);
   --w55:            rgba(255,255,255,.55);
@@ -271,16 +272,20 @@
 .dp-spark-bar.bear { background: var(--bear); }
 .dp-spark-bar.flat { top: 50%; height: 2px; margin-top: -1px; background: var(--w06); }
 
-/* ── Macro (flat/borderless list) ────────────────────────────────── */
+/* ── Macro (flat/borderless list) — USD high-impact only. ForexFactory's
+     "red folder" language: a red impact marker, white report text. This is
+     a deliberate, user-requested exception to the single-gold-accent rule. */
 .dp-macro-list { display: flex; flex-direction: column; }
-.dp-macro-row { display: flex; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--w06); }
+.dp-macro-row { display: flex; align-items: baseline; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--w06); }
 .dp-macro-row:last-child { border-bottom: none; }
+.dp-macro-impact { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; align-self: center;
+                   background: var(--ff-red, #e5484d); box-shadow: 0 0 8px rgba(229,72,77,.55); }
 .dp-macro-day  { font-family: var(--ff-mono); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--w30); flex-shrink: 0; width: 32px; }
 .dp-macro-row.next .dp-macro-day { color: var(--gold); }
 .dp-macro-time { font-family: var(--ff-mono); font-size: 12px; font-weight: 700; color: var(--w40); flex-shrink: 0; }
 .dp-macro-row.next .dp-macro-time { color: var(--gold); }
-.dp-macro-title { font-size: 13.5px; color: var(--w70); line-height: 1.4; flex: 1; min-width: 0; }
-.dp-macro-cur { font-family: var(--ff-mono); font-size: 11px; font-weight: 700; color: var(--w30); flex-shrink: 0; }
+.dp-macro-title { font-size: 13.5px; color: #fff; line-height: 1.4; flex: 1; min-width: 0; }
+.dp-macro-cur { font-family: var(--ff-mono); font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--ff-red, #e5484d); flex-shrink: 0; }
 .dp-macro-next-tag { font-family: var(--ff-mono); font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-30); background: var(--gold-08); border-radius: 3px; padding: 2px 6px; flex-shrink: 0; }
 
 /* ── Quick actions ────────────────────────────────────────────────── */

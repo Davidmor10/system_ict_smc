@@ -404,9 +404,10 @@ export default function DashboardView() {
   );
 
   /* ── Next macro event this week (real feed, Israel date + time) ──── */
+  // Only USD high-impact reports — the "red folder" events on ForexFactory.
   const nowMin = hhmmToMin(clockStr);
   const primaryMacro = (macro ?? [])
-    .filter(e => e.impact === 'High' || e.impact === 'Holiday')
+    .filter(e => e.impact === 'High' && e.currency === 'USD')
     .sort((a, b) => (a.dateIsrael + a.timeIsrael).localeCompare(b.dateIsrael + b.timeIsrael));
   const nextMacro = primaryMacro
     .find(e => e.dateIsrael > (macroToday ?? '') || (e.dateIsrael === macroToday && e.timeIsrael !== '' && hhmmToMin(e.timeIsrael) > nowMin));
@@ -776,6 +777,7 @@ export default function DashboardView() {
                     const dayLabel = e.dateIsrael === macroToday ? s.macroToday : weekdayShort(e.dateIsrael, L === 'he' ? 'he-IL' : 'en-US');
                     return (
                       <div key={`${e.dateIsrael}-${e.title}-${i}`} className={`dp-macro-row${isNext ? ' next' : ''}`}>
+                        <span className="dp-macro-impact" aria-hidden />
                         <span className="dp-macro-day">{dayLabel}</span>
                         <span className="dp-macro-time" dir="ltr">{e.timeIsrael || '—'}</span>
                         <span className="dp-macro-title">{e.title}</span>

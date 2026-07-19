@@ -20,6 +20,9 @@ vi.mock('../../app/lib/supabase/server', () => ({
 }));
 
 const TODAY = '2026-07-15';
+// The route returns everything in scope; the dashboard is what narrows to
+// USD high-impact. These fixtures include other currencies/impacts so the
+// scope filter is what's under test here, nothing more.
 const events = [
   { title: 'Past Event',    currency: 'USD', impact: 'High' as const, dateIsrael: '2026-07-13', timeIsrael: '10:00' },
   { title: 'CPI m/m',       currency: 'USD', impact: 'High' as const, dateIsrael: TODAY,          timeIsrael: '15:30' },
