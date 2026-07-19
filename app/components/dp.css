@@ -261,10 +261,22 @@
 .dp-perf-bar-track { height: 4px; border-radius: 2px; background: var(--w06); overflow: hidden; margin: 2px 0 4px; }
 .dp-perf-bar-fill  { height: 100%; border-radius: 2px; background: var(--bull); }
 
+/* Last-10-days trend — diverging bars off a zero baseline; fills the
+   flat performance card down to the height of its bordered neighbor. */
+.dp-perf-spark { display: flex; align-items: stretch; gap: 6px; height: 76px; position: relative; margin-top: 10px; }
+.dp-perf-spark::before { content: ""; position: absolute; inset-inline: 0; top: 50%; height: 1px; background: var(--w08); }
+.dp-spark-col { flex: 1; position: relative; }
+.dp-spark-bar { position: absolute; inset-inline: 0; border-radius: 2px; }
+.dp-spark-bar.bull { background: var(--bull); }
+.dp-spark-bar.bear { background: var(--bear); }
+.dp-spark-bar.flat { top: 50%; height: 2px; margin-top: -1px; background: var(--w06); }
+
 /* ── Macro (flat/borderless list) ────────────────────────────────── */
 .dp-macro-list { display: flex; flex-direction: column; }
 .dp-macro-row { display: flex; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--w06); }
 .dp-macro-row:last-child { border-bottom: none; }
+.dp-macro-day  { font-family: var(--ff-mono); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--w30); flex-shrink: 0; width: 32px; }
+.dp-macro-row.next .dp-macro-day { color: var(--gold); }
 .dp-macro-time { font-family: var(--ff-mono); font-size: 12px; font-weight: 700; color: var(--w40); flex-shrink: 0; }
 .dp-macro-row.next .dp-macro-time { color: var(--gold); }
 .dp-macro-title { font-size: 13.5px; color: var(--w70); line-height: 1.4; flex: 1; min-width: 0; }
@@ -278,10 +290,20 @@
 .dp-cta-ghost:hover { border-color: var(--gold-45); color: #fff; background: var(--w08); }
 .dp-quick { display: flex; flex-direction: column; gap: 10px; }
 
-/* ── Risk calculator — a quiet, collapsible tool, not a headline ───── */
-.dp-calc-head { display: flex; align-items: center; justify-content: space-between; }
-.dp-calc-toggle { font-family: var(--ff-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--w40); background: transparent; border: none; cursor: pointer; padding: 4px 2px; transition: color .2s; }
-.dp-calc-toggle:hover { color: var(--gold); }
+/* ── Risk calculator — collapsed by default, but its toggle must read as
+     an obvious button, not a quiet text link. ─────────────────────── */
+.dp-calc-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 13px 16px; border-radius: 9px; cursor: pointer;
+  background: var(--gold-08); border: 1px solid var(--gold-30); color: var(--gold);
+  transition: background .2s, border-color .2s;
+}
+.dp-calc-toggle:hover { background: var(--gold-10); border-color: var(--gold-45); }
+.dp-calc-toggle > span:first-child { font-size: 14px; }
+.dp-calc-toggle-label { font-family: var(--ff-mono); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--w90); }
+.dp-calc-toggle-state { margin-inline-start: auto; font-family: var(--ff-mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.dp-calc-toggle-chevron { font-size: 11px; transition: transform .25s var(--ease); }
+.dp-calc-toggle.open .dp-calc-toggle-chevron { transform: rotate(180deg); }
 .dp-calc-body { margin-top: 16px; }
 .dp-seg-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dp-seg-grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }

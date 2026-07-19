@@ -102,8 +102,9 @@ const STR = {
     save: 'שמור תוכנית', savedOk: 'נשמר', dirty: 'שינויים שלא נשמרו',
 
     // Macro
-    macroK: 'אירועי מאקרו היום', macroEmpty: 'אין אירועים בעלי השפעה גבוהה היום',
-    macroUnavailable: 'לא ניתן לטעון את היומן הכלכלי כרגע', macroNext: 'הבא',
+    macroK: 'אירועי מאקרו השבוע', macroEmpty: 'אין אירועים בעלי השפעה גבוהה השבוע',
+    macroUnavailable: 'לא ניתן לטעון את היומן הכלכלי כרגע', macroNext: 'הבא', macroToday: 'היום',
+    perfTrendK: '10 הימים האחרונים',
 
     // Tools
     quickK: 'פעולות מהירות',
@@ -161,8 +162,9 @@ const STR = {
     biasBull: 'BULLISH', biasBear: 'BEARISH', biasNeutral: 'NEUTRAL',
     save: 'Save plan', savedOk: 'Saved', dirty: 'Unsaved changes',
 
-    macroK: 'MACRO EVENTS TODAY', macroEmpty: 'No high-impact events today',
-    macroUnavailable: 'Economic calendar unavailable right now', macroNext: 'NEXT',
+    macroK: 'MACRO EVENTS THIS WEEK', macroEmpty: 'No high-impact events this week',
+    macroUnavailable: 'Economic calendar unavailable right now', macroNext: 'NEXT', macroToday: 'TODAY',
+    perfTrendK: 'LAST 10 DAYS',
 
     quickK: 'QUICK ACTIONS',
     ctaNewTrade: 'Log New Trade', ctaJournal: 'Open Journal', ctaCoach: 'Ask the coach',
@@ -185,6 +187,8 @@ const num = (s: string) => { const n = parseFloat(s); return Number.isFinite(n) 
 const money = (n: number) => (n >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
 const localISO = (d: Date) => d.toLocaleDateString('en-CA');
 const hhmmToMin = (t: string) => { const m = /^(\d{1,2}):(\d{2})/.exec(t); return m ? +m[1] * 60 + +m[2] : -1; };
+/** Short weekday label for a 'YYYY-MM-DD' Israel date — noon avoids any TZ/DST rollover onto the adjacent day. */
+const weekdayShort = (iso: string, locale: string) => new Date(iso + 'T12:00:00').toLocaleDateString(locale, { weekday: 'short' });
 
 interface RangeStats { n: number; wins: number; losses: number; decided: number; pnl: number; avgR: number | null; wr: number | null; pf: number | null }
 function rangeStats(list: TradeEntry[]): RangeStats {
@@ -242,6 +246,7 @@ export default function DashboardView() {
   const [userChecks, setUserChecks] = useState<RuleCheck[]>([]);
   const [violations, setViolations] = useState<{ ruleId: string; date: string }[]>([]);
   const [macro,     setMacro]     = useState<MacroEventLite[] | null>(null);
+  const [macroToday, setMacroToday] = useState<string | null>(null);
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -312,11 +317,11 @@ export default function DashboardView() {
     pushDashboard();
   }, [reminders, saved]);
 
-  /* ── Today's real macro events (never invented — [] on failure) ── */
+  /* ── This week's real macro events (never invented — [] on failure) ── */
   useEffect(() => {
-    fetch('/api/macro')
+    fetch('/api/macro?scope=week')
       .then(r => (r.ok ? r.json() : null))
-      .then(d => setMacro(Array.isArray(d?.events) ? d.events : []))
+      .then(d => { setMacro(Array.isArray(d?.events) ? d.events : []); setMacroToday(typeof d?.today === 'string' ? d.today : null); })
       .catch(() => setMacro([]));
   }, []);
 
@@ -380,17 +385,31 @@ export default function DashboardView() {
   const sPrevMonth = rangeStats(trades.filter(t => t.dateISO.startsWith(prevMonthKey)));
   const tradesToday = trades.filter(t => t.dateISO === todayISO2);
 
+  /* ── Last 10 days' daily PnL — a real trend, not a decoration ────── */
+  const dailyPnl = useMemo(() => {
+    const days: { key: string; pnl: number; n: number }[] = [];
+    for (let i = 9; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = localISO(d);
+      const decided = trades.filter(t => t.dateISO === key && t.result !== 'OPEN');
+      days.push({ key, pnl: decided.reduce((sum, t) => sum + (t.pnlUsd ?? 0), 0), n: decided.length });
+    }
+    return days;
+  }, [trades]);
+  const maxAbsDailyPnl = Math.max(1, ...dailyPnl.map(d => Math.abs(d.pnl)));
+
   const ruleStats = useMemo(
     () => computeRuleStats(rules, trades, userChecks, todayISO2, violations),
     [rules, trades, userChecks, violations, todayISO2],
   );
 
-  /* ── Next macro event today (real feed, Israel time) ──────────── */
+  /* ── Next macro event this week (real feed, Israel date + time) ──── */
   const nowMin = hhmmToMin(clockStr);
-  const primaryMacro = (macro ?? []).filter(e => e.impact === 'High' || e.impact === 'Holiday');
+  const primaryMacro = (macro ?? [])
+    .filter(e => e.impact === 'High' || e.impact === 'Holiday')
+    .sort((a, b) => (a.dateIsrael + a.timeIsrael).localeCompare(b.dateIsrael + b.timeIsrael));
   const nextMacro = primaryMacro
-    .filter(e => e.timeIsrael && hhmmToMin(e.timeIsrael) > nowMin)
-    .sort((a, b) => hhmmToMin(a.timeIsrael) - hhmmToMin(b.timeIsrael))[0];
+    .find(e => e.dateIsrael > (macroToday ?? '') || (e.dateIsrael === macroToday && e.timeIsrael !== '' && hhmmToMin(e.timeIsrael) > nowMin));
 
   /* ── Daily state — the hero's single verdict. Real data only: rule
      violations, the trade cap the trader set, and whether a plan exists
@@ -715,6 +734,24 @@ export default function DashboardView() {
                   <span className="dp-stat-story">{pfStory}</span>
                 </div>
               </div>
+
+              <div className="dp-stat-sep" />
+
+              <span className="dp-stat-label">{s.perfTrendK}</span>
+              <div className="dp-perf-spark">
+                {dailyPnl.map(d => (
+                  <div key={d.key} className="dp-spark-col" title={`${d.key} · ${d.n === 0 ? s.noData : money(d.pnl)}`}>
+                    {d.n === 0 ? (
+                      <div className="dp-spark-bar flat" />
+                    ) : (
+                      <div
+                        className={`dp-spark-bar ${d.pnl >= 0 ? 'bull' : 'bear'}`}
+                        style={{ height: `${Math.max((Math.abs(d.pnl) / maxAbsDailyPnl) * 50, 4)}%`, [d.pnl >= 0 ? 'bottom' : 'top']: '50%' }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -734,10 +771,12 @@ export default function DashboardView() {
                 ) : primaryMacro.length === 0 ? (
                   <span className="dp-mission-empty">{s.macroEmpty}</span>
                 ) : (
-                  primaryMacro.slice(0, 5).map((e, i) => {
-                    const isNext = !!nextMacro && e.title === nextMacro.title && e.timeIsrael === nextMacro.timeIsrael;
+                  primaryMacro.slice(0, 8).map((e, i) => {
+                    const isNext = !!nextMacro && e.dateIsrael === nextMacro.dateIsrael && e.title === nextMacro.title && e.timeIsrael === nextMacro.timeIsrael;
+                    const dayLabel = e.dateIsrael === macroToday ? s.macroToday : weekdayShort(e.dateIsrael, L === 'he' ? 'he-IL' : 'en-US');
                     return (
-                      <div key={`${e.title}-${i}`} className={`dp-macro-row${isNext ? ' next' : ''}`}>
+                      <div key={`${e.dateIsrael}-${e.title}-${i}`} className={`dp-macro-row${isNext ? ' next' : ''}`}>
+                        <span className="dp-macro-day">{dayLabel}</span>
                         <span className="dp-macro-time" dir="ltr">{e.timeIsrael || '—'}</span>
                         <span className="dp-macro-title">{e.title}</span>
                         {isNext && <span className="dp-macro-next-tag">{s.macroNext}</span>}
@@ -761,10 +800,12 @@ export default function DashboardView() {
 
               <div className="dp-plan-sep" />
 
-              <div className="dp-calc-head">
-                <span className="dp-field-label" style={{ marginBottom: 0 }}>{s.calcK}</span>
-                <button className="dp-calc-toggle" onClick={() => setCalcOpen(o => !o)}>{calcOpen ? s.calcHide : s.calcShow}</button>
-              </div>
+              <button className={`dp-calc-toggle${calcOpen ? ' open' : ''}`} onClick={() => setCalcOpen(o => !o)} aria-expanded={calcOpen}>
+                <span aria-hidden>⌘</span>
+                <span className="dp-calc-toggle-label">{s.calcK}</span>
+                <span className="dp-calc-toggle-state">{calcOpen ? s.calcHide : s.calcShow}</span>
+                <span aria-hidden className="dp-calc-toggle-chevron">▾</span>
+              </button>
 
               {calcOpen && (
                 <div className="dp-calc-body">
