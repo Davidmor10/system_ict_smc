@@ -1,15 +1,17 @@
 import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import { getMacroEvents, israelToday } from '../../lib/ai/macroCalendar';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { logger } from '../../lib/logger';
 
-/** GET /api/macro — today's real macro events in Israel time, for the dashboard
+/** GET /api/macro — real macro events in Israel time, for the dashboard
     briefing. Same cached feed the coach reads; never invents an event ([] when
-    the calendar can't be loaded). */
-export async function GET() {
+    the calendar can't be loaded). Defaults to today only; ?scope=week returns
+    the rest of the current week (the feed itself is already a weekly pull, so
+    this is just a wider filter on the same cached data). */
+export async function GET(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/macro GET' });
@@ -23,10 +25,12 @@ export async function GET() {
   }
 
   try {
+    const scope = req.nextUrl.searchParams.get('scope') === 'week' ? 'week' : 'today';
     const supabase = isSupabaseConfigured() ? createServerSupabaseClient() : null;
     const today = israelToday();
     const all = await getMacroEvents(supabase);
-    return NextResponse.json({ today, events: all.filter(e => e.dateIsrael === today) });
+    const events = scope === 'week' ? all.filter(e => e.dateIsrael >= today) : all.filter(e => e.dateIsrael === today);
+    return NextResponse.json({ today, scope, events });
   } catch (err) {
     logger.error('macro GET failed', { userId, error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

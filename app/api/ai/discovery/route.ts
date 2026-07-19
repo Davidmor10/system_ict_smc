@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 
-  // The dashboard's "AI insight of the day" is a Deluxe surface — enforced at
-  // the API too, not just by the client no longer calling it on a lower plan.
-  const denied = await requirePlanApi('deluxe', '/api/ai/discovery');
+  // The dashboard's "AI insight of the day" is a PRO+ surface — enforced at
+  // the API too, not just by the client no longer calling it on FREE.
+  const denied = await requirePlanApi('pro', '/api/ai/discovery');
   if (denied) return denied;
 
   try {
