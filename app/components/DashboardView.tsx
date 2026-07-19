@@ -3,6 +3,7 @@
 import './dp.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import { loadTrades, hydrateTradesFromCloud } from '../lib/journal';
@@ -55,6 +56,7 @@ const STR = {
     zonePerf: 'ביצועים', zoneDecision: 'מרכז ההחלטות', zoneTools: 'כלים',
 
     // Hero + daily state
+    greetMorning: 'בוקר טוב', greetAfternoon: 'צהריים טובים', greetEvening: 'ערב טוב', greetNight: 'לילה טוב',
     sessionActive: (name: string) => `${name} פעילה כעת`,
     dailyStateK: 'מצב יומי', tradesLabel: 'עסקאות',
     stateOnTrack: 'בתוכנית', stateAttention: 'לתשומת לב', stateNoPlan: 'אין תוכנית',
@@ -117,6 +119,7 @@ const STR = {
     briefingK: 'DAILY BRIEFING',
     zonePerf: 'PERFORMANCE', zoneDecision: 'DECISION CENTER', zoneTools: 'TOOLS',
 
+    greetMorning: 'Good morning', greetAfternoon: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night',
     sessionActive: (name: string) => `${name} active now`,
     dailyStateK: 'DAILY STATE', tradesLabel: 'trades',
     stateOnTrack: 'ON TRACK', stateAttention: 'ATTENTION', stateNoPlan: 'NO PLAN',
@@ -213,6 +216,8 @@ export default function DashboardView() {
   const s = STR[L];
   const { role } = usePlan();
   const isFree = role === 'free';
+  const { user, isLoaded: userLoaded } = useUser();
+  const firstName = userLoaded ? user?.firstName : undefined;
 
   /* ── State ────────────────────────────────────────────────────── */
   const [asset,     setAsset]     = useState<AssetKey>('ES');
@@ -345,6 +350,14 @@ export default function DashboardView() {
   const now = new Date();
   const dateStr = now.toLocaleDateString(L === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  /* ── Greeting — Israel time (same clock the header shows), real name when Clerk has it ── */
+  const idtHour = parseInt(clockStr.slice(0, 2), 10) || 0;
+  const greetWord = idtHour < 5 || idtHour >= 22 ? s.greetNight
+    : idtHour < 12 ? s.greetMorning
+    : idtHour < 18 ? s.greetAfternoon
+    : s.greetEvening;
+  const greeting = firstName ? `${greetWord}, ${firstName}` : greetWord;
+
   const spec = SPEC[asset];
   const bal = num(balance), rk = num(risk), st = num(stop);
   const cash = bal * (rk / 100);
@@ -470,10 +483,11 @@ export default function DashboardView() {
           <section className="dp-hero-row dp-reveal dp-rev-1">
             <div className="dp-hero-greet">
               <span className="dp-hero-eyebrow">{s.briefingK}</span>
-              <h1 className="dp-hero-title">
+              <h1 className="dp-hero-greeting">{greeting}</h1>
+              <p className="dp-hero-date">
                 {dateStr}
                 {activeSess ? <> · <b>{s.sessionActive(L === 'he' ? activeSess.he : activeSess.en)}</b></> : <> · {s.noSession}</>}
-              </h1>
+              </p>
               <div className="dp-sessions">
                 {SESS.map((sess, i) => (
                   <div key={sess.key} className={`dp-session-chip${i === activeSessionIdx ? ' active' : ''}`}>

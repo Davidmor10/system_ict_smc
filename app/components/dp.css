@@ -105,9 +105,10 @@
   content: ""; position: absolute; top: -70px; inset-inline-end: -70px; width: 240px; height: 240px;
   background: radial-gradient(circle, var(--gold-10), transparent 70%); pointer-events: none;
 }
-.dp-hero-eyebrow { font-family: var(--ff-mono); font-size: 11px; font-weight: 700; letter-spacing: .25em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; position: relative; }
-.dp-hero-title   { margin: 0 0 20px; font-family: var(--ff-serif); font-size: clamp(24px, 2.6vw, 32px); font-weight: 700; color: #fff; line-height: 1.28; position: relative; text-wrap: balance; }
-.dp-hero-title b { color: var(--gold); font-weight: 700; }
+.dp-hero-eyebrow  { font-family: var(--ff-mono); font-size: 11px; font-weight: 700; letter-spacing: .25em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; position: relative; }
+.dp-hero-greeting { margin: 0 0 8px; font-family: var(--ff-serif); font-size: clamp(32px, 3.6vw, 46px); font-weight: 700; color: #fff; line-height: 1.12; position: relative; text-wrap: balance; }
+.dp-hero-date     { margin: 0 0 20px; font-family: var(--ff-sans); font-size: 14px; color: var(--w55); line-height: 1.4; position: relative; }
+.dp-hero-date b   { color: var(--gold); font-weight: 700; }
 .dp-sessions { display: flex; gap: 8px; flex-wrap: wrap; position: relative; }
 .dp-session-chip { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 2px; border: 1px solid var(--border); transition: border-color .2s; }
 .dp-session-chip.active { background: var(--gold-10); border-color: var(--gold-30); }
