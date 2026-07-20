@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractResponse, stripInternalLabels } from '../../app/lib/ai/coachOutput';
+import { extractResponse, stripInternalLabels, stripLeakedScaffold } from '../../app/lib/ai/coachOutput';
 
 describe('extractResponse', () => {
   it('returns only the <response> body, never the <thinking>', () => {
@@ -60,5 +60,42 @@ describe('stripInternalLabels', () => {
   it('leaves a clean answer untouched, including legitimate caps like FVG / MNQ / NFP', () => {
     const clean = 'ה-FVG שלך על MNQ עבד טוב, ו-NFP ביום שישי הזיז את השוק.';
     expect(stripInternalLabels(clean)).toBe(clean);
+  });
+});
+
+describe('stripLeakedScaffold — the tag-less chain-of-thought leak', () => {
+  it('strips a full reasoning scaffold printed as plain text before the Hebrew answer', () => {
+    // The exact class of leak from the follow-up "why do I lose on MNQ?": the
+    // model printed its whole checklist as prose, with no <thinking> tags.
+    const raw = [
+      '1. THE REAL QUESTION — the trader wants to know the mechanism behind MNQ losses.',
+      '2. CLASSIFY: personal-data.',
+      "3. INVESTIGATE: The established fact 'החוזק שלך הוא MNQ' and 'אתה מתקשה יותר עם MNQ' are contradictory.",
+      '4. SELF-CHECK: Debunk a common mistake traders make? Yes.',
+      '5. Plan the order — mechanism first.',
+      '',
+      'רוב ההפסדים שלך ב-MNQ מגיעים מעסקאות מחוץ לסשן הראשי. שם כדאי למקד את הבדיקה.',
+    ].join('\n');
+    const out = extractResponse(raw);
+    expect(out).not.toContain('THE REAL QUESTION');
+    expect(out).not.toContain('SELF-CHECK');
+    expect(out).not.toContain('Debunk a common mistake');
+    expect(out).not.toContain('CLASSIFY');
+    expect(out).toBe('רוב ההפסדים שלך ב-MNQ מגיעים מעסקאות מחוץ לסשן הראשי. שם כדאי למקד את הבדיקה.');
+  });
+
+  it('strips a leaked scaffold even when wrapped only in an unclosed <thinking>', () => {
+    const raw = '<thinking>\n1. THE REAL QUESTION — ...\n4. SELF-CHECK: ...\n\nהתשובה האמיתית למשתמש כאן.';
+    expect(extractResponse(raw)).toBe('התשובה האמיתית למשתמש כאן.');
+  });
+
+  it('never touches a clean answer that has no scaffold markers', () => {
+    const clean = 'הסשן הכי חזק שלך הוא ניו יורק AM, עם אחוז הצלחה גבוה יותר מהשאר.';
+    expect(stripLeakedScaffold(clean)).toBe(clean);
+  });
+
+  it('does not strip a legitimate numbered list when no scaffold marker is present', () => {
+    const list = 'שלושה דברים לשפר:\n1. סטופ קבוע\n2. פחות עסקאות\n3. יומן מסודר';
+    expect(stripLeakedScaffold(list)).toBe(list);
   });
 });

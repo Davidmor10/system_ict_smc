@@ -26,6 +26,20 @@ function pickExtreme(groups: GroupPerformance[], mode: 'max' | 'min'): GroupPerf
   );
 }
 
+/** Strongest and weakest of the same dimension (instrument / session). They must
+    be genuinely DIFFERENT groups that genuinely differ — otherwise a trader who
+    has only one eligible instrument (or a flat spread) would be told both "your
+    strength is MNQ" AND "you struggle with MNQ", two contradictory facts about
+    the same key. When there's nothing honest to contrast, weakest is null. */
+function pickStrongestWeakest(groups: GroupPerformance[]): { strongest: GroupPerformance | null; weakest: GroupPerformance | null } {
+  const strongest = pickExtreme(groups, 'max');
+  const weakest = pickExtreme(groups, 'min');
+  if (!strongest || !weakest) return { strongest, weakest: null };
+  const distinct = weakest.key !== strongest.key;
+  const meaningfulSpread = strongest.winRate - weakest.winRate >= WIN_RATE_THRESHOLD;
+  return { strongest, weakest: distinct && meaningfulSpread ? weakest : null };
+}
+
 function diffField(field: string, previous: string | number | null, current: string | number | null): ProfileChange | null {
   if (previous === current) return null;
   if (previous === null && current === null) return null;
@@ -43,10 +57,8 @@ export function deriveTraderProfile(
   previousProfile: TraderProfile | null,
   recurringPatterns: PatternMemorySubjectSummary[] = [],
 ): TraderProfile {
-  const strongestInstrument = pickExtreme(analysis.instruments, 'max');
-  const weakestInstrument = pickExtreme(analysis.instruments, 'min');
-  const strongestSession = pickExtreme(analysis.sessions, 'max');
-  const weakestSession = pickExtreme(analysis.sessions, 'min');
+  const { strongest: strongestInstrument, weakest: weakestInstrument } = pickStrongestWeakest(analysis.instruments);
+  const { strongest: strongestSession, weakest: weakestSession } = pickStrongestWeakest(analysis.sessions);
 
   const { long, short } = analysis.direction;
   const bothQualify = long.confidence.sampleSize >= MIN_SAMPLE && short.confidence.sampleSize >= MIN_SAMPLE;

@@ -48,18 +48,63 @@ export function stripInternalLabels(text: string): string {
     .trim();
 }
 
+// The private-reasoning scaffold. A model that ignores the <thinking>/<response>
+// tag contract (weaker chat models do) can print its chain-of-thought as plain
+// prose ahead of the answer. These are the structural anchors that reasoning
+// uses — if any appears with no <response> tag, a whole thinking block leaked.
+const SCAFFOLD_MARKERS = [
+  'THE REAL QUESTION', 'CLASSIFY', 'INVESTIGATE', 'SELF-CHECK',
+  'Plan the order', 'NEVER shown to the trader',
+];
+
+/** Removes a leaked chain-of-thought scaffold. No-op unless a real scaffold
+    marker is present (so a legitimate answer that happens to use a numbered
+    list is never touched). When a marker IS present, the answer follows the
+    reasoning: cut past the last marker to the next paragraph break; failing
+    that, drop the marker lines and numbered-step lines individually. */
+export function stripLeakedScaffold(text: string): string {
+  if (!SCAFFOLD_MARKERS.some(m => text.includes(m))) return text;
+
+  let lastEnd = -1;
+  for (const m of SCAFFOLD_MARKERS) {
+    const i = text.lastIndexOf(m);
+    if (i >= 0) lastEnd = Math.max(lastEnd, i + m.length);
+  }
+  if (lastEnd >= 0) {
+    const after = text.slice(lastEnd);
+    const para = after.search(/\n\s*\n/);
+    const candidate = (para >= 0 ? after.slice(para) : after.replace(/^[^\n]*(?:\n|$)/, '')).trim();
+    if (candidate) return candidate;
+  }
+
+  const kept = text
+    .split('\n')
+    .filter(line => !SCAFFOLD_MARKERS.some(m => line.includes(m)) && !/^\s*\d[.)]\s+/.test(line))
+    .join('\n')
+    .trim();
+  return kept || text;
+}
+
+/** The trader must only ever see the final answer. Run BOTH scrubbers on every
+    path — each is a no-op when its target isn't present, so this is safe even
+    on a cleanly-tagged response. */
+function clean(text: string): string {
+  return stripInternalLabels(stripLeakedScaffold(text.trim()));
+}
+
 /** Return only the <response> body. If the model didn't use the tags (a
     fallback model, or output truncated before the closing tag), degrade
-    gracefully to whatever real answer is present. Always label-scrubbed. */
+    gracefully to whatever real answer is present — scaffold- and label-scrubbed. */
 export function extractResponse(raw: string): string {
   const closed = raw.match(/<response>([\s\S]*?)<\/response>/i);
-  if (closed) return stripInternalLabels(closed[1].trim());
+  if (closed) return clean(closed[1]);
   const open = raw.match(/<response>([\s\S]*)/i); // opened but truncated before close
-  if (open) return stripInternalLabels(open[1].trim());
-  // No response tag at all — drop any thinking block and return the rest.
+  if (open) return clean(open[1]);
+  // No response tag at all — drop any thinking block, then strip a tag-less
+  // scaffold the model may have printed as plain prose before the answer.
   const stripped = raw
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<\/?(thinking|response)>/gi, '')
     .trim();
-  return stripInternalLabels(stripped || raw.trim());
+  return clean(stripped || raw);
 }
