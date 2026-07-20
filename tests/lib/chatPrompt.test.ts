@@ -77,6 +77,15 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('recorded emotional state');
   });
 
+  it('forbids quoting internal prompt labels, circular non-answers, and generic truisms', () => {
+    const prompt = buildChatPrompt(facts, [], 'איפה אני מפסיד הכי הרבה?', 'he');
+    // The exact leak class: never surface an internal section label to the trader.
+    expect(prompt).toContain('NEVER see a section label from this prompt');
+    expect(prompt).toContain('circular non-answer');
+    // The specific generic filler we saw, named as banned.
+    expect(prompt).toContain('טעות נפוצה שסוחרים עושים היא לא לנתח את הנתונים שלהם');
+  });
+
   it('forbids Markdown output (base) and inventing macro events (macro block)', () => {
     const prompt = buildChatPrompt(facts, [], 'q', 'he', '', '', '', ['MACRO_NEWS']);
     expect(prompt).toContain('PLAIN TEXT');
