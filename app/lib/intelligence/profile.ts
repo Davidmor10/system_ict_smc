@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { FullAnalysis, GroupPerformance } from '../analytics';
+import { pairedExtremes } from '../analytics/extremes';
 import type { TradeEntry } from '../journal';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
@@ -18,26 +19,11 @@ const MAX_NOTES = 5;
 const MAX_CONFIRMATIONS = 3;
 const MAX_RECURRING = 5;
 
-function pickExtreme(groups: GroupPerformance[], mode: 'max' | 'min'): GroupPerformance | null {
-  const eligible = groups.filter(g => g.confidence.sampleSize >= MIN_SAMPLE);
-  if (eligible.length === 0) return null;
-  return eligible.reduce((best, g) =>
-    (mode === 'max' ? g.winRate > best.winRate : g.winRate < best.winRate) ? g : best
-  );
-}
-
-/** Strongest and weakest of the same dimension (instrument / session). They must
-    be genuinely DIFFERENT groups that genuinely differ — otherwise a trader who
-    has only one eligible instrument (or a flat spread) would be told both "your
-    strength is MNQ" AND "you struggle with MNQ", two contradictory facts about
-    the same key. When there's nothing honest to contrast, weakest is null. */
-function pickStrongestWeakest(groups: GroupPerformance[]): { strongest: GroupPerformance | null; weakest: GroupPerformance | null } {
-  const strongest = pickExtreme(groups, 'max');
-  const weakest = pickExtreme(groups, 'min');
-  if (!strongest || !weakest) return { strongest, weakest: null };
-  const distinct = weakest.key !== strongest.key;
-  const meaningfulSpread = strongest.winRate - weakest.winRate >= WIN_RATE_THRESHOLD;
-  return { strongest, weakest: distinct && meaningfulSpread ? weakest : null };
+/** Strongest/weakest by win rate, eligible at MIN_SAMPLE, requiring a real
+    win-rate spread — a thin wrapper over the shared `pairedExtremes` so the
+    "never the same group as both" guarantee lives in exactly one place. */
+function extremesByWinRate(groups: GroupPerformance[]) {
+  return pairedExtremes(groups, g => g.winRate, g => g.confidence.sampleSize >= MIN_SAMPLE, WIN_RATE_THRESHOLD);
 }
 
 function diffField(field: string, previous: string | number | null, current: string | number | null): ProfileChange | null {
@@ -57,8 +43,8 @@ export function deriveTraderProfile(
   previousProfile: TraderProfile | null,
   recurringPatterns: PatternMemorySubjectSummary[] = [],
 ): TraderProfile {
-  const { strongest: strongestInstrument, weakest: weakestInstrument } = pickStrongestWeakest(analysis.instruments);
-  const { strongest: strongestSession, weakest: weakestSession } = pickStrongestWeakest(analysis.sessions);
+  const { strongest: strongestInstrument, weakest: weakestInstrument } = extremesByWinRate(analysis.instruments);
+  const { strongest: strongestSession, weakest: weakestSession } = extremesByWinRate(analysis.sessions);
 
   const { long, short } = analysis.direction;
   const bothQualify = long.confidence.sampleSize >= MIN_SAMPLE && short.confidence.sampleSize >= MIN_SAMPLE;

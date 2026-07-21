@@ -53,9 +53,11 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('the manipulation leg) is BAIT, not confirmation');
     expect(prompt).toContain('shifts rate-cut/hike expectations'); // NFP mechanism
     expect(prompt).toContain('Correlation is not causation');
-    // Chain-of-thought contract: think privately, answer inside <response>.
-    expect(prompt).toContain('<thinking>');
-    expect(prompt).toContain('<response>');
+    // Structured-output contract: a single JSON object, reasoning kept private
+    // in its own field, only final_answer shown to the trader.
+    expect(prompt).toContain('SINGLE JSON object');
+    expect(prompt).toContain('"reasoning"');
+    expect(prompt).toContain('"final_answer"');
     // Multi-question handling + banned filler.
     expect(prompt).toContain('answer each one separately under its own short heading');
     expect(prompt).toContain('השוק מורכב ודינמי'); // named as banned filler

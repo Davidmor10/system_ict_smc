@@ -92,6 +92,33 @@ function clean(text: string): string {
   return stripInternalLabels(stripLeakedScaffold(text.trim()));
 }
 
+/** Parse the structured coach response and return ONLY its final_answer, or
+    null when the output isn't valid/expected JSON. This is the primary path:
+    because we read a specific field of a parsed object, the model's private
+    reasoning field can never reach the user by construction. The scrubbers are
+    still applied to final_answer as cheap belt-and-suspenders. Returns null
+    (never raw text) on any failure, so the caller can fail safe. */
+export function parseCoachJson(raw: string): string | null {
+  if (!raw || !raw.trim()) return null;
+  let s = raw.trim()
+    .replace(/^```(?:json)?\s*/i, '')  // some models fence JSON despite the ask
+    .replace(/```\s*$/, '')
+    .trim();
+  // If the model wrapped the object in stray prose, isolate the object itself.
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  s = s.slice(start, end + 1);
+  try {
+    const obj = JSON.parse(s) as { final_answer?: unknown };
+    const answer = typeof obj.final_answer === 'string' ? obj.final_answer.trim() : '';
+    if (!answer) return null;
+    return clean(answer);
+  } catch {
+    return null;
+  }
+}
+
 /** Return only the <response> body. If the model didn't use the tags (a
     fallback model, or output truncated before the closing tag), degrade
     gracefully to whatever real answer is present — scaffold- and label-scrubbed. */

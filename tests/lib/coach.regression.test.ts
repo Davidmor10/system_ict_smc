@@ -75,10 +75,10 @@ describe('coach prompt — mentor behavioral rules', () => {
     expect(prompt).toContain('never insert a generic "traders often…" line by default');
   });
 
-  it('Rule C: the private reasoning must never leak into the visible answer', () => {
-    expect(prompt).toContain('MUST NEVER appear in the visible answer');
-    expect(prompt).toContain('NEVER print your analysis as plain text');
-    expect(prompt).toContain('output ONLY the final answer to the trader');
+  it('Rule C: structured output — reasoning lives in its own field the trader never sees', () => {
+    expect(prompt).toContain('SINGLE JSON object');
+    expect(prompt).toContain('the trader NEVER sees this field');
+    expect(prompt).toContain('"final_answer" must contain NO analysis');
   });
 });
 

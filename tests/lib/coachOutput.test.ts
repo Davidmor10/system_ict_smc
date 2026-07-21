@@ -1,5 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { extractResponse, stripInternalLabels, stripLeakedScaffold } from '../../app/lib/ai/coachOutput';
+import { extractResponse, stripInternalLabels, stripLeakedScaffold, parseCoachJson } from '../../app/lib/ai/coachOutput';
+
+describe('parseCoachJson — structural guarantee: only final_answer can ever reach the user', () => {
+  it('returns final_answer and NEVER the private reasoning field', () => {
+    const raw = JSON.stringify({
+      reasoning: '1. THE REAL QUESTION ... SELF-CHECK: Debunk a common mistake? Yes. established fact contradiction here.',
+      final_answer: 'רוב ההפסדים שלך ב-MNQ מגיעים מעסקאות מחוץ לסשן הראשי.',
+    });
+    const out = parseCoachJson(raw);
+    expect(out).toBe('רוב ההפסדים שלך ב-MNQ מגיעים מעסקאות מחוץ לסשן הראשי.');
+    expect(out).not.toContain('THE REAL QUESTION');
+    expect(out).not.toContain('SELF-CHECK');
+    expect(out).not.toContain('established fact');
+  });
+
+  it('parses JSON even when the model wraps it in ```json fences', () => {
+    const raw = '```json\n{"reasoning":"x","final_answer":"הסשן החזק שלך הוא ניו יורק AM."}\n```';
+    expect(parseCoachJson(raw)).toBe('הסשן החזק שלך הוא ניו יורק AM.');
+  });
+
+  it('isolates the object when the model adds stray prose around it', () => {
+    const raw = 'Sure! {"reasoning":"x","final_answer":"התשובה שלך."} hope that helps';
+    expect(parseCoachJson(raw)).toBe('התשובה שלך.');
+  });
+
+  it('scrubs a leaked label even if it lands inside final_answer', () => {
+    const raw = JSON.stringify({ reasoning: 'x', final_answer: 'אתה חלש ב-MNQ, כפי שנרשם ב-ESTABLISHED FACTS.' });
+    const out = parseCoachJson(raw);
+    expect(out).not.toContain('ESTABLISHED FACTS');
+  });
+
+  it('returns null (never raw) on invalid JSON, so the caller can fail safe', () => {
+    expect(parseCoachJson('not json at all, just leaked reasoning: 1. THE REAL QUESTION')).toBeNull();
+  });
+
+  it('returns null when final_answer is missing or empty', () => {
+    expect(parseCoachJson('{"reasoning":"only reasoning, no answer"}')).toBeNull();
+    expect(parseCoachJson('{"final_answer":"   "}')).toBeNull();
+  });
+});
 
 describe('extractResponse', () => {
   it('returns only the <response> body, never the <thinking>', () => {

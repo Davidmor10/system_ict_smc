@@ -305,6 +305,20 @@ create table if not exists macro_calendar_cache (
   fetched_at  timestamptz not null default now()
 );
 
+-- Observability for the coach's structured-output fail-safe: one row each time
+-- the model's reply could not be parsed into {final_answer}. 'retry' = first
+-- attempt failed (we re-asked); 'failed' = still bad after the retry (the user
+-- got the fixed error message, never raw text). Lets us see the real rate in
+-- production instead of discovering leaks by hand.
+create table if not exists coach_generation_fallback (
+  id               bigint generated always as identity primary key,
+  clerk_id         text        not null,
+  stage            text        not null,   -- 'retry' | 'failed'
+  question_preview text,                   -- first 200 chars only
+  created_at       timestamptz not null default now()
+);
+create index if not exists coach_generation_fallback_created_idx on coach_generation_fallback (created_at desc);
+
 alter table trader_profiles     enable row level security;
 alter table pattern_memory      enable row level security;
 alter table weekly_ai_reports   enable row level security;
@@ -313,6 +327,7 @@ alter table trader_hypotheses   enable row level security;
 alter table coach_chats         enable row level security;
 alter table macro_calendar_cache enable row level security;
 alter table user_collections    enable row level security;
+alter table coach_generation_fallback enable row level security;
 
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)

@@ -14,11 +14,12 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/se
 import { getRecentTrades, getTraderProfile, getHypothesis } from '../intelligence/repository';
 import { runFullAnalysis, type FullAnalysis } from '../analytics';
 import { summarizeKnownFacts } from './factsBlock';
-import { generateCoachText } from './client';
+import { generateCoachJson } from './client';
 import { buildFactsContext, buildChatPrompt, type ChatTurn } from './chatPrompt';
 import { createCoachChat, getCoachChat, saveCoachChatMessages, deriveChatTitle } from './coachChats';
 import { getMacroEvents, buildMacroBlock, computeMacroOverlap, israelToday } from './macroCalendar';
-import { extractResponse } from './coachOutput';
+import { parseCoachJson } from './coachOutput';
+import { logCoachFallback } from './coachFallbackLog';
 import { retrieveKnowledge, renderKnowledge } from './kb';
 import { classifyQuestion } from './router';
 import { logger } from '../logger';
@@ -119,11 +120,28 @@ export async function answerCoachQuestion(
   const knowledgeBlock = renderKnowledge(retrieveKnowledge(question));
   const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock, categories);
 
-  let answer: string;
+  // Structured-output pipeline. The model must return {reasoning, final_answer};
+  // we read ONLY final_answer, so its private reasoning can never reach the user
+  // by construction. If the output doesn't parse into that shape, we NEVER show
+  // the raw text — we re-ask once with a corrective nudge, and if it still fails
+  // we return the fixed "unavailable" message. Every fallback is logged so the
+  // real production rate is visible, not discovered by hand.
+  const CORRECTIVE = '\n\nYour previous reply could not be parsed. Respond again with ONLY a valid JSON object of the exact shape {"reasoning": "...", "final_answer": "..."} and nothing else.';
+  let answer: string | null;
   try {
-    answer = extractResponse(await generateCoachText(prompt));
+    answer = parseCoachJson(await generateCoachJson(prompt));
+    if (!answer) {
+      await logCoachFallback(supabase, userId, 'retry', question);
+      answer = parseCoachJson(await generateCoachJson(prompt + CORRECTIVE));
+    }
   } catch (err) {
     logger.error('chat coach generation failed', { error: err instanceof Error ? err.message : String(err) });
+    return { answer: null, reason: 'ai_unavailable', chatId: resolvedChatId ?? undefined };
+  }
+  if (!answer) {
+    // Contract still violated after the retry — fail safe. The user sees the
+    // fixed error, never a scrap of raw model output.
+    await logCoachFallback(supabase, userId, 'failed', question);
     return { answer: null, reason: 'ai_unavailable', chatId: resolvedChatId ?? undefined };
   }
 
