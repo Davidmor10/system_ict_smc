@@ -31,6 +31,25 @@ describe('deriveTraderProfile', () => {
     expect(profile.weakestInstrument).toBeNull();
   });
 
+  it('never marks the same instrument as BOTH strongest and weakest (the contradiction bug)', () => {
+    // A trader who has only traded MNQ: one eligible instrument. It must not
+    // become both "your strength" and "you struggle with it".
+    const trades = winsAndLosses('NQ', 'nyam', 4, 3);
+    const profile = deriveTraderProfile(runFullAnalysis(trades), trades, null);
+    expect(profile.strongestInstrument?.key).toBe('NQ');
+    expect(profile.weakestInstrument).toBeNull();
+    if (profile.strongestInstrument && profile.weakestInstrument) {
+      expect(profile.weakestInstrument.key).not.toBe(profile.strongestInstrument.key);
+    }
+  });
+
+  it('does not call two near-equal groups strong vs weak without a real spread', () => {
+    // ES 3/6 (50%) and NQ 3/6 (50%): equal win rate → no honest weak/strong split.
+    const trades = [...winsAndLosses('ES', 'nyam', 3, 3), ...winsAndLosses('NQ', 'london', 3, 3)];
+    const profile = deriveTraderProfile(runFullAnalysis(trades), trades, null);
+    expect(profile.weakestInstrument).toBeNull();
+  });
+
   it('reports a direction edge only when both long and short qualify by sample size', () => {
     const tooFewShorts = [
       ...winsAndLosses('ES', 'nyam', 5, 0, 'LONG'),

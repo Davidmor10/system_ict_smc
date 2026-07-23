@@ -1,5 +1,6 @@
 import type { TradeEntry } from '../journal';
 import { computeGroupPerformance } from './metrics';
+import { pairedExtremes } from './extremes';
 import type { GroupPerformance, TimeSummary } from './types';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -61,15 +62,15 @@ export function isoWeekKey(dateISO: string): string {
   return `${target.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-function pickExtreme(groups: GroupPerformance[], by: (g: GroupPerformance) => number, mode: 'max' | 'min'): GroupPerformance | null {
+/** Single-ended pick (used only where there's no "worst" counterpart, e.g.
+    bestMonth). Paired best/worst go through the shared `pairedExtremes` so the
+    same group can never be both. */
+function pickBest(groups: GroupPerformance[], by: (g: GroupPerformance) => number): GroupPerformance | null {
   const eligible = groups.filter(g => g.trades > 0);
   if (eligible.length === 0) return null;
-  return eligible.reduce((best, g) => {
-    const cmp = by(g);
-    const bestCmp = by(best);
-    return mode === 'max' ? (cmp > bestCmp ? g : best) : (cmp < bestCmp ? g : best);
-  });
+  return eligible.reduce((best, g) => (by(g) > by(best) ? g : best));
 }
+const hasTrades = (g: GroupPerformance) => g.trades > 0;
 
 function bucketBy<K extends string | number>(trades: TradeEntry[], keyOf: (t: TradeEntry) => K | null): Map<K, TradeEntry[]> {
   const buckets = new Map<K, TradeEntry[]>();
@@ -103,17 +104,21 @@ export function analyzeTime(trades: TradeEntry[]): TimeSummary {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mk, ts]) => computeGroupPerformance(ts, mk, mk));
 
+  const hour = pairedExtremes(byHour, g => g.winRate, hasTrades);
+  const weekday = pairedExtremes(byWeekday, g => g.winRate, hasTrades);
+  const week = pairedExtremes(byWeek, g => g.totalPnl, hasTrades);
+
   return {
     byHour,
     byWeekday,
     byWeek,
     byMonth,
-    bestHour: pickExtreme(byHour, g => g.winRate, 'max'),
-    worstHour: pickExtreme(byHour, g => g.winRate, 'min'),
-    bestWeekday: pickExtreme(byWeekday, g => g.winRate, 'max'),
-    worstWeekday: pickExtreme(byWeekday, g => g.winRate, 'min'),
-    strongestWeek: pickExtreme(byWeek, g => g.totalPnl, 'max'),
-    weakestWeek: pickExtreme(byWeek, g => g.totalPnl, 'min'),
-    bestMonth: pickExtreme(byMonth, g => g.winRate, 'max'),
+    bestHour: hour.strongest,
+    worstHour: hour.weakest,
+    bestWeekday: weekday.strongest,
+    worstWeekday: weekday.weakest,
+    strongestWeek: week.strongest,
+    weakestWeek: week.weakest,
+    bestMonth: pickBest(byMonth, g => g.winRate),
   };
 }

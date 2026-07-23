@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { FullAnalysis, GroupPerformance } from '../analytics';
+import { pairedExtremes } from '../analytics/extremes';
 import type { TradeEntry } from '../journal';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
@@ -18,12 +19,11 @@ const MAX_NOTES = 5;
 const MAX_CONFIRMATIONS = 3;
 const MAX_RECURRING = 5;
 
-function pickExtreme(groups: GroupPerformance[], mode: 'max' | 'min'): GroupPerformance | null {
-  const eligible = groups.filter(g => g.confidence.sampleSize >= MIN_SAMPLE);
-  if (eligible.length === 0) return null;
-  return eligible.reduce((best, g) =>
-    (mode === 'max' ? g.winRate > best.winRate : g.winRate < best.winRate) ? g : best
-  );
+/** Strongest/weakest by win rate, eligible at MIN_SAMPLE, requiring a real
+    win-rate spread — a thin wrapper over the shared `pairedExtremes` so the
+    "never the same group as both" guarantee lives in exactly one place. */
+function extremesByWinRate(groups: GroupPerformance[]) {
+  return pairedExtremes(groups, g => g.winRate, g => g.confidence.sampleSize >= MIN_SAMPLE, WIN_RATE_THRESHOLD);
 }
 
 function diffField(field: string, previous: string | number | null, current: string | number | null): ProfileChange | null {
@@ -43,10 +43,8 @@ export function deriveTraderProfile(
   previousProfile: TraderProfile | null,
   recurringPatterns: PatternMemorySubjectSummary[] = [],
 ): TraderProfile {
-  const strongestInstrument = pickExtreme(analysis.instruments, 'max');
-  const weakestInstrument = pickExtreme(analysis.instruments, 'min');
-  const strongestSession = pickExtreme(analysis.sessions, 'max');
-  const weakestSession = pickExtreme(analysis.sessions, 'min');
+  const { strongest: strongestInstrument, weakest: weakestInstrument } = extremesByWinRate(analysis.instruments);
+  const { strongest: strongestSession, weakest: weakestSession } = extremesByWinRate(analysis.sessions);
 
   const { long, short } = analysis.direction;
   const bothQualify = long.confidence.sampleSize >= MIN_SAMPLE && short.confidence.sampleSize >= MIN_SAMPLE;

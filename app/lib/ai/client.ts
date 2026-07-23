@@ -19,18 +19,28 @@ interface Attempt { provider: Provider; model: string }
     non-empty completion. Falls through on overload (503) / quota (429) / any
     error to the next attempt, so one model being down never fails the request
     while another is available. Throws only if every attempt fails. */
-async function runAttempts(prompt: string, attempts: Attempt[]): Promise<string> {
+/** When `json` is set, ask the provider for a structured JSON object at the API
+    level (Groq's json_object response_format, Gemini's application/json mime).
+    This is what makes reasoning-leakage structurally impossible for the coach:
+    the caller parses a JSON object and reads only its `final_answer` field, so
+    the model's private `reasoning` field is never eligible to reach the user. */
+async function runAttempts(prompt: string, attempts: Attempt[], json = false): Promise<string> {
   let lastErr: unknown;
   for (const { provider, model } of attempts) {
     try {
       if (provider === "gemini") {
-        const result = await genAI.models.generateContent({ model, contents: prompt });
+        const result = await genAI.models.generateContent({
+          model,
+          contents: prompt,
+          ...(json ? { config: { responseMimeType: "application/json" } } : {}),
+        });
         if (result.text) return result.text;
         logger.warn("gemini returned no text", { model });
       } else {
         const result = await groq.chat.completions.create({
           model,
           messages: [{ role: "user", content: prompt }],
+          ...(json ? { response_format: { type: "json_object" } } : {}),
         });
         const text = result.choices[0]?.message?.content;
         if (text) return text;
@@ -80,4 +90,11 @@ export function generateInsightText(prompt: string): Promise<string> {
     strongest models first. */
 export function generateCoachText(prompt: string): Promise<string> {
   return runAttempts(prompt, COACH_ATTEMPTS);
+}
+
+/** Coach generation constrained to a JSON object at the API level. Returns the
+    raw JSON string (still parsed + validated by the caller, which is the layer
+    that enforces the fail-safe when a provider ignores the constraint). */
+export function generateCoachJson(prompt: string): Promise<string> {
+  return runAttempts(prompt, COACH_ATTEMPTS, true);
 }

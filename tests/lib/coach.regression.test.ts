@@ -63,16 +63,22 @@ describe('coach prompt — professional-precision regression', () => {
 
 describe('coach prompt — mentor behavioral rules', () => {
   it('Rule A: answer the deeper question beneath the surface one', () => {
-    expect(prompt).toContain('THE REAL QUESTION');
-    expect(prompt).toContain('BENEATH the surface');
-    expect(prompt).toContain('answers the deeper question');
+    expect(prompt).toContain('the real question beneath the words');
   });
 
-  it('Rule B: self-check the answer and rewrite it if any check fails', () => {
-    expect(prompt).toContain('SELF-CHECK');
-    expect(prompt).toContain('rewrite it before you output');
-    expect(prompt).toContain('debunk a common mistake');
-    expect(prompt).toContain('does it TEACH rather than just define');
+  it('Rule B: reason privately and teach — without shipping an echoable scaffold', () => {
+    // The reasoning contract must survive (think first, then answer, teach the
+    // mechanism), but WITHOUT a verbatim numbered checklist the model can parrot.
+    expect(prompt).toContain('Teach and explain the mechanism');
+    expect(prompt).toContain('KNOW vs SUSPECT vs CANNOT');
+    // Correcting a common mistake is now CONDITIONAL, not a default requirement.
+    expect(prompt).toContain('never insert a generic "traders often…" line by default');
+  });
+
+  it('Rule C: structured output — reasoning lives in its own field the trader never sees', () => {
+    expect(prompt).toContain('SINGLE JSON object');
+    expect(prompt).toContain('the trader NEVER sees this field');
+    expect(prompt).toContain('"final_answer" must contain NO analysis');
   });
 });
 

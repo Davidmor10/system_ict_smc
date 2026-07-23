@@ -53,9 +53,11 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('the manipulation leg) is BAIT, not confirmation');
     expect(prompt).toContain('shifts rate-cut/hike expectations'); // NFP mechanism
     expect(prompt).toContain('Correlation is not causation');
-    // Chain-of-thought contract: think privately, answer inside <response>.
-    expect(prompt).toContain('<thinking>');
-    expect(prompt).toContain('<response>');
+    // Structured-output contract: a single JSON object, reasoning kept private
+    // in its own field, only final_answer shown to the trader.
+    expect(prompt).toContain('SINGLE JSON object');
+    expect(prompt).toContain('"reasoning"');
+    expect(prompt).toContain('"final_answer"');
     // Multi-question handling + banned filler.
     expect(prompt).toContain('answer each one separately under its own short heading');
     expect(prompt).toContain('השוק מורכב ודינמי'); // named as banned filler
@@ -75,6 +77,15 @@ describe('buildChatPrompt', () => {
     expect(prompt).toContain('אתה עדיין בתהליך למידה');          // named as a thing NOT to say
     expect(prompt).toContain('experience level');
     expect(prompt).toContain('recorded emotional state');
+  });
+
+  it('forbids quoting internal prompt labels, circular non-answers, and generic truisms', () => {
+    const prompt = buildChatPrompt(facts, [], 'איפה אני מפסיד הכי הרבה?', 'he');
+    // The exact leak class: never surface an internal section label to the trader.
+    expect(prompt).toContain('NEVER see a section label from this prompt');
+    expect(prompt).toContain('circular non-answer');
+    // The specific generic filler we saw, named as banned.
+    expect(prompt).toContain('טעות נפוצה שסוחרים עושים היא לא לנתח את הנתונים שלהם');
   });
 
   it('forbids Markdown output (base) and inventing macro events (macro block)', () => {

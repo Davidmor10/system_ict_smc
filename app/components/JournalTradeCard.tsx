@@ -21,6 +21,12 @@ const money = (n: number) => '$' + Math.abs(n).toLocaleString('en-US');
 const price = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pnlColor = (n: number) => (n > 0 ? BULLISH : n < 0 ? BEARISH : 'rgba(255,255,255,0.4)');
 
+/** A trade whose entry time falls between the tracked session windows carries
+    session 'NONE' (or empty). That's a real state, not a bug — render it as
+    such instead of leaking the raw "NONE" token to the trader. */
+function isTrackedSession(sessionKey: string): boolean {
+  return !!sessionKey && sessionKey !== 'NONE' && SESS.some(s => s.key === sessionKey);
+}
 function sessionLabel(sessionKey: string): string {
   return SESS.find(s => s.key === sessionKey)?.he ?? sessionKey;
 }
@@ -141,7 +147,7 @@ export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeE
       <div className="flex items-center gap-[18px] pt-4 border-t border-[#1c1c1e] flex-wrap">
         <span className="font-mono text-xs font-semibold text-white/40 tabular-nums">{t.time}</span>
         <span className="w-1 h-1 rounded-full bg-white/30" />
-        <span className="text-[13px] text-white/55">סשן {sessionLabel(t.session)}</span>
+        <span className="text-[13px] text-white/55">{isTrackedSession(t.session) ? `סשן ${sessionLabel(t.session)}` : 'מחוץ לחלונות הסשן'}</span>
         <span className="w-1 h-1 rounded-full bg-white/30" />
         <span className="text-[13px] text-white/55">ביאס יומי <span className="font-semibold" style={{ color: t.bias === 'BULLISH' ? BULLISH : t.bias === 'BEARISH' ? BEARISH : 'rgba(255,255,255,0.55)' }}>{BIAS_HE[t.bias] ?? t.bias}</span></span>
         {!hasTag && (

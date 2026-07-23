@@ -8,6 +8,7 @@ import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { SESS, sessionForHour, getActiveSessionKey, type SessionKey } from '../lib/sessions';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
+import { confidenceLevelFor } from '../lib/analytics/confidence';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
@@ -140,7 +141,12 @@ function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string
       const wins = sessionThisWeek.filter(t => t.result === 'WIN').length;
       const winRate = Math.round((wins / decided.length) * 100);
       const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
-      return `זו העסקה ה-${sessionThisWeek.length} שלך השבוע בסשן ${label}. אחוז ההצלחה הנוכחי בסשן: ${winRate}%.`;
+      // A win rate never stands naked: always carry the sample it's built on,
+      // and flag a small sample as an early sign — same honesty as the
+      // dashboard's confidence badge, so we never sell an n=3 "67%" as fact.
+      const basis = `מבוסס על ${decided.length} עסקאות מוכרעות`;
+      const caveat = confidenceLevelFor(decided.length) === 'low' ? ' — עדיין מדגם קטן, סימן מוקדם בלבד' : '';
+      return `זו העסקה ה-${sessionThisWeek.length} שלך השבוע בסשן ${label}. אחוז ההצלחה בסשן: ${winRate}% (${basis})${caveat}.`;
     }
   }
 
@@ -162,6 +168,10 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
   if (trade.session && trade.session !== 'NONE') {
     const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
     facts.push(`זוהה אוטומטית כמושב ${label}.`);
+  } else {
+    // Not a detection failure — the entry time genuinely falls between the
+    // tracked session windows. Say so, so it never reads as a broken feature.
+    facts.push(`זמן הכניסה (${trade.time}) נופל מחוץ לחלונות הסשן שאנחנו עוקבים אחריהם.`);
   }
 
   const rr = calcRR(trade.entry, trade.stop, trade.target);
