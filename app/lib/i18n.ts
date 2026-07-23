@@ -9,6 +9,7 @@ export const DICT = {
   nav_ai_analytics:     { en: 'AI Analytics',           he: 'אנליטיקת AI'                    },
   nav_coach:            { en: 'AI Coach',               he: 'מאמן AI'                        },
   nav_journal:          { en: 'Journal',                he: 'יומן'                           },
+  nav_notebook:         { en: 'Notebook',               he: 'מחברת'                          },
   nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
   nav_locked_hint:      { en: 'Upgrade to unlock',      he: 'שדרג כדי לפתוח'                 },
