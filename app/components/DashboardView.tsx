@@ -60,6 +60,11 @@ const STR = {
     dowNames: ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'],
     calWeekHead: 'שבוע',
     paletteHd: "הוסף ווידג׳ט",
+    confirmTitle: 'להסיר את הווידג׳ט?',
+    confirmMsg: (name: string) => `הווידג׳ט <b>${name}</b> יוסר מהלוח שלך. ניתן להוסיף אותו שוב מהפלטה בכל רגע.`,
+    confirmNote: 'הפעולה משפיעה רק על התצוגה שלך — אין השפעה על נתוני המסחר.',
+    confirmCancel: 'ביטול',
+    confirmDelete: 'הסר',
   },
   en: {
     edit: '⊞ Customize', editOn: '✓ Save layout', brand: 'ONYX · CONTROL', settings: 'Settings',
@@ -92,6 +97,11 @@ const STR = {
     dowNames: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
     calWeekHead: 'WEEK',
     paletteHd: 'ADD WIDGET',
+    confirmTitle: 'Remove this widget?',
+    confirmMsg: (name: string) => `The <b>${name}</b> widget will be removed from your dashboard. You can add it back any time from the palette.`,
+    confirmNote: "This only affects your view — trade data is untouched.",
+    confirmCancel: 'Cancel',
+    confirmDelete: 'Remove',
   },
 } as const;
 
@@ -226,6 +236,7 @@ export default function DashboardView() {
   const [macro, setMacro]       = useState<MacroEventLite[] | null>(null);
   const [macroToday, setMacroToday] = useState<string | null>(null);
   const [discovery, setDiscovery]   = useState<AiDiscovery | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<WidgetKey | null>(null);
 
   /* ── Clock ───────────────────────────────────────────────────── */
   useEffect(() => {
@@ -371,7 +382,12 @@ export default function DashboardView() {
 
   /* ── Handlers ────────────────────────────────────────────────── */
   const toggleEdit = () => setEditMode(v => !v);
-  const removeWidget = useCallback((id: WidgetKey) => setWidgets(w => w.filter(x => x !== id)), []);
+  const askRemoveWidget = useCallback((id: WidgetKey) => setConfirmRemove(id), []);
+  const confirmRemoveWidget = useCallback(() => {
+    if (confirmRemove) setWidgets(w => w.filter(x => x !== confirmRemove));
+    setConfirmRemove(null);
+  }, [confirmRemove]);
+  const cancelRemoveWidget = useCallback(() => setConfirmRemove(null), []);
   const addWidget = useCallback((id: WidgetKey) => setWidgets(w => (w.includes(id) ? w : [...w, id])), []);
   const prevMonth = () => setMonthCursor(m => { const d = new Date(m); d.setMonth(d.getMonth() - 1); return d; });
   const nextMonth = () => setMonthCursor(m => { const d = new Date(m); d.setMonth(d.getMonth() + 1); return d; });
@@ -394,7 +410,7 @@ export default function DashboardView() {
 
   /* ── Render helpers ──────────────────────────────────────────── */
   const RemoveBtn = ({ id }: { id: WidgetKey }) => (
-    <span className="dp-widget-remove" onClick={(e) => { e.stopPropagation(); removeWidget(id); }} title="הסר">×</span>
+    <span className="dp-widget-remove" onClick={(e) => { e.stopPropagation(); askRemoveWidget(id); }} title={L === 'he' ? 'הסר ווידג׳ט' : 'Remove widget'}>×</span>
   );
 
   const renderWidget = (id: WidgetKey) => {
@@ -700,6 +716,24 @@ export default function DashboardView() {
               </span>
             );
           })}
+        </div>
+      </div>
+
+      {/* Confirm removal dialog */}
+      <div className={`dp-confirm-overlay${confirmRemove ? ' on' : ''}`} onClick={(e) => { if (e.target === e.currentTarget) cancelRemoveWidget(); }}>
+        <div className="dp-confirm" role="alertdialog" aria-modal="true">
+          <div className="dp-confirm-head">
+            <div className="dp-confirm-icon">⚠</div>
+            <div className="dp-confirm-title">{s.confirmTitle}</div>
+          </div>
+          <div className="dp-confirm-body">
+            <div className="dp-confirm-msg" dangerouslySetInnerHTML={{ __html: s.confirmMsg(confirmRemove ? (ALL_WIDGETS.find(w => w.id === confirmRemove)?.label ?? confirmRemove) : '') }} />
+            <div className="dp-confirm-note">{s.confirmNote}</div>
+          </div>
+          <div className="dp-confirm-foot">
+            <button className="dp-confirm-btn ghost" onClick={cancelRemoveWidget}>{s.confirmCancel}</button>
+            <button className="dp-confirm-btn danger" onClick={confirmRemoveWidget}>{s.confirmDelete}</button>
+          </div>
         </div>
       </div>
     </div>
