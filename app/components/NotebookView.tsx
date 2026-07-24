@@ -67,6 +67,7 @@ export default function NotebookView() {
   const [autosaveVisible, setAutosaveVisible] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<(NotebookTemplate & { updatedAt?: number; deleted?: boolean })[]>([]);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [templateNameModal, setTemplateNameModal] = useState<{ name: string } | null>(null);
 
   /* Modal state ─────────────────────────────────────────────────── */
   const [folderModal, setFolderModal] = useState<{ name: string; emoji: string; swatch: FolderSwatch; pickerTab: string; pickerSearch: string } | null>(null);
@@ -393,8 +394,10 @@ export default function NotebookView() {
   }, []);
   const addCustomTemplate = useCallback(() => {
     if (!currentEntry || !edBodyRef.current) return;
-    const name = window.prompt('שם התבנית:');
-    if (!name?.trim()) return;
+    setTemplateNameModal({ name: '' });
+  }, [currentEntry]);
+  const confirmAddTemplate = useCallback((name: string) => {
+    if (!currentEntry || !edBodyRef.current || !name.trim()) return;
     const tpl: NotebookTemplate & { updatedAt?: number } = {
       id: `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: name.trim(),
@@ -402,6 +405,7 @@ export default function NotebookView() {
       updatedAt: Date.now(),
     };
     persistCustomTemplates([...customTemplates, tpl]);
+    setTemplateNameModal(null);
   }, [currentEntry, customTemplates, persistCustomTemplates]);
   const removeCustomTemplate = useCallback((id: string) => {
     persistCustomTemplates(customTemplates.filter(t => t.id !== id));
@@ -483,6 +487,17 @@ export default function NotebookView() {
                       <span className="nb-folder-icon">{f.icon}</span>
                       <span className="nb-folder-name">{f.name}</span>
                       <span className="nb-folder-count">{count}</span>
+                      {!f.builtin && (
+                        <button className="nb-row-x" title="מחק תיקייה" onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDlg({
+                            title: 'למחוק את התיקייה?',
+                            msg: `התיקייה <b>${f.icon} ${f.name}</b> וכל <b>${count} הרשומות</b> שבתוכה יימחקו.`,
+                            note: 'פעולה זו אינה ניתנת לשחזור.',
+                            onConfirm: () => removeFolder(f.id),
+                          });
+                        }}>×</button>
+                      )}
                     </div>
                   );
                 })}
@@ -490,13 +505,32 @@ export default function NotebookView() {
               <div className="nb-folder-section">
                 <div className="nb-folder-section-title"><span>תגיות</span><span>▾</span></div>
                 <div className="nb-tags-list">
-                  {allTagsWithCounts.map(t => (
-                    <div key={t.name} className={`nb-tag-pill ${t.cls} ${filterTag === t.name ? 'active' : ''}`}
-                      onClick={() => setFilterTag(filterTag === t.name ? null : t.name)}>
-                      <span>{t.name}</span>
-                      <span className="nb-tag-count">{t.count}</span>
-                    </div>
-                  ))}
+                  {allTagsWithCounts.map(t => {
+                    const isDefault = DEFAULT_TAGS.some(d => d.name === t.name);
+                    return (
+                      <div key={t.name} className={`nb-tag-pill ${t.cls} ${filterTag === t.name ? 'active' : ''}`}
+                        onClick={() => setFilterTag(filterTag === t.name ? null : t.name)}
+                        title={isDefault ? 'תגית מובנית — לא ניתן למחוק' : undefined}>
+                        <span>{t.name}</span>
+                        <span className="nb-tag-count">{t.count}</span>
+                        {!isDefault && (
+                          <button className="nb-row-x" title="הסר תגית מכל הרשומות" onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDlg({
+                              title: 'להסיר את התגית מכל הרשומות?',
+                              msg: `התגית <b>${t.name}</b> תוסר מכל <b>${t.count} הרשומות</b> שסומנו בה.`,
+                              note: 'התוכן של הרשומות עצמן לא ייפגע — רק התגית תיעלם.',
+                              onConfirm: () => {
+                                const next = entries.map(en => en.tags.includes(t.name) ? { ...en, tags: en.tags.filter(x => x !== t.name), updatedAt: Date.now() } : en);
+                                persistEntries(next);
+                                if (filterTag === t.name) setFilterTag(null);
+                              },
+                            });
+                          }}>×</button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -520,17 +554,29 @@ export default function NotebookView() {
               {filteredEntries.length === 0 ? (
                 <div className="nb-entries-empty">אין רשומות בתיקייה זו עדיין.<br />לחץ <b style={{ color: 'var(--nb-gold)' }}>+</b> להוסיף רשומה חדשה.</div>
               ) : filteredEntries.map(e => {
+                // Hide entries that are truly empty (no title AND no body AND not a trade-linked auto-entry)
+                // unless it's the one the user is currently editing — otherwise clicking + would leave
+                // "(ללא כותרת)" ghosts in the list.
+                if (currentEntry?.id !== e.id && !e.title.trim() && !e.bodyHtml.trim() && e.tradeId == null) return null;
                 const sub = formatEntrySub(e);
                 const isActive = currentEntry?.id === e.id;
                 return (
                   <div key={e.id} className={`nb-entry ${isActive ? 'active' : ''}`} onClick={() => setCurrentEntryId(e.id)}>
+                    <button className="nb-row-x" title="מחק רשומה" onClick={(ev) => {
+                      ev.stopPropagation();
+                      setConfirmDlg({
+                        title: 'למחוק את הרשומה?',
+                        msg: `הרשומה <b>${e.title || 'ללא כותרת'}</b> תימחק לצמיתות, כולל כל התוכן שכתבת בה.`,
+                        note: 'פעולה זו אינה ניתנת לשחזור.',
+                        onConfirm: () => removeEntry(e.id),
+                      });
+                    }}>×</button>
                     <div className="nb-entry-title">{e.title || '(ללא כותרת)'}</div>
                     <div className="nb-entry-sub">
                       {sub.date && <span>{sub.date}</span>}
                       {sub.pnl && <><span className="dot" /><span style={{ color: sub.pnlCls === 'win' ? 'var(--nb-bull)' : 'var(--nb-bear)', fontWeight: 800 }}>{sub.pnl}</span></>}
                       {sub.meta && (sub.pnl || sub.date) && <span className="dot" />}
-                      {sub.meta && !sub.pnl && !sub.date && <span>{sub.meta}</span>}
-                      {sub.meta && (sub.pnl || sub.date) && <span>{sub.meta}</span>}
+                      {sub.meta && <span>{sub.meta}</span>}
                     </div>
                     {e.tags.length > 0 && (
                       <div className="nb-entry-tags">
@@ -559,7 +605,9 @@ export default function NotebookView() {
                         onChange={e => patchEntry(currentEntry.id, { title: e.target.value })} />
                       <div className="nb-ed-subtitle">{(() => {
                         const sub = formatEntrySub(currentEntry);
-                        return [sub.date, sub.pnl, sub.meta].filter(Boolean).join(' · ') || 'רשומה חדשה';
+                        // When the stats strip is showing, the P&L is already prominent there — don't duplicate it in the subtitle.
+                        const parts = stripStats ? [sub.date, sub.meta] : [sub.date, sub.pnl, sub.meta];
+                        return parts.filter(Boolean).join(' · ') || 'רשומה חדשה';
                       })()}</div>
                     </div>
                   </div>
@@ -759,21 +807,36 @@ export default function NotebookView() {
         />
       )}
 
-      {/* Right-side folder delete affordance: only for custom folders, via a subtle context button */}
-      {(() => {
-        const canDelete = currentFolder && !currentFolder.builtin;
-        if (!canDelete) return null;
-        return (
-          <div style={{ position: 'fixed', bottom: 16, insetInlineStart: 20, zIndex: 15 }}>
-            <button className="nb-modal-btn ghost" onClick={() => setConfirmDlg({
-              title: 'למחוק את התיקייה?',
-              msg: `התיקייה <b>${currentFolder.icon} ${currentFolder.name}</b> וכל <b>${(entriesByFolder.get(currentFolder.id) ?? []).length} הרשומות</b> שבתוכה יימחקו.`,
-              note: 'פעולה זו אינה ניתנת לשחזור.',
-              onConfirm: () => removeFolder(currentFolder.id),
-            })}>מחק את &quot;{currentFolder.name}&quot;</button>
+      {/* Template-name modal — proper UI instead of window.prompt */}
+      {templateNameModal && (
+        <div className="nb-modal-overlay on" onClick={(e) => { if (e.target === e.currentTarget) setTemplateNameModal(null); }}>
+          <div className="nb-modal" role="dialog" aria-modal="true" style={{ maxWidth: 400 }}>
+            <div className="nb-modal-head">
+              <div className="nb-modal-title">שמור כתבנית</div>
+              <button className="nb-modal-close" onClick={() => setTemplateNameModal(null)}>✕</button>
+            </div>
+            <div className="nb-modal-body">
+              <div>
+                <div className="nb-modal-label">שם התבנית</div>
+                <input className="nb-modal-input" autoFocus placeholder="לדוגמה: תבנית סוף שבוע"
+                  value={templateNameModal.name}
+                  onChange={(e) => setTemplateNameModal({ name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && templateNameModal.name.trim()) confirmAddTemplate(templateNameModal.name);
+                    if (e.key === 'Escape') setTemplateNameModal(null);
+                  }} />
+                <div style={{ fontFamily: 'var(--nb-ff-mono)', fontSize: 10, color: 'var(--nb-w40)', marginTop: 10, letterSpacing: '.05em' }}>
+                  התוכן הנוכחי של העורך יישמר כתבנית שתוכל להחיל על רשומות עתידיות בלחיצה אחת.
+                </div>
+              </div>
+            </div>
+            <div className="nb-modal-foot">
+              <button className="nb-modal-btn ghost" onClick={() => setTemplateNameModal(null)}>ביטול</button>
+              <button className="nb-modal-btn primary" disabled={!templateNameModal.name.trim()} onClick={() => confirmAddTemplate(templateNameModal.name)}>שמור תבנית</button>
+            </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
