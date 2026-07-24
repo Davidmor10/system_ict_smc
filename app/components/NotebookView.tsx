@@ -4,13 +4,13 @@ import './notebook.css';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { loadTrades, hydrateTradesFromCloud, tradePnL } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
-import { hydrateList, commitList, initSyncListeners } from '../lib/sync/collections';
+import { hydrateList, commitList, hydrateDoc, saveDoc, initSyncListeners } from '../lib/sync/collections';
 import {
   BUILTIN_FOLDERS, mergedFolders, seedTradeEntries, newEntry, newFolder,
   CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY, ENTRIES_KIND, ENTRIES_KEY,
   BUILTIN_TEMPLATES, DEFAULT_TAGS, hebrewDateLabel,
-  TEMPLATES_KIND, TEMPLATES_KEY,
-  type NotebookFolder, type NotebookEntry, type FolderSwatch, type NotebookTemplate,
+  TEMPLATES_KIND, TEMPLATES_KEY, PREFS_KIND, PREFS_KEY,
+  type NotebookFolder, type NotebookEntry, type FolderSwatch, type NotebookTemplate, type NotebookPrefs,
 } from '../lib/notebook/store';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -90,7 +90,31 @@ export default function NotebookView() {
     hydrateList<NotebookFolder>(CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY).then(setCustomFolders).catch(() => {});
     hydrateList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY).then(setEntries).catch(() => {});
     hydrateList<NotebookTemplate & { updatedAt?: number; deleted?: boolean }>(TEMPLATES_KIND, TEMPLATES_KEY).then(setCustomTemplates).catch(() => {});
+    // Per-user preferences: last folder / entry / tag filter
+    hydrateDoc<NotebookPrefs>(PREFS_KIND, PREFS_KEY).then(prefs => {
+      if (!prefs) return;
+      if (prefs.folderId) setCurrentFolderId(prefs.folderId);
+      if (prefs.entryId !== undefined) setCurrentEntryId(prefs.entryId ?? null);
+      if (prefs.filterTag !== undefined) setFilterTag(prefs.filterTag ?? null);
+      prefsHydratedRef.current = true;
+    }).catch(() => { prefsHydratedRef.current = true; });
   }, []);
+
+  /* Persist prefs whenever the trader switches folder / entry / tag — debounced
+     so a burst of clicks (folder → tag → entry) collapses to one write. */
+  const prefsHydratedRef = useRef(false);
+  const prefsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!prefsHydratedRef.current) return;
+    if (prefsTimerRef.current) clearTimeout(prefsTimerRef.current);
+    prefsTimerRef.current = setTimeout(() => {
+      void saveDoc<NotebookPrefs>(PREFS_KIND, PREFS_KEY, {
+        folderId: currentFolderId,
+        entryId: currentEntryId,
+        filterTag,
+      });
+    }, 500);
+  }, [currentFolderId, currentEntryId, filterTag]);
 
   /* Re-seed trade entries whenever trades change ────────────────── */
   useEffect(() => {
@@ -159,10 +183,9 @@ export default function NotebookView() {
     ? currentEntries.find(e => e.id === currentEntryId) ?? null
     : filteredEntries[0] ?? null;
 
-  /* When folder changes, reset to first entry ─────────────────────── */
-  useEffect(() => {
-    setCurrentEntryId(null);
-  }, [currentFolderId]);
+  /* We intentionally do NOT auto-reset currentEntryId on folder change —
+     the reset happens in the folder onClick handler so it's user-driven
+     and doesn't wipe the entry we just hydrated from prefs. */
 
   /* Load entry content into editor when currentEntry changes ────── */
   useEffect(() => {
@@ -481,7 +504,7 @@ export default function NotebookView() {
                   const isActive = !filterTag && f.id === currentFolderId;
                   return (
                     <div key={f.id} className={`nb-folder ${f.swatch} ${isActive ? 'active' : ''} ${f.synced ? 'is-synced' : ''}`}
-                      onClick={() => { setFilterTag(null); setCurrentFolderId(f.id); }}
+                      onClick={() => { setFilterTag(null); if (f.id !== currentFolderId) { setCurrentFolderId(f.id); setCurrentEntryId(null); } }}
                       title={f.builtin ? 'תיקייה מובנית — לא ניתן למחוק' : undefined}>
                       <span className="nb-folder-swatch" />
                       <span className="nb-folder-icon">{f.icon}</span>
@@ -617,21 +640,41 @@ export default function NotebookView() {
                 {/* Stats strip — visible for trade + daily entries */}
                 {stripStats && !('empty' in stripStats && stripStats.empty) && (
                   <div className="nb-ed-strip">
-                    <div className="nb-ed-chart-wrap">
-                      <div className="nb-ed-net">
-                        <span className="nb-ed-net-k">P&amp;L נטו</span>
-                        <span className={`nb-ed-net-v ${stripStats.pnlNet! > 0 ? '' : stripStats.pnlNet! < 0 ? 'loss' : 'flat'}`}>{stripStats.pnlNet === 0 ? '—' : fmtMoney(stripStats.pnlNet!)}</span>
-                      </div>
-                      <div className="nb-ed-strip-meta">
+                    <div className="nb-ed-net-block">
+                      <span className="nb-ed-net-k">P&amp;L נטו</span>
+                      <span className={`nb-ed-net-v ${stripStats.pnlNet! > 0 ? '' : stripStats.pnlNet! < 0 ? 'loss' : 'flat'}`}>{stripStats.pnlNet === 0 ? '—' : fmtMoney(stripStats.pnlNet!)}</span>
+                      <span className="nb-ed-strip-meta">
                         {stripStats.kind === 'trade' ? `${stripStats.symbol} · ${stripStats.direction === 'LONG' ? 'לונג' : 'שורט'} · ${stripStats.volume} חוזים` : `${stripStats.trades} עסקאות · ${stripStats.volume} חוזים`}
-                      </div>
+                      </span>
+                      {/* Mini chart — arrow up for win, down for loss */}
+                      <svg className="nb-ed-mini-chart" viewBox="0 0 200 26" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="nb-strip-grad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" stopColor={stripStats.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity=".35" />
+                            <stop offset="1" stopColor={stripStats.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        {stripStats.pnlNet! >= 0 ? (
+                          <>
+                            <path d="M0,22 L40,20 L80,16 L120,12 L160,7 L200,3 L200,26 L0,26 Z" fill="url(#nb-strip-grad)" />
+                            <path d="M0,22 L40,20 L80,16 L120,12 L160,7 L200,3" fill="none" stroke="#5fd39e" strokeWidth="1.8" strokeLinecap="round" />
+                            <circle cx="200" cy="3" r="2.5" fill="#5fd39e" />
+                          </>
+                        ) : (
+                          <>
+                            <path d="M0,3 L40,7 L80,12 L120,16 L160,20 L200,22 L200,26 L0,26 Z" fill="url(#nb-strip-grad)" />
+                            <path d="M0,3 L40,7 L80,12 L120,16 L160,20 L200,22" fill="none" stroke="#f0899e" strokeWidth="1.8" strokeLinecap="round" />
+                            <circle cx="200" cy="22" r="2.5" fill="#f0899e" />
+                          </>
+                        )}
+                      </svg>
                     </div>
                     <div className="nb-ed-stats-grid">
                       <div className="nb-ed-stat"><span className="nb-ed-stat-k">סה&quot;כ עסקאות</span><span className="nb-ed-stat-v">{stripStats.trades}</span></div>
                       <div className="nb-ed-stat"><span className="nb-ed-stat-k">מנצחות</span><span className="nb-ed-stat-v bull">{stripStats.wins}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">P&amp;L ברוטו</span><span className="nb-ed-stat-v">{stripStats.pnlGross === 0 ? '—' : fmtMoney(stripStats.pnlGross ?? 0)}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Win rate</span><span className="nb-ed-stat-v gold">{stripStats.wr}%</span></div>
                       <div className="nb-ed-stat"><span className="nb-ed-stat-k">מפסידות</span><span className="nb-ed-stat-v bear">{stripStats.losses}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Win rate</span><span className="nb-ed-stat-v gold">{stripStats.wr}%</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">P&amp;L ברוטו</span><span className={`nb-ed-stat-v ${(stripStats.pnlGross ?? 0) > 0 ? 'bull' : (stripStats.pnlGross ?? 0) < 0 ? 'bear' : ''}`}>{stripStats.pnlGross === 0 ? '—' : fmtMoney(stripStats.pnlGross ?? 0)}</span></div>
                       <div className="nb-ed-stat"><span className="nb-ed-stat-k">Profit factor</span><span className="nb-ed-stat-v gold">{stripStats.pf == null ? '—' : stripStats.pf === Infinity ? '∞' : stripStats.pf.toFixed(2)}</span></div>
                     </div>
                   </div>
