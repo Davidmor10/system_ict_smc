@@ -8,7 +8,9 @@ import { hydrateList, commitList, initSyncListeners } from '../lib/sync/collecti
 import {
   BUILTIN_FOLDERS, mergedFolders, seedTradeEntries, newEntry, newFolder,
   CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY, ENTRIES_KIND, ENTRIES_KEY,
-  type NotebookFolder, type NotebookEntry, type FolderSwatch,
+  BUILTIN_TEMPLATES, DEFAULT_TAGS, hebrewDateLabel,
+  TEMPLATES_KIND, TEMPLATES_KEY,
+  type NotebookFolder, type NotebookEntry, type FolderSwatch, type NotebookTemplate,
 } from '../lib/notebook/store';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -63,6 +65,8 @@ export default function NotebookView() {
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [autosaveVisible, setAutosaveVisible] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<(NotebookTemplate & { updatedAt?: number; deleted?: boolean })[]>([]);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
 
   /* Modal state ─────────────────────────────────────────────────── */
   const [folderModal, setFolderModal] = useState<{ name: string; emoji: string; swatch: FolderSwatch; pickerTab: string; pickerSearch: string } | null>(null);
@@ -81,9 +85,10 @@ export default function NotebookView() {
     // Trades first — they seed the built-in "trades" folder
     setTrades(loadTrades());
     hydrateTradesFromCloud().then(m => { if (m) setTrades(m); }).catch(() => {});
-    // Custom folders + entries from cloud
+    // Custom folders + entries + templates from cloud
     hydrateList<NotebookFolder>(CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY).then(setCustomFolders).catch(() => {});
     hydrateList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY).then(setEntries).catch(() => {});
+    hydrateList<NotebookTemplate & { updatedAt?: number; deleted?: boolean }>(TEMPLATES_KIND, TEMPLATES_KEY).then(setCustomTemplates).catch(() => {});
   }, []);
 
   /* Re-seed trade entries whenever trades change ────────────────── */
@@ -122,9 +127,33 @@ export default function NotebookView() {
   }, [entries]);
   const currentFolder = folderById.get(currentFolderId) ?? BUILTIN_FOLDERS[0];
   const currentEntries = entriesByFolder.get(currentFolderId) ?? [];
-  const filteredEntries = search.trim()
-    ? currentEntries.filter(e => (e.title + ' ' + e.tags.join(' ') + ' ' + e.bodyHtml).toLowerCase().includes(search.toLowerCase()))
+  // When a tag is picked from the sidebar, override folder scope: show every
+  // entry (across all folders) that carries the tag. Search still applies.
+  const scopedEntries = filterTag
+    ? entries.filter(e => e.tags.includes(filterTag))
     : currentEntries;
+  const filteredEntries = search.trim()
+    ? scopedEntries.filter(e => (e.title + ' ' + e.tags.join(' ') + ' ' + e.bodyHtml).toLowerCase().includes(search.toLowerCase()))
+    : scopedEntries;
+
+  /* All templates (builtin + custom) and tag library with live counts */
+  const allTemplates = useMemo<NotebookTemplate[]>(() => [
+    ...BUILTIN_TEMPLATES,
+    ...customTemplates.filter(t => !t.deleted && !BUILTIN_TEMPLATES.some(b => b.id === t.id)),
+  ], [customTemplates]);
+  const allTagsWithCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of entries) for (const t of e.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const seen = new Set<string>();
+    const list: { name: string; cls: 'gold' | 'green' | 'red'; count: number }[] = [];
+    for (const d of DEFAULT_TAGS) { list.push({ name: d.name, cls: d.cls, count: counts.get(d.name) ?? 0 }); seen.add(d.name); }
+    // Any tag actually used by the trader that isn't in the defaults gets tacked on
+    for (const [name, count] of counts) {
+      if (seen.has(name)) continue;
+      list.push({ name, cls: tagClass(name) as 'gold' | 'green' | 'red' || 'red', count });
+    }
+    return list;
+  }, [entries]);
   const currentEntry = currentEntryId
     ? currentEntries.find(e => e.id === currentEntryId) ?? null
     : filteredEntries[0] ?? null;
@@ -157,7 +186,20 @@ export default function NotebookView() {
   }, [entries, persistEntries, currentEntryId]);
 
   const createEntry = useCallback((folderId: string, opts?: Partial<NotebookEntry>) => {
-    const created = newEntry(folderId, opts);
+    const now = new Date();
+    // Smart defaults: daily gets today's Hebrew date, plan gets month-year, others empty
+    let defaultTitle = opts?.title ?? '';
+    let defaultDateISO = opts?.dateISO;
+    if (!opts?.title) {
+      if (folderId === 'daily') {
+        defaultTitle = hebrewDateLabel(now);
+        defaultDateISO = defaultDateISO ?? now.toISOString().slice(0, 10);
+      } else if (folderId === 'plan') {
+        const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+        defaultTitle = `תוכנית מסחר · ${months[now.getMonth()]} ${now.getFullYear()}`;
+      }
+    }
+    const created = newEntry(folderId, { ...opts, title: defaultTitle, dateISO: defaultDateISO });
     persistEntries([...entries, created]);
     setCurrentEntryId(created.id);
     return created;
@@ -287,6 +329,87 @@ export default function NotebookView() {
     if ((e.target as HTMLElement).closest('button')) e.preventDefault();
   }, []);
 
+  /* Stats strip data for the current entry — trade entries show that trade's
+     stats, daily entries aggregate all trades from that dateISO, others none. */
+  const stripStats = useMemo(() => {
+    if (!currentEntry) return null;
+    // Trade entry
+    if (currentEntry.tradeId != null) {
+      const t = trades.find(x => x.id === currentEntry.tradeId);
+      if (!t) return null;
+      const pnl = tradePnL(t) ?? 0;
+      const isWin = t.result === 'WIN' || (t.result !== 'LOSS' && t.result !== 'BE' && pnl > 0);
+      const isLoss = t.result === 'LOSS' || (t.result !== 'WIN' && t.result !== 'BE' && pnl < 0);
+      return {
+        kind: 'trade' as const,
+        pnlNet: pnl,
+        pnlGross: pnl,
+        trades: 1,
+        wins: isWin ? 1 : 0,
+        losses: isLoss ? 1 : 0,
+        wr: isWin ? 100 : isLoss ? 0 : 50,
+        volume: t.contracts,
+        pf: isWin ? Infinity : isLoss ? 0 : null,
+        symbol: t.symbol,
+        direction: t.direction,
+      };
+    }
+    // Daily entry — aggregate the day
+    if (currentEntry.folderId === 'daily' && currentEntry.dateISO) {
+      const day = trades.filter(x => x.dateISO === currentEntry.dateISO && x.result !== 'OPEN');
+      if (!day.length) return { kind: 'daily' as const, empty: true };
+      let pnlGross = 0, wins = 0, losses = 0, winsPnl = 0, lossesPnl = 0, volume = 0;
+      for (const t of day) {
+        const p = tradePnL(t) ?? 0;
+        pnlGross += p; volume += t.contracts;
+        if (t.result === 'WIN') { wins++; winsPnl += Math.abs(p); }
+        else if (t.result === 'LOSS') { losses++; lossesPnl += Math.abs(p); }
+      }
+      const decided = wins + losses;
+      return {
+        kind: 'daily' as const,
+        pnlNet: pnlGross, pnlGross, trades: day.length, wins, losses,
+        wr: decided ? Math.round((wins / decided) * 100) : 0,
+        volume,
+        pf: lossesPnl > 0 ? winsPnl / lossesPnl : (winsPnl > 0 ? Infinity : null),
+      };
+    }
+    return null;
+  }, [currentEntry, trades]);
+
+  /* Templates: apply into editor body (replace content, autosave) */
+  const applyTemplate = useCallback((tpl: NotebookTemplate) => {
+    if (!currentEntry || !edBodyRef.current) return;
+    edBodyRef.current.innerHTML = tpl.html;
+    patchEntry(currentEntry.id, { bodyHtml: tpl.html });
+    setAutosaveVisible(true);
+    setTimeout(() => setAutosaveVisible(false), 1600);
+  }, [currentEntry, patchEntry]);
+
+  /* Templates: add/remove custom ones */
+  const persistCustomTemplates = useCallback((next: (NotebookTemplate & { updatedAt?: number; deleted?: boolean })[]) => {
+    setCustomTemplates(next);
+    void commitList<NotebookTemplate & { updatedAt?: number; deleted?: boolean }>(TEMPLATES_KIND, TEMPLATES_KEY, next);
+  }, []);
+  const addCustomTemplate = useCallback(() => {
+    if (!currentEntry || !edBodyRef.current) return;
+    const name = window.prompt('שם התבנית:');
+    if (!name?.trim()) return;
+    const tpl: NotebookTemplate & { updatedAt?: number } = {
+      id: `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim(),
+      html: edBodyRef.current.innerHTML,
+      updatedAt: Date.now(),
+    };
+    persistCustomTemplates([...customTemplates, tpl]);
+  }, [currentEntry, customTemplates, persistCustomTemplates]);
+  const removeCustomTemplate = useCallback((id: string) => {
+    persistCustomTemplates(customTemplates.filter(t => t.id !== id));
+  }, [customTemplates, persistCustomTemplates]);
+
+  /* Format signed dollars for the strip */
+  const fmtMoney = (n: number) => (n >= 0 ? '+$' : '-$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: n % 1 ? 2 : 0 });
+
   /* Tag actions ──────────────────────────────────────────────────── */
   const openAddTag = useCallback(() => {
     setTagModal({ name: '', emoji: '🏷', swatch: 'f-gold', pickerTab: 'frequent', pickerSearch: '' });
@@ -351,9 +474,10 @@ export default function NotebookView() {
                 <div className="nb-folder-section-title"><span>תיקיות</span><span>▾</span></div>
                 {folders.map(f => {
                   const count = (entriesByFolder.get(f.id) ?? []).length;
+                  const isActive = !filterTag && f.id === currentFolderId;
                   return (
-                    <div key={f.id} className={`nb-folder ${f.swatch} ${f.id === currentFolderId ? 'active' : ''} ${f.synced ? 'is-synced' : ''}`}
-                      onClick={() => setCurrentFolderId(f.id)}
+                    <div key={f.id} className={`nb-folder ${f.swatch} ${isActive ? 'active' : ''} ${f.synced ? 'is-synced' : ''}`}
+                      onClick={() => { setFilterTag(null); setCurrentFolderId(f.id); }}
                       title={f.builtin ? 'תיקייה מובנית — לא ניתן למחוק' : undefined}>
                       <span className="nb-folder-swatch" />
                       <span className="nb-folder-icon">{f.icon}</span>
@@ -363,6 +487,18 @@ export default function NotebookView() {
                   );
                 })}
               </div>
+              <div className="nb-folder-section">
+                <div className="nb-folder-section-title"><span>תגיות</span><span>▾</span></div>
+                <div className="nb-tags-list">
+                  {allTagsWithCounts.map(t => (
+                    <div key={t.name} className={`nb-tag-pill ${t.cls} ${filterTag === t.name ? 'active' : ''}`}
+                      onClick={() => setFilterTag(filterTag === t.name ? null : t.name)}>
+                      <span>{t.name}</span>
+                      <span className="nb-tag-count">{t.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -370,7 +506,7 @@ export default function NotebookView() {
           <div className="nb-col">
             <div className="nb-entries-head">
               <div className="nb-entries-head-row">
-                <span className="nb-entries-title"><span className="ico">📄</span><span>{currentFolder.name}</span></span>
+                <span className="nb-entries-title"><span className="ico">📄</span><span>{filterTag ? `תגית: ${filterTag}` : currentFolder.name}</span></span>
                 <div className="nb-entries-actions">
                   <button className="nb-entries-btn primary" title="רשומה חדשה" onClick={() => createEntry(currentFolderId)}>+</button>
                 </div>
@@ -430,6 +566,34 @@ export default function NotebookView() {
                   <div className="nb-ed-meta">עודכן: {new Date(currentEntry.updatedAt ?? currentEntry.createdAt).toLocaleDateString('he-IL')}</div>
                 </div>
 
+                {/* Stats strip — visible for trade + daily entries */}
+                {stripStats && !('empty' in stripStats && stripStats.empty) && (
+                  <div className="nb-ed-strip">
+                    <div className="nb-ed-chart-wrap">
+                      <div className="nb-ed-net">
+                        <span className="nb-ed-net-k">P&amp;L נטו</span>
+                        <span className={`nb-ed-net-v ${stripStats.pnlNet! > 0 ? '' : stripStats.pnlNet! < 0 ? 'loss' : 'flat'}`}>{stripStats.pnlNet === 0 ? '—' : fmtMoney(stripStats.pnlNet!)}</span>
+                      </div>
+                      <div className="nb-ed-strip-meta">
+                        {stripStats.kind === 'trade' ? `${stripStats.symbol} · ${stripStats.direction === 'LONG' ? 'לונג' : 'שורט'} · ${stripStats.volume} חוזים` : `${stripStats.trades} עסקאות · ${stripStats.volume} חוזים`}
+                      </div>
+                    </div>
+                    <div className="nb-ed-stats-grid">
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">סה&quot;כ עסקאות</span><span className="nb-ed-stat-v">{stripStats.trades}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מנצחות</span><span className="nb-ed-stat-v bull">{stripStats.wins}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">P&amp;L ברוטו</span><span className="nb-ed-stat-v">{stripStats.pnlGross === 0 ? '—' : fmtMoney(stripStats.pnlGross ?? 0)}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Win rate</span><span className="nb-ed-stat-v gold">{stripStats.wr}%</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מפסידות</span><span className="nb-ed-stat-v bear">{stripStats.losses}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Profit factor</span><span className="nb-ed-stat-v gold">{stripStats.pf == null ? '—' : stripStats.pf === Infinity ? '∞' : stripStats.pf.toFixed(2)}</span></div>
+                    </div>
+                  </div>
+                )}
+                {stripStats && 'empty' in stripStats && stripStats.empty && (
+                  <div className="nb-ed-strip" style={{ display: 'flex', justifyContent: 'center', padding: '14px 22px' }}>
+                    <span className="nb-ed-strip-meta">אין עסקאות ליום זה — הרשומה עדיין תישמר ותהיה נגישה ל־AI Coach</span>
+                  </div>
+                )}
+
                 {/* Tag row */}
                 <div className="nb-ed-tagbar">
                   <span className="nb-ed-tagbar-ico">🏷</span>
@@ -445,6 +609,28 @@ export default function NotebookView() {
                     </span>
                   ))}
                   <span className="nb-ed-tag-add" onClick={openAddTag}>+ הוסף תגית</span>
+                </div>
+
+                {/* Templates row */}
+                <div className="nb-ed-templates">
+                  <span className="nb-ed-templates-k">תבניות:</span>
+                  {allTemplates.map(tpl => (
+                    <span key={tpl.id} className="nb-ed-tpl" onClick={() => applyTemplate(tpl)}>
+                      <span>{tpl.name}</span>
+                      {!tpl.builtin && (
+                        <span className="nb-pill-x" title="הסר תבנית" onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDlg({
+                            title: 'למחוק את התבנית?',
+                            msg: `התבנית <b>${tpl.name}</b> תוסר מהרשימה.`,
+                            note: 'התוכן שכבר הכנסת לרשומות לא ייפגע.',
+                            onConfirm: () => removeCustomTemplate(tpl.id),
+                          });
+                        }}>×</span>
+                      )}
+                    </span>
+                  ))}
+                  <span className="nb-ed-tpl nb-ed-tpl-add" onClick={addCustomTemplate}>+ הוסף תבנית</span>
                 </div>
 
                 {/* Toolbar */}
