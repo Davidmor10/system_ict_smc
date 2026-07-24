@@ -190,3 +190,15 @@ export const DEFAULT_TAGS: DefaultTag[] = [
   { name: 'Opening Drive', cls: 'red' },
   { name: 'FOMO',          cls: 'red' },
 ];
+
+/* ══ Per-user preferences — remembered across sessions/devices via the same
+   user_collections cloud sync (scoped by clerk_id, so switching users on the
+   same browser never leaks state). ══ */
+export interface NotebookPrefs {
+  folderId?: string;
+  entryId?: string | null;
+  filterTag?: string | null;
+  updatedAt?: number;
+}
+export const PREFS_KIND = 'notebook_prefs_v1';
+export const PREFS_KEY  = 'onyx_notebook_prefs_v1';
