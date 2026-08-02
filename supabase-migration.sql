@@ -329,5 +329,30 @@ alter table macro_calendar_cache enable row level security;
 alter table user_collections    enable row level security;
 alter table coach_generation_fallback enable row level security;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 17. Trade Reviews — the AI Trade Review (video analysis) feature. One row
+-- per uploaded video. Vision + transcript + report are all stored as jsonb so
+-- the trader can re-open a past review without re-analyzing. Rows are scoped
+-- by clerk_id (same access control shape as everything else).
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists trade_reviews (
+  id                  uuid        primary key,
+  clerk_id            text        not null,
+  trade_id            bigint      not null,
+  status              text        not null default 'analyzing', -- 'uploading'|'analyzing'|'done'|'failed'
+  error_message       text,
+  video_file_uri      text,       -- Gemini File API URI; cleared/kept per retention policy
+  video_mime          text,
+  video_duration_sec  numeric,
+  vision              jsonb,      -- VisionAnalysis
+  transcript          jsonb,      -- Transcript
+  report              jsonb,      -- TradeReviewReport (9 sections)
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+create index if not exists trade_reviews_clerk_idx       on trade_reviews (clerk_id);
+create index if not exists trade_reviews_clerk_trade_idx on trade_reviews (clerk_id, trade_id, created_at desc);
+alter table trade_reviews enable row level security;
+
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth
 -- For Clerk integration use service-role key in API routes (bypasses RLS)

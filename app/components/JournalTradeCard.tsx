@@ -6,6 +6,7 @@ import { calcRR } from '../lib/calc/trade';
 import { pointValue } from '../lib/instruments';
 import { SESS } from '../lib/sessions';
 import { UNSPECIFIED_MODEL } from '../lib/journal';
+import TradeReviewButton from './TradeReviewButton';
 
 const BULLISH = '#4a7c59';
 const BEARISH = '#8b3a3a';
@@ -156,6 +157,7 @@ export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeE
             <span className="text-[13px] text-white/30">ללא תגית סטאפ</span>
           </>
         )}
+        <span className="ms-auto"><TradeReviewButton tradeId={t.id} tradeSymbol={t.symbol} /></span>
       </div>
     </div>
   );
