@@ -20,7 +20,9 @@ import { buildTraderContext } from './contextBuilder';
 import { updateReview, getReview } from './reviewStore';
 import type { TraderContext } from './types';
 
-/** Upload a video blob to Gemini File API and return the file URI once ACTIVE. */
+/** Upload a video blob to Gemini File API and return the file URI once ACTIVE.
+    Used only for small server-side uploads (tests, dev). Large videos come from
+    the browser via the resumable-upload flow, which never touches this. */
 export async function uploadVideoToGemini(blob: Blob, mimeType: string): Promise<{ fileUri: string; mimeType: string }> {
   const uploaded = await genAI.files.upload({ file: blob, config: { mimeType } });
   if (!uploaded.name) throw new Error('Gemini upload did not return a file name');
@@ -29,9 +31,15 @@ export async function uploadVideoToGemini(blob: Blob, mimeType: string): Promise
   return { fileUri: active.uri, mimeType: active.mimeType ?? mimeType };
 }
 
+/** Extract the Gemini resource name ("files/xxx") from an upload URI. */
+function fileNameFromUri(uri: string): string | null {
+  const m = /(files\/[^/?#]+)/.exec(uri);
+  return m ? m[1] : null;
+}
+
 /** Poll a file until it's ACTIVE. Gemini video processing usually completes in
     5–30s. Cap the wait so a stuck file doesn't hang the pipeline forever. */
-async function waitForActive(name: string, timeoutMs = 90_000, intervalMs = 2_000): Promise<{ uri?: string; mimeType?: string }> {
+export async function waitForActive(name: string, timeoutMs = 180_000, intervalMs = 3_000): Promise<{ uri?: string; mimeType?: string }> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const file = await genAI.files.get({ name });
@@ -51,6 +59,18 @@ export async function runReviewPipeline(reviewId: string, clerkId: string): Prom
     const row = await getReview(reviewId, clerkId);
     if (!row) throw new Error('review not found');
     if (!row.videoFileUri || !row.videoMime) throw new Error('review has no video URI');
+
+    // The client uploads directly to Gemini's resumable endpoint, so by the
+    // time we get here processing may still be in progress on Gemini's side.
+    // Wait for ACTIVE before firing vision/transcript against it.
+    const name = fileNameFromUri(row.videoFileUri);
+    if (name) {
+      const active = await waitForActive(name);
+      if (active.uri && active.uri !== row.videoFileUri) {
+        await updateReview(reviewId, { videoFileUri: active.uri });
+        row.videoFileUri = active.uri;
+      }
+    }
 
     const ctx = await buildTraderContext(clerkId, row.tradeId);
     if (!ctx) throw new Error('could not build trader context (Supabase not configured or trade missing)');

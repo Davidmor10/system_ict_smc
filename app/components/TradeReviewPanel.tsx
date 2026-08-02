@@ -70,14 +70,42 @@ export default function TradeReviewPanel({
   async function upload(file: File) {
     setPhase('uploading');
     setError(null);
-    const form = new FormData();
-    form.append('video', file);
-    form.append('tradeId', String(tradeId));
     try {
-      const res = await fetch('/api/trade-review', { method: 'POST', body: form });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? body.detail ?? 'ההעלאה נכשלה');
-      setActiveReview(body.review);
+      // Step 1: ask our server for a Gemini resumable upload URL. Server-only —
+      // no video bytes yet, just metadata.
+      const initRes = await fetch('/api/trade-review/upload-init', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mimeType: file.type || 'video/mp4', sizeBytes: file.size, displayName: file.name }),
+      });
+      const initBody = await initRes.json();
+      if (!initRes.ok) throw new Error(initBody.error ?? 'לא הצלחנו להתחיל העלאה');
+
+      // Step 2: PUT the video bytes DIRECTLY to Gemini — bypasses Vercel's
+      // 4.5 MB serverless body limit entirely.
+      const putRes = await fetch(initBody.uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Length': String(file.size),
+          'X-Goog-Upload-Offset': '0',
+          'X-Goog-Upload-Command': 'upload, finalize',
+        },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error(`ההעלאה נכשלה (${putRes.status})`);
+      const uploadJson = await putRes.json() as { file?: { uri?: string; mimeType?: string; name?: string } };
+      const fileUri = uploadJson.file?.uri;
+      const uploadedMime = uploadJson.file?.mimeType ?? file.type ?? 'video/mp4';
+      if (!fileUri) throw new Error('הקובץ עלה אך לא התקבל URI מהספק');
+
+      // Step 3: tell our server "video's uploaded, start the pipeline".
+      const startRes = await fetch('/api/trade-review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tradeId, fileUri, mimeType: uploadedMime }),
+      });
+      const startBody = await startRes.json();
+      if (!startRes.ok) throw new Error(startBody.error ?? 'לא הצלחנו להפעיל את הניתוח');
+
+      setActiveReview(startBody.review);
       setPhase('analyzing');
     } catch (err) {
       setPhase('failed');
@@ -201,17 +229,17 @@ function UploadZone({
       <input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={onChange} />
       <div className="text-4xl mb-3 text-white/40">▶</div>
       <div className="text-[15px] text-white mb-1.5">גרור לכאן וידאו של סקירת העסקה</div>
-      <div className="text-[12.5px] text-white/50">MP4, MOV, WebM · עד 200MB · ~30-60 שניות מומלץ</div>
+      <div className="text-[12.5px] text-white/50">MP4, MOV, WebM · עד 500MB · עד ~15 דקות</div>
     </div>
   );
 }
 
 const STAGES = [
-  { label: 'מעלה את הוידאו', duration: 12 },
-  { label: 'קורא את הגרף', duration: 20 },
-  { label: 'מתמלל את הדיבור', duration: 15 },
-  { label: 'מצליב עם היומן והחוקים', duration: 25 },
-  { label: 'מרכיב את הדוח', duration: 15 },
+  { label: 'מעבד את הוידאו בצד של Gemini', duration: 30 },
+  { label: 'קורא את הגרף', duration: 40 },
+  { label: 'מתמלל את הדיבור', duration: 30 },
+  { label: 'מצליב עם היומן והחוקים', duration: 40 },
+  { label: 'מרכיב את הדוח', duration: 20 },
 ];
 
 /** Since the pipeline is server-driven with a single 'analyzing' status, we
@@ -240,7 +268,7 @@ function AnalysisProgress({ phase }: { phase: 'uploading' | 'analyzing' }) {
       <div className="text-center mb-6">
         <div className="font-mono text-[10.5px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-2">מנתח...</div>
         <h3 className="font-serif text-[22px] font-bold text-white m-0">{STAGES[currentIdx]?.label ?? 'מסיים'}</h3>
-        <div className="text-[12.5px] text-white/50 mt-1.5">בדרך כלל 45-90 שניות. תוכל לסגור ולחזור.</div>
+        <div className="text-[12.5px] text-white/50 mt-1.5">בדרך כלל 1-3 דקות (תלוי באורך הוידאו). תוכל לסגור ולחזור.</div>
       </div>
       <div className="h-1.5 rounded-full bg-[#1c1c1e] overflow-hidden mb-6">
         <motion.div
