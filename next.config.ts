@@ -7,6 +7,11 @@ const STRIPE_SCRIPT = 'https://js.stripe.com';
 const STRIPE_FRAME = 'https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com';
 const STRIPE_CONNECT = 'https://api.stripe.com';
 const SUPABASE_CONNECT = 'https://*.supabase.co wss://*.supabase.co';
+// Gemini File API — the Trade Review feature uploads videos directly from the
+// browser to Google's resumable-upload endpoint so it bypasses Vercel's 4.5MB
+// serverless body limit. Without this in connect-src the browser CSP blocks
+// the request before it leaves the page.
+const GEMINI_CONNECT = 'https://generativelanguage.googleapis.com';
 
 const csp = [
   `default-src 'self'`,
@@ -20,7 +25,7 @@ const csp = [
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: blob: https:`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT}`,
+  `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT} ${GEMINI_CONNECT}`,
   `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS}`,
   `frame-ancestors 'self'`,
   `object-src 'none'`,
