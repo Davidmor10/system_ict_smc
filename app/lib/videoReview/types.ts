@@ -172,6 +172,11 @@ export interface TradeReviewRow {
   errorMessage?: string | null;
   /** Gemini file URI while the video is being processed; null after report is ready. */
   videoFileUri?: string | null;
+  /** Supabase Storage path of the source video (owner/{uuid}.mp4). Kept until
+      the Gemini upload succeeds, then deleted. Populated by the browser upload
+      flow (client uploads here first because Vercel's serverless functions
+      cap at 4.5MB request bodies and Google's File API blocks browser CORS). */
+  storagePath?: string | null;
   /** MIME type of the uploaded video. */
   videoMime?: string | null;
   /** Duration in seconds. */

@@ -13,8 +13,7 @@ const memory = new Map<string, TradeReviewRow>();
 export async function createReview(
   clerkId: string,
   tradeId: number,
-  videoFileUri: string,
-  videoMime: string,
+  init: { videoFileUri?: string | null; storagePath?: string | null; videoMime: string },
 ): Promise<TradeReviewRow> {
   const now = Date.now();
   const row: TradeReviewRow = {
@@ -22,8 +21,9 @@ export async function createReview(
     clerkId,
     tradeId,
     status: 'analyzing',
-    videoFileUri,
-    videoMime,
+    videoFileUri: init.videoFileUri ?? null,
+    storagePath: init.storagePath ?? null,
+    videoMime: init.videoMime,
     createdAt: now,
     updatedAt: now,
   };
@@ -92,7 +92,8 @@ export async function listReviewsForTrade(clerkId: string, tradeId: number): Pro
 /* ── Row / DB shape translations ── */
 interface DbRow {
   id: string; clerk_id: string; trade_id: number; status: string; error_message?: string | null;
-  video_file_uri?: string | null; video_mime?: string | null; video_duration_sec?: number | null;
+  video_file_uri?: string | null; storage_path?: string | null;
+  video_mime?: string | null; video_duration_sec?: number | null;
   report?: TradeReviewReport | null; vision?: VisionAnalysis | null; transcript?: Transcript | null;
   created_at: string; updated_at: string;
 }
@@ -100,7 +101,8 @@ function rowToDb(r: TradeReviewRow): DbRow {
   return {
     id: r.id, clerk_id: r.clerkId, trade_id: r.tradeId, status: r.status,
     error_message: r.errorMessage ?? null,
-    video_file_uri: r.videoFileUri ?? null, video_mime: r.videoMime ?? null, video_duration_sec: r.videoDurationSec ?? null,
+    video_file_uri: r.videoFileUri ?? null, storage_path: r.storagePath ?? null,
+    video_mime: r.videoMime ?? null, video_duration_sec: r.videoDurationSec ?? null,
     report: r.report ?? null, vision: r.vision ?? null, transcript: r.transcript ?? null,
     created_at: new Date(r.createdAt).toISOString(),
     updated_at: new Date(r.updatedAt).toISOString(),
@@ -111,6 +113,7 @@ function patchToDb(p: Partial<TradeReviewRow> & { updatedAt: number }): Partial<
   if (p.status !== undefined)           out.status = p.status;
   if (p.errorMessage !== undefined)     out.error_message = p.errorMessage;
   if (p.videoFileUri !== undefined)     out.video_file_uri = p.videoFileUri;
+  if (p.storagePath !== undefined)      out.storage_path = p.storagePath;
   if (p.videoMime !== undefined)        out.video_mime = p.videoMime;
   if (p.videoDurationSec !== undefined) out.video_duration_sec = p.videoDurationSec;
   if (p.report !== undefined)           out.report = p.report;
@@ -123,6 +126,7 @@ function dbToRow(d: DbRow): TradeReviewRow {
     id: d.id, clerkId: d.clerk_id, tradeId: d.trade_id, status: d.status as TradeReviewRow['status'],
     errorMessage: d.error_message ?? undefined,
     videoFileUri: d.video_file_uri ?? undefined,
+    storagePath: d.storage_path ?? undefined,
     videoMime: d.video_mime ?? undefined,
     videoDurationSec: d.video_duration_sec ?? undefined,
     report: d.report ?? undefined,

@@ -342,6 +342,7 @@ create table if not exists trade_reviews (
   status              text        not null default 'analyzing', -- 'uploading'|'analyzing'|'done'|'failed'
   error_message       text,
   video_file_uri      text,       -- Gemini File API URI; cleared/kept per retention policy
+  storage_path        text,       -- Supabase Storage path (trade-review-videos bucket); cleared after Gemini upload
   video_mime          text,
   video_duration_sec  numeric,
   vision              jsonb,      -- VisionAnalysis
@@ -352,6 +353,8 @@ create table if not exists trade_reviews (
 );
 create index if not exists trade_reviews_clerk_idx       on trade_reviews (clerk_id);
 create index if not exists trade_reviews_clerk_trade_idx on trade_reviews (clerk_id, trade_id, created_at desc);
+-- Idempotent — adds storage_path to a trade_reviews table created before this addendum.
+alter table trade_reviews add column if not exists storage_path text;
 alter table trade_reviews enable row level security;
 
 -- Clerk passes user_id as a JWT claim; adjust claim name if using Supabase Auth

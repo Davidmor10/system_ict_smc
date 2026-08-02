@@ -31,12 +31,14 @@ export default function TradeReviewPanel({
   const [pastReviews, setPastReviews] = useState<TradeReviewRow[]>([]);
   const [activeReview, setActiveReview] = useState<TradeReviewRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
     setPhase('idle');
     setActiveReview(null);
     setError(null);
+    setUploadPct(0);
   }, []);
 
   useEffect(() => {
@@ -69,38 +71,32 @@ export default function TradeReviewPanel({
 
   async function upload(file: File) {
     setPhase('uploading');
+    setUploadPct(0);
     setError(null);
     try {
-      // Step 1: ask our server for a Gemini resumable upload URL. Server-only —
-      // no video bytes yet, just metadata.
-      const initRes = await fetch('/api/trade-review/upload-init', {
+      const mimeType = file.type || 'video/mp4';
+
+      // Step 1 — get a signed upload URL for Supabase Storage. Server-only,
+      // just metadata (no video bytes yet).
+      const initRes = await fetch('/api/trade-review/init-storage-upload', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mimeType: file.type || 'video/mp4', sizeBytes: file.size, displayName: file.name }),
+        body: JSON.stringify({ mimeType, sizeBytes: file.size }),
       });
       const initBody = await initRes.json();
       if (!initRes.ok) throw new Error(initBody.error ?? 'לא הצלחנו להתחיל העלאה');
 
-      // Step 2: PUT the video bytes DIRECTLY to Gemini — bypasses Vercel's
-      // 4.5 MB serverless body limit entirely.
-      const putRes = await fetch(initBody.uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Length': String(file.size),
-          'X-Goog-Upload-Offset': '0',
-          'X-Goog-Upload-Command': 'upload, finalize',
-        },
-        body: file,
-      });
-      if (!putRes.ok) throw new Error(`ההעלאה נכשלה (${putRes.status})`);
-      const uploadJson = await putRes.json() as { file?: { uri?: string; mimeType?: string; name?: string } };
-      const fileUri = uploadJson.file?.uri;
-      const uploadedMime = uploadJson.file?.mimeType ?? file.type ?? 'video/mp4';
-      if (!fileUri) throw new Error('הקובץ עלה אך לא התקבל URI מהספק');
+      // Step 2 — PUT the video bytes directly to Supabase. This bypasses
+      // Vercel's 4.5MB serverless body cap AND avoids Google's no-CORS
+      // browser-upload wall. We use XHR (not fetch) because it exposes real
+      // per-byte progress; a 100MB upload on residential upload speeds takes
+      // a while and a silent progress bar would look frozen.
+      await uploadWithProgress(initBody.uploadUrl, file, mimeType, pct => setUploadPct(pct));
 
-      // Step 3: tell our server "video's uploaded, start the pipeline".
+      // Step 3 — tell our server the upload's done. Server transfers the
+      // file to Gemini, kicks off analysis, cleans Supabase after.
       const startRes = await fetch('/api/trade-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tradeId, fileUri, mimeType: uploadedMime }),
+        body: JSON.stringify({ tradeId, storagePath: initBody.storagePath, mimeType }),
       });
       const startBody = await startRes.json();
       if (!startRes.ok) throw new Error(startBody.error ?? 'לא הצלחנו להפעיל את הניתוח');
@@ -181,7 +177,7 @@ export default function TradeReviewPanel({
               )}
 
               {(phase === 'uploading' || phase === 'analyzing') && (
-                <AnalysisProgress phase={phase} />
+                <AnalysisProgress phase={phase} uploadPct={uploadPct} />
               )}
 
               {phase === 'failed' && (
@@ -242,17 +238,38 @@ const STAGES = [
   { label: 'מרכיב את הדוח', duration: 20 },
 ];
 
-/** Since the pipeline is server-driven with a single 'analyzing' status, we
-    can't get real per-stage progress without more work — instead we animate
-    through the expected phases at their typical durations. The bar caps at
-    95% so it doesn't lie about being done. */
-function AnalysisProgress({ phase }: { phase: 'uploading' | 'analyzing' }) {
+/** Uploading has real byte-level progress (from XHR onprogress), analyzing
+    doesn't — the pipeline reports a single 'analyzing' status, so we animate
+    through expected stages at their typical durations. The analysis bar caps
+    at 95% so it doesn't lie about being done. */
+function AnalysisProgress({ phase, uploadPct }: { phase: 'uploading' | 'analyzing'; uploadPct: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
+    if (phase !== 'analyzing') return;
     const start = Date.now();
     const iv = setInterval(() => setElapsed((Date.now() - start) / 1000), 500);
     return () => clearInterval(iv);
-  }, []);
+  }, [phase]);
+
+  if (phase === 'uploading') {
+    return (
+      <div className="py-10 text-center">
+        <div className="font-mono text-[10.5px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-2">מעלה</div>
+        <h3 className="font-serif text-[22px] font-bold text-white m-0 mb-1">מעביר את הוידאו לאחסון</h3>
+        <div className="text-[12.5px] text-white/50 mb-6">נא לא לסגור עד שההעלאה תסתיים.</div>
+        <div className="h-1.5 rounded-full bg-[#1c1c1e] overflow-hidden mb-3 max-w-[420px] mx-auto">
+          <motion.div
+            className="h-full bg-[#d4af37]"
+            initial={{ width: 0 }}
+            animate={{ width: `${uploadPct}%` }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          />
+        </div>
+        <div className="font-mono text-[13px] tabular-nums text-white/60">{uploadPct.toFixed(0)}%</div>
+      </div>
+    );
+  }
+
   const total = STAGES.reduce((a, b) => a + b.duration, 0);
   let cursor = 0;
   let currentIdx = 0;
@@ -268,7 +285,7 @@ function AnalysisProgress({ phase }: { phase: 'uploading' | 'analyzing' }) {
       <div className="text-center mb-6">
         <div className="font-mono text-[10.5px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-2">מנתח...</div>
         <h3 className="font-serif text-[22px] font-bold text-white m-0">{STAGES[currentIdx]?.label ?? 'מסיים'}</h3>
-        <div className="text-[12.5px] text-white/50 mt-1.5">בדרך כלל 1-3 דקות (תלוי באורך הוידאו). תוכל לסגור ולחזור.</div>
+        <div className="text-[12.5px] text-white/50 mt-1.5">בדרך כלל 1-3 דקות (תלוי באורך הוידאו). תוכל לסגור ולחזור — הניתוח ממשיך ברקע.</div>
       </div>
       <div className="h-1.5 rounded-full bg-[#1c1c1e] overflow-hidden mb-6">
         <motion.div
@@ -286,9 +303,27 @@ function AnalysisProgress({ phase }: { phase: 'uploading' | 'analyzing' }) {
           </li>
         ))}
       </ul>
-      {phase === 'uploading' && (
-        <div className="text-[11.5px] text-white/40 text-center mt-6">מעלה לענן — נא לא לסגור עד שההעלאה תסתיים.</div>
-      )}
     </div>
   );
+}
+
+/** PUT to a signed URL with real per-byte upload progress. Uses XHR because
+    fetch() doesn't expose upload progress in browsers. */
+function uploadWithProgress(url: string, file: File, mimeType: string, onProgress: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    xhr.setRequestHeader('Content-Type', mimeType);
+    xhr.setRequestHeader('x-upsert', 'true');
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(); }
+      else reject(new Error(`ההעלאה נכשלה (${xhr.status}) ${xhr.responseText?.slice(0, 200) ?? ''}`));
+    };
+    xhr.onerror = () => reject(new Error('ההעלאה נכשלה (network error)'));
+    xhr.onabort = () => reject(new Error('ההעלאה בוטלה'));
+    xhr.send(file);
+  });
 }
