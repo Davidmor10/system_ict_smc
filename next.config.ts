@@ -8,9 +8,16 @@ const STRIPE_FRAME = 'https://js.stripe.com https://checkout.stripe.com https://
 const STRIPE_CONNECT = 'https://api.stripe.com';
 const SUPABASE_CONNECT = 'https://*.supabase.co wss://*.supabase.co';
 // Vercel Blob — the trade-review browser upload goes directly here (bypasses
-// Vercel's 4.5MB serverless body cap). Without this in connect-src the browser
-// CSP blocks the request before it leaves the page.
-const VERCEL_BLOB_CONNECT = 'https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com';
+// Vercel's 4.5MB serverless body cap). Includes:
+//  - blob.vercel-storage.com (bare host used by the multipart /mpu lifecycle:
+//    init, upload-part, complete)
+//  - *.blob.vercel-storage.com (per-store storage subdomains)
+//  - *.public.blob.vercel-storage.com (public store variant, kept for future)
+// The wildcard `*.blob.vercel-storage.com` alone does NOT match the bare
+// blob.vercel-storage.com host — CSP wildcards require at least one label
+// before the wildcard suffix — so multipart uploads silently hang without
+// the bare-host entry.
+const VERCEL_BLOB_CONNECT = 'https://blob.vercel-storage.com https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com';
 
 const csp = [
   `default-src 'self'`,
