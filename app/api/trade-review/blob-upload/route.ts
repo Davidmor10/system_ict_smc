@@ -23,12 +23,41 @@ import { MAX_VIDEO_BYTES, BLOB_PREFIX } from '../../../lib/videoReview/videoStor
 
 export const runtime = 'nodejs';
 
+/** GET diagnostic — hit /api/trade-review/blob-upload in a browser to check
+    whether BLOB_READ_WRITE_TOKEN actually reached the deployed function.
+    Without this, a missing token surfaces on the client as an opaque
+    "Failed to retrieve the client token" that could mean anything. */
+export async function GET() {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  return NextResponse.json({
+    hasToken: !!token,
+    tokenPrefix: token ? token.slice(0, 30) + '…' : null,
+    hint: token
+      ? 'Token present — if uploads still fail, the token may be invalid or the store may not be connected to this project.'
+      : 'BLOB_READ_WRITE_TOKEN is missing on this deployment. Reconnect the Blob store in Vercel Dashboard → Storage → your Blob store → Connect Project → then trigger a redeploy.',
+  });
+}
+
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const limited = checkRateLimit(`trade-review:blob-upload:${userId}`, 20, 60_000);
   if (!limited.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+
+  // handleUpload reads BLOB_READ_WRITE_TOKEN from the env by default; when
+  // it's missing, its failure surfaces on the client as the opaque
+  // "Failed to retrieve the client token". Catch the missing case here so
+  // the trader can see what's actually wrong.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    logger.error('blob-upload: BLOB_READ_WRITE_TOKEN missing at runtime', { userId });
+    return NextResponse.json({
+      error: 'Blob storage not configured',
+      detail: 'BLOB_READ_WRITE_TOKEN is missing. Connect the Vercel Blob store to this project (Dashboard → Storage → your store → Connect Project) and redeploy.',
+    }, { status: 500 });
+  }
 
   let body: HandleUploadBody;
   try { body = await req.json() as HandleUploadBody; } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

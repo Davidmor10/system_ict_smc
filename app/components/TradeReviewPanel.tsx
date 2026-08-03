@@ -83,17 +83,27 @@ export default function TradeReviewPanel({
       // body limit + no CORS issues), multipart for large files, and real
       // byte-level progress via onUploadProgress.
       const pathname = `trade-reviews/${tradeId}-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`;
-      const blob = await blobUpload(pathname, file, {
-        // Store is Private — the URL is unshareable and only readable by our
-        // server (which holds BLOB_READ_WRITE_TOKEN). Trade-review videos
-        // contain sensitive material (voice + chart + strategy), so this
-        // matches how the trader configured the store.
-        access: 'private',
-        contentType: mimeType,
-        handleUploadUrl: '/api/trade-review/blob-upload',
-        multipart: true,
-        onUploadProgress: e => setUploadPct(e.percentage),
-      });
+      let blob;
+      try {
+        blob = await blobUpload(pathname, file, {
+          // Store is Private — the URL is unshareable and only readable by our
+          // server (which holds BLOB_READ_WRITE_TOKEN). Trade-review videos
+          // contain sensitive material (voice + chart + strategy), so this
+          // matches how the trader configured the store.
+          access: 'private',
+          contentType: mimeType,
+          handleUploadUrl: '/api/trade-review/blob-upload',
+          multipart: true,
+          onUploadProgress: e => setUploadPct(e.percentage),
+        });
+      } catch (err) {
+        // Vercel Blob throws generic errors ("Failed to retrieve the client
+        // token"). Ask our own diagnostic what actually broke so the trader
+        // sees an actionable message instead of a black box.
+        const diag = await fetch('/api/trade-review/blob-upload').then(r => r.json()).catch(() => null);
+        if (diag && diag.hasToken === false) throw new Error(diag.hint);
+        throw err;
+      }
 
       // Step 2 — tell our server the upload's done. Server transfers the
       // video Blob → Gemini, kicks off analysis, deletes the blob after.
