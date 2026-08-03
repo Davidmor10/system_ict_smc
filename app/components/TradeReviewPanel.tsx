@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { upload as blobUpload } from '@vercel/blob/client';
 import type { TradeReviewRow } from '../lib/videoReview/types';
 import TradeReviewReport from './TradeReviewReport';
 
@@ -76,27 +77,25 @@ export default function TradeReviewPanel({
     try {
       const mimeType = file.type || 'video/mp4';
 
-      // Step 1 — get a signed upload URL for Supabase Storage. Server-only,
-      // just metadata (no video bytes yet).
-      const initRes = await fetch('/api/trade-review/init-storage-upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mimeType, sizeBytes: file.size }),
+      // Step 1 — PUT the video directly to Vercel Blob. The upload() helper
+      // handles: hitting our /blob-upload route for a scoped client token,
+      // uploading directly to Vercel Blob's CDN (bypasses Vercel serverless
+      // body limit + no CORS issues), multipart for large files, and real
+      // byte-level progress via onUploadProgress.
+      const pathname = `trade-reviews/${tradeId}-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`;
+      const blob = await blobUpload(pathname, file, {
+        access: 'public',
+        contentType: mimeType,
+        handleUploadUrl: '/api/trade-review/blob-upload',
+        multipart: true,
+        onUploadProgress: e => setUploadPct(e.percentage),
       });
-      const initBody = await initRes.json();
-      if (!initRes.ok) throw new Error(initBody.detail ?? initBody.error ?? 'לא הצלחנו להתחיל העלאה');
 
-      // Step 2 — PUT the video bytes directly to Supabase. This bypasses
-      // Vercel's 4.5MB serverless body cap AND avoids Google's no-CORS
-      // browser-upload wall. We use XHR (not fetch) because it exposes real
-      // per-byte progress; a 100MB upload on residential upload speeds takes
-      // a while and a silent progress bar would look frozen.
-      await uploadWithProgress(initBody.uploadUrl, file, mimeType, pct => setUploadPct(pct));
-
-      // Step 3 — tell our server the upload's done. Server transfers the
-      // file to Gemini, kicks off analysis, cleans Supabase after.
+      // Step 2 — tell our server the upload's done. Server transfers the
+      // video Blob → Gemini, kicks off analysis, deletes the blob after.
       const startRes = await fetch('/api/trade-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tradeId, storagePath: initBody.storagePath, mimeType }),
+        body: JSON.stringify({ tradeId, blobUrl: blob.url, mimeType }),
       });
       const startBody = await startRes.json();
       if (!startRes.ok) throw new Error(startBody.detail ?? startBody.error ?? 'לא הצלחנו להפעיל את הניתוח');
@@ -307,23 +306,3 @@ function AnalysisProgress({ phase, uploadPct }: { phase: 'uploading' | 'analyzin
   );
 }
 
-/** PUT to a signed URL with real per-byte upload progress. Uses XHR because
-    fetch() doesn't expose upload progress in browsers. */
-function uploadWithProgress(url: string, file: File, mimeType: string, onProgress: (pct: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url, true);
-    xhr.setRequestHeader('Content-Type', mimeType);
-    xhr.setRequestHeader('x-upsert', 'true');
-    xhr.upload.onprogress = e => {
-      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(); }
-      else reject(new Error(`ההעלאה נכשלה (${xhr.status}) ${xhr.responseText?.slice(0, 200) ?? ''}`));
-    };
-    xhr.onerror = () => reject(new Error('ההעלאה נכשלה (network error)'));
-    xhr.onabort = () => reject(new Error('ההעלאה בוטלה'));
-    xhr.send(file);
-  });
-}

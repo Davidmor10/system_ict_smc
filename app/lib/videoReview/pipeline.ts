@@ -1,8 +1,8 @@
 // Trade Review pipeline — the orchestrator.
 //
-// Flow: transfer video from Supabase Storage → Gemini File API → wait ACTIVE
-// → run vision + transcript in parallel → build the report → persist →
-// (async, non-blocking) update pattern memory → delete from Supabase Storage.
+// Flow: transfer video from Vercel Blob → Gemini File API → wait ACTIVE →
+// run vision + transcript in parallel → build the report → persist →
+// (async, non-blocking) update pattern memory → delete from Vercel Blob.
 //
 // Runs entirely server-side (never touches the DOM). Every stage updates the
 // review row's status so the client can poll and paint progress. A failure at
@@ -18,7 +18,7 @@ import { generateReport } from './reportGenerator';
 import { updateFromReport } from './patternMemory';
 import { buildTraderContext } from './contextBuilder';
 import { updateReview, getReview } from './reviewStore';
-import { transferToGemini, deleteFromStorage } from './videoStorage';
+import { transferToGemini, deleteBlob } from './videoStorage';
 import type { TraderContext } from './types';
 
 /** Upload a video blob directly to Gemini File API. Only used by unit tests
@@ -55,23 +55,23 @@ export async function waitForActive(name: string, timeoutMs = 180_000, intervalM
 const sleep = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
 /** Run the full analysis for a review row. The row must already exist and
-    carry either a storagePath (client uploaded to Supabase) or a videoFileUri
-    (dev/test path where the file was uploaded server-side already). */
+    carry either a storagePath (Vercel Blob URL the client just finished
+    uploading to) or a videoFileUri (test/server-side path). */
 export async function runReviewPipeline(reviewId: string, clerkId: string): Promise<void> {
-  let storagePathToClean: string | null = null;
+  let blobUrlToClean: string | null = null;
   try {
     const row = await getReview(reviewId, clerkId);
     if (!row) throw new Error('review not found');
     if (!row.videoMime) throw new Error('review has no mime type');
 
     // Step 1 — get a Gemini fileUri. Either it was set upfront (test path) or
-    // we pull the video from Supabase Storage and hand it to Gemini here.
+    // we pull the video from Vercel Blob and hand it to Gemini here.
     let fileUri = row.videoFileUri ?? null;
     if (!fileUri) {
-      if (!row.storagePath) throw new Error('review has neither a videoFileUri nor a storagePath');
+      if (!row.storagePath) throw new Error('review has neither a videoFileUri nor a source URL');
       const transferred = await transferToGemini(row.storagePath, row.videoMime);
       fileUri = transferred.fileUri;
-      storagePathToClean = row.storagePath;
+      blobUrlToClean = row.storagePath;
       await updateReview(reviewId, { videoFileUri: fileUri });
     }
 
@@ -103,23 +103,22 @@ export async function runReviewPipeline(reviewId: string, clerkId: string): Prom
     await updateReview(reviewId, { report, status: 'done' });
 
     // Step 6 — pattern memory update is best-effort; never fail the pipeline
-    // over it. And clean up the Supabase copy — the report is persisted, the
-    // Gemini file self-expires after 48h, we don't need a third copy sitting
-    // around costing storage.
+    // over it. Clean up the Blob copy — the report is persisted, the Gemini
+    // file self-expires after 48h, we don't need a third copy sitting around
+    // costing storage. On failure the blob is left in place so retries don't
+    // require a re-upload; a sweeper (or the user's next upload) cleans it.
     updateFromReport(clerkId, row.tradeId, report).catch(err => {
       logger.warn('pattern memory update failed after review', { reviewId, error: err instanceof Error ? err.message : String(err) });
     });
-    if (storagePathToClean) {
-      void deleteFromStorage(storagePathToClean);
+    if (blobUrlToClean) {
+      void deleteBlob(blobUrlToClean);
       await updateReview(reviewId, { storagePath: null });
-      storagePathToClean = null;
+      blobUrlToClean = null;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('trade review pipeline failed', { reviewId, error: message });
     await updateReview(reviewId, { status: 'failed', errorMessage: message });
-    // On failure, leave the Supabase copy in place so a retry doesn't require
-    // a re-upload. A separate sweeper (or the user's next upload) can clean it.
   }
 }
 

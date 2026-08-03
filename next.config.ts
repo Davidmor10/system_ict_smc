@@ -7,6 +7,10 @@ const STRIPE_SCRIPT = 'https://js.stripe.com';
 const STRIPE_FRAME = 'https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com';
 const STRIPE_CONNECT = 'https://api.stripe.com';
 const SUPABASE_CONNECT = 'https://*.supabase.co wss://*.supabase.co';
+// Vercel Blob — the trade-review browser upload goes directly here (bypasses
+// Vercel's 4.5MB serverless body cap). Without this in connect-src the browser
+// CSP blocks the request before it leaves the page.
+const VERCEL_BLOB_CONNECT = 'https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com';
 
 const csp = [
   `default-src 'self'`,
@@ -20,7 +24,7 @@ const csp = [
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: blob: https:`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT}`,
+  `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT} ${VERCEL_BLOB_CONNECT}`,
   `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS}`,
   `frame-ancestors 'self'`,
   `object-src 'none'`,
