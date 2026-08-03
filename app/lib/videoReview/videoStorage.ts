@@ -16,7 +16,7 @@
 //      no cross-origin constraints) → uploads to Gemini File API → analyzes
 //      → deletes the blob.
 
-import { del } from '@vercel/blob';
+import { del, get } from '@vercel/blob';
 import { genAI } from '../ai/client';
 import { logger } from '../logger';
 
@@ -43,11 +43,16 @@ export function isOwnBlobUrl(url: string): boolean {
 }
 
 /** Server-to-server: pull the video from Vercel Blob and hand it to the
-    Gemini File API. Returns the Gemini file URI. Server-to-server means no
-    browser body-size cap and no CORS. */
+    Gemini File API. Returns the Gemini file URI. Uses the Blob SDK's get()
+    with access:'private' — a raw fetch(url) would 401 because the store is
+    private (URLs are only readable by callers holding BLOB_READ_WRITE_TOKEN). */
 export async function transferToGemini(blobUrl: string, mimeType: string): Promise<{ fileUri: string }> {
-  const res = await fetch(blobUrl);
-  if (!res.ok) throw new Error(`blob fetch failed: ${res.status}`);
+  const result = await get(blobUrl, { access: 'private' });
+  if (!result || result.statusCode !== 200 || !result.stream) {
+    throw new Error(`blob get returned no stream (status ${result?.statusCode ?? 'null'})`);
+  }
+  // Turn the ReadableStream into a Blob so the Gemini SDK can upload it.
+  const res = new Response(result.stream);
   const blob = await res.blob();
   const uploaded = await genAI.files.upload({ file: blob, config: { mimeType } });
   if (!uploaded.uri) throw new Error('Gemini upload returned no URI');

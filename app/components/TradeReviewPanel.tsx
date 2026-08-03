@@ -84,7 +84,11 @@ export default function TradeReviewPanel({
       // byte-level progress via onUploadProgress.
       const pathname = `trade-reviews/${tradeId}-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`;
       const blob = await blobUpload(pathname, file, {
-        access: 'public',
+        // Store is Private — the URL is unshareable and only readable by our
+        // server (which holds BLOB_READ_WRITE_TOKEN). Trade-review videos
+        // contain sensitive material (voice + chart + strategy), so this
+        // matches how the trader configured the store.
+        access: 'private',
         contentType: mimeType,
         handleUploadUrl: '/api/trade-review/blob-upload',
         multipart: true,
