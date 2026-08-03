@@ -15,34 +15,17 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/se
 import { genAI } from '../ai/client';
 import { logger } from '../logger';
 
-/** Bucket must be created once per Supabase project. We create-on-first-use
-    with the service role key so nobody has to click through the dashboard. */
+/** Bucket must be created ONCE per Supabase project — see the setup note in
+    the trade-review README. Auto-creation via the service role key sounded
+    good on paper but silently fails in the field (Supabase's listBuckets /
+    createBucket sometimes returns permission errors that don't map to a
+    useful message on the wire), so we treat the bucket as a prerequisite
+    and let the "bucket not found" error surface with a clear hint. */
 export const VIDEO_BUCKET = 'trade-review-videos';
 
 /** Max file size Supabase Storage will accept for this bucket. Same cap the
     UI advertises so a rejection at the storage layer never surprises the user. */
 export const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
-
-let bucketReady = false;
-
-/** Idempotent — no-op if the bucket already exists. Runs once per cold start. */
-async function ensureBucket(): Promise<void> {
-  if (bucketReady) return;
-  const supabase = createServerSupabaseClient();
-  const { data: buckets, error: listErr } = await supabase.storage.listBuckets();
-  if (listErr) throw new Error(`list buckets failed: ${listErr.message}`);
-  if (buckets?.some(b => b.name === VIDEO_BUCKET)) { bucketReady = true; return; }
-  const { error: createErr } = await supabase.storage.createBucket(VIDEO_BUCKET, {
-    public: false,
-    fileSizeLimit: MAX_VIDEO_BYTES,
-    allowedMimeTypes: ['video/*'],
-  });
-  // A concurrent request might have just created it — treat that as success.
-  if (createErr && !/already exists/i.test(createErr.message)) {
-    throw new Error(`create bucket failed: ${createErr.message}`);
-  }
-  bucketReady = true;
-}
 
 /** Sanitize an incoming mime like "video/quicktime" into a filesystem-safe
     extension. Unknown types default to `bin` — Gemini reads the mimeType
@@ -70,14 +53,21 @@ export function ownsStoragePath(clerkId: string, path: string): boolean {
 }
 
 /** Ask Supabase for a signed upload URL. The browser can PUT the video bytes
-    directly to this URL — no auth headers, no CORS blockers. */
+    directly to this URL — no auth headers, no CORS blockers. The bucket must
+    already exist; if not, the Supabase error is rewritten into a message the
+    operator can act on. */
 export async function createUploadUrl(clerkId: string, mimeType: string): Promise<{ uploadUrl: string; storagePath: string; token: string }> {
   if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-  await ensureBucket();
   const path = buildStoragePath(clerkId, mimeType);
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.storage.from(VIDEO_BUCKET).createSignedUploadUrl(path);
-  if (error || !data) throw new Error(`signed upload url failed: ${error?.message ?? 'no data'}`);
+  if (error || !data) {
+    const msg = error?.message ?? 'no data returned';
+    if (/bucket.*not.*found|not found/i.test(msg)) {
+      throw new Error(`Supabase Storage bucket "${VIDEO_BUCKET}" not found — create it in the Supabase Dashboard (Storage → New bucket, private, video/* allowed).`);
+    }
+    throw new Error(`signed upload url failed: ${msg}`);
+  }
   return { uploadUrl: data.signedUrl, storagePath: data.path, token: data.token };
 }
 

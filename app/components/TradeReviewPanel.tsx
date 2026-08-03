@@ -83,7 +83,7 @@ export default function TradeReviewPanel({
         body: JSON.stringify({ mimeType, sizeBytes: file.size }),
       });
       const initBody = await initRes.json();
-      if (!initRes.ok) throw new Error(initBody.error ?? 'לא הצלחנו להתחיל העלאה');
+      if (!initRes.ok) throw new Error(initBody.detail ?? initBody.error ?? 'לא הצלחנו להתחיל העלאה');
 
       // Step 2 — PUT the video bytes directly to Supabase. This bypasses
       // Vercel's 4.5MB serverless body cap AND avoids Google's no-CORS
@@ -99,7 +99,7 @@ export default function TradeReviewPanel({
         body: JSON.stringify({ tradeId, storagePath: initBody.storagePath, mimeType }),
       });
       const startBody = await startRes.json();
-      if (!startRes.ok) throw new Error(startBody.error ?? 'לא הצלחנו להפעיל את הניתוח');
+      if (!startRes.ok) throw new Error(startBody.detail ?? startBody.error ?? 'לא הצלחנו להפעיל את הניתוח');
 
       setActiveReview(startBody.review);
       setPhase('analyzing');

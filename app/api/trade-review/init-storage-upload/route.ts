@@ -6,7 +6,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '../../../lib/rateLimit';
-import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
 import { createUploadUrl, MAX_VIDEO_BYTES } from '../../../lib/videoReview/videoStorage';
 
@@ -34,8 +33,12 @@ export async function POST(req: Request) {
     const { uploadUrl, storagePath, token } = await createUploadUrl(userId, mimeType);
     return NextResponse.json({ uploadUrl, storagePath, token });
   } catch (err) {
-    logger.error('init-storage-upload failed', { userId, error: err instanceof Error ? err.message : String(err) });
-    logSecurityEvent('validation_failed', { route: '/api/trade-review/init-storage-upload', userId });
-    return NextResponse.json({ error: 'Failed to prepare upload' }, { status: 500 });
+    // The message is the trader's own configuration state (missing bucket,
+    // permission issue) — no sensitive data in it, so surface it. Blanket
+    // "Failed to prepare upload" was untraceable without Vercel Function
+    // logs the trader can't see.
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('init-storage-upload failed', { userId, error: message });
+    return NextResponse.json({ error: 'Failed to prepare upload', detail: message }, { status: 500 });
   }
 }
