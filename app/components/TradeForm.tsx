@@ -127,6 +127,28 @@ function empty(): FormState {
   };
 }
 
+/** Convert a TradeEntry back into the form's local shape — used when the user
+    clicks Edit on an existing trade card. All numeric fields become strings
+    (the form's inputs are text-mode and parse on submit). */
+function fromTrade(t: TradeEntry): FormState {
+  return {
+    symbol: t.symbol,
+    contracts: String(t.contracts ?? 1),
+    direction: t.direction,
+    date: t.dateISO,
+    time: t.time,
+    entry: String(t.entry),
+    stop: String(t.stop),
+    target: String(t.target),
+    exits: (t.exits ?? []).map(e => ({ price: String(e.price), contracts: String(e.contracts) })),
+    confirmations: t.confirmations ?? [],
+    emotionalState: t.emotionalState ?? '',
+    model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
+    notes: t.notes ?? '',
+    screenshots: t.screenshots ?? [],
+  };
+}
+
 /** One line straight from the analytics engine — no network call, so it's on screen
     instantly. Only fires once the trader has 3+ trades logged (any dates), matching
     the same threshold every AI surface in the app uses. */
@@ -240,6 +262,7 @@ export default function TradeForm({
   onCancel,
   onDone,
   trades = [],
+  initial,
 }: {
   onSave: (trade: TradeEntry) => void;
   onCancel?: () => void;
@@ -247,8 +270,12 @@ export default function TradeForm({
   onDone?: () => void;
   /** Existing trades, used only to compute immediate before/after feedback (e.g. win rate) after saving. */
   trades?: TradeEntry[];
+  /** When set, the form is in edit mode: prefilled from this trade and, on
+      save, keeps the same id so the row is updated in place instead of a
+      duplicate being appended. */
+  initial?: TradeEntry;
 }) {
-  const [form, setForm] = useState<FormState>(empty());
+  const [form, setForm] = useState<FormState>(() => (initial ? fromTrade(initial) : empty()));
   const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
   const [customConfirmations, setCustomConfirmations] = useState<string[]>([]);
   const [newConfirmation, setNewConfirmation] = useState('');
@@ -351,7 +378,9 @@ export default function TradeForm({
       directly (no warnings) or after the trader dismisses the guardian panel. */
   function performSave() {
     const trade: TradeEntry = {
-      id: Date.now(),
+      // Preserve the id when editing so the save is an in-place update, not a
+      // duplicate row.
+      id: initial?.id ?? Date.now(),
       dateISO: form.date,
       time: form.time,
       symbol: form.symbol,

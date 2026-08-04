@@ -37,6 +37,7 @@ export default function JournalPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<TradeEntry | null>(null);
+  const [editingTrade, setEditingTrade] = useState<TradeEntry | null>(null);
 
   // Instant paint from the local cache, then reconcile with the cloud (pulls in
   // trades logged on other devices, propagates deletes) — the fix for the
@@ -55,7 +56,14 @@ export default function JournalPage() {
   }, []);
 
   function handleSave(trade: TradeEntry) {
-    const updated = [trade, ...trades];
+    // Upsert semantics: if a trade with this id already exists (edit flow),
+    // replace it in place; otherwise prepend as a new trade. The previous
+    // version blindly prepended, which duplicated trades on every edit or
+    // result-change round-trip.
+    const idx = trades.findIndex(t => t.id === trade.id);
+    const updated = idx >= 0
+      ? trades.map((t, i) => (i === idx ? trade : t))
+      : [trade, ...trades];
     saveTrades(updated);
     setTrades(updated);
   }
@@ -63,6 +71,29 @@ export default function JournalPage() {
   function handleDelete(id: number) {
     const { updatedTrades } = softDelete(trades, id);
     setTrades(updatedTrades);
+  }
+
+  /** Quick result-set from the trade card — flips WIN/LOSS/BE without opening
+      the full editor. Preserves everything else on the trade. */
+  function handleSetResult(id: number, result: 'WIN' | 'LOSS' | 'BE') {
+    const current = trades.find(t => t.id === id);
+    if (!current) return;
+    handleSave({ ...current, result, updatedAt: Date.now() });
+  }
+
+  /** Full edit — opens TradeForm prefilled with the trade. Save updates in
+      place via handleSave's upsert. */
+  function handleEdit(trade: TradeEntry) {
+    setEditingTrade(trade);
+    setShowForm(true);
+    // The form panel is above the trade log; without scrolling, opening it
+    // from a card near the bottom leaves the trader staring at the same card
+    // with no visible indication anything happened.
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 30);
+  }
+  function closeForm() {
+    setShowForm(false);
+    setEditingTrade(null);
   }
 
   const today = todayISO();
@@ -120,7 +151,10 @@ export default function JournalPage() {
                 </span>
               </div>
               <button
-                onClick={() => setShowForm(v => !v)}
+                onClick={() => {
+                  if (showForm) closeForm();
+                  else { setEditingTrade(null); setShowForm(true); }
+                }}
                 className="inline-flex items-center gap-2 py-[13px] px-6 rounded-sm bg-[#d4af37] text-black text-sm font-bold hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.4)]"
               >
                 <span className="font-mono text-base">{showForm ? '✕' : '+'}</span> {showForm ? 'ביטול' : 'עסקה חדשה'}
@@ -161,10 +195,12 @@ export default function JournalPage() {
         {showForm && (
           <div className="rounded-2xl bg-[#0a0a0b] p-6 sm:p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.7)]">
             <TradeForm
+              key={editingTrade?.id ?? 'new'}
               trades={trades}
+              initial={editingTrade ?? undefined}
               onSave={handleSave}
-              onCancel={() => setShowForm(false)}
-              onDone={() => setShowForm(false)}
+              onCancel={closeForm}
+              onDone={closeForm}
             />
           </div>
         )}
@@ -236,7 +272,15 @@ export default function JournalPage() {
                     <span className="font-mono text-[19px] font-extrabold tabular-nums" style={{ color: pnlColor(dayPnl) }}>{usd(dayPnl)}</span>
                   </div>
                   <div className="flex flex-col gap-4">
-                    {dayTrades.map(t => <JournalTradeCard key={t.id} trade={t} onDelete={() => setDeleteTarget(t)} />)}
+                    {dayTrades.map(t => (
+                      <JournalTradeCard
+                        key={t.id}
+                        trade={t}
+                        onDelete={() => setDeleteTarget(t)}
+                        onSetResult={handleSetResult}
+                        onEdit={handleEdit}
+                      />
+                    ))}
                   </div>
                 </div>
               );

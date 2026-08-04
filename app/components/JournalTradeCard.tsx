@@ -31,7 +31,16 @@ function sessionLabel(sessionKey: string): string {
   return SESS.find(s => s.key === sessionKey)?.he ?? sessionKey;
 }
 
-export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeEntry; onDelete?: (id: number) => void }) {
+export default function JournalTradeCard({
+  trade: t, onDelete, onSetResult, onEdit,
+}: {
+  trade: TradeEntry;
+  onDelete?: (id: number) => void;
+  /** Sets the trade's result in place (LOSS = stopped out, BE = flat, WIN = target hit). */
+  onSetResult?: (id: number, result: 'WIN' | 'LOSS' | 'BE') => void;
+  /** Opens the trade in the full edit form. */
+  onEdit?: (trade: TradeEntry) => void;
+}) {
   const isLong = t.direction === 'LONG';
   const dirC = isLong ? BULLISH : BEARISH;
   const dirBg = isLong ? 'rgba(74,124,89,0.12)' : 'rgba(139,58,58,0.12)';
@@ -94,6 +103,14 @@ export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeE
             <span className="text-sm font-bold" style={{ color: resC }}>{resHeb}</span>
             <span className="font-mono text-[22px] font-black tabular-nums tracking-[-0.01em]" style={{ color: pnlC }}>{pnlText}</span>
           </div>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(t)}
+              aria-label="ערוך עסקה"
+              title="עריכה מלאה"
+              className="opacity-40 group-hover:opacity-100 text-white/50 hover:text-[#d4af37] transition-all text-sm"
+            >✎</button>
+          )}
           {onDelete && (
             <button
               onClick={() => onDelete(t.id)}
@@ -103,6 +120,14 @@ export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeE
           )}
         </div>
       </div>
+
+      {/* Result buttons — Stop / BE / Take. Always visible so a result can be
+          changed after the fact; the current result is highlighted. Open trades
+          get a soft golden pulse on the whole row so the trader is prompted
+          to close them. */}
+      {onSetResult && (
+        <ResultButtons trade={t} onSetResult={onSetResult} />
+      )}
 
       {/* Price ladder (LTR) */}
       <div dir="ltr" className="mb-5">
@@ -158,5 +183,62 @@ export default function JournalTradeCard({ trade: t, onDelete }: { trade: TradeE
         )}
       </div>
     </div>
+  );
+}
+
+/** Three quick-set result buttons — the primary UX for closing an open trade
+    or correcting a wrong result. Highlighted = current result. */
+function ResultButtons({
+  trade, onSetResult,
+}: {
+  trade: TradeEntry;
+  onSetResult: (id: number, result: 'WIN' | 'LOSS' | 'BE') => void;
+}) {
+  const isOpen = trade.result === 'OPEN';
+  return (
+    <div className="mt-4 pt-4 border-t border-[#1c1c1e]">
+      {isOpen && (
+        <div className="text-[12px] text-[#d4af37] mb-2.5 font-semibold">איך העסקה נסגרה?</div>
+      )}
+      <div className="flex items-center gap-2">
+        <ResultBtn
+          label="סטופ" glyph="▼" active={trade.result === 'LOSS'}
+          activeC={BEARISH} activeBg="rgba(139,58,58,0.14)" activeBd="rgba(139,58,58,0.5)"
+          onClick={() => onSetResult(trade.id, 'LOSS')}
+        />
+        <ResultBtn
+          label="ברייק איוון" glyph="◆" active={trade.result === 'BE'}
+          activeC={GOLD} activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
+          onClick={() => onSetResult(trade.id, 'BE')}
+        />
+        <ResultBtn
+          label="טייק" glyph="▲" active={trade.result === 'WIN'}
+          activeC={BULLISH} activeBg="rgba(74,124,89,0.14)" activeBd="rgba(74,124,89,0.5)"
+          onClick={() => onSetResult(trade.id, 'WIN')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResultBtn({
+  label, glyph, active, activeC, activeBg, activeBd, onClick,
+}: {
+  label: string; glyph: string;
+  active: boolean; activeC: string; activeBg: string; activeBd: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] border text-[13px] font-bold transition-all duration-200"
+      style={{
+        borderColor: active ? activeBd : 'rgba(28,28,30,1)',
+        background: active ? activeBg : 'rgba(255,255,255,0.02)',
+        color: active ? activeC : 'rgba(255,255,255,0.55)',
+      }}
+    >
+      <span className="text-[11px]">{glyph}</span>{label}
+    </button>
   );
 }
