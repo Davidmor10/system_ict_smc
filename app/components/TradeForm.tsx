@@ -105,6 +105,9 @@ interface FormState {
   model: string;
   notes: string;
   screenshots: string[];
+  /** Explicit trade result — set via the Stop / BE / Take buttons in the
+      form. Empty string means "not chosen yet" (blocks save). */
+  result: 'WIN' | 'LOSS' | 'BE' | '';
 }
 
 function empty(): FormState {
@@ -124,6 +127,7 @@ function empty(): FormState {
     model: '',
     notes: '',
     screenshots: [],
+    result: '',
   };
 }
 
@@ -146,6 +150,9 @@ function fromTrade(t: TradeEntry): FormState {
     model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
     notes: t.notes ?? '',
     screenshots: t.screenshots ?? [],
+    // OPEN in the DB means "no explicit result chosen" — surface it as an
+    // empty selection so the trader is forced to pick one to save.
+    result: t.result === 'OPEN' ? '' : t.result,
   };
 }
 
@@ -389,7 +396,9 @@ export default function TradeForm({
       entry,
       stop,
       target,
-      result: derivedResult,
+      // Explicit result from the Stop/BE/Take buttons wins; the exits-derived
+      // result stays as a fallback for legacy edits that still use partial exits.
+      result: form.result || derivedResult,
       session: autoSession ?? 'NONE',
       bias: declaredBias ?? 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
@@ -420,6 +429,9 @@ export default function TradeForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
+    // Explicit result is now required — "no more open trades". If neither the
+    // user picked a result nor the exits imply one, refuse to save.
+    if (!form.result && derivedResult === 'OPEN') return;
 
     // Discipline guardian — surface any evidence-backed concern before saving.
     // Never blocks: if warnings exist, show them and let the trader decide.
@@ -532,11 +544,39 @@ export default function TradeForm({
           )}
         </Group>
 
-        {/* ── EXITS — one or more; result/PnL/R are derived, never chosen ── */}
-        <Group label="יציאות">
+        {/* ── RESULT — required. Stop = LOSS, ברייק איוון = BE, טייק = WIN.
+             Selecting one overrides any exits-derived result on save. */}
+        <Group label="תוצאת העסקה *">
+          <div className="flex items-center gap-2">
+            <FormResultBtn
+              label="סטופ" glyph="▼" active={form.result === 'LOSS'}
+              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
+              onClick={() => set('result', form.result === 'LOSS' ? '' : 'LOSS')}
+            />
+            <FormResultBtn
+              label="ברייק איוון" glyph="◆" active={form.result === 'BE'}
+              activeColor="#d4af37" activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
+              onClick={() => set('result', form.result === 'BE' ? '' : 'BE')}
+            />
+            <FormResultBtn
+              label="טייק" glyph="▲" active={form.result === 'WIN'}
+              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
+              onClick={() => set('result', form.result === 'WIN' ? '' : 'WIN')}
+            />
+          </div>
+          {!form.result && (
+            <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
+              חייב לבחור תוצאה — סטופ / BE / טייק. אחרת לא ניתן לשמור.
+            </p>
+          )}
+        </Group>
+
+        {/* ── EXITS — optional partial-exit legs; used to refine PnL/R when
+             they're finer than a single Stop/BE/Take label. ── */}
+        <Group label="יציאות (אופציונלי — למי שיצא בכמה חתיכות)">
           {form.exits.length === 0 ? (
             <p className="font-mono text-[11px] text-white/25 leading-relaxed">
-              אין עדיין יציאות רשומות — העסקה תישמר כפתוחה. הוסף יציאה (חלקית או מלאה) כשתסגור אותה.
+              אין יציאות חלקיות — התוצאה שבחרת למעלה תשמש לחישוב ה-P&L.
             </p>
           ) : (
             <div className="space-y-2">
@@ -727,9 +767,10 @@ export default function TradeForm({
         <div className="flex gap-3 pt-1">
           <button
             type="submit"
-            className="flex-1 py-3.5 rounded-xl font-mono text-sm font-bold uppercase tracking-[0.14em] transition-all duration-200 bg-[#d4af37] text-black hover:bg-[#e5c84a] hover:scale-[1.01] [box-shadow:0_0_24px_rgba(212,175,55,0.25)]"
+            disabled={!form.result && derivedResult === 'OPEN'}
+            className="flex-1 py-3.5 rounded-xl font-mono text-sm font-bold uppercase tracking-[0.14em] transition-all duration-200 bg-[#d4af37] text-black hover:bg-[#e5c84a] hover:scale-[1.01] [box-shadow:0_0_24px_rgba(212,175,55,0.25)] disabled:bg-[#3a3527] disabled:text-white/30 disabled:cursor-not-allowed disabled:[box-shadow:none] disabled:hover:scale-100"
           >
-            שמור עסקה
+            {initial ? 'שמור שינויים' : 'שמור עסקה'}
           </button>
           {onCancel && (
             <button
@@ -845,5 +886,30 @@ export default function TradeForm({
         </div>
       )}
     </div>
+  );
+}
+
+/** Result picker button — Stop / BE / Take. Highlighted when selected; click
+    again to deselect. Colors match the rest of the app's result palette. */
+function FormResultBtn({
+  label, glyph, active, activeColor, activeBg, activeBd, onClick,
+}: {
+  label: string; glyph: string;
+  active: boolean; activeColor: string; activeBg: string; activeBd: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[8px] border text-[13px] font-bold transition-all duration-200"
+      style={{
+        borderColor: active ? activeBd : 'rgba(28,28,30,1)',
+        background: active ? activeBg : 'rgba(255,255,255,0.02)',
+        color: active ? activeColor : 'rgba(255,255,255,0.55)',
+      }}
+    >
+      <span className="text-[11px]">{glyph}</span>{label}
+    </button>
   );
 }

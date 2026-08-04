@@ -32,13 +32,12 @@ function sessionLabel(sessionKey: string): string {
 }
 
 export default function JournalTradeCard({
-  trade: t, onDelete, onSetResult, onEdit,
+  trade: t, onDelete, onEdit,
 }: {
   trade: TradeEntry;
   onDelete?: (id: number) => void;
-  /** Sets the trade's result in place (LOSS = stopped out, BE = flat, WIN = target hit). */
-  onSetResult?: (id: number, result: 'WIN' | 'LOSS' | 'BE') => void;
-  /** Opens the trade in the full edit form. */
+  /** Opens the trade in the full edit form. Result buttons and any other
+      changes live inside the form itself now (moved out of the card). */
   onEdit?: (trade: TradeEntry) => void;
 }) {
   const isLong = t.direction === 'LONG';
@@ -105,29 +104,26 @@ export default function JournalTradeCard({
           </div>
           {onEdit && (
             <button
+              type="button"
               onClick={() => onEdit(t)}
               aria-label="ערוך עסקה"
               title="עריכה מלאה"
-              className="opacity-40 group-hover:opacity-100 text-white/50 hover:text-[#d4af37] transition-all text-sm"
-            >✎</button>
+              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-sm border border-[#2a2a2d] text-[12px] font-bold text-white/70 hover:text-[#d4af37] hover:border-[#d4af37]/40 transition-all"
+            >
+              <span className="text-[13px]">✎</span> ערוך
+            </button>
           )}
           {onDelete && (
             <button
+              type="button"
               onClick={() => onDelete(t.id)}
               aria-label="מחק עסקה"
-              className="opacity-0 group-hover:opacity-100 font-mono text-xs text-white/30 hover:text-[#8b3a3a] transition-all"
+              className="opacity-40 group-hover:opacity-100 font-mono text-xs text-white/40 hover:text-[#8b3a3a] transition-all px-1"
             >✕</button>
           )}
         </div>
       </div>
 
-      {/* Result buttons — Stop / BE / Take. Always visible so a result can be
-          changed after the fact; the current result is highlighted. Open trades
-          get a soft golden pulse on the whole row so the trader is prompted
-          to close them. */}
-      {onSetResult && (
-        <ResultButtons trade={t} onSetResult={onSetResult} />
-      )}
 
       {/* Price ladder (LTR) */}
       <div dir="ltr" className="mb-5">
@@ -186,59 +182,3 @@ export default function JournalTradeCard({
   );
 }
 
-/** Three quick-set result buttons — the primary UX for closing an open trade
-    or correcting a wrong result. Highlighted = current result. */
-function ResultButtons({
-  trade, onSetResult,
-}: {
-  trade: TradeEntry;
-  onSetResult: (id: number, result: 'WIN' | 'LOSS' | 'BE') => void;
-}) {
-  const isOpen = trade.result === 'OPEN';
-  return (
-    <div className="mt-4 pt-4 border-t border-[#1c1c1e]">
-      {isOpen && (
-        <div className="text-[12px] text-[#d4af37] mb-2.5 font-semibold">איך העסקה נסגרה?</div>
-      )}
-      <div className="flex items-center gap-2">
-        <ResultBtn
-          label="סטופ" glyph="▼" active={trade.result === 'LOSS'}
-          activeC={BEARISH} activeBg="rgba(139,58,58,0.14)" activeBd="rgba(139,58,58,0.5)"
-          onClick={() => onSetResult(trade.id, 'LOSS')}
-        />
-        <ResultBtn
-          label="ברייק איוון" glyph="◆" active={trade.result === 'BE'}
-          activeC={GOLD} activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
-          onClick={() => onSetResult(trade.id, 'BE')}
-        />
-        <ResultBtn
-          label="טייק" glyph="▲" active={trade.result === 'WIN'}
-          activeC={BULLISH} activeBg="rgba(74,124,89,0.14)" activeBd="rgba(74,124,89,0.5)"
-          onClick={() => onSetResult(trade.id, 'WIN')}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ResultBtn({
-  label, glyph, active, activeC, activeBg, activeBd, onClick,
-}: {
-  label: string; glyph: string;
-  active: boolean; activeC: string; activeBg: string; activeBd: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-[8px] border text-[13px] font-bold transition-all duration-200"
-      style={{
-        borderColor: active ? activeBd : 'rgba(28,28,30,1)',
-        background: active ? activeBg : 'rgba(255,255,255,0.02)',
-        color: active ? activeC : 'rgba(255,255,255,0.55)',
-      }}
-    >
-      <span className="text-[11px]">{glyph}</span>{label}
-    </button>
-  );
-}

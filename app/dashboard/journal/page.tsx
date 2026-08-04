@@ -73,16 +73,8 @@ export default function JournalPage() {
     setTrades(updatedTrades);
   }
 
-  /** Quick result-set from the trade card — flips WIN/LOSS/BE without opening
-      the full editor. Preserves everything else on the trade. */
-  function handleSetResult(id: number, result: 'WIN' | 'LOSS' | 'BE') {
-    const current = trades.find(t => t.id === id);
-    if (!current) return;
-    handleSave({ ...current, result, updatedAt: Date.now() });
-  }
-
   /** Full edit — opens TradeForm prefilled with the trade. Save updates in
-      place via handleSave's upsert. */
+      place via handleSave's upsert. Result buttons live inside the form. */
   function handleEdit(trade: TradeEntry) {
     setEditingTrade(trade);
     setShowForm(true);
@@ -277,7 +269,6 @@ export default function JournalPage() {
                         key={t.id}
                         trade={t}
                         onDelete={() => setDeleteTarget(t)}
-                        onSetResult={handleSetResult}
                         onEdit={handleEdit}
                       />
                     ))}
