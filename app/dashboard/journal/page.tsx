@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { SESS, getActiveSessionIdx } from '../../lib/sessions';
@@ -38,6 +38,11 @@ export default function JournalPage() {
   const [nowLabel, setNowLabel] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<TradeEntry | null>(null);
   const [editingTrade, setEditingTrade] = useState<TradeEntry | null>(null);
+  // Ref-based scroll target for the form panel. window.scrollTo() is a no-op
+  // here because the actual scroll container is a nested overflow-y-auto
+  // element, not the window itself — so clicking Edit on a trade far down
+  // the list looked like it did nothing (the form was opening off-screen).
+  const formRef = useRef<HTMLDivElement | null>(null);
 
   // Instant paint from the local cache, then reconcile with the cloud (pulls in
   // trades logged on other devices, propagates deletes) — the fix for the
@@ -78,10 +83,9 @@ export default function JournalPage() {
   function handleEdit(trade: TradeEntry) {
     setEditingTrade(trade);
     setShowForm(true);
-    // The form panel is above the trade log; without scrolling, opening it
-    // from a card near the bottom leaves the trader staring at the same card
-    // with no visible indication anything happened.
-    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 30);
+    // Ref-based scroll works regardless of which ancestor is the actual
+    // scroll container. Delayed slightly so the panel is mounted first.
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
   function closeForm() {
     setShowForm(false);
@@ -185,7 +189,15 @@ export default function JournalPage() {
 
         {/* Trade Form */}
         {showForm && (
-          <div className="rounded-2xl bg-[#0a0a0b] p-6 sm:p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.7)]">
+          <div
+            ref={formRef}
+            className="rounded-2xl bg-[#0a0a0b] p-6 sm:p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.7)] scroll-mt-6"
+          >
+            {editingTrade && (
+              <div className="mb-4 -mt-1 flex items-center gap-2 text-[12px] font-mono uppercase tracking-[0.16em] text-[#d4af37]">
+                <span>▸</span> עריכת עסקה קיימת · {editingTrade.symbol} · {editingTrade.dateISO}
+              </div>
+            )}
             <TradeForm
               key={editingTrade?.id ?? 'new'}
               trades={trades}
