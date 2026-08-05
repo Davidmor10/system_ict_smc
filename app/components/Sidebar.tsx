@@ -17,6 +17,7 @@ const NAV: { href: string; key: DictKey; min: Role }[] = [
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe' },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free'   },
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free'   },
+  { href: '/dashboard/settings',     key: 'nav_settings',     min: 'free'   },
 ];
 
 function LockIcon() {

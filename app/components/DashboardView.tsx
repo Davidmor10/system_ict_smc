@@ -551,7 +551,7 @@ export default function DashboardView() {
         <div className="dp-bar-right">
           <span className="dp-brand">{s.brand}</span>
           <span className="dp-brand-dot" />
-          <Link href="/dashboard/rules" className="dp-icon-btn" title={s.settings}>⚙</Link>
+          <Link href="/dashboard/settings" className="dp-icon-btn" title={s.settings}>⚙</Link>
         </div>
       </div>
 
