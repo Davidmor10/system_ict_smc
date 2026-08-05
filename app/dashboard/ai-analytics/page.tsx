@@ -9,6 +9,7 @@ import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
+import WeeklyReportPanel from '../../components/WeeklyReportPanel';
 
 /** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
     return shapes as local types (not imported) so this client component
@@ -279,10 +280,6 @@ export default function AiAnalyticsPage() {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [workingStrengths, setWorkingStrengths] = useState<WorkingStrength[]>([]);
   const [strengthsLoading, setStrengthsLoading] = useState(false);
-  const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
-  const [weeklyLoading, setWeeklyLoading] = useState(false);
-  const [reportHistory, setReportHistory] = useState<{ weekKey: string; report: WeeklyReport }[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
   const [hourStartMin, setHourStartMin] = useState<number | null>(null);
   const [rules, setRules] = useState<{ id: string; text: string }[]>([]);
@@ -347,57 +344,8 @@ export default function AiAnalyticsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trades.length]);
 
-  // ── Weekly AI report (cached per ISO week) + history archive ──
-  useEffect(() => {
-    try {
-      const h = localStorage.getItem('onyx_ai_weekly_report_history');
-      if (h) {
-        const parsed = JSON.parse(h);
-        if (Array.isArray(parsed)) {
-          // Drop any entry written by the previous (fixed-field) report shape.
-          setReportHistory(parsed.filter(entry => Array.isArray(entry?.report?.paragraphs)));
-        }
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (!hasEnoughData) { setWeeklyReport(null); return; }
-    const weekKey = isoWeekKey(todayISO());
-    const cacheKey = 'onyx_ai_weekly_report_' + weekKey;
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        // A cache written by the previous (fixed-field) report shape lacks
-        // `paragraphs` — discard it instead of crashing the page on it.
-        if (Array.isArray(parsed?.paragraphs)) { setWeeklyReport(parsed); return; }
-      } catch {}
-    }
-    setWeeklyLoading(true);
-    fetch('/api/ai/weekly-report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lang: 'he' }),
-    })
-      .then(r => r.json())
-      .then(({ report }: { report: WeeklyReport | null }) => {
-        if (!report || !Array.isArray(report.paragraphs) || report.paragraphs.length === 0) return;
-        setWeeklyReport(report);
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(report));
-          setReportHistory(prev => {
-            const withoutThisWeek = prev.filter(h => h.weekKey !== weekKey);
-            const updated = [{ weekKey, report }, ...withoutThisWeek].slice(0, 12);
-            localStorage.setItem('onyx_ai_weekly_report_history', JSON.stringify(updated));
-            return updated;
-          });
-        } catch {}
-      })
-      .catch(() => {})
-      .finally(() => setWeeklyLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades.length]);
+  // Weekly-report fetching + history archive moved into WeeklyReportPanel
+  // (self-contained component with its own state + cache + DB-backed history).
 
   /* ── Derived, purely-computed data (no AI) for sections 01–04 ── */
 
@@ -1006,52 +954,9 @@ export default function AiAnalyticsPage() {
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
           index={10} total={11} eyebrow="AI · Weekly Report" title="דוח שבועי"
-          description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא."
-          extra={weeklyReport && <div className="mt-4"><ConfidenceBadge level={weeklyReport.confidenceLevel} sampleSize={weeklyReport.sampleSize} /></div>}
+          description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא. הארכיון שומר את כל הדוחות הקודמים כדי שתוכל לחזור אליהם."
         >
-          {weeklyLoading ? (
-            <div className="flex items-center gap-2.5 py-6"><TypingDots /><span className="text-sm text-white/30">מכין את הדוח השבועי...</span></div>
-          ) : !weeklyReport ? (
-            <p className="text-sm text-white/30 py-2">אין עדיין מספיק נתונים היסטוריים כדי לייצר תובנה ברמת ביטחון גבוהה.</p>
-          ) : (
-            <div>
-              <div className="bg-[#0a0a0b] border border-[#1c1c1e] rounded-[4px] p-6 sm:p-7 flex flex-col gap-4">
-                {weeklyReport.paragraphs.slice(0, -1).map((p, i) => (
-                  <InsightText key={i} text={p} className="text-[15px] text-[#c0c0c0] leading-relaxed" />
-                ))}
-              </div>
-
-              <Reveal className="mt-6 p-6 sm:p-7 rounded-[6px]" style={{ border: '1px solid rgba(212,175,55,.3)', background: 'radial-gradient(120% 140% at 100% 0%,rgba(212,175,55,.08),transparent 60%)', boxShadow: '0 0 50px -20px rgba(212,175,55,.4)' }}>
-                <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 14 }}>◈</span><span className="font-mono text-xs font-extrabold uppercase tracking-[0.14em] text-[#d4af37]">המיקוד לשבוע הבא</span></div>
-                <InsightText text={weeklyReport.paragraphs[weeklyReport.paragraphs.length - 1]} className="text-base font-semibold text-white leading-relaxed" />
-              </Reveal>
-
-              <div className="mt-8 pt-6 border-t border-[#1c1c1e] flex items-center justify-between gap-4 flex-wrap">
-                {reportHistory.length > 0 && (
-                  <button onClick={() => setShowHistory(v => !v)} className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-white/45 hover:text-[#d4af37] transition-colors">
-                    {showHistory ? 'הסתר' : 'גיליונות קודמים'}
-                  </button>
-                )}
-                <span className="font-mono text-xs font-semibold text-[#52525b]">
-                  {reportHistory.length === 0 ? 'אין עדיין דוחות קודמים — הארכיון יתמלא שבוע אחר שבוע.' : `${reportHistory.length} דוחות בארכיון.`}
-                </span>
-              </div>
-              {showHistory && (
-                <div className="mt-4 flex flex-col gap-2.5 onyx-reveal">
-                  {reportHistory.map(h => (
-                    <div key={h.weekKey} className="rounded-lg bg-[#0a0a0b] border border-white/5 p-3.5 flex items-start gap-3">
-                      <span className="font-mono text-[9px] text-white/30 shrink-0 mt-0.5" dir="ltr">{h.weekKey}</span>
-                      <InsightText text={h.report.paragraphs[0]} className="text-xs text-white/55 leading-relaxed" />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <p className="mt-10 font-mono text-[11.5px] font-semibold text-[#52525b] leading-loose text-right">
-                אנליטיקת ה-AI היא רק עוד נקודת מבט של המערכת על היומן שלך — תמיד מומלץ להפעיל שיקול דעת עצמאי משלך. המסחר כרוך בסיכון משמעותי.
-              </p>
-            </div>
-          )}
+          <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} />
         </NumberedSection>
 
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
