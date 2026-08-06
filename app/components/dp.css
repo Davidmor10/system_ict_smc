@@ -80,13 +80,68 @@
 .dp-app .dp-icon-btn:hover{border-color:var(--dp-gold-40);color:var(--dp-gold);transform:translateY(-1px);box-shadow:0 6px 18px -8px var(--dp-gold-40);}
 .dp-app .dp-icon-btn.danger:hover{border-color:var(--dp-bear-30);color:var(--dp-bear);box-shadow:0 6px 18px -8px rgba(240,137,158,.4);}
 
-/* ── Row 2: greeting (right) + clock (left) ── */
-.dp-app .dp-greet-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;}
-.dp-app .dp-greet{font-family:var(--dp-ff-serif);font-size:clamp(20px,2.1vw,28px);font-weight:700;color:#fff;margin:0;letter-spacing:-.01em;}
-.dp-app .dp-greet b{background:linear-gradient(90deg,var(--dp-gold-soft),var(--dp-gold));-webkit-background-clip:text;background-clip:text;color:transparent;}
-.dp-app .dp-greet small{font-size:.58em;color:var(--dp-gold);font-weight:400;}
-.dp-app .dp-greet-sub{font-family:var(--dp-ff-sans);font-size:14px;font-weight:600;color:var(--dp-w72);margin-top:4px;letter-spacing:.005em;}
-.dp-app .dp-clock{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:rgba(20,19,26,.7);border:1px solid var(--dp-border-strong);backdrop-filter:blur(8px);flex-shrink:0;}
+/* ── Row 2: greeting block (right) + clock (left) — the "welcome" strip.
+   Sits inside a soft gold-tinted container so it reads as a warm entry
+   point to the app, not just another data row. Sized to lead over the
+   KPI grid without dwarfing it (greeting ≈ 40px, KPI values ≈ 34px). ── */
+.dp-app .dp-greet-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:20px;flex-shrink:0;
+  padding:16px 22px 18px;border-radius:18px;position:relative;overflow:hidden;
+  background:
+    radial-gradient(70% 100% at 15% 0%, rgba(230,198,101,.10), transparent 55%),
+    radial-gradient(60% 90% at 90% 100%, rgba(240,160,90,.06), transparent 60%),
+    linear-gradient(170deg, rgba(27,26,34,.55), rgba(18,17,24,.35));
+  border:1px solid rgba(230,198,101,.14);
+  box-shadow:0 0 40px -22px rgba(230,198,101,.35), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.dp-app .dp-greet-block{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.dp-app .dp-greet-eyebrow{
+  display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--dp-gold);
+}
+.dp-app .dp-greet-eyebrow-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--dp-gold);
+  box-shadow:0 0 10px 2px var(--dp-gold-40);
+  animation:dp-pulse-dot 2.4s ease-in-out infinite;
+}
+.dp-app .dp-greet{
+  font-family:var(--dp-ff-serif);
+  font-size:clamp(28px,3.2vw,40px);
+  font-weight:800;color:#fff;margin:0;
+  line-height:1.08;letter-spacing:-.015em;
+}
+.dp-app .dp-greet b{
+  font-weight:800;
+  background:linear-gradient(90deg,var(--dp-gold-soft),var(--dp-gold));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.dp-app .dp-greet-context{
+  margin-top:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.dp-app .dp-greet-session{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 12px;border-radius:20px;
+  font-family:var(--dp-ff-sans);font-size:12.5px;font-weight:800;
+  color:var(--dp-gold);
+  background:var(--dp-gold-08);
+  border:1px solid var(--dp-gold-30);
+  box-shadow:0 0 18px -8px var(--dp-gold-40);
+}
+.dp-app .dp-greet-session-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--dp-gold);
+  box-shadow:0 0 8px var(--dp-gold-40);
+  animation:dp-pulse-dot 2s ease-in-out infinite;
+}
+.dp-app .dp-greet-sub{
+  font-family:var(--dp-ff-sans);font-size:13.5px;font-weight:700;color:var(--dp-w72);
+  letter-spacing:.005em;
+}
+.dp-app .dp-greet-sep{
+  width:3px;height:3px;border-radius:50%;background:var(--dp-w28);
+}
+.dp-app .dp-clock{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:12px 18px;border-radius:14px;background:rgba(20,19,26,.7);border:1px solid var(--dp-border-strong);backdrop-filter:blur(8px);flex-shrink:0;}
 .dp-app .dp-clock-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dp-gold);}
 .dp-app .dp-clock-v{font-family:var(--dp-ff-mono);font-size:24px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.03em;}
 

@@ -555,11 +555,30 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {/* Row 2 — greeting + clock */}
+      {/* Row 2 — greeting + clock. The greeting block is the app's warm
+          entry point: eyebrow (today's date) → big serif greeting with the
+          trader's name in gold gradient → context row (active session chip
+          + trade count). Sits inside a gold-tinted container so it reads
+          as a proper welcome, not another data row. */}
       <div className="dp-greet-row dp-rise">
-        <div>
-          <h1 className="dp-greet">{greeting}. {activeSess && <small>{s.sessionActive(L === 'he' ? activeSess.he : activeSess.en)}</small>}</h1>
-          <div className="dp-greet-sub" dir={L === 'he' ? 'rtl' : 'ltr'}>{dateStr} · {trades.length} {s.tradesLabel}</div>
+        <div className="dp-greet-block">
+          <div className="dp-greet-eyebrow">
+            <span className="dp-greet-eyebrow-dot" />
+            <span dir={L === 'he' ? 'rtl' : 'ltr'}>{dateStr}</span>
+          </div>
+          <h1 className="dp-greet">
+            {greetWord}
+            {firstName ? <>, <b>{firstName}</b></> : null}
+          </h1>
+          <div className="dp-greet-context">
+            {activeSess && (
+              <span className="dp-greet-session">
+                <span className="dp-greet-session-dot" />
+                {s.sessionActive(L === 'he' ? activeSess.he : activeSess.en)}
+              </span>
+            )}
+            <span className="dp-greet-sub">{trades.length} {s.tradesLabel}</span>
+          </div>
         </div>
         <div className="dp-clock"><span className="dp-clock-k">{s.clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
       </div>
