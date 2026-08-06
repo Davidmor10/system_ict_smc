@@ -12,6 +12,7 @@ export const DICT = {
   nav_notebook:         { en: 'Notebook',               he: 'מחברת'                          },
   nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
+  nav_reports:          { en: 'Reports',                he: 'דוחות'                          },
   nav_settings:         { en: 'Settings',               he: 'הגדרות'                         },
   nav_locked_hint:      { en: 'Upgrade to unlock',      he: 'שדרג כדי לפתוח'                 },
   sys_account:          { en: 'Account',                he: 'חשבון'                          },

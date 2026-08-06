@@ -66,6 +66,7 @@ const STR = {
     macroToday: 'היום', macroEmpty: 'אין אירועים בעלי השפעה גבוהה השבוע', macroUnavailable: '…',
     macroNext: 'הבא',
     macroLegend: 'השפעה גבוהה',
+    macroAll: 'לכל הדוחות →',
     calTitle: (m: string) => `יומן מסחר · ${m}`,
     calMonthly: 'P&L חודשי',
     calDays: (n: number) => `${n} ימי מסחר`,
@@ -79,9 +80,6 @@ const STR = {
     confirmNote: 'הפעולה משפיעה רק על התצוגה שלך — אין השפעה על נתוני המסחר.',
     confirmCancel: 'ביטול',
     confirmDelete: 'הסר',
-    calEmptyTitle: 'הלוח שלך מחכה לעסקה הראשונה',
-    calEmptyBody: 'כל יום שתסחור בו יהפוך לתא צבוע — ירוק לרווח, ורוד להפסד. חודש שלם מסתדר לו כאן ומספר סיפור.',
-    calEmptyCta: '+ הזן עסקה ראשונה',
   },
   en: {
     edit: '⊞ Customize', editOn: '✓ Save layout', brand: 'ONYX · CONTROL', settings: 'Settings',
@@ -107,6 +105,7 @@ const STR = {
     macroToday: 'TODAY', macroEmpty: 'No high-impact events this week', macroUnavailable: '…',
     macroNext: 'NEXT',
     macroLegend: 'High impact',
+    macroAll: 'All reports →',
     calTitle: (m: string) => `Trade journal · ${m}`,
     calMonthly: 'Monthly P&L',
     calDays: (n: number) => `${n} trading days`,
@@ -120,9 +119,6 @@ const STR = {
     confirmNote: "This only affects your view — trade data is untouched.",
     confirmCancel: 'Cancel',
     confirmDelete: 'Remove',
-    calEmptyTitle: 'Your calendar is waiting for your first trade',
-    calEmptyBody: 'Every day you trade turns into a colored cell — green for a win, pink for a loss. A whole month fits here and tells a story.',
-    calEmptyCta: '+ Log your first trade',
   },
 } as const;
 
@@ -683,6 +679,7 @@ export default function DashboardView() {
             <div className="dp-macro-hd">
               <span className="dp-macro-k">{s.macroK}</span>
               <span className="dp-macro-legend"><span className="dp-macro-legend-dot" /> {s.macroLegend}</span>
+              <Link href="/dashboard/reports" className="dp-macro-all">{s.macroAll}</Link>
             </div>
             <div className="dp-macro-list">
               {macro == null ? (
@@ -720,22 +717,11 @@ export default function DashboardView() {
                 <div className="dp-cal-nav"><button onClick={prevMonth}>‹</button><button onClick={nextMonth}>›</button></div>
               </div>
             </div>
-            {trades.length === 0 ? (
-              /* Empty-state — friendlier than a grid of "—" cells. Uses
-                 the same panel so nothing jumps when the first trade lands. */
-              <div className="dp-cal-empty">
-                <div className="dp-cal-empty-icon">◈</div>
-                <div className="dp-cal-empty-title">{s.calEmptyTitle}</div>
-                <div className="dp-cal-empty-body">{s.calEmptyBody}</div>
-                <Link href="/dashboard/journal" className="dp-cal-empty-cta">{s.calEmptyCta}</Link>
-              </div>
-            ) : (
-              <>
-                <div className="dp-cal-dows">
-                  {s.dowNames.map((n, i) => <div key={i} className="dp-cal-dow">{n}</div>)}
-                  <div className="dp-cal-dow wk">{s.calWeekHead}</div>
-                </div>
-                <div className="dp-cal-grid">
+            <div className="dp-cal-dows">
+              {s.dowNames.map((n, i) => <div key={i} className="dp-cal-dow">{n}</div>)}
+              <div className="dp-cal-dow wk">{s.calWeekHead}</div>
+            </div>
+            <div className="dp-cal-grid">
               {calendar.rows.flatMap(row => [
                 ...row.days.map((d, i) => {
                   if (d === null) return <div key={`e${row.weekNum}-${i}`} className="dp-cal-cell empty" />;
@@ -765,9 +751,7 @@ export default function DashboardView() {
                   );
                 })(),
               ])}
-                </div>
-              </>
-            )}
+            </div>
           </div>
         </div>
       </div>

@@ -16,6 +16,8 @@ import { SESS, sessionForHour, type SessionKey } from '../sessions';
 import { logger } from '../logger';
 
 const FEED_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+const FEED_URL_LAST = 'https://nfs.faireconomy.media/ff_calendar_lastweek.json';
+const FEED_URL_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
 const TZ = 'Asia/Jerusalem';
 
 export type Impact = 'High' | 'Medium' | 'Low' | 'Holiday';
@@ -26,9 +28,15 @@ export interface MacroEvent {
   impact: Impact;
   dateIsrael: string;    // 'YYYY-MM-DD' in Israel time
   timeIsrael: string;    // 'HH:mm' in Israel time ('' when the feed gives no clock time)
+  forecast?: string;     // consensus estimate ('' when the feed omits it)
+  previous?: string;     // last release
+  actual?: string;       // released value ('' until publication time)
 }
 
-interface RawEvent { title?: unknown; country?: unknown; date?: unknown; impact?: unknown; }
+interface RawEvent {
+  title?: unknown; country?: unknown; date?: unknown; impact?: unknown;
+  forecast?: unknown; previous?: unknown; actual?: unknown;
+}
 
 // ── Time helpers (pure) ──────────────────────────────────────────────────────
 
@@ -65,6 +73,12 @@ function normImpact(v: unknown): Impact {
   return 'Low';
 }
 
+function normStr(v: unknown): string {
+  if (v == null) return '';
+  const s = String(v).trim();
+  return s;
+}
+
 /** Feed rows → normalized events (Israel time). Invalid rows are dropped. */
 export function normalizeEvents(raw: unknown): MacroEvent[] {
   if (!Array.isArray(raw)) return [];
@@ -81,6 +95,9 @@ export function normalizeEvents(raw: unknown): MacroEvent[] {
       impact: normImpact(r?.impact),
       dateIsrael: parts.dateIsrael,
       timeIsrael: parts.timeIsrael,
+      forecast: normStr(r?.forecast),
+      previous: normStr(r?.previous),
+      actual: normStr(r?.actual),
     });
   }
   return out;
@@ -173,6 +190,50 @@ function sessionKeyForLabel(label: string): SessionKey | null {
 // ── Fetch + cache (IO) ───────────────────────────────────────────────────────
 
 let memCache: { day: string; events: MacroEvent[] } | null = null;
+let memCacheJournal: { day: string; events: MacroEvent[] } | null = null;
+
+/** De-dup identical rows (same title + date + time + currency) that appear in
+    both `thisweek.json` and `nextweek.json` at the week boundary. Later entries
+    win — that's the one more likely to already carry an `actual` value. */
+function mergeDedupe(...groups: MacroEvent[][]): MacroEvent[] {
+  const map = new Map<string, MacroEvent>();
+  for (const g of groups) {
+    for (const e of g) {
+      const key = `${e.dateIsrael}|${e.timeIsrael}|${e.currency}|${e.title}`;
+      map.set(key, e);
+    }
+  }
+  return [...map.values()].sort((a, b) => (a.dateIsrael + a.timeIsrael).localeCompare(b.dateIsrael + b.timeIsrael));
+}
+
+async function fetchFeed(url: string): Promise<MacroEvent[]> {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'OnyxTrainer/1.0 (+trading journal)' } });
+    if (!res.ok) { logger.warn('macro feed non-ok', { url, status: res.status }); return []; }
+    return normalizeEvents(await res.json());
+  } catch (err) {
+    logger.warn('macro feed fetch failed', { url, error: err instanceof Error ? err.message : String(err) });
+    return [];
+  }
+}
+
+async function loadCached(supabase: SupabaseClient, table: string, day: string): Promise<MacroEvent[] | null> {
+  try {
+    const { data } = await supabase.from(table).select('payload').eq('day', day).maybeSingle();
+    if (data?.payload && Array.isArray(data.payload)) return data.payload as MacroEvent[];
+  } catch { /* fall through */ }
+  return null;
+}
+
+async function writeCache(supabase: SupabaseClient, table: string, day: string, events: MacroEvent[]): Promise<void> {
+  if (!events.length) return;
+  try {
+    await supabase.from(table).upsert(
+      { day, payload: events, fetched_at: new Date().toISOString() },
+      { onConflict: 'day' },
+    );
+  } catch { /* best-effort */ }
+}
 
 /** Returns this week's normalized macro events (Israel time), fetching the feed
     at most once per Israel day. Never throws — returns [] on any failure, so the
@@ -182,32 +243,36 @@ export async function getMacroEvents(supabase: SupabaseClient | null): Promise<M
   if (memCache && memCache.day === today) return memCache.events;
 
   if (supabase) {
-    try {
-      const { data } = await supabase.from('macro_calendar_cache').select('payload').eq('day', today).maybeSingle();
-      if (data?.payload && Array.isArray(data.payload)) {
-        memCache = { day: today, events: data.payload as MacroEvent[] };
-        return memCache.events;
-      }
-    } catch { /* fall through to a fresh fetch */ }
+    const cached = await loadCached(supabase, 'macro_calendar_cache', today);
+    if (cached) { memCache = { day: today, events: cached }; return cached; }
   }
 
-  let events: MacroEvent[] = [];
-  try {
-    const res = await fetch(FEED_URL, { headers: { 'User-Agent': 'OnyxTrainer/1.0 (+trading journal)' } });
-    if (res.ok) events = normalizeEvents(await res.json());
-    else logger.warn('macro feed non-ok', { status: res.status });
-  } catch (err) {
-    logger.warn('macro feed fetch failed', { error: err instanceof Error ? err.message : String(err) });
-  }
-
+  const events = await fetchFeed(FEED_URL);
   memCache = { day: today, events };
-  if (supabase && events.length) {
-    try {
-      await supabase.from('macro_calendar_cache').upsert(
-        { day: today, payload: events, fetched_at: new Date().toISOString() },
-        { onConflict: 'day' },
-      );
-    } catch { /* cache write is best-effort */ }
+  if (supabase) await writeCache(supabase, 'macro_calendar_cache', today, events);
+  return events;
+}
+
+/** Returns a 3-week window (last + this + next) for the macro journal page.
+    Uses its own cache table so it never fights the coach's this-week cache.
+    Falls back to fetching just this-week when the wider fetch fails. */
+export async function getMacroJournalEvents(supabase: SupabaseClient | null): Promise<MacroEvent[]> {
+  const today = israelToday();
+  if (memCacheJournal && memCacheJournal.day === today) return memCacheJournal.events;
+
+  if (supabase) {
+    const cached = await loadCached(supabase, 'macro_calendar_journal_cache', today);
+    if (cached) { memCacheJournal = { day: today, events: cached }; return cached; }
   }
+
+  const [last, thisW, next] = await Promise.all([
+    fetchFeed(FEED_URL_LAST),
+    fetchFeed(FEED_URL),
+    fetchFeed(FEED_URL_NEXT),
+  ]);
+  const events = mergeDedupe(last, thisW, next);
+
+  memCacheJournal = { day: today, events };
+  if (supabase) await writeCache(supabase, 'macro_calendar_journal_cache', today, events);
   return events;
 }

@@ -22,6 +22,7 @@ function IconChart()     { return <svg {...iconProps}><path d="M4 20V10M10 20V4M
 function IconCoach()     { return <svg {...iconProps}><path d="M8 9h8M8 13h5" /><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg>; }
 function IconPlaybook()  { return <svg {...iconProps}><path d="M12 4v16" /><path d="M3 6a3 3 0 0 1 3-3h5v18H6a3 3 0 0 1-3-3Z" /><path d="M21 6a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 0 3-3Z" /></svg>; }
 function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z" /><path d="M9 12l2 2 4-4" /></svg>; }
+function IconReports()   { return <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M8 13h5M8 17h4M16 12l3 3-3 3" /></svg>; }
 function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>; }
 
 const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl }[] = [
@@ -32,6 +33,7 @@ const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl }[] = [
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free',   Icon: IconPlaybook },
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free',   Icon: IconRules    },
+  { href: '/dashboard/reports',      key: 'nav_reports',      min: 'free',   Icon: IconReports  },
   { href: '/dashboard/settings',     key: 'nav_settings',     min: 'free',   Icon: IconSettings },
 ];
 

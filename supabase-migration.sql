@@ -305,6 +305,15 @@ create table if not exists macro_calendar_cache (
   fetched_at  timestamptz not null default now()
 );
 
+-- Wider 3-week snapshot (last + this + next week merged) that backs the macro
+-- reports journal at /dashboard/reports. Separate table so it never fights the
+-- coach's this-week cache. Same shape, same once-per-Israel-day refresh cadence.
+create table if not exists macro_calendar_journal_cache (
+  day         date        primary key,
+  payload     jsonb       not null,
+  fetched_at  timestamptz not null default now()
+);
+
 -- Observability for the coach's structured-output fail-safe: one row each time
 -- the model's reply could not be parsed into {final_answer}. 'retry' = first
 -- attempt failed (we re-asked); 'failed' = still bad after the retry (the user
@@ -326,6 +335,7 @@ alter table ai_insight_history  enable row level security;
 alter table trader_hypotheses   enable row level security;
 alter table coach_chats         enable row level security;
 alter table macro_calendar_cache enable row level security;
+alter table macro_calendar_journal_cache enable row level security;
 alter table user_collections    enable row level security;
 alter table coach_generation_fallback enable row level security;
 

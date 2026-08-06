@@ -196,7 +196,7 @@
 }
 .dp-app .dp-kpi-balance .dp-widget-k{font-size:13px;margin-bottom:14px;}
 .dp-app .dp-kpi-val{
-  font-family:var(--dp-ff-mono);font-size:clamp(44px,4.4vw,60px);font-weight:900;line-height:1;
+  font-family:var(--dp-ff-mono);font-size:clamp(38px,3.8vw,52px);font-weight:900;line-height:1;
   font-variant-numeric:tabular-nums;letter-spacing:-.02em;
   background:linear-gradient(180deg,#fff 20%,var(--dp-gold-soft) 90%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -301,38 +301,6 @@
 .dp-app .dp-cal-cell.win:hover,.dp-app .dp-cal-cell.loss:hover{transform:scale(1.04);}
 .dp-app .dp-cal-cell.best{box-shadow:0 0 22px -6px var(--dp-gold-40),inset 0 0 0 1px var(--dp-gold-30);}
 .dp-app .dp-cal-cell.empty{background:linear-gradient(160deg,rgba(230,198,101,.02),rgba(240,160,90,.008));box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);opacity:.6;}
-/* Calendar empty-state — first-run friendly. Same panel, warmer content. */
-.dp-app .dp-cal-empty{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;gap:12px;padding:32px 24px;
-  background:
-    radial-gradient(60% 80% at 50% 0%, rgba(230,198,101,.08), transparent 60%);
-  border-radius:12px;
-}
-.dp-app .dp-cal-empty-icon{
-  width:56px;height:56px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;color:var(--dp-gold);
-  background:rgba(230,198,101,.08);border:1px solid var(--dp-gold-30);
-  box-shadow:0 0 30px -8px var(--dp-gold-40);
-}
-.dp-app .dp-cal-empty-title{
-  font-family:var(--dp-ff-serif);font-size:22px;font-weight:800;color:#fff;
-  letter-spacing:-.005em;line-height:1.2;
-}
-.dp-app .dp-cal-empty-body{
-  font-family:var(--dp-ff-sans);font-size:14px;font-weight:500;color:var(--dp-w72);
-  line-height:1.6;max-width:440px;
-}
-.dp-app .dp-cal-empty-cta{
-  margin-top:6px;padding:11px 22px;border-radius:9px;
-  font-family:var(--dp-ff-mono);font-size:12px;font-weight:800;
-  letter-spacing:.06em;text-transform:uppercase;
-  color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));
-  text-decoration:none;transition:.2s var(--dp-ease);
-  box-shadow:0 8px 20px -8px var(--dp-gold-40);
-}
-.dp-app .dp-cal-empty-cta:hover{transform:translateY(-1px);box-shadow:0 12px 28px -8px var(--dp-gold-40);}
 
 .dp-app .dp-cal-daynum{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;color:var(--dp-w92);text-align:right;}
 .dp-app .dp-cal-pnl{font-family:var(--dp-ff-mono);font-size:15px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;line-height:1;letter-spacing:-.005em;}
@@ -349,8 +317,10 @@
 
 /* ── Macro list ── */
 .dp-app .dp-macro{flex-shrink:0;padding:14px 16px;display:flex;flex-direction:column;}
-.dp-app .dp-macro-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;}
-.dp-app .dp-macro-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dp-gold);}
+.dp-app .dp-macro-hd{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+.dp-app .dp-macro-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dp-gold);flex:1;min-width:0;}
+.dp-app .dp-macro-all{font-family:var(--dp-ff-sans);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-w72);text-decoration:none;padding:4px 8px;border-radius:6px;transition:color .18s var(--dp-ease),background .18s var(--dp-ease);white-space:nowrap;}
+.dp-app .dp-macro-all:hover{color:var(--dp-gold);background:var(--dp-gold-08);}
 .dp-app .dp-macro-note{font-family:var(--dp-ff-sans);font-size:13px;font-weight:600;color:var(--dp-w72);}
 /* Legend — a tiny "● High impact" chip in the macro header so the red
    dots down the list are readable at first glance instead of ominous. */
