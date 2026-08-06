@@ -12,18 +12,24 @@ type CellV  = 'check' | 'cross' | 'dash' | string; // string = literal display v
 
 // ─── Plan data ────────────────────────────────────────────────────────────────
 
+// Four plans laid out left-to-right: Free / Starter / Pro (featured) / Deluxe.
+// Pro sits in the middle so it reads as "the smart center", not "the top
+// price". Starter is deliberately narrow in feature-copy: it's the smallest
+// paid step so it's easy to say yes to. The value-per-shekel step FROM
+// Starter TO Pro (49→99 for a whole new tier of AI Analytics) is what does
+// the actual selling — the copy on the Pro card leans into that.
 const PLANS = [
   {
-    key: 'basic', featured: false,
+    key: 'free', featured: false,
     tag:      { he: 'היכרות',           en: 'Introduction'          } as BiStr,
-    name:     { he: 'BASIC',            en: 'BASIC'                 } as BiStr,
+    name:     { he: 'FREE',             en: 'FREE'                  } as BiStr,
     amt:      { he: 'חינם',             en: 'Free'                  } as BiStr,
     amtColor: 'var(--bull-t)',
     unit:     null as BiStr | null,
     features: [
       { text: { he: 'חשבון חינמי להיכרות עם המערכת',          en: 'Free account to explore the system'            } as BiStr, on: true  },
       { text: { he: 'דאשבורד, יומן מסחר, סטאפים וחוקים — גישה מלאה', en: 'Dashboard, trade journal, setups & rules — full access' } as BiStr, on: true  },
-      { text: { he: 'ללא ניתוח AI ביומן, סטטיסטיקות או מאמן AI', en: 'No AI journal analysis, statistics or AI coach' } as BiStr, on: false },
+      { text: { he: 'ללא ניתוח AI, אנליטיקס או מאמן AI',       en: 'No AI insights, analytics or coach'            } as BiStr, on: false },
     ],
     cta:      { he: 'התחל בחינם',               en: 'Get Started Free'       } as BiStr,
     href:     '/sign-up',
@@ -31,17 +37,35 @@ const PLANS = [
     fine:     { he: 'ללא כרטיס אשראי',          en: 'No credit card required' } as BiStr,
   },
   {
-    key: 'pro', featured: true,
-    tag:      { he: 'לסוחר הפעיל',      en: 'For the Active Trader' } as BiStr,
-    name:     { he: 'PRO',              en: 'PRO'                   } as BiStr,
-    amt:      { he: '99',               en: '99'                    } as BiStr,
+    key: 'starter', featured: false,
+    tag:      { he: 'הצעד הראשון',       en: 'First Step'            } as BiStr,
+    name:     { he: 'STARTER',          en: 'STARTER'               } as BiStr,
+    amt:      { he: '49',               en: '49'                    } as BiStr,
     amtColor: '#fff',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'כל מה שיש ב-BASIC',                          en: 'Everything in BASIC'                          } as BiStr, on: true  },
-      { text: { he: 'ניתוח AI אוטומטי על ביצועי היומן שלך',        en: 'Automatic AI analysis of your journal'        } as BiStr, on: true  },
-      { text: { he: 'ללא עמוד הסטטיסטיקה והאנליטיקס',             en: 'No statistics & analytics page'               } as BiStr, on: false },
-      { text: { he: 'ללא מאמן ה-AI',                              en: 'No AI coach'                                  } as BiStr, on: false },
+      { text: { he: 'כל מה שיש ב-FREE',                             en: 'Everything in FREE'                           } as BiStr, on: true  },
+      { text: { he: 'פאנל AI Insight נפתח ביומן — תובנה לכל עסקה', en: 'AI Insight panel unlocked — one takeaway per trade' } as BiStr, on: true  },
+      { text: { he: 'ללא עמוד ה-AI Analytics',                     en: 'No AI Analytics page'                         } as BiStr, on: false },
+      { text: { he: 'ללא המאמן האישי',                              en: 'No AI Coach'                                  } as BiStr, on: false },
+    ],
+    cta:      { he: 'הצטרף ל-STARTER',          en: 'Join STARTER'          } as BiStr,
+    href:     '/checkout?plan=starter',
+    ctaGold:  false,
+    fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
+  },
+  {
+    key: 'pro', featured: true,
+    tag:      { he: 'מרוויח בערך פי שניים ב-50 ₪ בלבד יותר', en: 'Twice the value for ₪50 more' } as BiStr,
+    name:     { he: 'PRO',              en: 'PRO'                   } as BiStr,
+    amt:      { he: '99',               en: '99'                    } as BiStr,
+    amtColor: 'var(--gold)',
+    unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
+    features: [
+      { text: { he: 'כל מה שיש ב-STARTER',                         en: 'Everything in STARTER'                        } as BiStr, on: true  },
+      { text: { he: 'עמוד ה-AI Analytics המלא נפתח',               en: 'Full AI Analytics page unlocked'              } as BiStr, on: true  },
+      { text: { he: 'זיהוי דפוסים חוזרים + סימולטור תרחישים + דוח שבועי', en: 'Pattern memory + what-if simulator + weekly report' } as BiStr, on: true  },
+      { text: { he: 'ללא המאמן האישי',                              en: 'No AI Coach'                                  } as BiStr, on: false },
     ],
     cta:      { he: 'הצטרף ל-PRO',              en: 'Join PRO'              } as BiStr,
     href:     '/checkout?plan=pro',
@@ -56,11 +80,10 @@ const PLANS = [
     amtColor: '#fff',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'כל מה שיש ב-PRO — בלי שום הגבלה',           en: 'Everything in PRO — with no limits'           } as BiStr, on: true  },
-      { text: { he: 'עמוד הסטטיסטיקה והאנליטיקס המלא',            en: 'Full statistics & analytics page'             } as BiStr, on: true  },
-      { text: { he: 'מאמן ה-AI ואנליטיקת ה-AI',                  en: 'AI coach & AI analytics'                      } as BiStr, on: true  },
-      { text: { he: 'כל הפיצ׳רים פתוחים, נוכחיים ועתידיים',       en: 'All features open, current and future'        } as BiStr, on: true  },
-      { text: { he: 'תמיכה מועדפת ועדיפות בעדכונים',              en: 'Priority support & update priority'           } as BiStr, on: true  },
+      { text: { he: 'כל מה שיש ב-PRO',                              en: 'Everything in PRO'                            } as BiStr, on: true  },
+      { text: { he: 'המאמן האישי נפתח — שיחה שקוראת את היומן שלך', en: 'Personal AI Coach unlocked — chat that reads your journal' } as BiStr, on: true  },
+      { text: { he: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר',     en: 'Coach chat history saved per trader'          } as BiStr, on: true  },
+      { text: { he: 'עדיפות בעדכונים ובפיצ׳רים חדשים',             en: 'Priority on updates & new features'           } as BiStr, on: true  },
     ],
     cta:      { he: 'הצטרף ל-DELUXE',           en: 'Join DELUXE'           } as BiStr,
     href:     '/checkout?plan=deluxe',
@@ -71,16 +94,18 @@ const PLANS = [
 
 // ─── Comparison table rows ────────────────────────────────────────────────────
 
-type TableRow = { feat: BiStr; b: CellV; p: CellV; d: CellV };
+// f=Free, s=Starter, p=Pro, d=Deluxe (single-letter column keys keep the
+// table rendering loop compact).
+type TableRow = { feat: BiStr; f: CellV; s: CellV; p: CellV; d: CellV };
 
 const TABLE_ROWS: TableRow[] = [
-  { feat: { he: 'טעימה מהביצועים הציבוריים',         en: 'Public performance preview'     }, b: 'check', p: 'check', d: 'check'   },
-  { feat: { he: 'גישה לדאשבורד',                     en: 'Dashboard access'               }, b: 'dash',  p: 'check', d: 'check'   }, // basic cell overridden to "taste" per lang
-  { feat: { he: 'יומן מסחר, סטאפים וחוקים',          en: 'Trade journal, setups & rules'  }, b: 'check', p: 'check', d: 'check'   },
-  { feat: { he: 'ניתוח AI על עסקאות היומן',          en: 'AI analysis of journal trades'  }, b: 'cross', p: 'check', d: 'check'   },
-  { feat: { he: 'עמוד סטטיסטיקה ואנליטיקס',         en: 'Statistics & analytics'         }, b: 'cross', p: 'cross', d: 'check'   },
-  { feat: { he: 'מאמן AI ואנליטיקת AI',              en: 'AI coach & analytics'           }, b: 'cross', p: 'cross', d: 'check'   },
-  { feat: { he: 'תמיכה',                             en: 'Support'                        }, b: '—',     p: '—',     d: '—'       }, // overridden per lang below
+  { feat: { he: 'דאשבורד, יומן מסחר, סטאפים וחוקים', en: 'Dashboard, journal, setups & rules' }, f: 'check', s: 'check', p: 'check', d: 'check' },
+  { feat: { he: 'מחברת סוחר וסנכרון מכשירים',        en: 'Trader notebook & device sync'  }, f: 'check', s: 'check', p: 'check', d: 'check' },
+  { feat: { he: 'AI Insight ביומן (תובנה לכל עסקה)', en: 'AI Insight in journal (per-trade takeaway)' }, f: 'cross', s: 'check', p: 'check', d: 'check' },
+  { feat: { he: 'עמוד AI Analytics המלא',            en: 'Full AI Analytics page'         }, f: 'cross', s: 'cross', p: 'check', d: 'check' },
+  { feat: { he: 'זיהוי דפוסים + סימולטור + דוח שבועי + ארכיון', en: 'Patterns + simulator + weekly report & archive' }, f: 'cross', s: 'cross', p: 'check', d: 'check' },
+  { feat: { he: 'המאמן האישי (שיחה שקוראת את היומן)', en: 'Personal AI Coach (chat reads your journal)' }, f: 'cross', s: 'cross', p: 'cross', d: 'check' },
+  { feat: { he: 'תמיכה',                             en: 'Support'                        }, f: '—',     s: '—',     p: '—',     d: '—'     }, // overridden per lang below
 ];
 
 // ─── I18N ─────────────────────────────────────────────────────────────────────
@@ -102,36 +127,36 @@ const I18N = {
   tbl_h2:     { he: 'השוואה מלאה',   en: 'Full Comparison' },
   tbl_sub:    { he: 'בדיוק מה מקבלים בכל מסלול', en: 'Exactly what you get in each plan' },
   tbl_col0:   { he: 'פיצ׳ר',          en: 'Feature'          },
-  // dashboard row — basic gets a "taste"
-  r_dash_b: { he: 'טעימה', en: 'Taste' },
-  // support row text
-  r7_b: { he: 'בסיסית',         en: 'Basic'          },
+  // Support row per-lang labels — four tiers, four levels of support.
+  r7_f: { he: 'קהילתית',         en: 'Community'      },
+  r7_s: { he: 'בסיסית',         en: 'Basic'          },
   r7_p: { he: 'מהירה',           en: 'Fast'           },
   r7_d: { he: 'מועדפת · VIP',   en: 'Priority · VIP' },
 
-  // FAQ
+  // FAQ — the central question is now Starter vs Pro (the value-jump
+  // between them is what actually drives revenue).
   faq_kicker: { he: 'שאלות נפוצות',   en: 'FAQ' },
   faq_h2:     { he: 'שאלות נפוצות',   en: 'Frequently Asked Questions' },
   faq_sub:    { he: 'מה שכדאי לדעת לפני שמצטרפים', en: 'What you should know before joining' },
-  faq_q1: { he: 'מה ההבדל המרכזי בין PRO ל-DELUXE?', en: 'What\'s the main difference between PRO and DELUXE?' },
+  faq_q1: { he: 'מה ההבדל בין STARTER ל-PRO?', en: 'What\'s the difference between STARTER and PRO?' },
   faq_a1: {
-    he: 'כבר ב-BASIC החינמי יש לך גישה מלאה לדאשבורד, ליומן המסחר, לסטאפים ולחוקים — כל מה שצריך כדי לתעד ולנהל את המסחר. ב-PRO מתווסף ניתוח AI אוטומטי על העסקאות שבתיעדת ביומן. ב-DELUXE נפתח גם עמוד הסטטיסטיקה והאנליטיקס, אנליטיקת ה-AI ומאמן ה-AI — כלומר כל שכבת הבינה של המערכת.',
-    en: 'Even the free BASIC plan gives you full access to the dashboard, the trade journal, setups and rules — everything you need to log and manage your trading. PRO adds automatic AI analysis of the trades you log in your journal. DELUXE opens up the statistics & analytics page, AI analytics and the AI coach too — the entire intelligence layer of the system.',
+    he: 'STARTER (49 ₪) פותח את פאנל ה-AI Insight ביומן — תובנה קצרה שהמערכת מוציאה על כל עסקה שתיעדת. PRO (99 ₪) לוקח את זה שלב הלאה: כל עמוד ה-AI Analytics המלא נפתח — זיהוי דפוסים חוזרים, סימולטור תרחישים ("מה היה קורה אם רק סחרתי בסשן NY?"), דוח שבועי מלא עם ארכיון היסטורי. בגלל שההפרש הוא 50 ₪ בלבד תמורת שכבה שלמה של יכולות, PRO יוצא כמעט תמיד המסלול המשתלם ביותר.',
+    en: 'STARTER (₪49) opens the AI Insight panel in the journal — a short takeaway the system generates on every trade you log. PRO (₪99) takes it a full layer further: the entire AI Analytics page unlocks — recurring pattern detection, a what-if simulator ("what if I only traded the NY session?"), a full weekly report with historical archive. Because the gap is only ₪50 for a whole new tier of capability, PRO almost always ends up being the highest-value plan.',
   },
-  faq_q2: { he: 'אפשר לשדרג מ-PRO ל-DELUXE באמצע?', en: 'Can I upgrade from PRO to DELUXE mid-cycle?' },
+  faq_q2: { he: 'ואז מתי בכלל לעבור ל-DELUXE?', en: 'So when does DELUXE make sense?' },
   faq_a2: {
-    he: 'בהחלט. השדרוג מיידי — ברגע שתעבור ל-DELUXE כל ההגבלות נפתחות, ותחויב רק על ההפרש היחסי עד סוף החודש.',
-    en: 'Absolutely. The upgrade is immediate — the moment you switch to DELUXE all limits open up, and you\'re only charged the prorated difference until month end.',
+    he: 'DELUXE (199 ₪) מוסיף מעל ה-PRO את המאמן האישי — שיחה שקוראת את היומן שלך בזמן אמת ועונה על שאלות מסחר בהתבסס על הנתונים והמושגים האמיתיים שלך. אם אתה מרגיש שאתה צריך שותף לחשיבה שיודע את היומן שלך על בוריו — DELUXE הוא הבחירה. אחרת PRO מספיק בהחלט.',
+    en: 'DELUXE (₪199) adds the personal AI Coach on top of everything PRO has — a chat that reads your journal live and answers trading questions grounded in your actual data and concepts. If you feel you need a thinking partner that knows your journal inside out — DELUXE is the pick. Otherwise PRO is more than enough.',
   },
-  faq_q3: { he: 'יש התחייבות לתקופה?', en: 'Is there a commitment period?' },
+  faq_q3: { he: 'יש התחייבות? אפשר לשדרג/לבטל?', en: 'Any commitment? Can I upgrade or cancel?' },
   faq_a3: {
-    he: 'אין. כל המסלולים בתשלום חודשי וניתנים לביטול בכל רגע. אם ביטלת — תישאר עם הגישה עד סוף החודש ששולם.',
-    en: 'None. All plans are monthly and cancellable at any moment. If you cancel — you keep access until the end of the paid month.',
+    he: 'אין התחייבות. כל המסלולים בתשלום חודשי, ניתנים לביטול בכל רגע, ומשדרגים בין המסלולים באמצע חודש בפרו־רייטה. אם ביטלת — תישאר עם הגישה עד סוף החודש ששולם.',
+    en: 'No commitment. All plans are monthly, cancellable anytime, and upgrades between tiers mid-cycle are prorated. If you cancel — you keep access until the end of the paid month.',
   },
   faq_q4: { he: 'מה כולל החשבון החינמי?', en: 'What does the free account include?' },
   faq_a4: {
-    he: 'BASIC נותן לך גישה מלאה וחינמית לדאשבורד, ליומן המסחר, לסטאפים ולחוקים. מה שנשאר לתשלום זו שכבת הבינה המלאכותית: ניתוח AI אוטומטי על היומן ב-PRO, ועמוד הסטטיסטיקה, אנליטיקת ה-AI ומאמן ה-AI ב-DELUXE.',
-    en: 'BASIC gives you full, free access to the dashboard, the trade journal, setups and rules. What stays paid is the AI intelligence layer: automatic AI journal analysis on PRO, and the statistics page, AI analytics and the AI coach on DELUXE.',
+    he: 'FREE נותן לך גישה מלאה וחינמית לדאשבורד, ליומן המסחר, למחברת, לסטאפים ולחוקים. מה שנשאר לתשלום זו שכבת ה-AI: תובנה אישית ליומן ב-STARTER, אנליטיקס מלא ב-PRO, ומאמן אישי ב-DELUXE.',
+    en: 'FREE gives you full, free access to the dashboard, the trade journal, the notebook, setups and rules. What stays paid is the AI layer: per-trade insights on STARTER, full analytics on PRO, and the personal coach on DELUXE.',
   },
 
   // CTA
@@ -141,8 +166,8 @@ const I18N = {
     en: 'Stop guessing.<br>Start trading the <span style="color:var(--gold)">model.</span>',
   },
   cta_body: {
-    he: 'הצטרף עכשיו, והמסוף נפתח לך מיד. אפשר להתחיל ב-PRO ולשדרג מתי שתרצה — או לקפוץ ישר ל-DELUXE בלי תקרות.',
-    en: 'Join now and the terminal opens for you immediately. Start with PRO and upgrade whenever you want — or jump straight to DELUXE with no limits.',
+    he: 'הצטרף עכשיו, והמסוף נפתח לך מיד. הרוב מתחיל ב-PRO — היחס ערך/מחיר הכי טוב בסולם. תמיד אפשר לשדרג ל-DELUXE (או להתחיל קטן עם STARTER) בהמשך.',
+    en: 'Join now and the terminal opens immediately. Most people start on PRO — the best value on the ladder. You can always upgrade to DELUXE later (or start small with STARTER).',
   },
   cta_pro:    { he: 'הצטרף ל-PRO →',   en: 'Join PRO →'        },
   cta_deluxe: { he: 'שדרג ל-DELUXE',    en: 'Upgrade to DELUXE' },
@@ -257,7 +282,7 @@ function PlanCards({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; lang: 
   return (
     <section className="border-t border-[var(--border)]">
       <div className="wrap" style={{ paddingTop: 80, paddingBottom: 96 }}>
-        <div className="grid grid-cols-1 lg:grid-cols-3" style={{ gap: 22, alignItems: 'stretch' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ gap: 18, alignItems: 'stretch' }}>
           {PLANS.map(plan => (
             <div key={plan.key} className="relative" style={{ paddingTop: plan.featured ? 22 : 0 }}>
               {/* Popular badge - floats above card */}
@@ -356,16 +381,13 @@ function PlanCards({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; lang: 
 function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; lang: Lang }) {
   const tl = (b: BiStr) => b[lang];
 
-  // Override text-only cells per lang
-  const resolveCell = (row: TableRow, col: 'b' | 'p' | 'd'): CellV => {
+  // Override text-only cells per lang. Support-row labels are the only
+  // per-lang overrides that don't fit as a raw check/cross/dash.
+  const resolveCell = (row: TableRow, col: 'f' | 's' | 'p' | 'd'): CellV => {
     const v = row[col];
-    // Dashboard row — basic is a limited "taste"
-    if (row.feat.en === 'Dashboard access' && col === 'b') {
-      return t('r_dash_b');
-    }
-    // Support row
     if (row.feat.en === 'Support') {
-      if (col === 'b') return t('r7_b');
+      if (col === 'f') return t('r7_f');
+      if (col === 's') return t('r7_s');
       if (col === 'p') return t('r7_p');
       if (col === 'd') return t('r7_d');
     }
@@ -374,7 +396,7 @@ function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; 
 
   const thStyle: React.CSSProperties = {
     fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '.14em', color: 'rgba(255,255,255,.55)', padding: '18px 20px',
+    letterSpacing: '.14em', color: 'rgba(255,255,255,.55)', padding: '18px 16px',
     textAlign: 'center', whiteSpace: 'pre-line',
   };
 
@@ -388,28 +410,26 @@ function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; 
         </Reveal>
 
         <Reveal delay={80}>
-          {/* horizontal scroll on mobile */}
+          {/* horizontal scroll on mobile — 4 columns need real width */}
           <div className="overflow-x-auto rounded-[14px] border" style={{ borderColor: 'var(--border2)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border2)' }}>
                   <th style={{ ...thStyle, textAlign: rtl ? 'right' : 'left', paddingInlineStart: 28 }}>
                     {t('tbl_col0')}
                   </th>
-                  {/* BASIC */}
-                  <th style={thStyle}>BASIC<br /><span style={{ color: 'var(--bull-t)', fontSize: 10 }}>{lang === 'he' ? 'חינם' : 'Free'}</span></th>
+                  <th style={thStyle}>FREE<br /><span style={{ color: 'var(--bull-t)', fontSize: 10 }}>{lang === 'he' ? 'חינם' : 'Free'}</span></th>
+                  <th style={thStyle}>STARTER<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '49 ₪' : '₪49'}</span></th>
                   {/* PRO — highlighted */}
                   <th style={{ ...thStyle, background: 'rgba(212,175,55,.06)', borderInline: '1px solid rgba(212,175,55,.18)' }}>
                     PRO<br /><span style={{ color: 'var(--gold)', fontSize: 10 }}>{lang === 'he' ? '99 ₪' : '₪99'}</span>
                   </th>
-                  {/* DELUXE */}
                   <th style={thStyle}>DELUXE<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '199 ₪' : '₪199'}</span></th>
                 </tr>
               </thead>
               <tbody>
                 {TABLE_ROWS.map((row, i) => (
                   <tr key={i} style={{ borderBottom: i < TABLE_ROWS.length - 1 ? '1px solid var(--border2)' : undefined }}>
-                    {/* Feature label */}
                     <td dir={rtl ? 'rtl' : 'ltr'} style={{
                       padding: '16px 20px', paddingInlineStart: 28,
                       fontFamily: 'var(--sans)', fontSize: '0.88rem', fontWeight: 500,
@@ -417,16 +437,16 @@ function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; 
                     }}>
                       {tl(row.feat)}
                     </td>
-                    {/* BASIC */}
-                    <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                      <TableCell v={resolveCell(row, 'b')} rtl={rtl} />
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
+                      <TableCell v={resolveCell(row, 'f')} rtl={rtl} />
                     </td>
-                    {/* PRO — highlighted */}
-                    <td style={{ padding: '16px 20px', textAlign: 'center', background: 'rgba(212,175,55,.04)', borderInline: '1px solid rgba(212,175,55,.12)' }}>
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
+                      <TableCell v={resolveCell(row, 's')} rtl={rtl} />
+                    </td>
+                    <td style={{ padding: '16px 16px', textAlign: 'center', background: 'rgba(212,175,55,.04)', borderInline: '1px solid rgba(212,175,55,.12)' }}>
                       <TableCell v={resolveCell(row, 'p')} rtl={rtl} />
                     </td>
-                    {/* DELUXE */}
-                    <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
                       <TableCell v={resolveCell(row, 'd')} rtl={rtl} />
                     </td>
                   </tr>

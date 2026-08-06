@@ -14,23 +14,35 @@ export interface Tier {
   badgeKey?: DictKey;
 }
 
+// Three paid tiers on the /checkout picker. Free isn't here — a Free user
+// starts at /sign-up, not the checkout. Pro is featured (visual gold frame +
+// "הכי פופולרי" badge + gold CTA), Starter and Deluxe frame it — Pro sits
+// between them so it reads as the "smart middle" not the top price.
 export const TIERS: Tier[] = [
   {
-    id: 'premium',
-    nameKey: 'tier_premium_name',
-    tagKey: 'tier_premium_tag',
-    subtitleKey: 'tier_premium_sub',
-    featureKeys: ['tier_premium_f1', 'tier_premium_f2', 'tier_premium_f3', 'tier_premium_f4'],
+    id: 'starter',
+    nameKey: 'tier_starter_name',
+    tagKey: 'tier_starter_tag',
+    subtitleKey: 'tier_starter_sub',
+    featureKeys: ['tier_starter_f1', 'tier_starter_f2', 'tier_starter_f3', 'tier_starter_f4'],
     featured: false,
+  },
+  {
+    id: 'pro',
+    nameKey: 'tier_pro_name',
+    tagKey: 'tier_pro_tag',
+    badgeKey: 'tier_pro_badge',
+    subtitleKey: 'tier_pro_sub',
+    featureKeys: ['tier_pro_f1', 'tier_pro_f2', 'tier_pro_f3', 'tier_pro_f4'],
+    featured: true,
   },
   {
     id: 'deluxe',
     nameKey: 'tier_deluxe_name',
     tagKey: 'tier_deluxe_tag',
-    badgeKey: 'tier_deluxe_badge',
     subtitleKey: 'tier_deluxe_sub',
     featureKeys: ['tier_deluxe_f1', 'tier_deluxe_f2', 'tier_deluxe_f3', 'tier_deluxe_f4'],
-    featured: true,
+    featured: false,
   },
 ];
 
@@ -49,7 +61,7 @@ export function PricingCards({
   const label = ctaLabel ?? `${t('cta_upgrade')} ←`;
 
   return (
-    <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto" dir={lang === 'he' ? 'rtl' : 'ltr'}>
+    <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto" dir={lang === 'he' ? 'rtl' : 'ltr'}>
       {TIERS.map(tier => {
         const selected = selectedId === tier.id;
         return (

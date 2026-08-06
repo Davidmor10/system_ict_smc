@@ -1,14 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { TIERS, PricingCards } from '../components/Pricing';
 import LegalDisclaimer from '../components/LegalDisclaimer';
 import { useLanguage } from '../hooks/useLanguage';
 
+/** Wrapped in Suspense because useSearchParams() forces the tree into
+    dynamic rendering under Next 16 — without the wrapper, the whole
+    checkout page CSR-bails at the marketing edge. */
 export default function CheckoutPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutInner />
+    </Suspense>
+  );
+}
+
+function CheckoutInner() {
   const { t } = useLanguage();
-  const [selected, setSelected] = useState<string>('deluxe');
+  const searchParams = useSearchParams();
+  // Pre-select from ?plan=... — the marketing /pricing page links here with
+  // ?plan=pro / ?plan=deluxe. Falls back to 'pro' (the intended default).
+  const planParam = searchParams.get('plan');
+  const initialTier = planParam && TIERS.some(t => t.id === planParam) ? planParam : 'pro';
+  const [selected, setSelected] = useState<string>(initialTier);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const tier = TIERS.find(tr => tr.id === selected) ?? TIERS[0];

@@ -23,10 +23,14 @@ export default function LockedFeature({
   title,
   description,
   children,
+  ctaLabel = 'שדרוג ל-Deluxe ←',
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  /** CTA button label — parametrized because different gated pages point at
+      different tiers now (ai-analytics → Pro, coach → Deluxe). */
+  ctaLabel?: string;
 }) {
   return (
     // `relative` is scoped to this subtree only (the route's own content pane) —
@@ -60,7 +64,7 @@ export default function LockedFeature({
             className="mt-2 px-6 py-3 rounded-sm font-mono text-xs font-bold uppercase tracking-[0.14em] transition-colors"
             style={{ background: GOLD, color: '#000', boxShadow: '0 0 36px rgba(212,175,55,0.4)' }}
           >
-            שדרוג ל-Deluxe ←
+            {ctaLabel}
           </Link>
         </div>
       </div>

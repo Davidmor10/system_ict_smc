@@ -11,6 +11,7 @@ import JournalCalendar from '../../components/JournalCalendar';
 import JournalTradeCard from '../../components/JournalTradeCard';
 import EmptyState from '../../components/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Link from 'next/link';
 
 const M_HEB = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const D_HEB = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
@@ -209,8 +210,12 @@ export default function JournalPage() {
           </div>
         )}
 
-        {/* AI Insight — a Pro+ tool; free users get the journal itself but not this */}
-        {trades.length > 0 && canAccess('pro') && <AIInsightPanel trades={trades} />}
+        {/* AI Insight — Starter+ tool. Free users see a locked card in the
+            same frame so they know the feature exists and how to unlock it. */}
+        {trades.length > 0 && (canAccess('starter')
+          ? <AIInsightPanel trades={trades} />
+          : <AIInsightLocked />
+        )}
 
         {/* Monthly P&L calendar */}
         {trades.length > 0 && (
@@ -303,6 +308,35 @@ export default function JournalPage() {
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget.id); setDeleteTarget(null); }}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+/** Locked-state twin of AIInsightPanel — same visual frame so a Free user
+    sees exactly where the panel lives once unlocked. First paid step in the
+    ladder: Starter (₪49/mo) is the CTA here on purpose. */
+function AIInsightLocked() {
+  return (
+    <div className="rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] p-6 sm:p-7 overflow-hidden relative">
+      <div className="absolute inset-0 opacity-40 pointer-events-none" style={{ background: 'radial-gradient(80% 60% at 100% 0%, rgba(212,175,55,0.10), transparent 60%)' }} />
+      <div className="relative flex items-start gap-4 flex-wrap">
+        <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center border border-[#d4af37]/40 bg-[#d4af37]/[0.08]" style={{ boxShadow: '0 0 24px -8px rgba(212,175,55,0.4)' }}>
+          <span className="text-[#d4af37] text-[18px]">✦</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-[10.5px] font-bold tracking-[0.24em] uppercase text-[#d4af37] mb-2">AI INSIGHT · נעול</div>
+          <h3 style={{ fontFamily: 'var(--serif)' }} className="text-[20px] font-bold text-white leading-tight m-0">התובנה שהמערכת רואה על היומן שלך</h3>
+          <p className="mt-2 text-[14px] text-white/60 leading-relaxed max-w-[560px]">
+            אחרי כל עסקה שמוסיפים, המערכת מריצה ניתוח קצר על התבנית שמתגלה — מה עובד לך, איפה יש דלף, ומה כדאי לשים לב אליו בעסקה הבאה. פתוח החל ממנוי <span className="text-[#d4af37] font-bold">Starter</span> (₪49/חודש).
+          </p>
+        </div>
+        <Link
+          href="/checkout"
+          className="shrink-0 self-center py-2.5 px-5 rounded-sm font-mono text-[11px] font-bold uppercase tracking-[0.14em] bg-[#d4af37] text-black hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.35)]"
+        >
+          שדרוג ל-Starter ←
+        </Link>
+      </div>
     </div>
   );
 }

@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 
-  const { tier } = await req.json().catch(() => ({ tier: 'deluxe' }));
+  const { tier } = await req.json().catch(() => ({ tier: 'pro' }));
   const price = priceIdForTier(tier);
   if (!price) {
     return NextResponse.json({ error: `No price configured for tier "${tier}"` }, { status: 400 });

@@ -2,8 +2,8 @@
 
 import { createContext, useContext } from 'react';
 
-export type Role = 'free' | 'pro' | 'deluxe';
-const RANK: Record<Role, number> = { free: 0, pro: 1, deluxe: 2 };
+export type Role = 'free' | 'starter' | 'pro' | 'deluxe';
+const RANK: Record<Role, number> = { free: 0, starter: 1, pro: 2, deluxe: 3 };
 
 const PlanCtx = createContext<Role>('free');
 

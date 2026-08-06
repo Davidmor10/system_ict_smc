@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   // AI-analytics surface — Deluxe only, enforced at the API as well.
-  const denied = await requirePlanApi('deluxe', '/api/ai/pattern-insights');
+  // Rendered on /dashboard/ai-analytics, which is now Pro+ (was Deluxe).
+  const denied = await requirePlanApi('pro', '/api/ai/pattern-insights');
   if (denied) return denied;
 
   try {

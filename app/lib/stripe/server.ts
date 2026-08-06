@@ -19,10 +19,13 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-// Both paid tiers grant the binary 'pro' role; the tier only picks the price.
+// Three paid tiers, three distinct Stripe price IDs. Each tier maps to its
+// own role in the webhook (starter/pro/deluxe). Prices are wired per env
+// var — see .env.example for the mapping.
 const PRICE_BY_TIER: Record<string, string | undefined> = {
-  premium: process.env.STRIPE_PRICE_PREMIUM,
-  deluxe: process.env.STRIPE_PRICE_DELUXE,
+  starter: process.env.STRIPE_PRICE_STARTER,   // ₪49/mo — unlocks AI Insight
+  pro:     process.env.STRIPE_PRICE_PRO,       // ₪99/mo — adds AI Analytics
+  deluxe:  process.env.STRIPE_PRICE_DELUXE,    // ₪199/mo — adds the AI Coach
 };
 
 export function priceIdForTier(tier: string): string | undefined {

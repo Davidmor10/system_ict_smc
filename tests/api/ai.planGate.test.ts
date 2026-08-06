@@ -55,6 +55,7 @@ function post(body: unknown = { lang: 'he' }) {
 function seedProfiles() {
   fakeDb.seed('profiles', [
     { clerk_id: 'user_free', role: 'free' },
+    { clerk_id: 'user_starter', role: 'starter' },
     { clerk_id: 'user_pro', role: 'pro' },
     { clerk_id: 'user_deluxe', role: 'deluxe' },
   ]);
@@ -86,10 +87,11 @@ describe('AI APIs — free plan is rejected with 403 on every paid surface', () 
     expect((await coachChatByIdRoute.DELETE(new Request('http://x'), params)).status).toBe(403);
   });
 
-  it('POST /api/ai/insights → 403 (pro surface)', async () => {
+  it('POST /api/ai/insights → 403 (starter+ surface)', async () => {
     const res = await insightsRoute.POST(post() as never);
     expect(res.status).toBe(403);
-    expect((await res.json()).requiredPlan).toBe('pro');
+    // AI Insight is the first paid step — gated at 'starter', not 'pro'.
+    expect((await res.json()).requiredPlan).toBe('starter');
   });
 
   it('POST /api/ai/pattern-insights → 403', async () => {
@@ -103,7 +105,8 @@ describe('AI APIs — free plan is rejected with 403 on every paid surface', () 
   it('POST /api/ai/strengths → 403', async () => {
     const res = await strengthsRoute.POST(post() as never);
     expect(res.status).toBe(403);
-    expect((await res.json()).requiredPlan).toBe('deluxe');
+    // Rendered on ai-analytics, which is now Pro+ (was Deluxe).
+    expect((await res.json()).requiredPlan).toBe('pro');
   });
 
   it('POST /api/ai/discovery → 403 (the dashboard "AI insight of the day" card)', async () => {
@@ -147,9 +150,25 @@ describe('AI APIs — a sufficient plan passes the gate', () => {
     expect((await res.json()).strengths).toEqual([]);
   });
 
-  it('pro user is still below the deluxe strengths surface (403)', async () => {
+  it('starter user PASSES the insights gate (starter is the first paid step)', async () => {
+    currentUserId = 'user_starter';
+    const res = await insightsRoute.POST(post() as never);
+    expect(res.status).not.toBe(403);
+  });
+
+  it('starter user is still BELOW the ai-analytics tier (strengths → 403)', async () => {
+    currentUserId = 'user_starter';
+    const res = await strengthsRoute.POST(post() as never);
+    expect(res.status).toBe(403);
+    expect((await res.json()).requiredPlan).toBe('pro');
+  });
+
+  it('pro user PASSES the strengths gate (it is a pro surface now, not deluxe)', async () => {
+    // Under the four-tier model the AI Analytics page (and every API it
+    // renders — strengths, patterns, weekly report) is Pro-tier, not
+    // Deluxe. Only the Coach stays Deluxe-only.
     currentUserId = 'user_pro';
-    expect((await strengthsRoute.POST(post() as never)).status).toBe(403);
+    expect((await strengthsRoute.POST(post() as never)).status).not.toBe(403);
   });
 
   it('deluxe user passes the discovery gate (not 403)', async () => {

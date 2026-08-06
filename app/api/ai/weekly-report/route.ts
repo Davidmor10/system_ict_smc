@@ -18,8 +18,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 
-  // AI-analytics surface — Deluxe only, enforced at the API as well.
-  const denied = await requirePlanApi('deluxe', '/api/ai/weekly-report');
+  // AI-analytics surface — Pro+ (the whole /dashboard/ai-analytics page is
+  // now Pro-tier), enforced at the API as well.
+  const denied = await requirePlanApi('pro', '/api/ai/weekly-report');
   if (denied) return denied;
 
   try {

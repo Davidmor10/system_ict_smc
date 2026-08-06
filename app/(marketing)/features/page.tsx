@@ -75,11 +75,11 @@ const I18N = {
   p3_t2_r:    { he: '−1.0R',                   en: '−1.0R' },
 
   // ROW 4 — Analytics (DELUXE)
-  r4_tag:  { he: 'תובנות · DELUXE', en: 'Insights · DELUXE' },
+  r4_tag:  { he: 'תובנות · PRO',    en: 'Insights · PRO'    },
   r4_h3:   { he: 'סטטיסטיקות ואנליטיקס', en: 'Statistics & Analytics' },
   r4_lead: {
-    he: 'כאן הדאטה שלך הופך לקצה. המערכת חותכת את אחוזי ההצלחה לפי סשן, סוג סטאפ, יישור מול הביאס ויום בשבוע — ומראה שחור על גבי לבן אילו מודלים מרוויחים לך כסף ואילו רק שורפים. (זמין במסלול DELUXE.)',
-    en: 'This is where your data becomes an edge. The system breaks down win rates by session, setup type, bias alignment, and day of week — showing you in black and white which models actually make money and which only burn it. (Available on DELUXE plan.)',
+    he: 'כאן הדאטה שלך הופך לקצה. המערכת חותכת את אחוזי ההצלחה לפי סשן, סוג סטאפ, יישור מול הביאס ויום בשבוע — ומראה שחור על גבי לבן אילו מודלים מרוויחים לך כסף ואילו רק שורפים. (זמין במסלול PRO ומעלה.)',
+    en: 'This is where your data becomes an edge. The system breaks down win rates by session, setup type, bias alignment, and day of week — showing you in black and white which models actually make money and which only burn it. (Available on PRO and above.)',
   },
   r4_b1: { he: 'ווין רייט לפי סשן · סטאפ · יום', en: 'Win rate by session · setup · day' },
   r4_b2: { he: 'אילו מודלים הכי עובדים לך',       en: 'Which models perform best for you' },
@@ -105,7 +105,7 @@ const I18N = {
   },
   cta_gold:    { he: 'לרכישת מנוי ←',          en: 'Subscribe →' },
   cta_ghost:   { he: 'הכר את המנוע',            en: 'Explore the Engine' },
-  cta_lock:    { he: 'חלק מהפיצ׳רים נפתחים רק ב-DELUXE · ביטול בכל עת', en: 'Some features available on DELUXE only · Cancel anytime' },
+  cta_lock:    { he: 'AI Analytics נפתח ב-PRO · המאמן האישי ב-DELUXE · ביטול בכל עת', en: 'AI Analytics unlocks on PRO · Personal Coach on DELUXE · Cancel anytime' },
 } as const;
 
 type K = keyof typeof I18N;
@@ -363,7 +363,7 @@ function JournalPanel({ t }: { t: (k: K) => string }) {
 function AnalyticsPanel({ t }: { t: (k: K) => string }) {
   return (
     <Panel>
-      <PanelHeader title={t('p4_title')} badge="DELUXE" />
+      <PanelHeader title={t('p4_title')} badge="PRO" />
       <div className="p-5 space-y-3">
         {/* Top metrics */}
         <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--border2)' }}>

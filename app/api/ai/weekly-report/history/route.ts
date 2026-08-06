@@ -26,7 +26,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
-  const denied = await requirePlanApi('deluxe', '/api/ai/weekly-report/history');
+  const denied = await requirePlanApi('pro', '/api/ai/weekly-report/history');
   if (denied) return denied;
 
   if (!isSupabaseConfigured()) return NextResponse.json({ reports: [] });

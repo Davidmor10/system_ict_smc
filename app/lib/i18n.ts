@@ -161,22 +161,50 @@ export const DICT = {
   cta_upgrade:          { en: 'Subscribe & Upgrade the System', he: 'לרכישת מנוי ושדרוג המערכת' },
   dock_sub:             { en: 'Upgrade · Onyx Trading',   he: 'שדרוג · Onyx Trading'          },
 
-  // ── Pricing tiers ────────────────────────────────────────────────
-  tier_premium_name:    { en: 'PREMIUM Plan',             he: 'מנוי PREMIUM'                  },
-  tier_premium_tag:     { en: 'Full Trading Access',      he: 'גישת מסחר מלאה'                },
-  tier_premium_sub:     { en: 'Everything you need to trade live.', he: 'כל הכלים שאתה צריך בשביל לסחור בלייב.' },
-  tier_premium_f1:      { en: 'Central trading dashboard', he: 'דשבורד המסחר המרכזי'           },
-  tier_premium_f2:      { en: 'Live ES & NQ futures chart sync', he: 'סינכרון גרפים חי של חוזי ES ו-NQ' },
-  tier_premium_f3:      { en: 'Built-in CME risk manager', he: 'מחשבון ניהול סיכונים CME מובנה' },
-  tier_premium_f4:      { en: 'Real-time macro news panel', he: 'פאנל חדשות מאקרו בזמן אמת'     },
-  tier_deluxe_name:     { en: 'DELUXE Plan',              he: 'מנוי DELUXE'                   },
-  tier_deluxe_tag:      { en: "The Professionals' Suite", he: 'חבילת המקצוענים'               },
-  tier_deluxe_badge:    { en: "Professionals' Choice",    he: 'הבחירה של המקצוענים'           },
-  tier_deluxe_sub:      { en: 'The most complete and advanced version of the system.', he: 'הגרסה המלאה והמתקדמת ביותר של המערכת.' },
-  tier_deluxe_f1:       { en: 'All Premium plan capabilities', he: 'כל יכולות מנוי ה-Premium'  },
-  tier_deluxe_f2:       { en: 'Exclusive access to the Analytics screen', he: 'גישה בלעדית למסך הניתוחים' },
-  tier_deluxe_f3:       { en: 'Digital trading journal for logging trades', he: 'יומן המסחר הדיגיטלי לתיעוד עסקאות' },
-  tier_deluxe_f4:       { en: 'Essential performance metrics bar (StatsBar)', he: 'שורת מדדי הביצוע החיוניים (StatsBar)' },
+  // ── Pricing tiers — three paid steps on the checkout ────────────
+  // STARTER — the first paid step. Kept small & narrow on purpose so it's
+  // the least psychological barrier to convert Free → paid.
+  tier_starter_name:    { en: 'STARTER',                  he: 'STARTER'                       },
+  tier_starter_tag:     { en: '₪49 / month',              he: '49 ש״ח / חודש'                 },
+  tier_starter_sub:     { en: 'The AI reads your journal after every trade — one paragraph, one takeaway.',
+                          he: 'תובנת ה-AI על העסקאות שתיעדת ביומן — פסקה אחת, מסקנה אחת.'      },
+  tier_starter_f1:      { en: 'Everything Free has',      he: 'כל מה שיש ב-Free'              },
+  tier_starter_f2:      { en: 'AI Insight panel unlocked in the journal',
+                          he: 'פאנל AI Insight נפתח ביומן'                                    },
+  tier_starter_f3:      { en: 'Cross-device sync of your rules, setups & preferences',
+                          he: 'סנכרון חוצה־מכשירים של החוקים, הסטאפים וההעדפות'                },
+  tier_starter_f4:      { en: 'Cancel anytime, no commitment',
+                          he: 'ביטול בכל רגע, ללא התחייבות'                                    },
+
+  // PRO — the intended default. Feature-highlighted; the price nearly
+  // doubles from Starter (49 → 99) but the value jumps by a whole layer
+  // of AI analytics, so this reads as the "smart deal".
+  tier_pro_name:        { en: 'PRO',                      he: 'PRO'                           },
+  tier_pro_tag:         { en: '₪99 / month',              he: '99 ש״ח / חודש'                 },
+  tier_pro_badge:       { en: 'Most Popular',             he: 'הכי פופולרי'                   },
+  tier_pro_sub:         { en: 'The full AI Analytics page — patterns, what-if simulator, weekly report. The step where the data becomes an edge.',
+                          he: 'עמוד ה-AI Analytics המלא — דפוסים, סימולטור תרחישים, דוח שבועי. השלב שבו הדאטה הופך ליתרון.' },
+  tier_pro_f1:          { en: 'Everything Starter has',   he: 'כל מה שיש ב-Starter'           },
+  tier_pro_f2:          { en: 'Full /dashboard/ai-analytics page unlocked',
+                          he: 'עמוד /dashboard/ai-analytics נפתח במלואו'                       },
+  tier_pro_f3:          { en: 'Pattern memory, recurring-habit detection, weekly report + archive',
+                          he: 'זיכרון דפוסים, זיהוי הרגלים חוזרים, דוח שבועי + ארכיון'         },
+  tier_pro_f4:          { en: 'What-if simulator: how your P&L would look filtered by any condition',
+                          he: 'סימולטור תרחישים: איך ה-P&L שלך נראה מסונן לפי כל תנאי'         },
+
+  // DELUXE — everything Pro has, plus the personal AI coach.
+  tier_deluxe_name:     { en: 'DELUXE',                   he: 'DELUXE'                        },
+  tier_deluxe_tag:      { en: '₪199 / month',             he: '199 ש״ח / חודש'                },
+  tier_deluxe_sub:      { en: 'Everything Pro has, plus the personal AI coach that reads your journal and holds a real conversation.',
+                          he: 'כל מה שיש ב-Pro, בתוספת המאמן האישי — קורא את היומן שלך ומדבר איתך על באמת.' },
+  tier_deluxe_f1:       { en: 'Everything Pro has',       he: 'כל מה שיש ב-Pro'               },
+  tier_deluxe_f2:       { en: 'Personal AI Coach — chat that reads your live journal',
+                          he: 'מאמן AI אישי — שיחה שקוראת את היומן שלך בזמן אמת'              },
+  tier_deluxe_f3:       { en: 'Coach chat history, saved per trader',
+                          he: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר'                       },
+  tier_deluxe_f4:       { en: 'Priority feature access — new tools open to Deluxe first',
+                          he: 'גישה מועדפת לפיצ׳רים חדשים — נפתחים ל-Deluxe קודם'              },
+
   card_selected:        { en: 'Selected ✓',               he: 'נבחר ✓'                        },
   card_select:          { en: 'Select Plan',              he: 'בחר מסלול'                     },
 

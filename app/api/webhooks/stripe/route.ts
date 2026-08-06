@@ -13,10 +13,14 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/s
 // Stripe statuses that still entitle paid access.
 const PAID_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing']);
 
-// The 'deluxe' tier unlocks everything; any other paid tier ('premium'/'pro')
-// grants 'pro'. Defaults to 'pro' so a paying customer is never left at 'free'.
-function roleForTier(tier: string | null | undefined): 'pro' | 'deluxe' {
-  return tier === 'deluxe' ? 'deluxe' : 'pro';
+// Three paid tiers, each mapping to its own role. Defaults to 'starter'
+// (the cheapest paid tier) if the checkout somehow committed without the
+// tier metadata — safer than 'free' (paying customer keeps *some* access)
+// and safer than 'deluxe' (never over-grant on missing data).
+function roleForTier(tier: string | null | undefined): 'starter' | 'pro' | 'deluxe' {
+  if (tier === 'deluxe') return 'deluxe';
+  if (tier === 'pro')    return 'pro';
+  return 'starter';
 }
 
 export async function POST(req: Request) {

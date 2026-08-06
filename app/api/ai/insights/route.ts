@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } });
   }
 
-  // Rendered on the journal page — Pro and up, enforced at the API as well.
-  const denied = await requirePlanApi('pro', '/api/ai/insights');
+  // Rendered on the journal page — Starter and up, enforced at the API as
+  // well so a Free user can't fetch insights by calling this endpoint directly.
+  const denied = await requirePlanApi('starter', '/api/ai/insights');
   if (denied) return denied;
 
   try {

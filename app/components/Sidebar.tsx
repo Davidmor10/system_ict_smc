@@ -13,7 +13,7 @@ const NAV: { href: string; key: DictKey; min: Role }[] = [
   { href: '/dashboard',              key: 'nav_workspace',    min: 'free'   },
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'free'   },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'free'   },
-  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'deluxe' },
+  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro'    },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe' },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free'   },
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free'   },

@@ -2,13 +2,16 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { connection } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from './supabase/server';
 
-// Three real tiers. Access is strictly ranked: deluxe ⊇ pro ⊇ free.
-//   free   — dashboard, journal, setups (playbook) and rules, all without
-//            the paid AI tools (e.g. the journal's AI insight panel)
-//   pro    — adds the AI tools embedded in those free-tier pages
-//   deluxe — everything (adds statistics, AI analytics and the AI coach)
-export type Role = 'free' | 'pro' | 'deluxe';
-export const ROLE_RANK: Record<Role, number> = { free: 0, pro: 1, deluxe: 2 };
+// Four real tiers, strictly ranked deluxe ⊇ pro ⊇ starter ⊇ free.
+//   free    — dashboard, journal, playbook, rules; NO AI Insight panel
+//   starter — same pages as free, PLUS the AI Insight panel in the journal
+//             (₪49/mo — cheap first paid step, kept minimal on purpose)
+//   pro     — everything Starter has, PLUS the /dashboard/ai-analytics page
+//             (₪99/mo — the "smart deal", where most users are meant to land)
+//   deluxe  — everything Pro has, PLUS the /dashboard/coach (personal AI
+//             coach) (₪199/mo)
+export type Role = 'free' | 'starter' | 'pro' | 'deluxe';
+export const ROLE_RANK: Record<Role, number> = { free: 0, starter: 1, pro: 2, deluxe: 3 };
 export interface UserContext { role: Role; isOwner: boolean; }
 
 // Owner emails — always granted the top tier server-side, regardless of
@@ -17,7 +20,10 @@ const OWNER_EMAILS = ['davidmor030908@gmail.com', 'davidmor030909@gmail.com'];
 
 /** Normalizes a raw stored value to a known Role, defaulting to 'free'. */
 export function normalizeRole(v: unknown): Role {
-  return v === 'deluxe' ? 'deluxe' : v === 'pro' ? 'pro' : 'free';
+  return v === 'deluxe' ? 'deluxe'
+       : v === 'pro'    ? 'pro'
+       : v === 'starter' ? 'starter'
+       : 'free';
 }
 
 // Resolve the current user's role from the `profiles` table (keyed by Clerk ID).
