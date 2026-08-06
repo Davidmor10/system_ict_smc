@@ -36,10 +36,23 @@ const STR = {
     clockLabel: 'שעון ישראל', tradesLabel: 'עסקאות', importLast: 'יבוא אחרון',
     unitLabel: 'תצוגה לפי',
     liveTag: 'חי',
+    // KPI labels — Hebrew primary. Trader-standard English abbreviations kept
+    // in parens ONLY where the abbreviation is a universal notation (P&L, R,
+    // PF). Trader jargon that reads more naturally in Hebrew stays Hebrew
+    // (ווין רייט → אחוז הצלחה; Max Drawdown → ירידה מקסימלית).
     kpi: {
-      balance: 'יתרת חשבון · P&L', pnl: 'P&L נקי', pf: 'פרופיט פקטור', win: 'ווין רייט',
-      expectancy: 'תוחלת עסקה', avgrr: 'יחס R ממוצע', streak: 'סטרייק', maxdd: 'Max Drawdown',
-      longshort: 'לונג / שורט', bestday: 'היום הכי טוב', tradesday: 'עסקאות ליום', avgwl: 'ממוצע רווח/הפסד',
+      balance: 'יתרת חשבון',
+      pnl: 'רווח נקי (P&L)',
+      pf: 'יחס רווח (PF)',
+      win: 'אחוז הצלחה',
+      expectancy: 'תוחלת עסקה',
+      avgrr: 'יחס R ממוצע',
+      streak: 'רצף מנצח',
+      maxdd: 'ירידה מקסימלית',
+      longshort: 'לונג / שורט',
+      bestday: 'היום הכי טוב',
+      tradesday: 'עסקאות ליום',
+      avgwl: 'ממוצע רווח/הפסד',
     },
     winW: 'W', winBE: 'BE', winL: 'L', streakDays: 'ימים', streakTrades: 'עסקאות',
     aiK: 'תובנת AI · יומית', aiConf: 'רמת ביטחון', aiSample: (n: number) => `מבוסס על ${n} עסקאות`,
@@ -52,6 +65,7 @@ const STR = {
     macroK: 'דוחות מאקרו · USD השפעה גבוהה', macroWeek: 'השבוע',
     macroToday: 'היום', macroEmpty: 'אין אירועים בעלי השפעה גבוהה השבוע', macroUnavailable: '…',
     macroNext: 'הבא',
+    macroLegend: 'השפעה גבוהה',
     calTitle: (m: string) => `יומן מסחר · ${m}`,
     calMonthly: 'P&L חודשי',
     calDays: (n: number) => `${n} ימי מסחר`,
@@ -65,6 +79,9 @@ const STR = {
     confirmNote: 'הפעולה משפיעה רק על התצוגה שלך — אין השפעה על נתוני המסחר.',
     confirmCancel: 'ביטול',
     confirmDelete: 'הסר',
+    calEmptyTitle: 'הלוח שלך מחכה לעסקה הראשונה',
+    calEmptyBody: 'כל יום שתסחור בו יהפוך לתא צבוע — ירוק לרווח, ורוד להפסד. חודש שלם מסתדר לו כאן ומספר סיפור.',
+    calEmptyCta: '+ הזן עסקה ראשונה',
   },
   en: {
     edit: '⊞ Customize', editOn: '✓ Save layout', brand: 'ONYX · CONTROL', settings: 'Settings',
@@ -89,6 +106,7 @@ const STR = {
     macroK: 'MACRO · USD HIGH-IMPACT', macroWeek: 'This week',
     macroToday: 'TODAY', macroEmpty: 'No high-impact events this week', macroUnavailable: '…',
     macroNext: 'NEXT',
+    macroLegend: 'High impact',
     calTitle: (m: string) => `Trade journal · ${m}`,
     calMonthly: 'Monthly P&L',
     calDays: (n: number) => `${n} trading days`,
@@ -102,6 +120,9 @@ const STR = {
     confirmNote: "This only affects your view — trade data is untouched.",
     confirmCancel: 'Cancel',
     confirmDelete: 'Remove',
+    calEmptyTitle: 'Your calendar is waiting for your first trade',
+    calEmptyBody: 'Every day you trade turns into a colored cell — green for a win, pink for a loss. A whole month fits here and tells a story.',
+    calEmptyCta: '+ Log your first trade',
   },
 } as const;
 
@@ -459,11 +480,17 @@ export default function DashboardView() {
         const wr = stats.wr ?? 0;
         const wPct = stats.decided ? (stats.wins / stats.decided) * 100 : 0;
         const bePct = stats.decided ? (stats.bes / (stats.wins + stats.losses + stats.bes || 1)) * 100 : 0;
+        // When nothing's decided yet, paint the whole ring in neutral grey.
+        // The previous formula collapsed to 100% bearish red for a
+        // just-registered account — a broken-looking first impression.
+        const gaugeBg = stats.decided
+          ? `conic-gradient(var(--dp-bull) 0 ${wPct}%, var(--dp-w10) ${wPct}% ${wPct + bePct}%, var(--dp-bear) ${wPct + bePct}% 100%)`
+          : 'conic-gradient(rgba(255,255,255,0.08) 0 100%)';
         return (
           <div key={id} className="dp-widget" data-w={id}>{editMode && <RemoveBtn id={id} />}
             <div className="dp-widget-k">{s.kpi.win}</div>
             <div className="dp-gauge">
-              <div className="dp-gauge-ring" style={{ background: `conic-gradient(var(--dp-bull) 0 ${wPct}%, var(--dp-w10) ${wPct}% ${wPct + bePct}%, var(--dp-bear) ${wPct + bePct}% 100%)` }} />
+              <div className="dp-gauge-ring" style={{ background: gaugeBg, boxShadow: stats.decided ? undefined : 'none' }} />
               <div className="dp-gauge-legend">
                 <span style={{ color: 'var(--dp-bull)' }}>{stats.wins} {s.winW}</span>
                 <span>{stats.bes} {s.winBE}</span>
@@ -623,10 +650,19 @@ export default function DashboardView() {
             </div>
           ) : (
             <div className="dp-ai">
-              <div className="dp-ai-head"><div className="dp-ai-ico">◆</div><div className="dp-ai-k">{s.aiK}</div></div>
+              <div className="dp-ai-head">
+                <div className="dp-ai-ico">◆</div>
+                <div className="dp-ai-head-text">
+                  <div className="dp-ai-k">{s.aiK}</div>
+                  {discovery?.title && <div className="dp-ai-title">{discovery.title}</div>}
+                </div>
+              </div>
               {discovery ? (
                 <>
                   <div className="dp-ai-txt" dangerouslySetInnerHTML={{ __html: discovery.evidence.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') }} />
+                  {discovery.action && (
+                    <div className="dp-ai-action"><span className="dp-ai-action-k">→</span>{discovery.action}</div>
+                  )}
                   <div className="dp-ai-foot">
                     <span className="dp-ai-conf">✓ {s.aiConf} · {discovery.confidenceLevel}</span>
                     <span className="dp-ai-note">{s.aiSample(discovery.sampleSize)}</span>
@@ -646,7 +682,7 @@ export default function DashboardView() {
           <div className="dp-panel dp-macro">
             <div className="dp-macro-hd">
               <span className="dp-macro-k">{s.macroK}</span>
-              <span className="dp-macro-note">{s.macroWeek}</span>
+              <span className="dp-macro-legend"><span className="dp-macro-legend-dot" /> {s.macroLegend}</span>
             </div>
             <div className="dp-macro-list">
               {macro == null ? (
@@ -684,11 +720,22 @@ export default function DashboardView() {
                 <div className="dp-cal-nav"><button onClick={prevMonth}>‹</button><button onClick={nextMonth}>›</button></div>
               </div>
             </div>
-            <div className="dp-cal-dows">
-              {s.dowNames.map((n, i) => <div key={i} className="dp-cal-dow">{n}</div>)}
-              <div className="dp-cal-dow wk">{s.calWeekHead}</div>
-            </div>
-            <div className="dp-cal-grid">
+            {trades.length === 0 ? (
+              /* Empty-state — friendlier than a grid of "—" cells. Uses
+                 the same panel so nothing jumps when the first trade lands. */
+              <div className="dp-cal-empty">
+                <div className="dp-cal-empty-icon">◈</div>
+                <div className="dp-cal-empty-title">{s.calEmptyTitle}</div>
+                <div className="dp-cal-empty-body">{s.calEmptyBody}</div>
+                <Link href="/dashboard/journal" className="dp-cal-empty-cta">{s.calEmptyCta}</Link>
+              </div>
+            ) : (
+              <>
+                <div className="dp-cal-dows">
+                  {s.dowNames.map((n, i) => <div key={i} className="dp-cal-dow">{n}</div>)}
+                  <div className="dp-cal-dow wk">{s.calWeekHead}</div>
+                </div>
+                <div className="dp-cal-grid">
               {calendar.rows.flatMap(row => [
                 ...row.days.map((d, i) => {
                   if (d === null) return <div key={`e${row.weekNum}-${i}`} className="dp-cal-cell empty" />;
@@ -718,7 +765,9 @@ export default function DashboardView() {
                   );
                 })(),
               ])}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

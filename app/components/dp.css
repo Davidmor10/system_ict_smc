@@ -4,9 +4,11 @@
    Ported from the trader-signed dashboard-v2 mockup.
 ══════════════════════════════════════════════════════════════════ */
 .dp-app{
+  /* Card ground lifted ~15% brighter and border shifted to a more visible
+     rgba white so tiles read as real cards, not smudges on the wall. */
   --dp-bg-0:#0c0c10; --dp-bg-1:#111016;
-  --dp-card-a:#1b1a22; --dp-card-b:#121118;
-  --dp-border:#2a2833; --dp-border-strong:#3a3745;
+  --dp-card-a:#232028; --dp-card-b:#181621;
+  --dp-border:rgba(255,255,255,.09); --dp-border-strong:rgba(255,255,255,.16);
   --dp-gold:#e6c665; --dp-gold-deep:#c99f34; --dp-gold-soft:#f2d98a;
   --dp-gold-08:rgba(230,198,101,.08); --dp-gold-15:rgba(230,198,101,.15); --dp-gold-25:rgba(230,198,101,.25); --dp-gold-30:rgba(230,198,101,.30); --dp-gold-40:rgba(230,198,101,.40);
   --dp-bull:#5fd39e; --dp-bull-deep:#2f9c74; --dp-bull-08:rgba(95,211,158,.10); --dp-bull-30:rgba(95,211,158,.34);
@@ -174,14 +176,40 @@
 .dp-app .dp-side > .dp-ai,.dp-app .dp-side > .dp-ai-locked{flex:0 0 auto;} .dp-app .dp-side > .dp-macro{flex:1;}
 .dp-app .dp-panel{background:linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));border:1px solid var(--dp-border);border-radius:14px;box-shadow:0 20px 44px -34px #000,inset 0 1px 0 rgba(255,255,255,.04);min-height:0;}
 
-.dp-app .dp-kpi-balance{grid-column:span 2;justify-content:flex-start;}
-.dp-app .dp-kpi-val{font-family:var(--dp-ff-mono);font-size:34px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,#fff,var(--dp-gold-soft));-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.015em;}
-.dp-app .dp-kpi-spark{width:100%;height:30px;margin-top:auto;}
+/* ── The P&L / balance HERO — the whole point of the dashboard.
+   Spans 2 columns AND 2 rows so it visually dominates the grid rather
+   than tying for weight with "Streak" or "Long/Short". Gold-accent
+   border, gold radial-glow background, and a value size (60px) that
+   nearly doubles a normal KPI (32px) so the eye lands on it first. ── */
+.dp-app .dp-kpi-balance{
+  grid-column:span 2; grid-row:span 2;
+  justify-content:flex-start; padding:24px 28px;
+  background:
+    radial-gradient(85% 100% at 100% 0%, rgba(230,198,101,.16), transparent 60%),
+    radial-gradient(60% 80% at 0% 100%, rgba(240,160,90,.08), transparent 60%),
+    linear-gradient(155deg, #221f2b, #17151f);
+  border:1px solid rgba(230,198,101,.30);
+  box-shadow:
+    0 30px 60px -30px #000,
+    0 0 70px -22px rgba(230,198,101,.30),
+    inset 0 1px 0 rgba(255,255,255,.05);
+}
+.dp-app .dp-kpi-balance .dp-widget-k{font-size:13px;margin-bottom:14px;}
+.dp-app .dp-kpi-val{
+  font-family:var(--dp-ff-mono);font-size:clamp(44px,4.4vw,60px);font-weight:900;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  background:linear-gradient(180deg,#fff 20%,var(--dp-gold-soft) 90%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.dp-app .dp-kpi-balance .dp-widget-sub{font-size:14px;font-weight:800;margin-top:10px;}
+.dp-app .dp-kpi-spark{width:100%;height:56px;margin-top:auto;}
 
 .dp-app .dp-widget{position:relative;overflow:hidden;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;
-  background:linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));
-  border:1px solid var(--dp-border);
-  box-shadow:0 16px 34px -30px #000,inset 0 1px 0 rgba(255,255,255,.04);
+  /* Lifted the card ground by ~15% brightness and moved the border to
+     rgba white .09 so tiles stop dissolving into the app background. */
+  background:linear-gradient(155deg,#232028,#181621);
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 16px 34px -30px #000,inset 0 1px 0 rgba(255,255,255,.05);
   transition:transform .22s var(--dp-ease),box-shadow .22s,border-color .2s;}
 .dp-app .dp-widget::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(160px 160px at var(--mx,50%) var(--my,0%),var(--dp-gold-15),transparent 70%);}
 .dp-app .dp-widget:hover::before{opacity:1;}
@@ -216,10 +244,22 @@
   border:1px solid var(--dp-gold-25);
   box-shadow:0 22px 50px -38px #000,0 0 60px -46px var(--dp-gold-40),inset 0 1px 0 rgba(255,255,255,.05);}
 .dp-app .dp-ai::before{content:"";position:absolute;top:-60px;inset-inline-start:-40px;width:200px;height:200px;background:radial-gradient(circle,var(--dp-gold-15),transparent 70%);pointer-events:none;}
-.dp-app .dp-ai-head{display:flex;align-items:center;gap:11px;position:relative;}
-.dp-app .dp-ai-ico{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px;color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));box-shadow:0 8px 20px -6px var(--dp-gold-40);}
-.dp-app .dp-ai-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dp-gold);}
-.dp-app .dp-ai-txt{position:relative;font-family:var(--dp-ff-serif);font-size:19px;line-height:1.55;color:#fff;font-weight:500;}
+.dp-app .dp-ai-head{display:flex;align-items:flex-start;gap:12px;position:relative;}
+.dp-app .dp-ai-ico{width:40px;height:40px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));box-shadow:0 8px 20px -6px var(--dp-gold-40);}
+.dp-app .dp-ai-head-text{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.dp-app .dp-ai-k{font-family:var(--dp-ff-sans);font-size:11.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--dp-gold);}
+.dp-app .dp-ai-title{font-family:var(--dp-ff-serif);font-size:17px;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.005em;}
+.dp-app .dp-ai-txt{position:relative;font-family:var(--dp-ff-serif);font-size:17px;line-height:1.55;color:var(--dp-w92);font-weight:500;}
+/* Structured "action" line — the takeaway sits just below the body copy
+   in a soft gold rail. Gives the insight a clear beginning (title) →
+   middle (evidence) → end (action) structure instead of one prose blob. */
+.dp-app .dp-ai-action{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:10px 14px;border-radius:10px;
+  background:rgba(230,198,101,.06);border:1px solid var(--dp-gold-25);
+  font-family:var(--dp-ff-sans);font-size:13px;font-weight:700;color:#fff;line-height:1.55;
+}
+.dp-app .dp-ai-action-k{color:var(--dp-gold);font-weight:900;font-size:14px;line-height:1.4;}
 .dp-app .dp-ai-txt b{color:#fff;}
 .dp-app .dp-ai-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;}
 .dp-app .dp-ai-conf{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-bull);background:var(--dp-bull-08);border:1px solid var(--dp-bull-30);border-radius:20px;padding:5px 12px;}
@@ -261,6 +301,39 @@
 .dp-app .dp-cal-cell.win:hover,.dp-app .dp-cal-cell.loss:hover{transform:scale(1.04);}
 .dp-app .dp-cal-cell.best{box-shadow:0 0 22px -6px var(--dp-gold-40),inset 0 0 0 1px var(--dp-gold-30);}
 .dp-app .dp-cal-cell.empty{background:linear-gradient(160deg,rgba(230,198,101,.02),rgba(240,160,90,.008));box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);opacity:.6;}
+/* Calendar empty-state — first-run friendly. Same panel, warmer content. */
+.dp-app .dp-cal-empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:12px;padding:32px 24px;
+  background:
+    radial-gradient(60% 80% at 50% 0%, rgba(230,198,101,.08), transparent 60%);
+  border-radius:12px;
+}
+.dp-app .dp-cal-empty-icon{
+  width:56px;height:56px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;color:var(--dp-gold);
+  background:rgba(230,198,101,.08);border:1px solid var(--dp-gold-30);
+  box-shadow:0 0 30px -8px var(--dp-gold-40);
+}
+.dp-app .dp-cal-empty-title{
+  font-family:var(--dp-ff-serif);font-size:22px;font-weight:800;color:#fff;
+  letter-spacing:-.005em;line-height:1.2;
+}
+.dp-app .dp-cal-empty-body{
+  font-family:var(--dp-ff-sans);font-size:14px;font-weight:500;color:var(--dp-w72);
+  line-height:1.6;max-width:440px;
+}
+.dp-app .dp-cal-empty-cta{
+  margin-top:6px;padding:11px 22px;border-radius:9px;
+  font-family:var(--dp-ff-mono);font-size:12px;font-weight:800;
+  letter-spacing:.06em;text-transform:uppercase;
+  color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));
+  text-decoration:none;transition:.2s var(--dp-ease);
+  box-shadow:0 8px 20px -8px var(--dp-gold-40);
+}
+.dp-app .dp-cal-empty-cta:hover{transform:translateY(-1px);box-shadow:0 12px 28px -8px var(--dp-gold-40);}
+
 .dp-app .dp-cal-daynum{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;color:var(--dp-w92);text-align:right;}
 .dp-app .dp-cal-pnl{font-family:var(--dp-ff-mono);font-size:15px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;line-height:1;letter-spacing:-.005em;}
 .dp-app .dp-cal-pnl.win{color:var(--dp-bull);}
@@ -279,6 +352,12 @@
 .dp-app .dp-macro-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;}
 .dp-app .dp-macro-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dp-gold);}
 .dp-app .dp-macro-note{font-family:var(--dp-ff-sans);font-size:13px;font-weight:600;color:var(--dp-w72);}
+/* Legend — a tiny "● High impact" chip in the macro header so the red
+   dots down the list are readable at first glance instead of ominous. */
+.dp-app .dp-macro-legend{display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--dp-w72);
+  padding:4px 9px;border-radius:20px;border:1px solid rgba(229,72,77,.28);background:rgba(229,72,77,.06);}
+.dp-app .dp-macro-legend-dot{width:7px;height:7px;border-radius:50%;background:#e5484d;box-shadow:0 0 7px 1px rgba(229,72,77,.45);}
 .dp-app .dp-macro-list{display:flex;flex-direction:column;overflow-y:auto;min-height:0;flex:1;}
 .dp-app .dp-macro-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--dp-w06);}
 .dp-app .dp-macro-row:last-child{border-bottom:none;}
