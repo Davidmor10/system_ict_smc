@@ -176,30 +176,36 @@ export const DICT = {
   tier_starter_f4:      { en: 'Cancel anytime, no commitment',
                           he: 'ביטול בכל רגע, ללא התחייבות'                                    },
 
-  // PRO — the intended default. Feature-highlighted; the price nearly
-  // doubles from Starter (49 → 99) but the value jumps by a whole layer
-  // of AI analytics, so this reads as the "smart deal".
+  // PRO — feature-highlighted with the "הכי פופולרי" badge. Each bullet is
+  // rewritten as a standalone capability (no "Everything Starter has"
+  // leader) so the card carries substance on its own instead of reading
+  // as an add-on to a cheaper plan. The four bullets together enumerate
+  // the entire AI intelligence layer, which is the actual value story.
   tier_pro_name:        { en: 'PRO',                      he: 'PRO'                           },
-  tier_pro_tag:         { en: '₪99 / month',              he: '99 ש״ח / חודש'                 },
+  tier_pro_tag:         { en: 'The Intelligence Layer',   he: 'שכבת הבינה המלאה'              },
   tier_pro_badge:       { en: 'Most Popular',             he: 'הכי פופולרי'                   },
-  tier_pro_sub:         { en: 'The full AI Analytics page — patterns, what-if simulator, weekly report. The step where the data becomes an edge.',
-                          he: 'עמוד ה-AI Analytics המלא — דפוסים, סימולטור תרחישים, דוח שבועי. השלב שבו הדאטה הופך ליתרון.' },
-  tier_pro_f1:          { en: 'Everything Starter has',   he: 'כל מה שיש ב-Starter'           },
-  tier_pro_f2:          { en: 'Full /dashboard/ai-analytics page unlocked',
-                          he: 'עמוד /dashboard/ai-analytics נפתח במלואו'                       },
-  tier_pro_f3:          { en: 'Pattern memory, recurring-habit detection, weekly report + archive',
-                          he: 'זיכרון דפוסים, זיהוי הרגלים חוזרים, דוח שבועי + ארכיון'         },
-  tier_pro_f4:          { en: 'What-if simulator: how your P&L would look filtered by any condition',
-                          he: 'סימולטור תרחישים: איך ה-P&L שלך נראה מסונן לפי כל תנאי'         },
+  tier_pro_sub:         { en: '99 ₪/mo · The full AI layer of the system unlocks — Insight on every trade, Analytics page, pattern memory, what-if simulator, weekly report + archive. Everything working together.',
+                          he: '99 ₪/חודש · כל שכבת ה-AI של המערכת נפתחת — תובנה על כל עסקה, עמוד Analytics מלא, זיכרון דפוסים, סימולטור תרחישים, דוח שבועי + ארכיון. הכול עובד ביחד.' },
+  tier_pro_f1:          { en: 'AI Insight on every trade you log — a personal one-paragraph read the moment you close it',
+                          he: 'תובנת AI על כל עסקה שתיעדת — פסקה אישית מיד כשסגרת את הטרייד' },
+  tier_pro_f2:          { en: 'Full AI Analytics page: win rates broken by session, setup, bias and day of week',
+                          he: 'עמוד ה-AI Analytics המלא: אחוזי הצלחה חתוכים לפי סשן, סטאפ, בייאס ויום'  },
+  tier_pro_f3:          { en: 'Personal pattern memory — the system learns YOUR patterns week after week',
+                          he: 'זיכרון דפוסים אישי — המערכת לומדת דפוסים אמיתיים על המסחר שלך שבוע אחר שבוע' },
+  tier_pro_f4:          { en: 'What-if simulator + weekly report + full archive — hypotheses answered on your real trades',
+                          he: 'סימולטור תרחישים + דוח שבועי אישי + ארכיון היסטורי מלא — היפותזות שנענות על עסקאות אמת' },
 
-  // DELUXE — everything Pro has, plus the personal AI coach.
+  // DELUXE — the whole Pro intelligence layer + the personal AI Coach. The
+  // "leans on Pro" phrasing is intentional: it reinforces that Pro carries
+  // the substance and Deluxe is the coach *on top* of it.
   tier_deluxe_name:     { en: 'DELUXE',                   he: 'DELUXE'                        },
-  tier_deluxe_tag:      { en: '₪199 / month',             he: '199 ש״ח / חודש'                },
-  tier_deluxe_sub:      { en: 'Everything Pro has, plus the personal AI coach that reads your journal and holds a real conversation.',
-                          he: 'כל מה שיש ב-Pro, בתוספת המאמן האישי — קורא את היומן שלך ומדבר איתך על באמת.' },
-  tier_deluxe_f1:       { en: 'Everything Pro has',       he: 'כל מה שיש ב-Pro'               },
+  tier_deluxe_tag:      { en: '199 ₪ / month · No Ceilings', he: '199 ש״ח / חודש · ללא תקרות' },
+  tier_deluxe_sub:      { en: 'The full PRO intelligence layer plus the personal AI Coach — a chat that reads your live journal and answers grounded in your actual data.',
+                          he: 'כל שכבת הבינה של PRO — במלואה — ובנוסף המאמן האישי, שיחה שקוראת את היומן שלך בזמן אמת ועונה מתוך הנתונים שלך.' },
+  tier_deluxe_f1:       { en: 'The full PRO intelligence layer',
+                          he: 'כל שכבת ה-AI של PRO — במלואה'                                   },
   tier_deluxe_f2:       { en: 'Personal AI Coach — chat that reads your live journal',
-                          he: 'מאמן AI אישי — שיחה שקוראת את היומן שלך בזמן אמת'              },
+                          he: 'המאמן האישי נפתח — שיחה שקוראת את היומן שלך בזמן אמת'          },
   tier_deluxe_f3:       { en: 'Coach chat history, saved per trader',
                           he: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר'                       },
   tier_deluxe_f4:       { en: 'Priority feature access — new tools open to Deluxe first',

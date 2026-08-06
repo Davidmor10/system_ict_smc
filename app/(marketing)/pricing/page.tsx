@@ -54,24 +54,36 @@ const PLANS = [
     ctaGold:  false,
     fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
   },
+  // Pro's bullets are deliberately written as four standalone value
+  // statements — no "Everything in STARTER" leader that would read as an
+  // afterthought to a cheaper plan. Each bullet is a real capability the
+  // trader can point at, so the card reads full on its own. The value story
+  // (₪50 more for a whole intelligence layer) lives in the FAQ so it doesn't
+  // undercut the copy here.
   {
     key: 'pro', featured: true,
-    tag:      { he: 'מרוויח בערך פי שניים ב-50 ₪ בלבד יותר', en: 'Twice the value for ₪50 more' } as BiStr,
+    tag:      { he: 'שכבת הבינה המלאה של המערכת', en: 'The Full Intelligence Layer' } as BiStr,
     name:     { he: 'PRO',              en: 'PRO'                   } as BiStr,
     amt:      { he: '99',               en: '99'                    } as BiStr,
     amtColor: 'var(--gold)',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'כל מה שיש ב-STARTER',                         en: 'Everything in STARTER'                        } as BiStr, on: true  },
-      { text: { he: 'עמוד ה-AI Analytics המלא נפתח',               en: 'Full AI Analytics page unlocked'              } as BiStr, on: true  },
-      { text: { he: 'זיהוי דפוסים חוזרים + סימולטור תרחישים + דוח שבועי', en: 'Pattern memory + what-if simulator + weekly report' } as BiStr, on: true  },
-      { text: { he: 'ללא המאמן האישי',                              en: 'No AI Coach'                                  } as BiStr, on: false },
+      { text: { he: 'תובנת AI על כל עסקה שתיעדת — פסקה אישית שהמערכת מוציאה מיד אחרי שסגרת את הטרייד',
+                en: 'AI Insight on every trade you log — a personal one-paragraph read the system generates the moment you close the trade' } as BiStr, on: true  },
+      { text: { he: 'עמוד ה-AI Analytics המלא נפרס מולך: אחוזי הצלחה חתוכים לפי סשן, סטאפ, בייאס ויום בשבוע — יודעים מה עובד לך ומה שורף',
+                en: 'The full AI Analytics page opens: win rates broken by session, setup, bias and day-of-week — you see exactly what works and what burns' } as BiStr, on: true  },
+      { text: { he: 'זיכרון דפוסים אישי — המערכת לומדת דפוסים אמיתיים על המסחר שלך שבוע אחר שבוע (לא סטטיסטיקות של "סוחרים באופן כללי")',
+                en: 'Personal pattern memory — the system learns your real patterns week after week (not "generic trader" stats)' } as BiStr, on: true  },
+      { text: { he: 'סימולטור תרחישים + דוח שבועי אישי + ארכיון היסטורי מלא — "מה היה קורה אם רק סחרתי בסשן NY?" נענה על עסקאות אמת',
+                en: 'What-if simulator + personal weekly report + full historical archive — "what if I only traded the NY session?" answered on real trades' } as BiStr, on: true  },
     ],
     cta:      { he: 'הצטרף ל-PRO',              en: 'Join PRO'              } as BiStr,
     href:     '/checkout?plan=pro',
     ctaGold:  true,
     fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
   },
+  // Deluxe deliberately leads with "כל שכבת ה-AI של PRO" — this reinforces
+  // that Pro carries the substance, and Deluxe is the coach *on top* of it.
   {
     key: 'deluxe', featured: false,
     tag:      { he: 'ללא תקרות',        en: 'No Limits'             } as BiStr,
@@ -80,7 +92,7 @@ const PLANS = [
     amtColor: '#fff',
     unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
     features: [
-      { text: { he: 'כל מה שיש ב-PRO',                              en: 'Everything in PRO'                            } as BiStr, on: true  },
+      { text: { he: 'כל שכבת ה-AI של PRO — במלואה',                 en: 'The full PRO intelligence layer'              } as BiStr, on: true  },
       { text: { he: 'המאמן האישי נפתח — שיחה שקוראת את היומן שלך', en: 'Personal AI Coach unlocked — chat that reads your journal' } as BiStr, on: true  },
       { text: { he: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר',     en: 'Coach chat history saved per trader'          } as BiStr, on: true  },
       { text: { he: 'עדיפות בעדכונים ובפיצ׳רים חדשים',             en: 'Priority on updates & new features'           } as BiStr, on: true  },
@@ -140,8 +152,8 @@ const I18N = {
   faq_sub:    { he: 'מה שכדאי לדעת לפני שמצטרפים', en: 'What you should know before joining' },
   faq_q1: { he: 'מה ההבדל בין STARTER ל-PRO?', en: 'What\'s the difference between STARTER and PRO?' },
   faq_a1: {
-    he: 'STARTER (49 ₪) פותח את פאנל ה-AI Insight ביומן — תובנה קצרה שהמערכת מוציאה על כל עסקה שתיעדת. PRO (99 ₪) לוקח את זה שלב הלאה: כל עמוד ה-AI Analytics המלא נפתח — זיהוי דפוסים חוזרים, סימולטור תרחישים ("מה היה קורה אם רק סחרתי בסשן NY?"), דוח שבועי מלא עם ארכיון היסטורי. בגלל שההפרש הוא 50 ₪ בלבד תמורת שכבה שלמה של יכולות, PRO יוצא כמעט תמיד המסלול המשתלם ביותר.',
-    en: 'STARTER (₪49) opens the AI Insight panel in the journal — a short takeaway the system generates on every trade you log. PRO (₪99) takes it a full layer further: the entire AI Analytics page unlocks — recurring pattern detection, a what-if simulator ("what if I only traded the NY session?"), a full weekly report with historical archive. Because the gap is only ₪50 for a whole new tier of capability, PRO almost always ends up being the highest-value plan.',
+    he: 'STARTER (49 ₪) פותח את פאנל ה-AI Insight ביומן — פסקה קצרה על כל עסקה שתיעדת. PRO (99 ₪) פותח את **כל שכבת הבינה** של המערכת: את התובנה על כל עסקה, ובנוסף את עמוד ה-AI Analytics המלא — זיכרון דפוסים אישי שהמערכת בונה עליך שבוע אחר שבוע, סימולטור תרחישים ("מה היה קורה אם רק סחרתי בסשן NY?" — נענה על עסקאות אמת), ודוח שבועי אישי עם ארכיון היסטורי מלא. ההפרש בין המסלולים הוא 50 ₪ בחודש. מה שנפתח בהפרש הזה הוא לא עוד פיצ׳ר בודד אלא שכבה שלמה של יכולות — ורוב הסוחרים מוצאים שהיא זו שמייצרת את היתרון.',
+    en: 'STARTER (₪49) opens the AI Insight panel in the journal — a short paragraph on every trade you log. PRO (₪99) opens **the entire intelligence layer** of the system: that per-trade insight PLUS the full AI Analytics page — personal pattern memory the system builds on you week after week, a what-if simulator ("what if I only traded the NY session?" — answered on your real trades), and a personal weekly report with a full historical archive. The gap between the plans is ₪50/month. What opens in that gap isn\'t a single extra feature — it\'s a whole layer of capabilities. Most traders find that\'s the layer that actually produces the edge.',
   },
   faq_q2: { he: 'ואז מתי בכלל לעבור ל-DELUXE?', en: 'So when does DELUXE make sense?' },
   faq_a2: {
@@ -420,9 +432,16 @@ function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; 
                   </th>
                   <th style={thStyle}>FREE<br /><span style={{ color: 'var(--bull-t)', fontSize: 10 }}>{lang === 'he' ? 'חינם' : 'Free'}</span></th>
                   <th style={thStyle}>STARTER<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '49 ₪' : '₪49'}</span></th>
-                  {/* PRO — highlighted */}
+                  {/* PRO — visually anchored: gold price + a small
+                       positioning line ("שכבת הבינה המלאה") so the column
+                       reads as its own thing, not just "middle option". */}
                   <th style={{ ...thStyle, background: 'rgba(212,175,55,.06)', borderInline: '1px solid rgba(212,175,55,.18)' }}>
-                    PRO<br /><span style={{ color: 'var(--gold)', fontSize: 10 }}>{lang === 'he' ? '99 ₪' : '₪99'}</span>
+                    PRO<br />
+                    <span style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700 }}>{lang === 'he' ? '99 ₪' : '₪99'}</span>
+                    <br />
+                    <span style={{ color: 'rgba(230,198,101,.55)', fontSize: 9, fontWeight: 500, letterSpacing: '.04em', textTransform: 'none' }}>
+                      {lang === 'he' ? 'שכבת הבינה המלאה' : 'The intelligence layer'}
+                    </span>
                   </th>
                   <th style={thStyle}>DELUXE<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '199 ₪' : '₪199'}</span></th>
                 </tr>
