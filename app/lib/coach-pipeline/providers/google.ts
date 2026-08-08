@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Generative AI provider wrapper for the coach pipeline.
-// Currently exposes just embeddings — Gemini text generation lives here later.
+// Two surfaces: embeddings (text-embedding-004) and Gemini text generation
+// (gemini-2.5-flash) used as the fallback path for daily-insight generation.
 //
 // Uses the shared `genAI` client from app/lib/ai/client.ts (already carries the
 // GEMINI_API_KEY setup + safe defaults), so we don't fork the SDK setup.
@@ -115,4 +116,101 @@ export async function embedAll(
     vectors.push(...res.vectors);
   }
   return { vectors, latencyMs: Date.now() - started };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemini text generation — the fallback path for daily-insight when Claude is
+// over-budget, rate-limited, or down. Same return shape as callClaudeInsight
+// so the orchestrator picks either provider through one union type.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const GEMINI_INSIGHT_MODEL       = 'gemini-2.5-flash';
+export const GEMINI_INSIGHT_MAX_TOKENS  = 400;   // tighter than Claude on purpose
+export const GEMINI_INSIGHT_TEMPERATURE = 0.3;
+export const GEMINI_INSIGHT_TIMEOUT_MS  = 15_000;
+
+// Gemini 2.5 Flash pricing (Aug 2026) — USD per token, up to 128k context.
+const GEMINI_COST_INPUT_PER_TOKEN  = 0.075 / 1_000_000;
+const GEMINI_COST_OUTPUT_PER_TOKEN = 0.30  / 1_000_000;
+
+export type GeminiCallOutcome =
+  | {
+      ok:         true;
+      text:       string;
+      tokensIn:   number;
+      tokensOut:  number;
+      costUsd:    number;
+      latencyMs:  number;
+    }
+  | {
+      ok:         false;
+      errorKind:  'rate_limit' | 'timeout' | 'api_error' | 'other';
+      message:    string;
+      status?:    number;
+      latencyMs:  number;
+    };
+
+function classifyGemini(err: unknown, latencyMs: number): GeminiCallOutcome {
+  const msg    = err instanceof Error ? err.message : String(err);
+  const status =
+    (err as { status?: number })?.status ??
+    (typeof msg === 'string' && /\b(429|5\d{2})\b/.exec(msg)?.[0] ? Number(/\b(429|5\d{2})\b/.exec(msg)![0]) : undefined);
+  if (err instanceof Error && (err.name === 'AbortError' || /aborted|timeout/i.test(msg))) {
+    return { ok: false, errorKind: 'timeout', message: msg, latencyMs };
+  }
+  if (status === 429)               return { ok: false, errorKind: 'rate_limit', message: msg, status, latencyMs };
+  if (status && status >= 500)      return { ok: false, errorKind: 'api_error',  message: msg, status, latencyMs };
+  return { ok: false, errorKind: 'other', message: msg, status, latencyMs };
+}
+
+/** Call Gemini with the daily-insight prompt. The system prompt is concatenated
+ *  to the user message with a separator — Gemini's chat API accepts a
+ *  `systemInstruction` but for a single-turn call this simpler shape works
+ *  and matches our token counting model. Timeout enforced via an
+ *  AbortController since the SDK doesn't take a per-call timeout. */
+export async function callGeminiInsight(
+  systemPrompt: string,
+  userMessage: string,
+): Promise<GeminiCallOutcome> {
+  const started    = Date.now();
+  const controller = new AbortController();
+  const timer      = setTimeout(() => controller.abort(), GEMINI_INSIGHT_TIMEOUT_MS);
+  try {
+    const res = await genAI.models.generateContent({
+      model: GEMINI_INSIGHT_MODEL,
+      contents: `${systemPrompt}\n\n═══ USER MESSAGE ═══\n${userMessage}`,
+      config: {
+        temperature:     GEMINI_INSIGHT_TEMPERATURE,
+        maxOutputTokens: GEMINI_INSIGHT_MAX_TOKENS,
+        abortSignal:     controller.signal,
+      },
+    });
+
+    const text = typeof res.text === 'string' ? res.text : '';
+    if (!text.trim()) {
+      return {
+        ok: false, errorKind: 'other',
+        message: 'gemini returned empty text',
+        latencyMs: Date.now() - started,
+      };
+    }
+
+    // usageMetadata is optional in the SDK's typings; guard both fields.
+    const usage = (res as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } }).usageMetadata;
+    const tokensIn  = usage?.promptTokenCount     ?? 0;
+    const tokensOut = usage?.candidatesTokenCount ?? 0;
+    const costUsd   = tokensIn * GEMINI_COST_INPUT_PER_TOKEN + tokensOut * GEMINI_COST_OUTPUT_PER_TOKEN;
+
+    return { ok: true, text, tokensIn, tokensOut, costUsd, latencyMs: Date.now() - started };
+  } catch (err) {
+    const out = classifyGemini(err, Date.now() - started);
+    logger.warn('callGeminiInsight failed', {
+      kind: out.ok ? 'ok' : out.errorKind,
+      status: out.ok ? undefined : out.status,
+      msg: out.ok ? undefined : out.message.slice(0, 200),
+    });
+    return out;
+  } finally {
+    clearTimeout(timer);
+  }
 }
