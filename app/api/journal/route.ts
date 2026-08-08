@@ -5,6 +5,7 @@ import { tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logger } from '../../lib/logger';
+import { mirrorTrades } from '../../lib/coach-pipeline/mirror/journalToIntelligence';
 
 // Returns null (and never throws) on a malformed body — lets callers turn it
 // into a clean 400 instead of an unhandled exception bubbling out of the route.
@@ -181,6 +182,11 @@ export async function POST(req: Request) {
     logger.error('journal POST failed', { userId, error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+
+  // Fire-and-forget mirror into the intelligence pipeline. Never blocks or
+  // fails the response — a mirror error is logged inside mirrorTrades.
+  void mirrorTrades(userId, [trade]);
+
   return NextResponse.json({ ok: true });
 }
 
@@ -225,5 +231,9 @@ export async function PUT(req: Request) {
     logger.error('journal PUT failed', { userId, error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+
+  // Bulk-mirror. Same fire-and-forget semantics as the single-trade path.
+  void mirrorTrades(userId, trades);
+
   return NextResponse.json({ ok: true });
 }

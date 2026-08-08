@@ -1,0 +1,124 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Mirror writer — every write path on /api/journal (POST / PUT / DELETE /
+// PATCH) also calls into here so intelligence_trades stays in sync with the
+// legacy journal_trades table. This is what turns the coach pipeline from
+// "infrastructure that runs on nothing" into a live system that actually has
+// data to reason about tonight.
+//
+// Guarantees:
+//   - Deterministic uuid per (clerk_id, legacy id) → upserts are idempotent
+//     (same trade written twice = same row).
+//   - Never throws. A failure here MUST NOT take down the /api/journal call
+//     the user is waiting on. Failures are logged and swallowed.
+//   - No secondary AI calls, no cron enqueue. Only a plain Supabase upsert.
+//
+// If we later decide to drop the legacy table, this file is the one that
+// becomes redundant — everything downstream already speaks intelligence_trades.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { createHash } from 'crypto';
+import type { TradeEntry } from '../../journal';
+import { T } from '../types';
+import { getClient } from '../db/client';
+import { logger } from '../../logger';
+
+/** SHA1 of `intelligence_trades:${clerkId}:${legacyId}` formatted as a UUID.
+ *  Not a real UUIDv5, but Postgres' uuid column accepts any 32-hex-char
+ *  string in the canonical 8-4-4-4-12 layout, and we get determinism cheaply.
+ *  Same input → same UUID forever, so a re-save updates the mirror row. */
+export function deterministicUuid(clerkId: string, legacyId: number): string {
+  const raw = createHash('sha1')
+    .update(`intelligence_trades:${clerkId}:${legacyId}`, 'utf8')
+    .digest('hex');
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20, 32)}`;
+}
+
+/** Translate a legacy TradeEntry into an intelligence_trades row. */
+export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, deleted = false) {
+  return {
+    clerk_id:        clerkId,
+    id:              deterministicUuid(clerkId, trade.id),
+    date:            trade.dateISO,
+    time:            trade.time || null,
+    symbol:          trade.symbol,
+    direction:       trade.direction,
+    contracts:       trade.contracts ?? 1,
+    entry_price:     trade.entry,
+    stop_loss:       trade.stop,
+    take_profit:     trade.target ?? null,
+    exit_price:      null,                                 // legacy doesn't track a single exit
+    exits:           trade.exits ?? null,
+    rr_planned:      null,
+    r_multiple:      trade.tradeR ?? null,
+    pnl_usd:         trade.pnlUsd ?? null,
+    result:          trade.result,
+    session:         trade.session || null,
+    bias:            trade.bias || null,
+    setup:           trade.setup ?? null,
+    confirmations:   trade.confirmations ?? null,
+    emotional_state: trade.emotionalState ?? null,
+    followed_rules:  true,                                 // legacy has no field for this — assume true
+    notes:           trade.notes ?? '',
+    tags:            [],
+    screenshots:     trade.screenshots ?? null,
+    deleted_at:      deleted ? new Date().toISOString() : null,
+    updated_at:      new Date().toISOString(),
+  };
+}
+
+/** Upsert one or many TradeEntry rows into intelligence_trades. Idempotent
+ *  by the deterministic UUID. Never throws. */
+export async function mirrorTrades(
+  clerkId: string,
+  trades: readonly TradeEntry[],
+): Promise<void> {
+  if (!clerkId || !trades.length) return;
+  try {
+    const rows = trades.map(t => tradeEntryToIntelligenceRow(clerkId, t));
+    const { error } = await getClient()
+      .from(T.trades)
+      .upsert(rows, { onConflict: 'id' });
+    if (error) {
+      logger.warn('mirror upsert to intelligence_trades failed', {
+        clerkId, count: rows.length, error: error.message,
+      });
+    }
+  } catch (err) {
+    // Defensive — the whole point of the mirror is that it can't take down the
+    // main call. A thrown exception here would defeat that.
+    logger.warn('mirror upsert threw', {
+      clerkId, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Mark the intelligence_trades mirror row for a legacy trade id as
+ *  deleted / undeleted. `deleted=true` sets deleted_at=now(); false clears it.
+ *  Never throws. */
+export async function mirrorTradeDeleted(
+  clerkId: string,
+  legacyId: number,
+  deleted: boolean,
+): Promise<void> {
+  if (!clerkId || !Number.isSafeInteger(legacyId)) return;
+  try {
+    const uuid = deterministicUuid(clerkId, legacyId);
+    const { error } = await getClient()
+      .from(T.trades)
+      .update({
+        deleted_at: deleted ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('clerk_id', clerkId)
+      .eq('id', uuid);
+    if (error) {
+      logger.warn('mirror delete/restore failed', {
+        clerkId, legacyId, deleted, error: error.message,
+      });
+    }
+  } catch (err) {
+    logger.warn('mirror delete/restore threw', {
+      clerkId, legacyId, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

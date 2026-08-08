@@ -4,6 +4,7 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/s
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logger } from '../../../lib/logger';
+import { mirrorTradeDeleted } from '../../../lib/coach-pipeline/mirror/journalToIntelligence';
 
 /** DELETE /api/journal/[id] — soft-delete (sets deleted_at). */
 export async function DELETE(
@@ -41,6 +42,11 @@ export async function DELETE(
     logger.error('journal DELETE failed', { userId, error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+
+  // Mirror the soft-delete into intelligence_trades so the nightly pipeline
+  // stops treating this trade as active. Fire-and-forget.
+  void mirrorTradeDeleted(userId, idNum, true);
+
   return NextResponse.json({ ok: true });
 }
 
@@ -80,5 +86,9 @@ export async function PATCH(
     logger.error('journal PATCH failed', { userId, error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+
+  // Restore in the mirror as well.
+  void mirrorTradeDeleted(userId, idNum, false);
+
   return NextResponse.json({ ok: true });
 }
