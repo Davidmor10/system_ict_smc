@@ -44,8 +44,8 @@ export async function DELETE(
   }
 
   // Mirror the soft-delete into intelligence_trades so the nightly pipeline
-  // stops treating this trade as active. Fire-and-forget.
-  void mirrorTradeDeleted(userId, idNum, true);
+  // stops treating this trade as active. Awaited (see /api/journal for why).
+  await mirrorTradeDeleted(userId, idNum, true);
 
   return NextResponse.json({ ok: true });
 }
@@ -87,8 +87,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  // Restore in the mirror as well.
-  void mirrorTradeDeleted(userId, idNum, false);
+  // Restore in the mirror as well. Awaited for the same serverless reason.
+  await mirrorTradeDeleted(userId, idNum, false);
 
   return NextResponse.json({ ok: true });
 }

@@ -183,9 +183,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  // Fire-and-forget mirror into the intelligence pipeline. Never blocks or
-  // fails the response — a mirror error is logged inside mirrorTrades.
-  void mirrorTrades(userId, [trade]);
+  // Mirror into the intelligence pipeline. Awaited (not void) — on Vercel
+  // serverless a fire-and-forget promise is torn down when the response
+  // returns, so the write silently never happens. mirrorTrades swallows its
+  // own errors, so awaiting can't fail the request; it just costs ~50ms.
+  await mirrorTrades(userId, [trade]);
 
   return NextResponse.json({ ok: true });
 }
@@ -232,8 +234,9 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  // Bulk-mirror. Same fire-and-forget semantics as the single-trade path.
-  void mirrorTrades(userId, trades);
+  // Bulk-mirror. Awaited for the same serverless reason as the POST path.
+  // A user with 200 stored trades ships ~200 rows in one upsert = ~100ms.
+  await mirrorTrades(userId, trades);
 
   return NextResponse.json({ ok: true });
 }
