@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
+import DailyInsightCard from './DailyInsightCard';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { initSyncListeners } from '../lib/sync/collections';
@@ -604,6 +605,11 @@ export default function DashboardView() {
           </div>
         </div>
         <div className="dp-clock"><span className="dp-clock-k">{s.clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
+      </div>
+
+      {/* Row 2.5 — daily AI insight card (self-contained: fetches + renders + reactions) */}
+      <div className="dp-daily-insight-wrap dp-rise">
+        <DailyInsightCard />
       </div>
 
       {/* Row 3 — sessions + unit toggle */}
