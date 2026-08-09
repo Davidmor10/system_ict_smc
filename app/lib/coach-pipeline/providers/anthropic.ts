@@ -22,7 +22,14 @@ import { logger } from '../../logger';
 // once reaching Claude, and paying a wasted round-trip to find out.
 export const CLAUDE_MODEL      = 'claude-sonnet-5';
 export const CLAUDE_MAX_TOKENS = 500;
-export const CLAUDE_TIMEOUT_MS = 15_000;
+
+// 15s was too tight. The first live call took 28.8s wall-clock for a 384-token
+// Hebrew answer — one attempt timed out and the SDK silently retried, so we
+// paid double the latency to get the same result. Budget for the real thing:
+// a full-length response takes ~25s, and one retry beyond that is all the
+// nightly drain window can absorb.
+export const CLAUDE_TIMEOUT_MS = 30_000;
+export const CLAUDE_MAX_RETRIES = 1;
 
 // Sonnet 5 pricing — USD per token. (Intro rate is lower through 2026-08-31;
 // we bill the standard rate so the ledger never under-reports.)
@@ -36,7 +43,12 @@ const COST_OUTPUT_PER_TOKEN = 15 / 1_000_000;
 let cached: Anthropic | null = null;
 function client(): Anthropic {
   if (cached) return cached;
-  cached = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? 'unset' });
+  cached = new Anthropic({
+    apiKey:     process.env.ANTHROPIC_API_KEY ?? 'unset',
+    // Default is 2. Retries are invisible from the outside — they show up
+    // only as tripled latency and a timeout that doesn't mean what it says.
+    maxRetries: CLAUDE_MAX_RETRIES,
+  });
   return cached;
 }
 
