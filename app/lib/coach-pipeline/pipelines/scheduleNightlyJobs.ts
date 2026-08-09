@@ -98,14 +98,19 @@ export interface ScheduleResult {
   error?:          string;
 }
 
-/** Full orchestrator run. */
-export async function scheduleNightlyJobs(now: Date = new Date()): Promise<ScheduleResult> {
+/** Full orchestrator run. Accepts an optional spread override so a caller
+ *  that plans to drain the queue inline (e.g. Vercel Hobby, no minute-worker
+ *  cron) can force every job's scheduled_at to now(). */
+export async function scheduleNightlyJobs(
+  now: Date = new Date(),
+  spreadMinutesOverride?: number,
+): Promise<ScheduleResult> {
   if (!(await flags.aiPipelineEnabled())) {
     logger.warn('scheduleNightlyJobs skipped — kill switch off');
     return { enumerated: 0, eligible: 0, enqueued: 0, skippedExisting: 0, windowMinutes: 0, disabled: true };
   }
 
-  const windowMinutes = await flags.spreadWindowMinutes();
+  const windowMinutes = spreadMinutesOverride ?? await flags.spreadWindowMinutes();
   const users         = await enumerateEligibleUsers(now);
   const targetDate    = israelToday(now);
   const jobType: JobType = 'daily_insight';

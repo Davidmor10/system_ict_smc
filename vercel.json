@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/nightly-orchestrate",
       "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/process-jobs",
-      "schedule": "* * * * *"
     }
   ]
 }
