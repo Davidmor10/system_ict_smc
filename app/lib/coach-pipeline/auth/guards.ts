@@ -17,6 +17,17 @@ import { OWNER_EMAILS, isOwnerEmail } from './owners';
 
 export { OWNER_EMAILS, isOwnerEmail };
 
+/** The configured cron secret, or null when it isn't set.
+ *
+ *  Trimmed on read. Pasting a value into a hosting dashboard or a .env file
+ *  picks up a trailing newline often enough that treating whitespace as
+ *  significant costs far more debugging time than it ever buys in security —
+ *  a secret whose edges are whitespace is an accident, not a choice. */
+export function cronSecret(): string | null {
+  const raw = process.env.CRON_SECRET?.trim();
+  return raw ? raw : null;
+}
+
 /** Constant-time string compare that doesn't leak length through early exit.
  *  Hashes both sides to a fixed width first so unequal lengths are safe. */
 export function safeEqual(a: string, b: string): boolean {
@@ -37,7 +48,7 @@ export function safeEqual(a: string, b: string): boolean {
  *  behavior (allow + warn) meant a deploy that forgot the variable shipped
  *  publicly-triggerable AI spend. A 503 is loud; an open endpoint is silent. */
 export function assertCronAuth(req: Request, route: string): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
+  const secret = cronSecret();
   if (!secret) {
     logSecurityEvent('auth_failed', { route, reason: 'cron_secret_unset' });
     return NextResponse.json(
@@ -46,7 +57,7 @@ export function assertCronAuth(req: Request, route: string): NextResponse | null
     );
   }
 
-  const header = req.headers.get('authorization') ?? '';
+  const header = (req.headers.get('authorization') ?? '').trim();
   if (!safeEqual(header, `Bearer ${secret}`)) {
     logSecurityEvent('auth_failed', { route, reason: 'bad_cron_bearer' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -33,7 +33,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server';
-import { assertOwner, safeEqual } from '../../../lib/coach-pipeline/auth/guards';
+import { assertOwner, safeEqual, cronSecret } from '../../../lib/coach-pipeline/auth/guards';
 import { isOwnerEmail } from '../../../lib/coach-pipeline/auth/owners';
 import { generateDailyInsight, type PlanTier } from '../../../lib/coach-pipeline/pipelines/generateDailyInsight';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
@@ -68,18 +68,28 @@ export const dynamic     = 'force-dynamic';
 type KeyAuth =
   | { ok: true;  userId: string }
   | { ok: false; skip: true }
-  | { ok: false; skip: false; reason: string };
+  | { ok: false; skip: false; reason: string; lengths?: { received: number; expected: number } };
 
 function authorizeByKey(req: NextRequest): KeyAuth {
-  const key = req.nextUrl.searchParams.get('key');
+  const key = req.nextUrl.searchParams.get('key')?.trim();
   if (!key) return { ok: false, skip: true };
 
-  const secret = process.env.CRON_SECRET;
+  const secret = cronSecret();
   if (!secret) {
     return { ok: false, skip: false, reason: 'CRON_SECRET is not set on this deployment' };
   }
   if (!safeEqual(key, secret)) {
-    return { ok: false, skip: false, reason: 'key does not match CRON_SECRET' };
+    // Lengths, not content. A mismatch is nearly always truncation (a copy
+    // that missed the tail) or mangling (`+` decoded as a space, `%` eaten as
+    // an escape) — both of which show up here instantly, and neither of which
+    // is findable by staring at two long hex strings. Publishing the length
+    // of a high-entropy secret to someone already holding a candidate for it
+    // costs nothing they could use.
+    return {
+      ok: false, skip: false,
+      reason: 'key does not match CRON_SECRET',
+      lengths: { received: key.length, expected: secret.length },
+    };
   }
 
   // The key proves "you are the operator", not "you are user X" — so the
@@ -110,7 +120,7 @@ export async function GET(req: NextRequest) {
     // A key was offered and rejected. Say why rather than falling back to the
     // session check, which would report the wrong problem.
     return NextResponse.json(
-      { error: 'Unauthorized', via: 'key', reason: viaKey.reason },
+      { error: 'Unauthorized', via: 'key', reason: viaKey.reason, lengths: viaKey.lengths },
       { status: 401 },
     );
   } else {
