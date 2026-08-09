@@ -77,7 +77,13 @@ export async function mirrorTrades(
     const rows = trades.map(t => tradeEntryToIntelligenceRow(clerkId, t));
     const { error } = await getClient()
       .from(T.trades)
-      .upsert(rows, { onConflict: 'id' });
+      // Conflict-target names the tenant. `id` is derived from a hash of the
+      // source row, so targeting it alone would let a hash collision across
+      // two users resolve to "update the other user's row". With
+      // (clerk_id, id) the unique index enforces the isolation instead of the
+      // hash being trusted to. Requires intelligence_trades_clerk_id_key —
+      // see supabase-migration-intelligence-patch-2.sql §3.
+      .upsert(rows, { onConflict: 'clerk_id,id' });
     if (error) {
       logger.warn('mirror upsert to intelligence_trades failed', {
         clerkId, count: rows.length, error: error.message,

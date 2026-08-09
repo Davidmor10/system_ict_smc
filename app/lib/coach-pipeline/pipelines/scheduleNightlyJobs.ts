@@ -12,7 +12,8 @@ import { getClient } from '../db/client';
 import { enqueueJob } from '../db/jobs';
 import { flags } from '../db/flags';
 import { normalizeRole, type Role } from '../../getUserRole';
-import { israelToday, israelDayOfWeek, scheduleSlotFor } from '../dates';
+import { isOwnerEmail } from '../auth/owners';
+import { israelYesterday, israelDayOfWeek, scheduleSlotFor } from '../dates';
 import { logger } from '../../logger';
 
 /** Cadence rule per plan tier — Step 5 §7 (Deluxe/Pro daily, Starter M-W-F). */
@@ -56,17 +57,21 @@ async function listActiveClerkIds(idleSkipDays: number, hardLimit = 5000): Promi
   return [...seen];
 }
 
-/** Batch-load plan tiers from `profiles` — single query, no N+1 Clerk hits. */
+/** Batch-load plan tiers from `profiles` — single query, no N+1 Clerk hits.
+ *
+ *  Owner emails resolve to deluxe regardless of what `role` says, matching
+ *  getUserRole.ts. The worker has no Clerk session to ask, so the override
+ *  keys off profiles.email instead of currentUser(). */
 async function loadPlanTiers(clerkIds: string[]): Promise<Map<string, Role>> {
   if (!clerkIds.length) return new Map();
   const { data, error } = await getClient()
     .from('profiles')
-    .select('clerk_id, role')
+    .select('clerk_id, role, email')
     .in('clerk_id', clerkIds);
   if (error) throw error;
   const map = new Map<string, Role>();
-  for (const row of (data ?? []) as Array<{ clerk_id: string; role: unknown }>) {
-    map.set(row.clerk_id, normalizeRole(row.role));
+  for (const row of (data ?? []) as Array<{ clerk_id: string; role: unknown; email: string | null }>) {
+    map.set(row.clerk_id, isOwnerEmail(row.email) ? 'deluxe' : normalizeRole(row.role));
   }
   return map;
 }
@@ -112,7 +117,11 @@ export async function scheduleNightlyJobs(
 
   const windowMinutes = spreadMinutesOverride ?? await flags.spreadWindowMinutes();
   const users         = await enumerateEligibleUsers(now);
-  const targetDate    = israelToday(now);
+  // The trading day being analyzed, NOT the calendar day the cron wakes up on.
+  // We fire at 01:00 UTC = 03:00/04:00 Israel, so Israel has already flipped
+  // to the next date; targeting it would look for trades in a three-hour-old
+  // day and find none, every single night.
+  const targetDate    = israelYesterday(now);
   const jobType: JobType = 'daily_insight';
 
   let enqueued = 0;

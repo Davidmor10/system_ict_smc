@@ -12,7 +12,8 @@ import { getClient } from '../db/client';
 import { flags } from '../db/flags';
 import { generateDailyInsight, type PlanTier } from './generateDailyInsight';
 import { normalizeRole } from '../../getUserRole';
-import { israelToday } from '../dates';
+import { isOwnerEmail } from '../auth/owners';
+import { israelToday, israelYesterday } from '../dates';
 import { logger } from '../../logger';
 import type { ProcessingJobRow, JobErrorKind, JobType } from '../types';
 
@@ -39,9 +40,12 @@ export interface BatchResult {
 async function fetchPlanTier(clerkId: string): Promise<PlanTier> {
   const { data } = await getClient()
     .from('profiles')
-    .select('role')
+    .select('role, email')
     .eq('clerk_id', clerkId)
     .maybeSingle();
+  // Owner override, same rule as getUserRole.ts — keyed off the stored email
+  // because the worker has no Clerk session to ask.
+  if (isOwnerEmail((data as { email?: string | null } | null)?.email)) return 'deluxe';
   return normalizeRole(data?.role);
 }
 
@@ -56,7 +60,12 @@ async function runOne(job: ProcessingJobRow): Promise<
   try {
     if (job.job_type === 'daily_insight' || job.job_type === 'session_insight') {
       const plan = await fetchPlanTier(job.clerk_id);
-      const date = job.target_date ?? israelToday();
+      // target_date is set at enqueue time; the fallback only matters for a
+      // hand-inserted row. A session insight is intraday (today); a nightly
+      // one analyzes the trading day that just closed (yesterday in Israel,
+      // because the cron runs after Israel midnight).
+      const date = job.target_date
+        ?? (job.job_type === 'session_insight' ? israelToday() : israelYesterday());
       const out  = await generateDailyInsight({
         clerkId:  job.clerk_id,
         date,

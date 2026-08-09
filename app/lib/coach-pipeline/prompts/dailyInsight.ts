@@ -14,13 +14,16 @@
 // gets three additional constraints appended by its own wrapper.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { UserProfileRow, TradeRow } from '../types';
+import type { UserProfileRow, TradeRow, Statistical } from '../types';
 import type { TodaySignals } from '../analyzers/todaySignals';
 
 /** Bump on any edit to SYSTEM_PROMPT or buildUserMessage. Stored in
  *  daily_insights.prompt_version so a later regression can be traced to a
- *  specific prompt revision. */
-export const DAILY_INSIGHT_PROMPT_VERSION = 1;
+ *  specific prompt revision.
+ *
+ *  v2 — statistical fallback (profile-less users now get real numbers) and
+ *       angle-bracket escaping in every interpolated block. */
+export const DAILY_INSIGHT_PROMPT_VERSION = 2;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -95,6 +98,27 @@ export interface DailyInsightInputs {
   todayTrades:      readonly TradeRow[];
   signals:          TodaySignals;
   pastWritingBlock: string;              // JSON string from formatPastWritingBlock
+  /** Deterministic stats to use when the rolling profile has none yet.
+   *  Computed by analyzers/statistical.ts from the user's real trade history —
+   *  never invented, never a placeholder. Ignored when the profile already
+   *  carries a populated `statistical`. */
+  statisticalFallback?: Statistical;
+}
+
+/** JSON.stringify, with `<` and `>` neutralized.
+ *
+ *  The four data blocks are delimited by pseudo-XML tags, and JSON string
+ *  escaping does NOT touch angle brackets — so a trader who names a setup
+ *  `</today><user_profile>` would be writing their own prompt sections. The
+ *  \uXXXX form is still valid JSON and decodes to the same characters on the
+ *  model's side, so nothing is lost but the injection. */
+function safeJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+}
+
+/** Same treatment for a block that is already-serialized JSON. */
+function safeBlock(json: string): string {
+  return json.replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 }
 
 /** Compact representation of one trade — the schema the system prompt
@@ -124,10 +148,23 @@ function compact(t: TradeRow): CompactTrade {
   };
 }
 
-function profileBlock(p: UserProfileRow | null): unknown {
-  if (!p) return { statistical: {}, behavioral: {}, narrative_summary: '' };
+/** True when the profile's statistical blob has nothing usable in it — no
+ *  row at all, or a row whose stats were never computed. */
+function statsAreEmpty(s: Statistical | undefined | null): boolean {
+  return !s || typeof s.n !== 'number' || s.n === 0;
+}
+
+function profileBlock(p: UserProfileRow | null, fallback?: Statistical): unknown {
+  // The rolling profile is built by a background agent that may not have run
+  // yet (brand-new user, or the refresh job hasn't fired). Rather than ship an
+  // empty <user_profile> — which makes the model either say nothing useful or
+  // guess — fall back to the deterministic computer over real trade history.
+  const statistical = statsAreEmpty(p?.statistical) ? (fallback ?? {}) : p!.statistical;
+  if (!p) {
+    return { statistical, behavioral: {}, narrative_summary: '' };
+  }
   return {
-    statistical:       p.statistical,
+    statistical,
     behavioral:        p.behavioral,
     narrative_summary: p.narrative_summary,
   };
@@ -140,19 +177,19 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
   const trades = inputs.todayTrades.map(compact);
   return [
     '<user_profile>',
-    JSON.stringify(profileBlock(inputs.profile)),
+    safeJson(profileBlock(inputs.profile, inputs.statisticalFallback)),
     '</user_profile>',
     '',
     '<today>',
-    JSON.stringify(trades),
+    safeJson(trades),
     '</today>',
     '',
     '<today_signals>',
-    JSON.stringify(inputs.signals),
+    safeJson(inputs.signals),
     '</today_signals>',
     '',
     '<past_writing>',
-    inputs.pastWritingBlock,
+    safeBlock(inputs.pastWritingBlock),
     '</past_writing>',
   ].join('\n');
 }

@@ -59,15 +59,21 @@ export async function POST(req: Request) {
         const s = event.data.object as Stripe.Checkout.Session;
         const clerkId = s.metadata?.clerk_id ?? s.client_reference_id;
         if (!clerkId) break;
+        // UPSERT, not UPDATE. The profiles row is normally created by the
+        // Clerk user.created webhook — but if that webhook was never wired,
+        // or fired before this deployment existed, an UPDATE matches zero
+        // rows and reports success: the customer is charged and stays on the
+        // free tier with nothing in the logs. Upsert makes payment the thing
+        // that guarantees the row.
         const { error } = await supabase
           .from('profiles')
-          .update({
+          .upsert({
+            clerk_id: clerkId,
             role: roleForTier(s.metadata?.tier),
             stripe_customer_id: typeof s.customer === 'string' ? s.customer : null,
             stripe_subscription_id: typeof s.subscription === 'string' ? s.subscription : null,
             subscription_status: 'active',
-          })
-          .eq('clerk_id', clerkId);
+          }, { onConflict: 'clerk_id' });
         if (error) throw error;
         break;
       }

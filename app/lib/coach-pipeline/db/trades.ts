@@ -65,6 +65,30 @@ export async function listTradesForDate(
   return (data ?? []) as TradeRow[];
 }
 
+/** This user's most recent trades, newest first, capped at `limit`.
+ *
+ *  Feeds computeStatistical when the rolling profile hasn't been built yet.
+ *  Every new user starts without a user_profile row, and without this the
+ *  <user_profile> block would go out empty forever — the model would have
+ *  nothing but today's handful of trades to reason from. 200 rows is enough
+ *  for a stable win-rate/PF read and still a single fast index scan. */
+export async function listRecentTrades(
+  clerkId: string,
+  limit = 200,
+): Promise<TradeRow[]> {
+  const cid = requireClerkId(clerkId);
+  const { data, error } = await getClient()
+    .from(T.trades)
+    .select('*')
+    .eq('clerk_id', cid)
+    .is('deleted_at', null)
+    .order('date', { ascending: false })
+    .order('time', { ascending: false, nullsFirst: false })
+    .limit(Math.min(Math.max(limit, 1), 500));
+  if (error) throw error;
+  return (data ?? []) as TradeRow[];
+}
+
 /** Stamp a batch of trades as included in the current profile refresh.
     Idempotent: setting `profile_processed_at` twice is a no-op. Called at
     the end of a successful refresh — never before, so a failed refresh
@@ -75,8 +99,11 @@ export async function markTradesProcessed(
   processedRev: number,
   processedAt: Date = new Date(),
 ): Promise<void> {
-  if (!tradeIds.length) return;
+  // Validate the tenant BEFORE the empty-list early return, so a caller
+  // passing a bad clerk_id gets told on every call rather than only on the
+  // calls that happen to have work to do.
   const cid = requireClerkId(clerkId);
+  if (!tradeIds.length) return;
   const { error } = await getClient()
     .from(T.trades)
     .update({
