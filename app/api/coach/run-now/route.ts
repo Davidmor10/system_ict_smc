@@ -51,23 +51,46 @@ export const dynamic     = 'force-dynamic';
 
 /** Resolve who this run is for, by either accepted credential.
  *
- *  The secret is compared in constant time and only after confirming it is
- *  configured at all — an unset CRON_SECRET must never make `key=undefined`
- *  or an empty string a valid credential. */
-function authorizeByKey(req: NextRequest): { userId: string } | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return null;
+ *  Returns `{ skip: true }` when no key was supplied at all — that's the
+ *  ordinary session path, not a failure. When a key WAS supplied but didn't
+ *  work, it says which of the three reasons applied.
+ *
+ *  Being specific matters here. The first version fell through to the Clerk
+ *  check on every failure, so a wrong key, an unset CRON_SECRET, a missing
+ *  clerk_id and a plain unauthenticated browser all produced the identical
+ *  `401 Unauthorized` — and this endpoint exists precisely so that failures
+ *  are readable. It leaks nothing: whoever sent a key already knows whether
+ *  they sent one.
+ *
+ *  The secret is compared in constant time, and only after confirming it is
+ *  configured at all — an unset CRON_SECRET must never make `key=` or an
+ *  empty string into a valid credential. */
+type KeyAuth =
+  | { ok: true;  userId: string }
+  | { ok: false; skip: true }
+  | { ok: false; skip: false; reason: string };
 
+function authorizeByKey(req: NextRequest): KeyAuth {
   const key = req.nextUrl.searchParams.get('key');
-  if (!key || !safeEqual(key, secret)) return null;
+  if (!key) return { ok: false, skip: true };
+
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return { ok: false, skip: false, reason: 'CRON_SECRET is not set on this deployment' };
+  }
+  if (!safeEqual(key, secret)) {
+    return { ok: false, skip: false, reason: 'key does not match CRON_SECRET' };
+  }
 
   // The key proves "you are the operator", not "you are user X" — so the
   // target user has to be named explicitly. No default: silently running for
   // the wrong account is worse than an error message.
   const clerkId = req.nextUrl.searchParams.get('clerk_id');
-  if (!clerkId) return null;
+  if (!clerkId) {
+    return { ok: false, skip: false, reason: 'key accepted, but clerk_id is missing' };
+  }
 
-  return { userId: clerkId };
+  return { ok: true, userId: clerkId };
 }
 
 export async function GET(req: NextRequest) {
@@ -76,15 +99,38 @@ export async function GET(req: NextRequest) {
   // and the worst a cross-site trigger can do is generate one insight the
   // owner was going to get anyway.
   const viaKey = authorizeByKey(req);
+
   let userId: string;
-  if (viaKey) {
+  if (viaKey.ok) {
     logger.warn('run-now authorized by shared secret, not a session', {
       route: ROUTE, userId: viaKey.userId,
     });
     userId = viaKey.userId;
+  } else if (!viaKey.skip) {
+    // A key was offered and rejected. Say why rather than falling back to the
+    // session check, which would report the wrong problem.
+    return NextResponse.json(
+      { error: 'Unauthorized', via: 'key', reason: viaKey.reason },
+      { status: 401 },
+    );
   } else {
     const gate = await assertOwner(ROUTE);
-    if (gate instanceof NextResponse) return gate;
+    if (gate instanceof NextResponse) {
+      // Same idea for the session path: 401 here means Clerk saw no session
+      // (usually a cookie scoped to a different hostname), 403 means signed in
+      // but not an owner. Naming which one saves a round of guessing.
+      const status = gate.status;
+      return NextResponse.json(
+        {
+          error:  status === 403 ? 'Forbidden' : 'Unauthorized',
+          via:    'session',
+          reason: status === 403
+            ? 'signed in, but this email is not in the owner allowlist'
+            : 'no Clerk session on this request — check you are signed in on this exact hostname, or use ?key=&clerk_id=',
+        },
+        { status },
+      );
+    }
     userId = gate.userId;
   }
 
