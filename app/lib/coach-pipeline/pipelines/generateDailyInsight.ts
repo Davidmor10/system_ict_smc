@@ -44,7 +44,12 @@ export interface GenerateInputs {
 }
 
 export type GenerateOutcome =
-  | { status: 'ok';       row: DailyInsightRow; provider: Provider; fallbackReason?: FallbackReason }
+  // `primaryError` carries Claude's failure message on a rescued run. Without
+  // it a fallback is indistinguishable from a healthy run except for the
+  // provider field — the pipeline reports success while never once reaching
+  // the model it is supposed to be using, and the reason is buried in a log
+  // line nobody reads.
+  | { status: 'ok';       row: DailyInsightRow; provider: Provider; fallbackReason?: FallbackReason; primaryError?: string }
   | { status: 'exists';   row: DailyInsightRow }                        // insight already exists for this user+day+kind
   | { status: 'disabled' }                                              // kill switch off
   | { status: 'ineligible'; reason: 'free_plan' }                       // free tier gets no insight
@@ -181,6 +186,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   let usedLatency   = 0;
   let usedFallbackReason: FallbackReason | undefined = primaryFallbackReason;
   let usedModel: string;
+  let primaryError: string | undefined;
 
   if (primary === 'anthropic') {
     const c = await callClaudeInsight(SYSTEM_PROMPT, userMessage);
@@ -207,6 +213,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
       });
       logger.warn('claude failed → trying gemini fallback', { clerkId: cid, kind: c.errorKind });
       const claudeErrMessage = c.message;
+      primaryError = `${CLAUDE_MODEL} ${c.errorKind}${c.status ? ` (${c.status})` : ''}: ${c.message.slice(0, 300)}`;
 
       const g = await callGeminiInsight(SYSTEM_PROMPT + GEMINI_STRICT_ADDENDUM, userMessage);
       if (g.ok) {
@@ -324,6 +331,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     row:            inserted,
     provider:       usedProvider,
     fallbackReason: usedProvider === 'google' ? usedFallbackReason : undefined,
+    primaryError,
   };
 }
 

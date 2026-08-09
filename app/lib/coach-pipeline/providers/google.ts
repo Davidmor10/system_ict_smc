@@ -125,9 +125,16 @@ export async function embedAll(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const GEMINI_INSIGHT_MODEL       = 'gemini-2.5-flash';
-export const GEMINI_INSIGHT_MAX_TOKENS  = 400;   // tighter than Claude on purpose
+export const GEMINI_INSIGHT_MAX_TOKENS  = 700;
 export const GEMINI_INSIGHT_TEMPERATURE = 0.3;
 export const GEMINI_INSIGHT_TIMEOUT_MS  = 15_000;
+
+// Gemini 2.5 Flash is a thinking model, and maxOutputTokens budgets thinking
+// AND visible text together. Left at the default it spent ~390 of a 400-token
+// budget reasoning and returned 13 tokens of Hebrew cut off mid-word — an
+// insight that reads as broken software to the trader. Thinking is off: this
+// is one short paragraph grounded in data blocks, not a reasoning problem.
+const GEMINI_THINKING_BUDGET = 0;
 
 // Gemini 2.5 Flash pricing (Aug 2026) — USD per token, up to 128k context.
 const GEMINI_COST_INPUT_PER_TOKEN  = 0.075 / 1_000_000;
@@ -182,17 +189,40 @@ export async function callGeminiInsight(
       config: {
         temperature:     GEMINI_INSIGHT_TEMPERATURE,
         maxOutputTokens: GEMINI_INSIGHT_MAX_TOKENS,
+        thinkingConfig:  { thinkingBudget: GEMINI_THINKING_BUDGET },
         abortSignal:     controller.signal,
       },
     });
 
-    const text = typeof res.text === 'string' ? res.text : '';
-    if (!text.trim()) {
+    const raw = typeof res.text === 'string' ? res.text : '';
+    if (!raw.trim()) {
       return {
         ok: false, errorKind: 'other',
         message: 'gemini returned empty text',
         latencyMs: Date.now() - started,
       };
+    }
+
+    // Belt and braces: even with thinking off, a long answer can still hit the
+    // ceiling. Never persist a sentence that stops mid-word — cut back to the
+    // last completed sentence instead, and fail outright if nothing usable
+    // survives. A missing insight is recoverable; a broken-looking one isn't.
+    const finish = (res as { candidates?: Array<{ finishReason?: string }> })
+      .candidates?.[0]?.finishReason;
+    let text = raw;
+    if (finish === 'MAX_TOKENS') {
+      const cut = Math.max(raw.lastIndexOf('.'), raw.lastIndexOf('!'), raw.lastIndexOf('?'));
+      text = cut > 0 ? raw.slice(0, cut + 1) : '';
+      logger.warn('gemini hit maxOutputTokens', {
+        rawLength: raw.length, keptLength: text.length,
+      });
+      if (text.trim().length < 80) {
+        return {
+          ok: false, errorKind: 'other',
+          message: `gemini truncated at maxOutputTokens with nothing usable (${raw.length} chars)`,
+          latencyMs: Date.now() - started,
+        };
+      }
     }
 
     // usageMetadata is optional in the SDK's typings; guard both fields.
