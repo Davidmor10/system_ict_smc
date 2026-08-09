@@ -58,6 +58,10 @@ export default function NotebookView() {
   /* Data ─────────────────────────────────────────────────────────── */
   const [customFolders, setCustomFolders] = useState<NotebookFolder[]>([]);
   const [entries, setEntries] = useState<NotebookEntry[]>([]);
+  /** Entries have come back from the cloud. Until this is true, `entries` is
+   *  an empty array that means "not loaded yet", not "the user has none" —
+   *  and anything that writes the list back must wait. */
+  const [entriesHydrated, setEntriesHydrated] = useState(false);
   const [trades, setTrades] = useState<TradeEntry[]>([]);
 
   /* UI state ─────────────────────────────────────────────────────── */
@@ -99,7 +103,9 @@ export default function NotebookView() {
     hydrateTradesFromCloud().then(m => { if (m) setTrades(m); }).catch(() => {});
     // Custom folders + entries + templates from cloud
     hydrateList<NotebookFolder>(CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY).then(setCustomFolders).catch(() => {});
-    hydrateList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY).then(setEntries).catch(() => {});
+    hydrateList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY)
+      .then(list => { setEntries(list); setEntriesHydrated(true); })
+      .catch(() => setEntriesHydrated(true));
     hydrateList<NotebookTemplate & { updatedAt?: number; deleted?: boolean }>(TEMPLATES_KIND, TEMPLATES_KEY).then(setCustomTemplates).catch(() => {});
     // Per-user preferences: last folder / entry / tag filter
     hydrateDoc<NotebookPrefs>(PREFS_KIND, PREFS_KEY).then(prefs => {
@@ -127,9 +133,18 @@ export default function NotebookView() {
     }, 500);
   }, [currentFolderId, currentEntryId, filterTag]);
 
-  /* Re-seed trade entries whenever trades change ────────────────── */
+  /* Re-seed trade entries whenever trades change ──────────────────
+     Gated on entriesHydrated, and that gate is the whole point.
+
+     loadTrades() is synchronous while hydrateList() is a round-trip, so this
+     effect used to fire with `entries` still [] — then write [...[], seeded]
+     back to the cloud as the authoritative list. Every note the user had
+     written was erased by opening the notebook. It looked like "the editor
+     doesn't show what I saved"; the text was saved, and then deleted.
+
+     An empty `entries` before hydration means "not loaded", never "none". */
   useEffect(() => {
-    if (!trades.length) return;
+    if (!entriesHydrated || !trades.length) return;
     setEntries(prev => {
       const seeded = seedTradeEntries(trades, prev);
       if (!seeded.length) return prev;
@@ -138,7 +153,7 @@ export default function NotebookView() {
       void commitList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY, next);
       return next;
     });
-  }, [trades]);
+  }, [trades, entriesHydrated]);
 
   /* Derived ─────────────────────────────────────────────────────── */
   const folders = useMemo(() => mergedFolders(customFolders), [customFolders]);
