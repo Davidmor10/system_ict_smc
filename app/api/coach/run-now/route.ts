@@ -15,10 +15,25 @@
 //
 // Same budget checks, same fallback logic, same persistence as the cron. If it
 // works here it works there.
+//
+// TWO WAYS IN
+//   1. Signed in as the owner (Clerk session). The normal path.
+//   2. `?key=<CRON_SECRET>&clerk_id=<id>` — the same shared secret the cron
+//      authenticates with. This exists because path 1 depends on the browser
+//      sending a Clerk session cookie, which silently fails whenever the URL
+//      is on a different host than the one you logged in on (a Vercel preview
+//      URL, say). Debugging "the pipeline is broken" should not first require
+//      debugging which hostname your cookie lives on.
+//
+// The tradeoff of path 2 is real: a secret in a query string lands in browser
+// history and the platform's access logs. It is here because this endpoint
+// spends about one cent and writes one row that ?force=1 can overwrite — the
+// blast radius does not justify a token-exchange flow. If you use it, rotate
+// CRON_SECRET afterwards and the exposure ends with it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from 'next/server';
-import { assertOwner } from '../../../lib/coach-pipeline/auth/guards';
+import { assertOwner, safeEqual } from '../../../lib/coach-pipeline/auth/guards';
 import { isOwnerEmail } from '../../../lib/coach-pipeline/auth/owners';
 import { generateDailyInsight, type PlanTier } from '../../../lib/coach-pipeline/pipelines/generateDailyInsight';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
@@ -34,14 +49,44 @@ const ROUTE = '/api/coach/run-now';
 export const maxDuration = 60;
 export const dynamic     = 'force-dynamic';
 
+/** Resolve who this run is for, by either accepted credential.
+ *
+ *  The secret is compared in constant time and only after confirming it is
+ *  configured at all — an unset CRON_SECRET must never make `key=undefined`
+ *  or an empty string a valid credential. */
+function authorizeByKey(req: NextRequest): { userId: string } | null {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return null;
+
+  const key = req.nextUrl.searchParams.get('key');
+  if (!key || !safeEqual(key, secret)) return null;
+
+  // The key proves "you are the operator", not "you are user X" — so the
+  // target user has to be named explicitly. No default: silently running for
+  // the wrong account is worse than an error message.
+  const clerkId = req.nextUrl.searchParams.get('clerk_id');
+  if (!clerkId) return null;
+
+  return { userId: clerkId };
+}
+
 export async function GET(req: NextRequest) {
   // GET is deliberate here — the whole point is that you can hit this from a
   // browser address bar to see whether the pipeline works. It's owner-gated,
   // and the worst a cross-site trigger can do is generate one insight the
   // owner was going to get anyway.
-  const gate = await assertOwner(ROUTE);
-  if (gate instanceof NextResponse) return gate;
-  const { userId } = gate;
+  const viaKey = authorizeByKey(req);
+  let userId: string;
+  if (viaKey) {
+    logger.warn('run-now authorized by shared secret, not a session', {
+      route: ROUTE, userId: viaKey.userId,
+    });
+    userId = viaKey.userId;
+  } else {
+    const gate = await assertOwner(ROUTE);
+    if (gate instanceof NextResponse) return gate;
+    userId = gate.userId;
+  }
 
   const started = Date.now();
   const date    = req.nextUrl.searchParams.get('date') ?? israelToday();

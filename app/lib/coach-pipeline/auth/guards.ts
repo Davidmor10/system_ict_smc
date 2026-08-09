@@ -19,7 +19,7 @@ export { OWNER_EMAILS, isOwnerEmail };
 
 /** Constant-time string compare that doesn't leak length through early exit.
  *  Hashes both sides to a fixed width first so unequal lengths are safe. */
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
   const bufB = Buffer.from(b, 'utf8');
   if (bufA.length !== bufB.length) {
