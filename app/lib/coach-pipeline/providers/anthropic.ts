@@ -2,7 +2,7 @@
 // Anthropic (Claude) provider wrapper.
 //
 // Called only from generateDailyInsight. Not a general-purpose SDK — every
-// setting the coach pipeline needs (model, max_tokens, temperature, timeout,
+// setting the coach pipeline needs (model, max_tokens, thinking, timeout,
 // system-prompt handling, structured return) is baked in.
 //
 // Never throws. Every outcome (ok / rate_limit / timeout / api_error / other)
@@ -15,12 +15,17 @@ import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../../logger';
 
 // Pinned so a Claude family upgrade doesn't silently ship. Bump deliberately.
-export const CLAUDE_MODEL      = 'claude-3-5-sonnet-20241022';
+//
+// NOT claude-3-5-sonnet-20241022 — that snapshot was retired 2025-10-28 and
+// now 404s. A 404 classifies as `other`, so the orchestrator would silently
+// rescue every single call to Gemini: the pipeline would "work" while never
+// once reaching Claude, and paying a wasted round-trip to find out.
+export const CLAUDE_MODEL      = 'claude-sonnet-5';
 export const CLAUDE_MAX_TOKENS = 500;
-export const CLAUDE_TEMPERATURE = 0.5;
 export const CLAUDE_TIMEOUT_MS = 15_000;
 
-// Sonnet 3.5 pricing (Aug 2026) — USD per token.
+// Sonnet 5 pricing — USD per token. (Intro rate is lower through 2026-08-31;
+// we bill the standard rate so the ledger never under-reports.)
 const COST_INPUT_PER_TOKEN  = 3  / 1_000_000;
 const COST_OUTPUT_PER_TOKEN = 15 / 1_000_000;
 
@@ -77,11 +82,18 @@ export async function callClaudeInsight(
   try {
     const res = await client().messages.create(
       {
-        model:       CLAUDE_MODEL,
-        max_tokens:  CLAUDE_MAX_TOKENS,
-        temperature: CLAUDE_TEMPERATURE,
-        system:      systemPrompt,
-        messages:    [{ role: 'user', content: userMessage }],
+        model:      CLAUDE_MODEL,
+        max_tokens: CLAUDE_MAX_TOKENS,
+        // No `temperature`. Sonnet 5 rejects non-default sampling parameters
+        // with a 400 — tone is steered by the system prompt instead.
+        //
+        // Thinking is explicitly OFF. When omitted, Sonnet 5 thinks
+        // adaptively, and max_tokens budgets thinking + visible text
+        // TOGETHER — a 300-400 token Hebrew insight would truncate
+        // mid-sentence behind a reasoning block nobody reads.
+        thinking:   { type: 'disabled' },
+        system:     systemPrompt,
+        messages:   [{ role: 'user', content: userMessage }],
       },
       { timeout: CLAUDE_TIMEOUT_MS },
     );

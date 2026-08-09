@@ -38,10 +38,20 @@ export async function logUsage(input: UsageInsert): Promise<void> {
   };
   const { error } = await getClient().from(T.aiUsageLog).insert(row);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('coach-pipeline: ai_usage_log insert failed', error.message);
   }
 }
+
+// ── Cost reads ──────────────────────────────────────────────────────────────
+//
+// Both sums go through Postgres RPCs (see supabase-migration-intelligence-
+// patch-2.sql §1), NOT through a select-then-reduce.
+//
+// PostgREST caps a plain SELECT at 1000 rows by default and returns the
+// truncated page without an error. The previous implementation summed that
+// page client-side, so once the ledger passed 1000 rows in a window, every
+// total silently under-reported — and a budget cap that under-reports is a
+// budget cap that never trips. Aggregate where the rows are.
 
 /** Sum this user's AI cost since a given start of month (UTC). Used before
     every Claude call to decide whether to fall back to Gemini. */
@@ -50,24 +60,37 @@ export async function sumUserMonthlyCost(
   monthStart: Date,
 ): Promise<number> {
   const cid = requireClerkId(clerkId);
-  const { data, error } = await getClient()
-    .from(T.aiUsageLog)
-    .select('cost_usd_estimate')
-    .eq('clerk_id', cid)
-    .gte('created_at', monthStart.toISOString());
+  const { data, error } = await getClient().rpc('sum_ai_cost_user', {
+    p_clerk_id: cid,
+    p_since:    monthStart.toISOString(),
+  });
   if (error) throw error;
-  return (data ?? []).reduce((s, r) => s + Number(r.cost_usd_estimate ?? 0), 0);
+  return Number(data ?? 0);
 }
 
 /** Sum total system cost since a given timestamp — usually "today at 00:00
     Israel time". Feeds the daily budget alarm. */
 export async function sumSystemCostSince(sinceIso: string): Promise<number> {
-  const { data, error } = await getClient()
-    .from(T.aiUsageLog)
-    .select('cost_usd_estimate')
-    .gte('created_at', sinceIso);
+  const { data, error } = await getClient().rpc('sum_ai_cost_system', {
+    p_since: sinceIso,
+  });
   if (error) throw error;
-  return (data ?? []).reduce((s, r) => s + Number(r.cost_usd_estimate ?? 0), 0);
+  return Number(data ?? 0);
+}
+
+/** Chunks this user has embedded since `sinceIso`. tokens_in on a note_embed
+    row carries the chunk count, not tokens — see embedEntry.ts. */
+export async function sumEmbedChunksSince(
+  clerkId: string,
+  sinceIso: string,
+): Promise<number> {
+  const cid = requireClerkId(clerkId);
+  const { data, error } = await getClient().rpc('sum_embed_chunks_user', {
+    p_clerk_id: cid,
+    p_since:    sinceIso,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 /** Most-recent usage rows (any user) for the admin panel. */

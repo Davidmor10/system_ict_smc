@@ -7,6 +7,7 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
+import { inlineFormat } from './dailyInsightMarkdown';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { initSyncListeners } from '../lib/sync/collections';
@@ -661,7 +662,12 @@ export default function DashboardView() {
               </div>
               {discovery ? (
                 <>
-                  <div className="dp-ai-txt" dangerouslySetInnerHTML={{ __html: discovery.evidence.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') }} />
+                  {/* discovery.evidence is model-generated text. inlineFormat
+                      escapes it before re-introducing the one tag we allow —
+                      the previous inline .replace() bolded **…** without
+                      escaping anything, so any markup the model emitted was
+                      injected into the page verbatim. */}
+                  <div className="dp-ai-txt" dangerouslySetInnerHTML={{ __html: inlineFormat(discovery.evidence) }} />
                   {discovery.action && (
                     <div className="dp-ai-action"><span className="dp-ai-action-k">→</span>{discovery.action}</div>
                   )}

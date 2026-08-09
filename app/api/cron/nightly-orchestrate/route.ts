@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server';
 import { scheduleNightlyJobs } from '../../../lib/coach-pipeline/pipelines/scheduleNightlyJobs';
 import { processJobBatch, type BatchResult } from '../../../lib/coach-pipeline/pipelines/processJobBatch';
+import { assertCronAuth } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
 import { T } from '../../../lib/coach-pipeline/types';
 import { logger } from '../../../lib/logger';
@@ -25,20 +26,8 @@ import { logger } from '../../../lib/logger';
 export const maxDuration = 60;
 export const dynamic     = 'force-dynamic';
 
+const ROUTE = '/api/cron/nightly-orchestrate';
 const DRAIN_BUDGET_MS = 45_000;   // leave 15s for enqueue + logging + response
-
-function assertCronAuth(req: Request): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    logger.warn('CRON_SECRET unset — /api/cron/* endpoints are open');
-    return null;
-  }
-  const header = req.headers.get('authorization') ?? '';
-  if (header !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  return null;
-}
 
 async function logRun(startedAt: string, ok: boolean, extra: Record<string, unknown> & {
   enqueued?: number; completed?: number; failed?: number; retried?: number; error?: string;
@@ -64,7 +53,21 @@ async function logRun(startedAt: string, ok: boolean, extra: Record<string, unkn
 async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResult, 'picked' | 'completed' | 'failed' | 'retried'>> {
   let picked = 0, completed = 0, failed = 0, retried = 0;
   while (Date.now() - started < DRAIN_BUDGET_MS) {
-    const batch = await processJobBatch();
+    let batch: BatchResult;
+    try {
+      batch = await processJobBatch();
+    } catch (err) {
+      // A batch can throw before any job runs — a constraint violation on the
+      // claim, a transient Postgres error. Without this catch the exception
+      // propagates out of the whole cron and the nightly run is lost for
+      // everyone. Stop draining, keep what already succeeded, let the next
+      // pass pick up the rest (jobs stay 'pending', so nothing is dropped).
+      logger.error('drain batch threw — stopping drain', {
+        error: err instanceof Error ? err.message : String(err),
+        completedSoFar: completed,
+      });
+      break;
+    }
     picked    += batch.picked;
     completed += batch.completed;
     failed    += batch.failed;
@@ -76,8 +79,8 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
 }
 
 export async function POST(req: Request) {
-  const auth = assertCronAuth(req);
-  if (auth) return auth;
+  const denied = assertCronAuth(req, ROUTE);
+  if (denied) return denied;
 
   const started   = Date.now();
   const startedAt = new Date(started).toISOString();
@@ -91,12 +94,11 @@ export async function POST(req: Request) {
     await logRun(startedAt, true, combined);
     return NextResponse.json({ ok: true, ...combined });
   } catch (err) {
+    // Detail goes to the log, never to the caller — raw Postgres errors carry
+    // table/column/constraint names.
     const msg = err instanceof Error ? err.message : String(err);
     logger.error('nightly-orchestrate failed', { error: msg });
     await logRun(startedAt, false, { error: msg });
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
   }
 }
-
-// Support GET for manual poke from a browser (auth-gated identically).
-export async function GET(req: Request) { return POST(req); }

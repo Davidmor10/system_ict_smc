@@ -10,6 +10,7 @@
 
 import { NextResponse } from 'next/server';
 import { processJobBatch } from '../../../lib/coach-pipeline/pipelines/processJobBatch';
+import { assertCronAuth } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
 import { T } from '../../../lib/coach-pipeline/types';
 import { logger } from '../../../lib/logger';
@@ -19,18 +20,7 @@ import { logger } from '../../../lib/logger';
 export const maxDuration = 60;
 export const dynamic     = 'force-dynamic';
 
-function assertCronAuth(req: Request): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    logger.warn('CRON_SECRET unset — /api/cron/* endpoints are open');
-    return null;
-  }
-  const header = req.headers.get('authorization') ?? '';
-  if (header !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  return null;
-}
+const ROUTE = '/api/cron/process-jobs';
 
 async function logRun(startedAt: string, ok: boolean, extra: Record<string, unknown>): Promise<void> {
   try {
@@ -49,8 +39,8 @@ async function logRun(startedAt: string, ok: boolean, extra: Record<string, unkn
 }
 
 export async function POST(req: Request) {
-  const auth = assertCronAuth(req);
-  if (auth) return auth;
+  const denied = assertCronAuth(req, ROUTE);
+  if (denied) return denied;
 
   const startedAt = new Date().toISOString();
   try {
@@ -59,11 +49,14 @@ export async function POST(req: Request) {
     if (result.picked > 0) await logRun(startedAt, true, { ...result });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
+    // Detail to the log only — raw Postgres errors name tables, columns and
+    // constraints, which is a free schema map for anyone probing the endpoint.
     const msg = err instanceof Error ? err.message : String(err);
     logger.error('process-jobs failed', { error: msg });
     await logRun(startedAt, false, { error: msg });
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function GET(req: Request) { return POST(req); }
+// No GET alias. A GET that mutates the queue is reachable from a browser
+// address bar, a prefetch, or a link preview — and this one spends money.

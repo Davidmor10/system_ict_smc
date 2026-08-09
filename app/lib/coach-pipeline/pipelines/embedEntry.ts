@@ -22,10 +22,9 @@
 import { chunkBody } from '../chunker';
 import { embedAll, EMBEDDING_MODEL } from '../providers/google';
 import { getEntry, markEntryEmbedded, replaceChunks } from '../db/notebook';
-import { logUsage } from '../db/usage';
+import { logUsage, sumEmbedChunksSince } from '../db/usage';
 import { flags } from '../db/flags';
-import { getClient, requireClerkId } from '../db/client';
-import { T } from '../types';
+import { requireClerkId } from '../db/client';
 import { logger } from '../../logger';
 
 export const EMBED_DAILY_CAP_PER_USER = 500;
@@ -41,18 +40,13 @@ export type EmbedOutcome =
 
 /** Count embedding calls this user has made in the past 24h. Uses the
  *  authoritative ledger (ai_usage_log) so a restart / cold serverless
- *  instance never resets the count. */
+ *  instance never resets the count.
+ *
+ *  Summed in Postgres, not here: a client-side reduce over a PostgREST page
+ *  stops counting at 1000 rows, which turns a rate limit into a suggestion. */
 async function countEmbeddingsLast24h(clerkId: string): Promise<number> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await getClient()
-    .from(T.aiUsageLog)
-    .select('tokens_in')
-    .eq('clerk_id', clerkId)
-    .eq('purpose', 'note_embed')
-    .gte('created_at', since);
-  if (error) throw error;
-  // tokens_in on note_embed rows stores chunk count (see logUsage call below).
-  return (data ?? []).reduce((s, r) => s + Number(r.tokens_in ?? 0), 0);
+  return sumEmbedChunksSince(clerkId, since);
 }
 
 /** Full pipeline for one entry. Idempotent — if the entry's embedded_body_hash

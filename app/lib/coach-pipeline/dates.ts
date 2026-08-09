@@ -16,6 +16,21 @@ export function israelToday(now: Date = new Date()): string {
   }).format(now);
 }
 
+/** Yesterday in Israel as 'YYYY-MM-DD'.
+ *
+ *  This is the *trading day* the nightly run analyzes. The cron fires at
+ *  01:00 UTC — 03:00/04:00 in Israel — so by the time it runs, the Israel
+ *  calendar has already rolled over. Targeting israelToday() there would ask
+ *  for trades from a day that is three hours old and always empty.
+ *
+ *  Implemented by subtracting a day from the *already-localized* date string
+ *  rather than from the instant, so a DST shift can't move the answer. */
+export function israelYesterday(now: Date = new Date()): string {
+  const [y, m, d] = israelToday(now).split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d) - 86_400_000);
+  return prev.toISOString().slice(0, 10);
+}
+
 /** Day-of-week in Israel: Sunday=0 … Saturday=6. */
 export function israelDayOfWeek(now: Date = new Date()): number {
   const day = now.toLocaleDateString('en-US', { timeZone: TZ, weekday: 'long' });

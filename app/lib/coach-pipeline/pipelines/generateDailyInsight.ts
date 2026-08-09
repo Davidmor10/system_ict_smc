@@ -17,9 +17,9 @@
 
 import { createHash } from 'crypto';
 
-import type { DailyInsightRow, FallbackReason, InsightKind, Provider, TradeRow } from '../types';
+import type { DailyInsightRow, FallbackReason, InsightKind, Provider, Statistical, TradeRow } from '../types';
 import { getUserProfile } from '../db/profile';
-import { listTradesForDate } from '../db/trades';
+import { listTradesForDate, listRecentTrades } from '../db/trades';
 import { getInsightForDate, insertInsight } from '../db/insights';
 import { logUsage, sumUserMonthlyCost, sumSystemCostSince } from '../db/usage';
 import { flags } from '../db/flags';
@@ -29,6 +29,7 @@ import {
   SYSTEM_PROMPT, GEMINI_STRICT_ADDENDUM, DAILY_INSIGHT_PROMPT_VERSION, buildUserMessage,
 } from '../prompts/dailyInsight';
 import { computeTodaySignals } from '../analyzers/todaySignals';
+import { computeStatistical } from '../analyzers/statistical';
 import { retrievePastWriting } from './retrievePastWriting';
 import { requireClerkId } from '../db/client';
 import { logger } from '../../logger';
@@ -128,6 +129,24 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   ]);
   const signals = computeTodaySignals(todayTrades);
 
+  // The rolling profile is written by a background agent. Until it has run at
+  // least once — which for every new user is "not yet" — profile.statistical
+  // is empty, and the model would be asked to coach on a single day's trades
+  // with no idea who this trader is. Compute the numbers ourselves from real
+  // history: deterministic, free, and no number in it was invented.
+  let statisticalFallback: Statistical | undefined;
+  if (!profile || !profile.statistical || typeof profile.statistical.n !== 'number' || profile.statistical.n === 0) {
+    try {
+      const history = await listRecentTrades(cid, 200);
+      if (history.length) statisticalFallback = computeStatistical(history, { today: inputs.date });
+    } catch (err) {
+      // A missing fallback degrades the insight; it must never kill the run.
+      logger.warn('statistical fallback failed — continuing without it', {
+        clerkId: cid, error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Retrieval — never throws, always returns a well-formed empty on failure.
   const retrieval = await retrievePastWriting(cid, todayTrades);
 
@@ -149,6 +168,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     todayTrades,
     signals,
     pastWritingBlock: retrieval.block,
+    statisticalFallback,
   });
 
   // 6. Run the primary. If primary is Claude and it fails, try Gemini once
@@ -251,10 +271,18 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
 
   // 8. Persist. Race-safe: insertInsight returns null on unique-conflict, and
   //    if that happens we return the row that beat us.
-  const promptVersion = await flags.insightPromptVersion();
+  // The code constant wins over the DB flag. prompt_version exists so a bad
+  // insight can be traced to the exact prompt text that produced it — a flag
+  // that someone forgot to bump would record a version this run never used,
+  // which is worse than no version at all. The flag stays available as an
+  // override for deliberate A/B runs; it just can't silently lag the code.
+  const flagVersion   = await flags.insightPromptVersion();
+  const promptVersion = Math.max(flagVersion, DAILY_INSIGHT_PROMPT_VERSION);
   const contextSnapshot: Record<string, unknown> = {
     profile_updated_at:   profile?.updated_at ?? null,
     analyzer_version:     profile?.analyzer_version ?? null,
+    statistical_source:   statisticalFallback ? 'computed_fallback' : (profile ? 'rolling_profile' : 'none'),
+    statistical_n:        statisticalFallback?.n ?? profile?.statistical?.n ?? 0,
     trade_ids:            todayTrades.map(t => t.id),
     today_signals:        signals,
     retrieval_query_text: retrieval.queryText,

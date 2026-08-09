@@ -83,33 +83,87 @@ $$;
 --     since orchestrator staggers scheduled_at across a 60-minute window).
 --   - Bounded by p_limit (default 5, hard cap 20 to protect the worker
 --     invocation budget on Vercel).
+--
+-- Three things this function must NOT do, learned the hard way:
+--
+--   a) It must never return two jobs with the same (clerk_id, job_type). The
+--      partial unique index jobs_one_running_per_kind forbids two 'running'
+--      rows of a kind per user, so the outer UPDATE would raise 23505 and
+--      abort the WHOLE batch — one user with a stray duplicate takes down
+--      everyone else's insight for the night. Hence `distinct on`.
+--
+--   b) It must not hand out a job for a user who already has one running.
+--      Same index, same blast radius. Hence the `not exists` guard.
+--
+--   c) It must not let a crashed worker wedge a user forever. A serverless
+--      invocation that is killed mid-job leaves status = 'running' with no
+--      one to clear it, and (b) would then block that user permanently. The
+--      reaper CTE returns anything running longer than 15 minutes to
+--      'pending'. Note that CTEs share one snapshot, so a reaped row becomes
+--      visible on the NEXT call, not this one — deliberate, and harmless
+--      because the caller loops.
 -- ─────────────────────────────────────────────────────────────────────────────
 create or replace function pick_pending_jobs(p_limit int default 5)
 returns setof processing_jobs
 language sql volatile
 as $$
-  with candidates as (
-    select id
-    from processing_jobs
-    where status = 'pending'
-      and (scheduled_at is null or scheduled_at <= now())
-      and (next_retry_at is null or next_retry_at <= now())
+  with reaped as (
+    update processing_jobs
+       set status     = 'pending',
+           started_at = null,
+           error      = 'reaped: running > 15 minutes without completing',
+           error_kind = 'timeout'
+     where status = 'running'
+       and started_at is not null
+       and started_at < now() - interval '15 minutes'
+    returning id
+  ),
+  locked as (
+    select pj.id, pj.clerk_id, pj.job_type, pj.scheduled_at
+    from processing_jobs pj
+    where pj.status = 'pending'
+      and (pj.scheduled_at is null or pj.scheduled_at <= now())
+      and (pj.next_retry_at is null or pj.next_retry_at <= now())
+      and not exists (
+        select 1
+        from processing_jobs r
+        where r.clerk_id = pj.clerk_id
+          and r.job_type = pj.job_type
+          and r.status   = 'running'
+      )
+    order by pj.scheduled_at asc nulls first
+    -- Over-fetch: duplicates collapse in `candidates` below, so a narrow
+    -- lock window would return fewer than p_limit jobs on a busy queue.
+    limit greatest(1, least(coalesce(p_limit, 5), 20)) * 4
+    for update skip locked
+  ),
+  candidates as (
+    select distinct on (clerk_id, job_type) id, scheduled_at
+    from locked
+    order by clerk_id, job_type, scheduled_at asc nulls first
+  ),
+  bounded as (
+    select id from candidates
     order by scheduled_at asc nulls first
     limit greatest(1, least(coalesce(p_limit, 5), 20))
-    for update skip locked
   )
   update processing_jobs pj
     set status      = 'running',
         started_at  = now()
-    from candidates
-    where pj.id = candidates.id
+    from bounded
+    where pj.id = bounded.id
     returning pj.*;
 $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Grants — the coach pipeline calls these functions with the service_role
--- key, which has full DB access. But we also grant to authenticated so a
--- future switch to Supabase-Auth-backed calls Just Works.
+-- Grants — the coach pipeline calls these functions with the service_role key.
+--
+-- `authenticated` is deliberately NOT granted on pick_pending_jobs: it mutates
+-- the queue (claims jobs, flips status) and takes no clerk_id, so any logged-in
+-- user could hand themselves the entire queue and starve the worker. The revoke
+-- is explicit because an earlier version of this file did grant it.
 -- ─────────────────────────────────────────────────────────────────────────────
 grant execute on function search_notebook_chunks(text, vector, int, numeric) to service_role, authenticated;
-grant execute on function pick_pending_jobs(int) to service_role, authenticated;
+grant  execute on function pick_pending_jobs(int) to service_role;
+revoke execute on function pick_pending_jobs(int) from authenticated;
+revoke execute on function pick_pending_jobs(int) from anon;

@@ -135,7 +135,7 @@ function packAtoms(atoms: string[]): string[] {
 function tailByTokens(text: string, n: number): string {
   if (!text) return '';
   const words = text.split(/(\s+)/);
-  let acc: string[] = [];
+  const acc: string[] = [];
   let tok = 0;
   for (let i = words.length - 1; i >= 0; i -= 1) {
     const w = words[i];

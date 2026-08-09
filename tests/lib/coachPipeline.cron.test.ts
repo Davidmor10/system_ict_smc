@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   israelToday,
+  israelYesterday,
   israelDayOfWeek,
   stableHash,
   scheduleSlotFor,
@@ -28,6 +29,45 @@ describe('israelToday', () => {
     expect(israelToday(new Date('2026-08-15T20:00:00Z'))).toBe('2026-08-15');
     // 2026-08-15 22:30 UTC = 2026-08-16 01:30 IL — Israel already tomorrow.
     expect(israelToday(new Date('2026-08-15T22:30:00Z'))).toBe('2026-08-16');
+  });
+});
+
+describe('israelYesterday', () => {
+  it('is exactly one day before israelToday', () => {
+    const now  = new Date('2026-08-15T20:00:00Z');
+    const diff = (Date.parse(israelToday(now)) - Date.parse(israelYesterday(now))) / 86_400_000;
+    expect(diff).toBe(1);
+  });
+
+  // The nightly cron fires at 01:00 UTC. That's already the NEXT day in
+  // Israel, so the trading day it must analyze is israelYesterday — this is
+  // the case that made every job load zero trades.
+  it('returns the trading day that just closed when the cron fires', () => {
+    // 2026-08-16 01:00 UTC = 2026-08-16 04:00 IL (summer, UTC+3).
+    const cronFire = new Date('2026-08-16T01:00:00Z');
+    expect(israelToday(cronFire)).toBe('2026-08-16');
+    expect(israelYesterday(cronFire)).toBe('2026-08-15');
+  });
+
+  it('crosses a month boundary', () => {
+    expect(israelYesterday(new Date('2026-09-01T01:00:00Z'))).toBe('2026-08-31');
+  });
+
+  it('crosses a year boundary', () => {
+    expect(israelYesterday(new Date('2027-01-01T01:00:00Z'))).toBe('2026-12-31');
+  });
+
+  it('handles a leap day', () => {
+    expect(israelYesterday(new Date('2028-03-01T01:00:00Z'))).toBe('2028-02-29');
+  });
+
+  // Israel's DST transitions are ±1h. Subtracting from the localized date
+  // string (rather than from the instant) makes them irrelevant by design.
+  it('is unaffected by the DST transition', () => {
+    // IL moved to DST on 2026-03-27; the day after must still resolve cleanly.
+    expect(israelYesterday(new Date('2026-03-28T01:00:00Z'))).toBe('2026-03-27');
+    // IL left DST on 2026-10-25.
+    expect(israelYesterday(new Date('2026-10-26T01:00:00Z'))).toBe('2026-10-25');
   });
 });
 
