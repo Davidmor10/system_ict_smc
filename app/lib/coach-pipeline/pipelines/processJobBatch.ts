@@ -11,6 +11,7 @@ import { pickPendingJobs, markJobSuccess, markJobFailure } from '../db/jobs';
 import { getClient } from '../db/client';
 import { flags } from '../db/flags';
 import { generateDailyInsight, type PlanTier } from './generateDailyInsight';
+import { embedEntry } from './embedEntry';
 import { normalizeRole } from '../../getUserRole';
 import { isOwnerEmail } from '../auth/owners';
 import { israelToday, israelYesterday } from '../dates';
@@ -106,8 +107,31 @@ async function runOne(job: ProcessingJobRow): Promise<
       }
     }
 
-    // profile_refresh / note_embed jobs aren't wired to a runner yet — mark
-    // as skipped rather than failed so they don't consume retry budget.
+    if (job.job_type === 'note_embed') {
+      // Overflow from a notebook save: the first few entries were embedded
+      // inline, the rest were queued here. Partial success still counts as
+      // success — a retry would re-embed the ones that already worked, and
+      // embedEntry is a no-op on an unchanged hash anyway, so the next
+      // scheduled pass picks up stragglers without burning retry budget.
+      const ids = job.input_entry_ids ?? [];
+      let ok = 0, bad = 0;
+      for (const entryId of ids) {
+        const out = await embedEntry(job.clerk_id, entryId);
+        if (out.status === 'ok' || out.status === 'unchanged' || out.status === 'empty') ok += 1;
+        else bad += 1;
+      }
+      return {
+        kind: 'success',
+        summary: {
+          jobId: job.id, jobType: job.job_type, clerkId: job.clerk_id,
+          status: 'success', reason: `embedded ${ok}/${ids.length}${bad ? ` (${bad} incomplete)` : ''}`,
+          latencyMs: Date.now() - started,
+        },
+      };
+    }
+
+    // profile_refresh has no runner yet — mark as skipped rather than failed
+    // so it doesn't consume retry budget.
     return {
       kind: 'success',
       summary: {

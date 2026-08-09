@@ -5,6 +5,12 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supa
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { logger } from '../../lib/logger';
+import { syncNotebook, type SyncNotebookResult } from '../../lib/coach-pipeline/pipelines/syncNotebook';
+import type { ClientNotebookEntry } from '../../lib/coach-pipeline/mirror/notebookToIntelligence';
+
+// Must match ENTRIES_KIND in app/lib/notebook/store.ts. Not imported from
+// there: that module is client-side and pulls in the whole notebook store.
+const NOTEBOOK_ENTRIES_KIND = 'notebook_entries_v1';
 
 // Generic per-user KV sync for the client's localStorage collections (setups,
 // rules, violations, daily plan, reminders, preferences, lockout). Every query
@@ -103,7 +109,21 @@ export async function PUT(req: Request) {
         { onConflict: 'clerk_id,kind' },
       );
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+
+    // The notebook is the coach's only window into what the trader actually
+    // wrote. It syncs through this generic KV endpoint as one blob, while the
+    // pipeline reads a real notebook_entries table — so without this hop the
+    // RAG index has no source and every retrieval comes back empty.
+    //
+    // Awaited, not fire-and-forget: on serverless the function can be frozen
+    // the moment the response is returned, which is exactly how the trades
+    // mirror silently wrote nothing for a day.
+    let notebook: SyncNotebookResult | undefined;
+    if (parsed.data.kind === NOTEBOOK_ENTRIES_KIND && Array.isArray(parsed.data.data)) {
+      notebook = await syncNotebook(userId, parsed.data.data as ClientNotebookEntry[]);
+    }
+
+    return NextResponse.json({ ok: true, ...(notebook ? { notebook } : {}) });
   } catch (err) {
     logger.error('collections PUT failed', { userId, error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
