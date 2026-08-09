@@ -92,14 +92,25 @@ export async function POST(req: Request) {
           .update({
             role: paid ? roleForTier(sub.metadata?.tier) : 'free',
             subscription_status: event.type === 'customer.subscription.deleted' ? 'canceled' : sub.status,
-          });
+          }, { count: 'exact' });
 
-        const { error } = clerkId
+        const { error, count } = clerkId
           ? await query.eq('clerk_id', clerkId)
           : customerId
             ? await query.eq('stripe_customer_id', customerId)
-            : { error: null };
+            : { error: null, count: null };
         if (error) throw error;
+
+        // An UPDATE that matches nothing is not an error to Postgres, so
+        // without this check a subscription change would be acknowledged
+        // while the user's tier never moved — the exact failure mode that
+        // let paid customers sit on `free`. Throwing makes Stripe retry and
+        // puts the event in the dashboard's failed list where it's visible.
+        if (count === 0) {
+          throw new Error(
+            `no profiles row matched for ${clerkId ? `clerk_id=${clerkId}` : `stripe_customer_id=${customerId}`}`,
+          );
+        }
         break;
       }
 
