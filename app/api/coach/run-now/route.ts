@@ -32,6 +32,7 @@
 // CRON_SECRET afterwards and the exposure ends with it.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { assertOwner, safeEqual, cronSecret } from '../../../lib/coach-pipeline/auth/guards';
 import { isOwnerEmail } from '../../../lib/coach-pipeline/auth/owners';
@@ -65,10 +66,38 @@ export const dynamic     = 'force-dynamic';
  *  The secret is compared in constant time, and only after confirming it is
  *  configured at all — an unset CRON_SECRET must never make `key=` or an
  *  empty string into a valid credential. */
+/** Which build is actually serving this request.
+ *
+ *  Vercel bakes environment variables into a deployment at build time, so a
+ *  variable you changed after the last build is not the variable the running
+ *  function sees. That has cost this project several rounds of "but I set
+ *  it" — the commit and the build time make it checkable instead of
+ *  arguable. All three values are already public in the repo or the
+ *  deployment list. */
+function deploymentInfo() {
+  return {
+    commit:  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'unknown',
+    env:     process.env.VERCEL_ENV ?? 'local',
+    builtAt: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+  };
+}
+
+/** First 8 hex of SHA-256. Lets two values be compared for equality without
+ *  either being disclosed: 32 bits of a hash over a 256-bit random secret is
+ *  not something you work backwards from, but it answers "is the deployment
+ *  holding the string I think it is?" in one glance. */
+function fingerprint(s: string): string {
+  return createHash('sha256').update(s, 'utf8').digest('hex').slice(0, 8);
+}
+
 type KeyAuth =
   | { ok: true;  userId: string }
   | { ok: false; skip: true }
-  | { ok: false; skip: false; reason: string; lengths?: { received: number; expected: number } };
+  | {
+      ok: false; skip: false; reason: string;
+      lengths?:     { received: number; expected: number };
+      fingerprints?: { received: string; configured: string };
+    };
 
 function authorizeByKey(req: NextRequest): KeyAuth {
   const key = req.nextUrl.searchParams.get('key')?.trim();
@@ -88,7 +117,8 @@ function authorizeByKey(req: NextRequest): KeyAuth {
     return {
       ok: false, skip: false,
       reason: 'key does not match CRON_SECRET',
-      lengths: { received: key.length, expected: secret.length },
+      lengths:      { received: key.length,      expected:   secret.length },
+      fingerprints: { received: fingerprint(key), configured: fingerprint(secret) },
     };
   }
 
@@ -120,7 +150,14 @@ export async function GET(req: NextRequest) {
     // A key was offered and rejected. Say why rather than falling back to the
     // session check, which would report the wrong problem.
     return NextResponse.json(
-      { error: 'Unauthorized', via: 'key', reason: viaKey.reason, lengths: viaKey.lengths },
+      {
+        error:        'Unauthorized',
+        via:          'key',
+        reason:       viaKey.reason,
+        lengths:      viaKey.lengths,
+        fingerprints: viaKey.fingerprints,
+        deployment:   deploymentInfo(),
+      },
       { status: 401 },
     );
   } else {
@@ -178,8 +215,9 @@ export async function GET(req: NextRequest) {
     const result = await generateDailyInsight({ clerkId: userId, date, planTier, kind: 'daily' });
 
     return NextResponse.json({
-      ranAt:     new Date().toISOString(),
+      ranAt:      new Date().toISOString(),
       durationMs: Date.now() - started,
+      deployment: deploymentInfo(),
       input: {
         date,
         planTier,
