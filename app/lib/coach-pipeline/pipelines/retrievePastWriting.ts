@@ -37,6 +37,11 @@ export interface RetrievalResult {
   topScore:     number | null;         // for daily_insights.retrieval_top_score
   latencyMs:    number;                // embed + rpc combined
   skipped:      false | 'no_trades' | 'embed_failed' | 'search_failed';
+  /** The provider/DB message behind a failed skip. Retrieval degrades
+   *  silently by design — the insight is still worth writing without the
+   *  notebook — but "silently" meant the RAG half of this pipeline was dead
+   *  for its entire life and the only trace was a one-word enum. */
+  error?:       string;
 }
 
 /** Empty-result helper — used for the various skip paths so the caller
@@ -45,6 +50,7 @@ function empty(
   signals: TodaySignals,
   queryText: string,
   reason: 'no_trades' | 'embed_failed' | 'search_failed' | false,
+  error?: string,
 ): RetrievalResult {
   return {
     signals,
@@ -56,6 +62,7 @@ function empty(
     topScore:  null,
     latencyMs: 0,
     skipped:   reason,
+    error,
   };
 }
 
@@ -118,7 +125,7 @@ export async function retrievePastWriting(
       ok: false,
       errorKind: /rate/i.test(msg) ? 'rate_limit' : 'model_error',
     });
-    return empty(signals, queryText, 'embed_failed');
+    return empty(signals, queryText, 'embed_failed', `${EMBEDDING_MODEL}: ${msg.slice(0, 300)}`);
   }
   const embedLatency = Date.now() - embedStart;
 
@@ -139,7 +146,7 @@ export async function retrievePastWriting(
       purpose: 'retrieval_query', tokensIn: 1, tokensOut: 0, costUsdEst: 0,
       latencyMs: embedLatency, ok: true,
     });
-    return empty(signals, queryText, 'search_failed');
+    return empty(signals, queryText, 'search_failed', msg.slice(0, 300));
   }
   const searchLatency = Date.now() - searchStart;
 

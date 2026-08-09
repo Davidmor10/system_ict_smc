@@ -294,6 +294,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     today_signals:        signals,
     retrieval_query_text: retrieval.queryText,
     retrieval_skipped:    retrieval.skipped,
+    retrieval_error:      retrieval.error ?? null,
     retrieval_top_score:  retrieval.topScore,
     budget_state:         budget.state,
     budget_user_spend:    budget.userSpendUsd,

@@ -10,7 +10,15 @@
 import { genAI } from '../../ai/client';
 import { logger } from '../../logger';
 
-export const EMBEDDING_MODEL       = 'text-embedding-004';
+// NOT text-embedding-004 — that model has been retired, which is why every
+// retrieval came back `embed_failed` and the coach never once saw the
+// trader's own notebook.
+//
+// gemini-embedding-001 is natively 3072-dimensional and Matryoshka-trained,
+// so a 768-slice is a first-class representation rather than a truncation.
+// 768 is not a preference here: notebook_chunks.embedding is vector(768) and
+// the HNSW index is built for it, so any other width fails on insert.
+export const EMBEDDING_MODEL       = 'gemini-embedding-001';
 export const EMBEDDING_DIMENSIONS  = 768;
 export const EMBEDDING_BATCH_MAX   = 100;        // Google's per-call cap for batchEmbedContents
 
@@ -66,7 +74,9 @@ export async function embedBatch(
       const res = await genAI.models.embedContent({
         model:    EMBEDDING_MODEL,
         contents: texts,
-        config:   { taskType },
+        // outputDimensionality is required, not optional: the default is 3072
+        // and the column is vector(768), so omitting it fails on every insert.
+        config:   { taskType, outputDimensionality: EMBEDDING_DIMENSIONS },
       });
 
       // The SDK returns { embeddings: [{ values: number[] }, ...] } — normalize.
