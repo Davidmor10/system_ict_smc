@@ -153,6 +153,29 @@
 .nb-app .nb-ed-subtitle{font-family:var(--nb-ff-mono);font-size:10px;color:var(--nb-w40);margin-top:4px;letter-spacing:.03em;}
 .nb-app .nb-ed-meta{font-family:var(--nb-ff-mono);font-size:10px;color:var(--nb-w40);white-space:nowrap;flex-shrink:0;padding-top:8px;}
 
+/* Save control — the header's right edge. Two states, and they must be
+   readable at a glance: "נשמר" is quiet and inert, "שמור שינויים" is gold
+   and inviting, because unsaved work is the one thing in this editor worth
+   drawing the eye. */
+.nb-app .nb-ed-head-right{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.nb-app .nb-save-btn{
+  font-family:var(--nb-ff-mono);font-size:10.5px;font-weight:700;letter-spacing:.05em;
+  padding:7px 15px;border-radius:9px;white-space:nowrap;
+  background:var(--nb-w06);border:1px solid var(--nb-border);color:var(--nb-w40);
+  cursor:default;transition:.2s var(--nb-ease);
+}
+.nb-app .nb-save-btn.dirty{
+  background:linear-gradient(155deg,rgba(230,198,101,.18),rgba(232,152,82,.06));
+  border-color:var(--nb-gold-25);color:var(--nb-gold);cursor:pointer;
+  box-shadow:0 4px 14px -8px var(--nb-gold-40);
+}
+.nb-app .nb-save-btn.dirty:hover{transform:translateY(-1px);border-color:var(--nb-gold-40);}
+.nb-app .nb-save-btn.dirty:active{transform:translateY(0);}
+.nb-app .nb-save-btn:focus-visible{outline:2px solid var(--nb-gold);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){
+  .nb-app .nb-save-btn,.nb-app .nb-save-btn.dirty:hover{transition:none;transform:none;}
+}
+
 /* Tags row */
 .nb-app .nb-ed-tagbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;padding-inline-start:2px;}
 .nb-app .nb-ed-tagbar-ico{color:var(--nb-w40);font-size:13px;}

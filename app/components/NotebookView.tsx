@@ -65,6 +65,7 @@ export default function NotebookView() {
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [autosaveVisible, setAutosaveVisible] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<(NotebookTemplate & { updatedAt?: number; deleted?: boolean })[]>([]);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [templateNameModal, setTemplateNameModal] = useState<{ name: string } | null>(null);
@@ -78,7 +79,17 @@ export default function NotebookView() {
   /* Editor refs ─────────────────────────────────────────────────── */
   const edBodyRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveChipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Live mirrors of state the save path needs. The unmount and pagehide
+     handlers run with whatever closure they were registered with, and a
+     stale `entries` there would write an old snapshot back over the user's
+     text — so the save path reads these instead. */
+  const currentEntryIdRef = useRef<string | null>(null);
+  const patchEntryRef = useRef<(id: string, patch: Partial<NotebookEntry>) => void>(() => {});
+  /** Unsaved text is sitting in the editor DOM. A ref, not just state,
+   *  because the teardown handlers read it outside a render. */
+  const dirtyRef = useRef(false);
 
   /* Hydrate on mount ────────────────────────────────────────────── */
   useEffect(() => {
@@ -187,10 +198,25 @@ export default function NotebookView() {
      the reset happens in the folder onClick handler so it's user-driven
      and doesn't wipe the entry we just hydrated from prefs. */
 
-  /* Load entry content into editor when currentEntry changes ────── */
+  /* Load entry content into editor when currentEntry changes ──────
+     Before overwriting the editor, commit whatever the OUTGOING entry has
+     in the DOM. Switching entries used to blow away unsaved text with no
+     warning, same root cause as navigating away.
+
+     Written against refs on purpose: this effect sits above the save
+     helpers in the component body, so naming them in a dependency array
+     would read them before they are initialized. */
+  const loadedEntryIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!edBodyRef.current) return;
+    const outgoing = loadedEntryIdRef.current;
+    if (outgoing && outgoing !== (currentEntry?.id ?? null) && dirtyRef.current) {
+      patchEntryRef.current(outgoing, { bodyHtml: edBodyRef.current.innerHTML });
+    }
+    dirtyRef.current = false;
+    setDirty(false);
     edBodyRef.current.innerHTML = currentEntry?.bodyHtml ?? '';
+    loadedEntryIdRef.current = currentEntry?.id ?? null;
     savedRangeRef.current = null;
   }, [currentEntry?.id]);
 
@@ -203,6 +229,10 @@ export default function NotebookView() {
   const patchEntry = useCallback((id: string, patch: Partial<NotebookEntry>) => {
     persistEntries(entries.map(e => (e.id === id ? { ...e, ...patch, updatedAt: Date.now() } : e)));
   }, [entries, persistEntries]);
+
+  // Keep the save path's mirrors current.
+  patchEntryRef.current = patchEntry;
+  useEffect(() => { currentEntryIdRef.current = currentEntryId; }, [currentEntryId]);
 
   const removeEntry = useCallback((id: string) => {
     persistEntries(entries.filter(e => e.id !== id));
@@ -243,17 +273,77 @@ export default function NotebookView() {
     if (currentFolderId === id) setCurrentFolderId('trades');
   }, [folderById, entries, persistEntries, customFolders, persistCustomFolders, currentFolderId]);
 
-  /* Autosave the editor body (debounced) ────────────────────────── */
-  const scheduleAutosave = useCallback(() => {
-    if (!currentEntry) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const html = edBodyRef.current?.innerHTML ?? '';
-      patchEntry(currentEntry.id, { bodyHtml: html });
-      setAutosaveVisible(true);
-      setTimeout(() => setAutosaveVisible(false), 1600);
-    }, 700);
-  }, [currentEntry, patchEntry]);
+  /* Saving the editor body ───────────────────────────────────────
+     Explicit, not on a timer. The old behavior queued a write 700ms after
+     the last keystroke, so leaving the page inside that window dropped the
+     edit entirely — the timer never fired and the editor's DOM went away
+     with it. Typing now only marks the entry dirty; the Save button (or
+     Ctrl/Cmd+S) writes.
+
+     flushSave still runs when the editor is about to lose the text it is
+     holding — switching entries, unmounting, closing the tab. That is not
+     autosave sneaking back in: it is the difference between "you decide
+     when to save" and "your writing can vanish". Nothing here writes while
+     you type. */
+  const flushSave = useCallback((): boolean => {
+    if (!dirtyRef.current) return false;
+    const id = currentEntryIdRef.current;
+    const html = edBodyRef.current?.innerHTML;
+    if (!id || html == null) return false;
+    dirtyRef.current = false;
+    setDirty(false);
+    patchEntryRef.current(id, { bodyHtml: html });
+    return true;
+  }, []);
+
+  const saveNow = useCallback(() => {
+    const wrote = flushSave();
+    // Confirm either way. A Save press that reports nothing reads as broken,
+    // even when the correct answer is "already saved".
+    setAutosaveVisible(true);
+    if (saveChipTimerRef.current) clearTimeout(saveChipTimerRef.current);
+    saveChipTimerRef.current = setTimeout(() => setAutosaveVisible(false), wrote ? 1600 : 1000);
+  }, [flushSave]);
+
+  const markDirty = useCallback(() => {
+    if (!currentEntryIdRef.current) return;
+    dirtyRef.current = true;
+    setDirty(true);
+  }, []);
+
+  /* Ctrl/Cmd+S — the shortcut everyone's fingers already know. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveNow();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [saveNow]);
+
+  /* Last line of defence: the tab is closing or being hidden with unsaved
+     text in the DOM. Nothing else gets a chance to run after this. */
+  useEffect(() => {
+    const onLeave = () => { flushSave(); };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      flushSave();
+      e.preventDefault();
+    };
+    window.addEventListener('pagehide', onLeave);
+    document.addEventListener('visibilitychange', onLeave);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('pagehide', onLeave);
+      document.removeEventListener('visibilitychange', onLeave);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      // Unmount — navigating to another dashboard page. This is the exact
+      // path that lost the user's writing.
+      flushSave();
+    };
+  }, [flushSave]);
 
   /* Editor selection preservation (for toolbar) ─────────────────── */
   const saveRange = useCallback(() => {
@@ -276,8 +366,8 @@ export default function NotebookView() {
     restoreRange();
     try { document.execCommand(cmd, false, val ?? undefined); } catch { /* silent */ }
     saveRange();
-    scheduleAutosave();
-  }, [restoreRange, saveRange, scheduleAutosave]);
+    markDirty();
+  }, [restoreRange, saveRange, markDirty]);
 
   /* Font-size — wrap each text-node slice of the selection in a sized span,
      so a mixed h3/p/list selection all changes at once, and nested inner
@@ -299,7 +389,7 @@ export default function NotebookView() {
       r.setStart(span.firstChild!, 1); r.collapse(true);
       sel.removeAllRanges(); sel.addRange(r);
       savedRangeRef.current = r.cloneRange();
-      scheduleAutosave();
+      markDirty();
       return;
     }
     const { startContainer: startC, startOffset: startO, endContainer: endC, endOffset: endO } = range;
@@ -345,8 +435,8 @@ export default function NotebookView() {
       sel.removeAllRanges(); sel.addRange(r);
       savedRangeRef.current = r.cloneRange();
     }
-    scheduleAutosave();
-  }, [restoreRange, scheduleAutosave]);
+    markDirty();
+  }, [restoreRange, markDirty]);
 
   /* Toolbar mousedown preservation ──────────────────────────────── */
   const preserveSelection = useCallback((e: React.MouseEvent) => {
@@ -634,7 +724,17 @@ export default function NotebookView() {
                       })()}</div>
                     </div>
                   </div>
-                  <div className="nb-ed-meta">עודכן: {new Date(currentEntry.updatedAt ?? currentEntry.createdAt).toLocaleDateString('he-IL')}</div>
+                  <div className="nb-ed-head-right">
+                    <div className="nb-ed-meta">עודכן: {new Date(currentEntry.updatedAt ?? currentEntry.createdAt).toLocaleDateString('he-IL')}</div>
+                    <button
+                      type="button"
+                      className={`nb-save-btn${dirty ? ' dirty' : ''}`}
+                      onClick={saveNow}
+                      title="שמירה (Ctrl+S)"
+                    >
+                      {dirty ? 'שמור שינויים' : 'נשמר'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Stats strip — visible for trade + daily entries */}
@@ -765,7 +865,7 @@ export default function NotebookView() {
                   contentEditable
                   suppressContentEditableWarning
                   data-placeholder="התחל לכתוב..."
-                  onInput={scheduleAutosave}
+                  onInput={markDirty}
                   onMouseUp={saveRange}
                   onKeyUp={saveRange} />
               </>
@@ -775,7 +875,7 @@ export default function NotebookView() {
       </div>
 
       {/* Autosave chip */}
-      <div className={`nb-autosave${autosaveVisible ? ' show' : ''}`}><span className="nb-autosave-dot" />נשמר אוטומטית</div>
+      <div className={`nb-autosave${autosaveVisible ? ' show' : ''}`}><span className="nb-autosave-dot" />נשמר</div>
 
       {/* Folder create modal */}
       {folderModal && (
