@@ -231,8 +231,15 @@ export default function NotebookView() {
   }, [entries, persistEntries]);
 
   // Keep the save path's mirrors current.
+  //
+  // Tracks currentEntry?.id, NOT currentEntryId. Those differ: when nothing
+  // has been clicked, currentEntry falls back to the first entry in the list
+  // while currentEntryId stays null. Keying the save path off the id meant
+  // that on the most common path of all — open the notebook, start typing in
+  // whatever is already showing — every keystroke was ignored and the Save
+  // button never lit up.
   patchEntryRef.current = patchEntry;
-  useEffect(() => { currentEntryIdRef.current = currentEntryId; }, [currentEntryId]);
+  useEffect(() => { currentEntryIdRef.current = currentEntry?.id ?? null; }, [currentEntry?.id]);
 
   const removeEntry = useCallback((id: string) => {
     persistEntries(entries.filter(e => e.id !== id));
@@ -732,6 +739,7 @@ export default function NotebookView() {
                       onClick={saveNow}
                       title="שמירה (Ctrl+S)"
                     >
+                      {dirty && <span className="nb-save-dot" />}
                       {dirty ? 'שמור שינויים' : 'נשמר'}
                     </button>
                   </div>
