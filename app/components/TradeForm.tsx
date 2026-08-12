@@ -90,6 +90,23 @@ function loadPlaybookSetups(): PlaybookSetup[] {
 
 interface ExitRow { price: string; contracts: string; }
 
+/** The default shape of the exit question: one leg, the whole position.
+ *
+ *  This used to be an empty array, and the section that rendered it was
+ *  labelled "אופציונלי — למי שיצא בכמה חתיכות". 33 trades in, not one had an
+ *  exit recorded — which is what a form gets when it tells the trader that
+ *  skipping a field is free and that the result button will work it out.
+ *
+ *  It isn't free. Without a real exit price the R of the trade is the R the
+ *  trade was PLANNED for, so a win is assumed to have banked its full target
+ *  and a loss to have given back its whole stop. Every deviation from the plan
+ *  — the thing the behaviour layer exists to find — is invisible by
+ *  construction. The multi-leg case is still there, one click away; it is just
+ *  no longer the only reason to answer. */
+function singleLeg(contracts: string): ExitRow[] {
+  return [{ price: '', contracts }];
+}
+
 interface FormState {
   symbol: InstrumentKey;
   contracts: string;
@@ -122,7 +139,7 @@ function empty(): FormState {
     entry: '',
     stop: '',
     target: '',
-    exits: [],
+    exits: singleLeg('1'),
     followedRules: '',
     confirmations: [],
     emotionalState: '',
@@ -146,7 +163,11 @@ function fromTrade(t: TradeEntry): FormState {
     entry: String(t.entry),
     stop: String(t.stop),
     target: String(t.target),
-    exits: (t.exits ?? []).map(e => ({ price: String(e.price), contracts: String(e.contracts) })),
+    // A trade logged before the exit price was asked for opens with the
+    // question waiting, not with the section missing.
+    exits: t.exits?.length
+      ? t.exits.map(e => ({ price: String(e.price), contracts: String(e.contracts) }))
+      : singleLeg(String(t.contracts ?? 1)),
     followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
     confirmations: t.confirmations ?? [],
     emotionalState: t.emotionalState ?? '',
@@ -309,6 +330,23 @@ export default function TradeForm({
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  /** Position size, with the single exit leg kept in step with it.
+   *
+   *  While there is only one leg it means "I closed the whole thing here", so
+   *  its size is not something the trader should have to restate — and a stale
+   *  copy of an earlier size would silently mis-weight the realized R. Once
+   *  the position is split across legs the sizes are real answers and are left
+   *  alone. */
+  function setContracts(value: string) {
+    setForm(prev => ({
+      ...prev,
+      contracts: value,
+      exits: prev.exits.length === 1
+        ? [{ ...prev.exits[0], contracts: value }]
+        : prev.exits,
+    }));
+  }
+
   const entry     = parseFloat(form.entry);
   const stop      = parseFloat(form.stop);
   const target    = parseFloat(form.target);
@@ -334,11 +372,44 @@ export default function TradeForm({
     ? inferResult(entry, stop, isFinite(target) ? target : null, weightedExitPrice, form.direction)
     : 'OPEN';
 
+  /** Split the position into another leg.
+   *
+   *  Going from one leg to two is the case worth handling carefully: the
+   *  single leg holds the entire position, so appending "the remainder" would
+   *  append zero — and falling back to the full size (which is what this did)
+   *  would claim more contracts were closed than were ever opened. Splitting
+   *  the size explicitly keeps the legs adding up to the position at every
+   *  step. */
   function addExit() {
-    setForm(prev => ({ ...prev, exits: [...prev.exits, { price: '', contracts: String(remainingContracts || contracts) }] }));
+    setForm(prev => {
+      if (prev.exits.length === 1) {
+        const total = Math.max(1, parseInt(prev.contracts, 10) || 1);
+        const first = Math.max(1, Math.ceil(total / 2));
+        const rest  = total - first;
+        return {
+          ...prev,
+          exits: [
+            { ...prev.exits[0], contracts: String(first) },
+            // A one-contract position has nothing to split. Leave the size
+            // blank rather than inventing a second contract — an empty leg is
+            // dropped on save, an invented one would overstate the realized R.
+            { price: '', contracts: rest > 0 ? String(rest) : '' },
+          ],
+        };
+      }
+      return { ...prev, exits: [...prev.exits, { price: '', contracts: String(remainingContracts || 1) }] };
+    });
   }
   function removeExit(i: number) {
-    setForm(prev => ({ ...prev, exits: prev.exits.filter((_, idx) => idx !== i) }));
+    setForm(prev => {
+      const next = prev.exits.filter((_, idx) => idx !== i);
+      // Back to one leg — it means the whole position again, so re-sync it
+      // rather than leaving it holding a half-size from the split.
+      if (next.length === 1) return { ...prev, exits: [{ ...next[0], contracts: prev.contracts }] };
+      // Never leave the trader with no way to answer the question.
+      if (next.length === 0) return { ...prev, exits: singleLeg(prev.contracts) };
+      return { ...prev, exits: next };
+    });
   }
   function setExit(i: number, field: keyof ExitRow, value: string) {
     setForm(prev => ({ ...prev, exits: prev.exits.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)) }));
@@ -519,7 +590,7 @@ export default function TradeForm({
               </div>
             </Field>
             <Field label="חוזים">
-              <input type="number" min={1} step="1" value={form.contracts} onChange={e => set('contracts', e.target.value)} placeholder="1" className={inputCls} required />
+              <input type="number" min={1} step="1" value={form.contracts} onChange={e => setContracts(e.target.value)} placeholder="1" className={inputCls} required />
             </Field>
           </div>
         </Group>
@@ -548,8 +619,101 @@ export default function TradeForm({
           )}
         </Group>
 
+        {/* ── EXIT — where the trade ACTUALLY closed.
+             See singleLeg() for why this stopped being an optional section for
+             partial-exit traders and became a question every trade is asked.
+
+             Deliberately NOT prefilled from the result button. Prefilling the
+             target on a win would put a measured-looking number in a field
+             nobody checked, and "exit == target, exactly" is precisely the
+             reading the early-exit detector is built to trust. An empty field
+             the trader fills in is worth more than a populated one they
+             skimmed past. ── */}
+        <Group label="איפה יצאת בפועל?">
+          <div className="space-y-2">
+            {form.exits.map((exitRow, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="number" step="0.25"
+                  placeholder={form.exits.length === 1 ? 'מחיר היציאה שלך' : `מחיר יציאה ${i + 1}`}
+                  value={exitRow.price} onChange={e => setExit(i, 'price', e.target.value)}
+                  className={inputCls}
+                />
+                {/* One leg means the whole position, so its size is not a
+                    question. It becomes one only once the position is split. */}
+                {form.exits.length > 1 && (
+                  <>
+                    <input
+                      type="number" min={1} step="1" placeholder="חוזים"
+                      value={exitRow.contracts} onChange={e => setExit(i, 'contracts', e.target.value)}
+                      className={inputCls + ' max-w-[92px]'}
+                    />
+                    <button
+                      type="button" onClick={() => removeExit(i)}
+                      aria-label="הסר יציאה"
+                      className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-white/25 hover:text-[#ef4444] transition-colors duration-150"
+                    >✕</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={addExit}
+            className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors duration-150"
+          >
+            {form.exits.length === 1 ? '➕ יצאתי בכמה חלקים' : '➕ הוסף יציאה נוספת'}
+          </button>
+
+          {!hasExits && (
+            <p className="font-mono text-[11px] text-white/40 leading-relaxed">
+              בלי מחיר יציאה, ה-R של העסקה יחושב לפי התוכנית — כאילו טייק נלקח
+              במלואו וסטופ ננגס במלואו. זה כמעט אף פעם לא מה שקרה, והפער בין
+              השניים הוא בדיוק מה שהמערכת מחפשת.
+            </p>
+          )}
+
+          {hasExits && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 rounded-xl bg-white/[0.02]">
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד ממומש</span>
+                <span className="font-mono text-lg font-bold" style={{ color: (realizedPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {realizedPnl !== null ? `${realizedPnl >= 0 ? '+' : ''}$${Math.abs(realizedPnl).toFixed(0)}` : '—'}
+                </span>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">R ממומש</span>
+                <span className="font-mono text-lg font-bold text-white/80">{realizedR !== null ? `${realizedR.toFixed(2)}R` : '—'}</span>
+              </div>
+              <div className="h-8 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">תוצאה</span>
+                <span className="font-mono text-sm font-bold" style={{ color: resultColor }}>{RESULT_HE[derivedResult]}</span>
+              </div>
+              {remainingContracts > 0 && (
+                <>
+                  <div className="h-8 w-px bg-white/[0.08]" />
+                  <div>
+                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">חוזים פתוחים</span>
+                    <span className="font-mono text-sm font-bold text-white/60">{remainingContracts}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </Group>
+
         {/* ── RESULT — required. Stop = LOSS, ברייק איוון = BE, טייק = WIN.
-             Selecting one overrides any exits-derived result on save. */}
+             Selecting one overrides any exits-derived result on save.
+
+             Sits AFTER the exit price now, and the order is the point: the
+             trader states where they got out, and only then labels it. Asking
+             for the label first invites the exit to be reconstructed to match
+             it — "it was a win, so I suppose I took the target" — which is the
+             same fiction we removed from the code, re-entered by hand. */}
         <Group label="תוצאת העסקה *">
           <div className="flex items-center gap-2">
             <FormResultBtn
@@ -602,76 +766,6 @@ export default function TradeForm({
               ? 'אם תדלג — העסקה לא תיספר לשני הכיוונים. עדיף לא לענות מאשר לענות לא נכון.'
               : 'התשובה שלך על העסקה הזו — לא נגזרת מהתוצאה.'}
           </p>
-        </Group>
-
-        {/* ── EXITS — optional partial-exit legs; used to refine PnL/R when
-             they're finer than a single Stop/BE/Take label. ── */}
-        <Group label="יציאות (אופציונלי — למי שיצא בכמה חתיכות)">
-          {form.exits.length === 0 ? (
-            <p className="font-mono text-[11px] text-white/25 leading-relaxed">
-              אין יציאות חלקיות — התוצאה שבחרת למעלה תשמש לחישוב ה-P&L.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {form.exits.map((exitRow, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="number" step="0.25" placeholder="מחיר יציאה"
-                    value={exitRow.price} onChange={e => setExit(i, 'price', e.target.value)}
-                    className={inputCls}
-                  />
-                  <input
-                    type="number" min={1} step="1" placeholder="חוזים"
-                    value={exitRow.contracts} onChange={e => setExit(i, 'contracts', e.target.value)}
-                    className={inputCls + ' max-w-[92px]'}
-                  />
-                  <button
-                    type="button" onClick={() => removeExit(i)}
-                    aria-label="הסר יציאה"
-                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-white/25 hover:text-[#ef4444] transition-colors duration-150"
-                  >✕</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={addExit}
-            className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors duration-150"
-          >
-            ➕ הוסף יציאה נוספת
-          </button>
-
-          {hasExits && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 rounded-xl bg-white/[0.02]">
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד ממומש</span>
-                <span className="font-mono text-lg font-bold" style={{ color: (realizedPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
-                  {realizedPnl !== null ? `${realizedPnl >= 0 ? '+' : ''}$${Math.abs(realizedPnl).toFixed(0)}` : '—'}
-                </span>
-              </div>
-              <div className="h-8 w-px bg-white/[0.08]" />
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">R ממומש</span>
-                <span className="font-mono text-lg font-bold text-white/80">{realizedR !== null ? `${realizedR.toFixed(2)}R` : '—'}</span>
-              </div>
-              <div className="h-8 w-px bg-white/[0.08]" />
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">תוצאה</span>
-                <span className="font-mono text-sm font-bold" style={{ color: resultColor }}>{RESULT_HE[derivedResult]}</span>
-              </div>
-              {remainingContracts > 0 && (
-                <>
-                  <div className="h-8 w-px bg-white/[0.08]" />
-                  <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">חוזים פתוחים</span>
-                    <span className="font-mono text-sm font-bold text-white/60">{remainingContracts}</span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </Group>
 
         {/* ── MODEL / SETUP — the trader's own playbook models, sitting right beside
