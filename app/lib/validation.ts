@@ -50,6 +50,14 @@ export const tradeEntrySchema = z.object({
   })).max(50).optional(),
   confirmations: z.array(z.string().max(60)).max(40).optional(),
   emotionalState: z.enum(['CALM', 'CONFIDENT', 'STRESSED', 'FOMO', 'TIRED', 'ANGRY', 'IMPATIENT']).optional(),
+  // The trader's own verdict on the trade. Absent when they didn't answer, and
+  // that absence is meaningful downstream — the rule-violation detector treats
+  // null as "invisible", never as "clean".
+  //
+  // A z.object() strips keys it doesn't declare, so leaving this out did not
+  // fail loudly: the form collected the answer, the request carried it, and
+  // validation deleted it before either the row mapper or the mirror saw it.
+  followedRules: z.boolean().optional(),
   /** Epoch-ms of the last edit — drives cross-device newest-wins merge. */
   updatedAt: z.number().finite().optional(),
 });

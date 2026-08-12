@@ -80,6 +80,29 @@ function readiness(trades: readonly TradeRow[]) {
   };
 }
 
+/** The raw fields the detectors read, one line per trade.
+ *
+ *  Aggregates say "0 usable" without saying which link broke. The chain is
+ *  form → localStorage → PUT /api/journal → journal_trades → mirror →
+ *  intelligence_trades, and a null at the end is consistent with a bug in any
+ *  of them. This shows what actually landed, so the next question is which
+ *  trade rather than which layer. */
+function perTrade(trades: readonly TradeRow[]) {
+  return trades.map(t => ({
+    date:          t.date,
+    time:          t.time,
+    symbol:        t.symbol,
+    result:        t.result,
+    take_profit:   t.take_profit,
+    exit_price:    t.exit_price,
+    exitLegs:      Array.isArray(t.exits) ? t.exits.length : 0,
+    r_multiple:    t.r_multiple,
+    followed_rules: t.followed_rules,
+    confirmations: Array.isArray(t.confirmations) ? t.confirmations.length : 0,
+    updated_at:    t.updated_at,
+  }));
+}
+
 /** How far a finding is from its next lifecycle step, in trades.
  *
  *  Silence is the honest answer for a thin history, but silence with no end in
@@ -153,6 +176,7 @@ export async function GET(req: NextRequest) {
       cost: 'none — pure computation, no model call',
 
       readiness: readiness(trades),
+      perTrade:  perTrade(trades),
 
       thresholds: {
         detectTrigger:   MIN_TOTAL_OCCURRENCES,
