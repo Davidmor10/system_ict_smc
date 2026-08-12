@@ -37,6 +37,7 @@ import { MIN_TOTAL_OCCURRENCES } from '../../../lib/coach-pipeline/behavior/cont
 import { computeGuardrails } from '../../../lib/coach-pipeline/behavior/guardrails';
 import { reconcile, familiesFor, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
+import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBehavior';
 import { ROLLING_WINDOW } from '../../../lib/coach-pipeline/behavior/finding';
 import type { BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import type { TradeRow } from '../../../lib/coach-pipeline/types';
@@ -236,6 +237,12 @@ export async function GET(req: NextRequest) {
 
       readiness: readiness(trades),
       perTrade:  perTrade(trades),
+
+      // Exactly what the model receives tonight — same function the nightly
+      // run calls, with the write turned off. Everything above explains how it
+      // was derived; this is the thing itself, and it is the only part the
+      // trader will ever indirectly read.
+      promptBlock: (await analyzeBehavior(userId, { persist: false })).block,
 
       memory: {
         available: memoryAvailable,

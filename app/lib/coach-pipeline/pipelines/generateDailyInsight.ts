@@ -31,6 +31,7 @@ import {
 import { computeTodaySignals } from '../analyzers/todaySignals';
 import { computeStatistical } from '../analyzers/statistical';
 import { retrievePastWriting } from './retrievePastWriting';
+import { analyzeBehavior } from './analyzeBehavior';
 import { requireClerkId } from '../db/client';
 import { logger } from '../../logger';
 
@@ -155,6 +156,12 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   // Retrieval — never throws, always returns a well-formed empty on failure.
   const retrieval = await retrievePastWriting(cid, todayTrades);
 
+  // The behaviour layer. This is where it writes: the nightly run is the
+  // cadence the lifecycle is measured in, and running it here means the state
+  // the insight was written from is the state that got stored. Never throws;
+  // an empty block produces a shorter, honest note rather than a failed run.
+  const behavior = await analyzeBehavior(cid, { persist: true });
+
   // 4. Budget decision.
   const budget = await checkBudget(cid, inputs.planTier, inputs.date);
 
@@ -174,6 +181,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     signals,
     pastWritingBlock: retrieval.block,
     statisticalFallback,
+    behavior: behavior.block,
   });
 
   // 6. Run the primary. If primary is Claude and it fails, try Gemini once
@@ -299,6 +307,14 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     budget_state:         budget.state,
     budget_user_spend:    budget.userSpendUsd,
     budget_user_cap:      budget.userCapUsd,
+    // The behavioural state the insight was written from. Without it, an
+    // insight that reads oddly can only be re-investigated against a history
+    // that has since moved on — which is to say, not investigated at all.
+    behavior_primary:     behavior.block.primary?.label ?? null,
+    behavior_status:      behavior.block.primary?.status ?? null,
+    behavior_insufficient: behavior.block.insufficientEvidence,
+    behavior_snapshot:    behavior.snapshot,
+    behavior_error:       behavior.error,
   };
 
   const inserted = await insertInsight({
