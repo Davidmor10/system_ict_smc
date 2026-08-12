@@ -32,7 +32,7 @@
 
 import type { TradeRow } from '../types';
 
-export type MistakeKind =
+export type BehaviorKind =
   | 'discretionary_exit'
   | 'no_confirmation'
   | 'rule_violation'
@@ -41,7 +41,7 @@ export type MistakeKind =
 /** Human-readable, evidence-first labels. Deliberately descriptive of the
  *  ACTION, never of a supposed state of mind — "closed short of target", not
  *  "fear of giving back profit". */
-export const MISTAKE_LABELS: Record<MistakeKind, string> = {
+export const BEHAVIOR_LABELS: Record<BehaviorKind, string> = {
   discretionary_exit: 'סגירה שיקולית — לא ביעד ולא בסטופ',
   no_confirmation: 'כניסה בלי אישור מתועד',
   rule_violation:  'סטייה מהחוקים שהגדרת',
@@ -66,8 +66,8 @@ export const SIZE_BASELINE_MIN = 5;
  *  permanently grown becomes the new normal rather than a standing alarm. */
 export const SIZE_BASELINE_WINDOW = 20;
 
-export interface MistakeEvent {
-  kind:    MistakeKind;
+export interface BehaviorOccurrence {
+  kind:    BehaviorKind;
   tradeId: string;
   date:    string;
   /** The numbers that prove it. Everything downstream — the prompt, the UI —
@@ -76,15 +76,15 @@ export interface MistakeEvent {
   evidence: Record<string, string | number | null>;
 }
 
-export interface MistakeTally {
-  kind:          MistakeKind;
+export interface BehaviorTally {
+  kind:          BehaviorKind;
   occurrences:   number;
   /** Trades that COULD have exhibited this mistake. Never zero in a returned
    *  tally — a kind with no opportunities is omitted entirely. */
   opportunities: number;
   /** occurrences / opportunities. */
   rate:          number;
-  events:        MistakeEvent[];
+  events:        BehaviorOccurrence[];
   /** WHICH trades were opportunities, in chronological order.
    *
    *  The count alone is enough to state a rate, but not to split the history
@@ -142,7 +142,7 @@ function median(values: number[]): number {
  *  Requires exit_price, so it only fires on trades where the exit was actually
  *  recorded. A trade whose R was assumed from its result cannot testify about
  *  where it closed — the assumption already decided the answer. */
-function detectDiscretionaryExit(t: TradeRow): [boolean, MistakeEvent | null] {
+function detectDiscretionaryExit(t: TradeRow): [boolean, BehaviorOccurrence | null] {
   const exit   = t.exit_price;
   const target = t.take_profit;
   const stop   = t.stop_loss;
@@ -184,7 +184,7 @@ function detectDiscretionaryExit(t: TradeRow): [boolean, MistakeEvent | null] {
  *  This measures the JOURNAL, not the chart: an empty list means none was
  *  recorded, which is not proof none existed. That distinction has to survive
  *  all the way to the wording the trader reads. */
-function detectNoConfirmation(t: TradeRow): [boolean, MistakeEvent | null] {
+function detectNoConfirmation(t: TradeRow): [boolean, BehaviorOccurrence | null] {
   const count = t.confirmations?.length ?? 0;
   if (count > 0) return [true, null];
   return [true, {
@@ -202,7 +202,7 @@ function detectNoConfirmation(t: TradeRow): [boolean, MistakeEvent | null] {
  *  would inflate the denominator with trades nobody graded and make the
  *  adherence rate a flattering fiction; counting it as a violation would be
  *  worse. The honest denominator is "trades the trader actually graded". */
-function detectRuleViolation(t: TradeRow): [boolean, MistakeEvent | null] {
+function detectRuleViolation(t: TradeRow): [boolean, BehaviorOccurrence | null] {
   if (t.followed_rules == null) return [false, null];
   if (t.followed_rules) return [true, null];
   return [true, {
@@ -218,7 +218,7 @@ function detectRuleViolation(t: TradeRow): [boolean, MistakeEvent | null] {
  *  Needs history, so it is the one detector that reads more than its own
  *  trade. Median, not mean, so a single outlier can't drag the baseline up
  *  and hide the next outlier behind it. */
-function detectSizeSpike(t: TradeRow, priorContracts: number[]): [boolean, MistakeEvent | null] {
+function detectSizeSpike(t: TradeRow, priorContracts: number[]): [boolean, BehaviorOccurrence | null] {
   if (priorContracts.length < SIZE_BASELINE_MIN) return [false, null];
   const base = median(priorContracts.slice(-SIZE_BASELINE_WINDOW));
   if (base <= 0) return [false, null];
@@ -247,13 +247,13 @@ function detectSizeSpike(t: TradeRow, priorContracts: number[]): [boolean, Mista
  *  rate descending — the most frequent behaviour first. A kind nobody could
  *  have exhibited is absent rather than reported as a spotless record, since
  *  "0 of 0" reads as praise the trader hasn't earned. */
-export function detectMistakes(trades: readonly TradeRow[]): MistakeTally[] {
+export function detectBehaviors(trades: readonly TradeRow[]): BehaviorTally[] {
   const decided = sortChronologically(trades).filter(
     t => !t.deleted_at && DECIDED.has(t.result),
   );
 
-  const acc = new Map<MistakeKind, { events: MistakeEvent[]; opps: string[] }>();
-  const bump = (kind: MistakeKind, tradeId: string, opportunity: boolean, event: MistakeEvent | null) => {
+  const acc = new Map<BehaviorKind, { events: BehaviorOccurrence[]; opps: string[] }>();
+  const bump = (kind: BehaviorKind, tradeId: string, opportunity: boolean, event: BehaviorOccurrence | null) => {
     if (!opportunity) return;
     const cur = acc.get(kind) ?? { events: [], opps: [] };
     cur.opps.push(tradeId);
@@ -284,7 +284,7 @@ export function detectMistakes(trades: readonly TradeRow[]): MistakeTally[] {
 
 /** The trade ids on which a given mistake occurred. Step 2 needs this to
  *  split the history into "it happened" and "it didn't". */
-export function eventTradeIds(tally: MistakeTally): Set<string> {
+export function occurrenceTradeIds(tally: BehaviorTally): Set<string> {
   return new Set(tally.events.map(e => e.tradeId));
 }
 

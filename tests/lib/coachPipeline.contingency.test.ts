@@ -7,7 +7,7 @@ import {
   MIN_GROUP_OPPORTUNITIES,
   MIN_LIFT,
 } from '../../app/lib/coach-pipeline/behavior/contingency';
-import { detectMistakes } from '../../app/lib/coach-pipeline/behavior/mistakes';
+import { detectBehaviors } from '../../app/lib/coach-pipeline/behavior/behaviors';
 import { buildContexts } from '../../app/lib/coach-pipeline/behavior/context';
 import type { TradeRow } from '../../app/lib/coach-pipeline/types';
 
@@ -61,7 +61,7 @@ const bad  = (o: Partial<TradeRow> = {}) => T({ followed_rules: false, ...o });
 const good = (o: Partial<TradeRow> = {}) => T({ followed_rules: true,  ...o });
 
 function triggersFor(trades: TradeRow[], kind = 'rule_violation') {
-  const tally = detectMistakes(trades).find(t => t.kind === kind)!;
+  const tally = detectBehaviors(trades).find(t => t.kind === kind)!;
   return analyzeTriggers(tally, buildContexts(trades));
 }
 
@@ -117,7 +117,7 @@ describe('insufficient evidence', () => {
       good({ time: '11:00' }), good({ time: '12:00' }),
       good({ time: '13:00' }), good({ time: '14:00' }),
     ];
-    const tally = detectMistakes(trades).find(t => t.kind === 'rule_violation')!;
+    const tally = detectBehaviors(trades).find(t => t.kind === 'rule_violation')!;
     expect(tally.occurrences).toBeLessThan(MIN_TOTAL_OCCURRENCES);
     expect(triggersFor(trades)).toEqual([]);
   });
@@ -165,7 +165,7 @@ describe('insufficient evidence', () => {
 
   it('bestTrigger returns null rather than the least bad option', () => {
     const trades = [bad({ time: '09:00' }), good({ time: '10:00' })];
-    const tally = detectMistakes(trades).find(t => t.kind === 'rule_violation')!;
+    const tally = detectBehaviors(trades).find(t => t.kind === 'rule_violation')!;
     expect(bestTrigger(tally, buildContexts(trades))).toBeNull();
   });
 });
@@ -299,7 +299,7 @@ describe('plumbing', () => {
 
   it('survives contexts missing for some opportunities', () => {
     const trades = [bad(), good(), bad(), good()];
-    const tally = detectMistakes(trades).find(t => t.kind === 'rule_violation')!;
+    const tally = detectBehaviors(trades).find(t => t.kind === 'rule_violation')!;
     expect(() => analyzeTriggers(tally, new Map())).not.toThrow();
     expect(analyzeTriggers(tally, new Map())).toEqual([]);
   });

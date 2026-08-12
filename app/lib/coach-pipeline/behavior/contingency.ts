@@ -31,7 +31,7 @@
 // human can always see what was adjusted.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { MistakeTally } from './mistakes';
+import type { BehaviorTally } from './behaviors';
 import {
   CONTEXT_DIMENSIONS,
   dimensionValue,
@@ -140,7 +140,7 @@ interface Candidate {
  *  inflate the multiple-comparison correction — being strict about sample
  *  size shouldn't be punished by making the surviving findings look weaker. */
 function candidates(
-  tally: MistakeTally,
+  tally: BehaviorTally,
   contexts: Map<string, TradeContext>,
 ): Candidate[] {
   const occurred = new Set(tally.events.map(e => e.tradeId));
@@ -191,7 +191,7 @@ const DIMENSION_RANK = new Map<ContextDimension, number>(
  *  every context we can see, and the honest reading of that is "we don't know
  *  when this happens" — not "it happens everywhere". */
 export function analyzeTriggers(
-  tally: MistakeTally,
+  tally: BehaviorTally,
   contexts: Map<string, TradeContext>,
 ): TriggerFinding[] {
   if (tally.occurrences < MIN_TOTAL_OCCURRENCES) return [];
@@ -247,7 +247,7 @@ export function analyzeTriggers(
  *  supports none. Null is a first-class result — step 3 turns it into a
  *  question rather than a guess. */
 export function bestTrigger(
-  tally: MistakeTally,
+  tally: BehaviorTally,
   contexts: Map<string, TradeContext>,
 ): TriggerFinding | null {
   return analyzeTriggers(tally, contexts)[0] ?? null;

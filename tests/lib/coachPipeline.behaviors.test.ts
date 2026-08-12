@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  detectMistakes,
-  eventTradeIds,
+  detectBehaviors,
+  occurrenceTradeIds,
   sortChronologically,
   EXIT_TOLERANCE,
   SIZE_BASELINE_MIN,
   __internals,
-} from '../../app/lib/coach-pipeline/behavior/mistakes';
+} from '../../app/lib/coach-pipeline/behavior/behaviors';
 import type { TradeRow } from '../../app/lib/coach-pipeline/types';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ function T(overrides: Partial<TradeRow> = {}): TradeRow {
 }
 
 function tally(trades: TradeRow[], kind: string) {
-  return detectMistakes(trades).find(t => t.kind === kind);
+  return detectBehaviors(trades).find(t => t.kind === kind);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -74,12 +74,12 @@ describe('opportunities', () => {
 
   it('ignores OPEN trades entirely — they have not finished happening', () => {
     const trades = [T({ result: 'OPEN' }), T({ result: 'OPEN' })];
-    expect(detectMistakes(trades)).toEqual([]);
+    expect(detectBehaviors(trades)).toEqual([]);
   });
 
   it('ignores soft-deleted trades', () => {
     const trades = [T({ deleted_at: '2026-08-02T00:00:00Z', followed_rules: false, exit_price: 20010 })];
-    expect(detectMistakes(trades)).toEqual([]);
+    expect(detectBehaviors(trades)).toEqual([]);
   });
 
   it('rate is occurrences over opportunities, not over all trades', () => {
@@ -247,7 +247,7 @@ describe('size_spike', () => {
 // Ordering + plumbing
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('detectMistakes', () => {
+describe('detectBehaviors', () => {
   it('returns the most frequent behaviour first', () => {
     const trades = [
       T({ followed_rules: false, confirmations: ['SMT'] }),
@@ -255,25 +255,25 @@ describe('detectMistakes', () => {
       T({ followed_rules: true,  confirmations: ['SMT'] }),
       T({ followed_rules: true,  confirmations: ['SMT'] }),
     ];
-    const out = detectMistakes(trades);
+    const out = detectBehaviors(trades);
     expect(out[0].kind).toBe('rule_violation');
     expect(out[0].rate).toBe(0.5);
   });
 
   it('is deterministic — same input, same output', () => {
     const trades = [T({ followed_rules: false }), T({ confirmations: [] }), T()];
-    expect(detectMistakes(trades)).toEqual(detectMistakes(trades));
+    expect(detectBehaviors(trades)).toEqual(detectBehaviors(trades));
   });
 
   it('handles an empty history', () => {
-    expect(detectMistakes([])).toEqual([]);
+    expect(detectBehaviors([])).toEqual([]);
   });
 
-  it('eventTradeIds returns exactly the offending trades', () => {
+  it('occurrenceTradeIds returns exactly the offending trades', () => {
     const bad = T({ followed_rules: false });
     const good = T({ followed_rules: true });
     const t = tally([bad, good], 'rule_violation')!;
-    expect([...eventTradeIds(t)]).toEqual([bad.id]);
+    expect([...occurrenceTradeIds(t)]).toEqual([bad.id]);
   });
 });
 

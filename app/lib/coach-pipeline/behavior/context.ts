@@ -23,7 +23,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeRow } from '../types';
-import { sortChronologically } from './mistakes';
+import { sortChronologically } from './behaviors';
 
 const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
 
