@@ -32,6 +32,7 @@ import { computeTodaySignals } from '../analyzers/todaySignals';
 import { computeStatistical } from '../analyzers/statistical';
 import { retrievePastWriting } from './retrievePastWriting';
 import { analyzeBehavior } from './analyzeBehavior';
+import { checkInsight, hasHardViolation, buildCorrection } from '../quality/insightCheck';
 import { requireClerkId } from '../db/client';
 import { logger } from '../../logger';
 
@@ -284,6 +285,53 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     return { status: 'failed', reason: 'empty text from provider' };
   }
 
+  // 7b. Check the output against the rules that can be checked, and spend one
+  //     retry on a hard violation.
+  //
+  //     A rule that only produces a log line is a rule nobody enforces. The
+  //     two failures this catches — the generic coaching sentence, and the
+  //     model explaining the trader's psychology to them — both read perfectly
+  //     well, so neither would ever be noticed by someone skimming the output.
+  //
+  //     Exactly one retry, and it publishes either way. Silence is worse than
+  //     an imperfect note, and a second rewrite tends to produce a blander one
+  //     than the first. The violations are stored on the row regardless, so
+  //     quality is a number rather than an impression.
+  let violations = checkInsight(usedText, behavior.block);
+  let retried = false;
+
+  if (hasHardViolation(violations)) {
+    retried = true;
+    logger.warn('insight broke output rules — retrying once', {
+      clerkId: cid, rules: violations.filter(v => v.severity === 'hard').map(v => v.rule),
+    });
+    const corrected = userMessage + buildCorrection(violations);
+    const r = usedProvider === 'anthropic'
+      ? await callClaudeInsight(SYSTEM_PROMPT, corrected)
+      : await callGeminiInsight(SYSTEM_PROMPT + GEMINI_STRICT_ADDENDUM, corrected);
+
+    if (r.ok && r.text.trim()) {
+      const retryViolations = checkInsight(r.text, behavior.block);
+      // Keep the rewrite only if it is actually better. A retry that trades a
+      // causal claim for a generic one is not an improvement, and a checker
+      // that can be satisfied by getting worse is worse than none.
+      if (retryViolations.length < violations.length) {
+        usedText   = r.text;
+        violations = retryViolations;
+      }
+      usedTokensIn  += r.tokensIn;
+      usedTokensOut += r.tokensOut;
+      usedCostUsd   += r.costUsd;
+      await logUsage({
+        clerkId: cid, provider: usedProvider,
+        model: usedProvider === 'anthropic' ? CLAUDE_MODEL : GEMINI_INSIGHT_MODEL,
+        purpose: 'daily_insight',
+        tokensIn: r.tokensIn, tokensOut: r.tokensOut, costUsdEst: r.costUsd,
+        latencyMs: r.latencyMs, ok: true,
+      });
+    }
+  }
+
   // 8. Persist. Race-safe: insertInsight returns null on unique-conflict, and
   //    if that happens we return the row that beat us.
   // The code constant wins over the DB flag. prompt_version exists so a bad
@@ -315,6 +363,11 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     behavior_insufficient: behavior.block.insufficientEvidence,
     behavior_snapshot:    behavior.snapshot,
     behavior_error:       behavior.error,
+    // Output quality as a number rather than an impression. An empty array is
+    // the claim being made every night; without it stored, a slow drift into
+    // generic advice would be invisible until someone happened to read one.
+    output_violations:    violations,
+    output_retried:       retried,
   };
 
   const inserted = await insertInsight({
