@@ -150,7 +150,17 @@
 /* ── Row 3: sessions (right) + unit toggle (left) ── */
 /* Daily insight card sits between the greeting and the sessions row — a full-
    width block so the coach's paragraph gets the reading width it deserves. */
-.dp-app .dp-daily-insight-wrap{margin:6px 0 4px;}
+/* The insight card is the only element on this page whose height is set by a
+   language model. Left uncapped it took whatever it wanted out of the shared
+   column, and everything below it — the calendar most visibly — got whatever
+   was left. A four-paragraph day squeezed the month into unreadable slivers.
+
+   Capped at a fixed share of the viewport with its own scroll, so the coach
+   can be as talkative as it likes and the layout underneath never moves. */
+.dp-app .dp-daily-insight-wrap{margin:6px 0 4px;flex:0 0 auto;max-height:26vh;overflow-y:auto;overscroll-behavior:contain;}
+.dp-app .dp-daily-insight-wrap::-webkit-scrollbar{width:6px;}
+.dp-app .dp-daily-insight-wrap::-webkit-scrollbar-thumb{background:rgba(212,175,55,.22);border-radius:3px;}
+.dp-app .dp-daily-insight-wrap::-webkit-scrollbar-track{background:transparent;}
 
 .dp-app .dp-control-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;flex-wrap:wrap;}
 .dp-app .dp-sessions{display:flex;gap:8px;flex-wrap:wrap;}
@@ -296,7 +306,14 @@
 .dp-app .dp-cal-dows{display:grid;grid-template-columns:repeat(7,1fr) 128px;gap:6px;flex-shrink:0;margin-bottom:6px;}
 .dp-app .dp-cal-dow{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-w72);text-align:center;}
 .dp-app .dp-cal-dow.wk{color:var(--dp-gold);}
-.dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 128px;grid-auto-rows:1fr;gap:6px;flex:1;min-height:0;}
+/* A day cell has to hold a date, a P&L figure and a trade count. Below about
+   58px those stack into an unreadable sliver, so that is the floor — the grid
+   scrolls before a row is allowed to collapse. `1fr` still lets cells grow to
+   fill a tall screen. */
+.dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 128px;grid-auto-rows:minmax(58px,1fr);gap:6px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.dp-app .dp-cal-grid::-webkit-scrollbar{width:6px;}
+.dp-app .dp-cal-grid::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:3px;}
+.dp-app .dp-cal-grid::-webkit-scrollbar-track{background:transparent;}
 .dp-app .dp-cal-cell{border-radius:8px;border:1px solid transparent;padding:5px 6px;display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;transition:transform .15s var(--dp-ease);
   background:linear-gradient(160deg,rgba(230,198,101,.04),rgba(230,198,101,.015));
   box-shadow:inset 0 0 0 1px rgba(230,198,101,.06);}

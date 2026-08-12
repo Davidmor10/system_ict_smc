@@ -101,8 +101,16 @@ export async function listRecentInsights(
     .from(T.dailyInsights)
     .select('*')
     .eq('clerk_id', cid)
-    .order('date', { ascending: false })
+    // generated_at first, not date.
+    //
+    // Ordering by `date` meant an insight written under an older prompt could
+    // outrank one written minutes ago, purely because it was about a later
+    // trading day. After a prompt fix the dashboard kept serving the bad copy
+    // and there was no way to replace it short of deleting the row. The card
+    // shows the newest thing the coach actually wrote, which in normal
+    // operation is also the newest day.
     .order('generated_at', { ascending: false })
+    .order('date', { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 200));
   if (error) throw error;
   return (data ?? []) as DailyInsightRow[];

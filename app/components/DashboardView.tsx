@@ -1,13 +1,12 @@
 'use client';
 
 import './dp.css';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
-import { inlineFormat } from './dailyInsightMarkdown';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { initSyncListeners } from '../lib/sync/collections';
@@ -26,8 +25,6 @@ const ACCOUNT_START_DEFAULT = 25000;
 const WIDGETS_KEY = 'onyx_dash2_widgets';
 const UNIT_KEY = 'onyx_dash2_unit';
 
-type ConfidenceLevel = 'low' | 'medium' | 'high';
-interface AiDiscovery { title: string; evidence: string; action: string; confidenceLevel: ConfidenceLevel; sampleSize: number; }
 interface MacroEventLite { title: string; currency: string; impact: 'High' | 'Medium' | 'Low' | 'Holiday'; dateIsrael: string; timeIsrael: string; }
 
 const STR = {
@@ -127,7 +124,6 @@ const STR = {
 /* ══════════════════════════════════════════════════════════════════
    Helpers
 ══════════════════════════════════════════════════════════════════ */
-const todayKey = () => new Date().toISOString().slice(0, 10);
 const hhmmToMin = (t: string) => { const m = /^(\d{1,2}):(\d{2})/.exec(t); return m ? +m[1] * 60 + +m[2] : -1; };
 const weekdayShort = (iso: string, locale: string) => new Date(iso + 'T12:00:00').toLocaleDateString(locale, { weekday: 'short' });
 
@@ -254,7 +250,6 @@ export default function DashboardView() {
   const [monthCursor, setMonthCursor] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [macro, setMacro]       = useState<MacroEventLite[] | null>(null);
   const [macroToday, setMacroToday] = useState<string | null>(null);
-  const [discovery, setDiscovery]   = useState<AiDiscovery | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<WidgetKey | null>(null);
 
   /* ── Clock ───────────────────────────────────────────────────── */
@@ -293,21 +288,6 @@ export default function DashboardView() {
       .catch(() => setMacro([]));
   }, []);
 
-  /* ── AI discovery (PRO+ only, min 3 trades) ──────────────────── */
-  useEffect(() => {
-    if (isFree || trades.length < 3) { setDiscovery(null); return; }
-    const cacheKey = 'onyx_ai_discovery_' + todayKey();
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { setDiscovery(JSON.parse(cached)); return; } catch {} }
-    fetch('/api/ai/discovery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trades, lang: L }) })
-      .then(r => r.json())
-      .then(({ discovery: d }: { discovery: AiDiscovery | null }) => {
-        if (!d) return;
-        setDiscovery(d);
-        try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
-      })
-      .catch(() => {});
-  }, [isFree, trades, L]);
 
   /* ── Derived: stats + calendar + conversion context ──────────── */
   const stats = useMemo(() => aggregate(trades), [trades]);
@@ -651,42 +631,16 @@ export default function DashboardView() {
               <div className="dp-ai-locked-msg">{s.aiLockedMsgPre} <b>{s.aiLockedMsgBold}</b></div>
               <Link href="/checkout" className="dp-ai-locked-cta">{s.aiLockedCta}</Link>
             </div>
-          ) : (
-            <div className="dp-ai">
-              <div className="dp-ai-head">
-                <div className="dp-ai-ico">◆</div>
-                <div className="dp-ai-head-text">
-                  <div className="dp-ai-k">{s.aiK}</div>
-                  {discovery?.title && <div className="dp-ai-title">{discovery.title}</div>}
-                </div>
-              </div>
-              {discovery ? (
-                <>
-                  {/* discovery.evidence is model-generated text. inlineFormat
-                      escapes it before re-introducing the one tag we allow —
-                      the previous inline .replace() bolded **…** without
-                      escaping anything, so any markup the model emitted was
-                      injected into the page verbatim. */}
-                  <div className="dp-ai-txt" dangerouslySetInnerHTML={{ __html: inlineFormat(discovery.evidence) }} />
-                  {discovery.action && (
-                    <div className="dp-ai-action"><span className="dp-ai-action-k">→</span>{discovery.action}</div>
-                  )}
-                  <div className="dp-ai-foot">
-                    <span className="dp-ai-conf">✓ {s.aiConf} · {discovery.confidenceLevel}</span>
-                    <span className="dp-ai-note">{s.aiSample(discovery.sampleSize)}</span>
-                    <Link href="/dashboard/coach" className="dp-ai-cta">{s.aiCta}</Link>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="dp-ai-txt">{s.aiWaitingBody}</div>
-                  <div className="dp-ai-foot">
-                    <Link href="/dashboard/journal" className="dp-ai-cta">{s.aiWaitingT}</Link>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          ) : null}
+          {/* The AI discovery panel that used to live here is gone. It was a
+              second, weaker analysis of the same trades sitting under the
+              daily insight card at the top of this page — and it carried its
+              own "log 3 trades to unlock" gate that kept showing after the
+              threshold was passed. Two coaches on one screen disagreeing
+              about whether they have enough data is worse than one.
+
+              The /api/ai/discovery call that fed it is gone with it, so the
+              dashboard no longer spends an AI call on every load. */}
           <div className="dp-panel dp-macro">
             <div className="dp-macro-hd">
               <span className="dp-macro-k">{s.macroK}</span>
