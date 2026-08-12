@@ -311,9 +311,12 @@
    other section had taken its share, which is how a month ended up as a band
    of slivers. */
 .dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 112px;grid-auto-rows:auto;gap:6px;}
-/* Square. A day is a square everywhere people read calendars, and the wide,
-   short cells this used to produce are what made the month unreadable. */
-.dp-app .dp-cal-cell{aspect-ratio:1/1;border-radius:8px;border:1px solid transparent;padding:6px 7px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;transition:transform .15s var(--dp-ease);
+/* 4:3 — the wall-calendar proportion. A true square read better in isolation
+   but cost ~160px of page height at 1920, and the point of the fix was a
+   month you can take in, not a month you scroll through. The old cells had
+   no ratio at all: they took whatever height was left over, which is how a
+   day ended up a wide, unreadable sliver. */
+.dp-app .dp-cal-cell{aspect-ratio:4/3;border-radius:8px;border:1px solid transparent;padding:6px 7px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;transition:transform .15s var(--dp-ease);
   background:linear-gradient(160deg,rgba(230,198,101,.04),rgba(230,198,101,.015));
   box-shadow:inset 0 0 0 1px rgba(230,198,101,.06);}
 .dp-app .dp-cal-cell.win{background:linear-gradient(160deg,var(--dp-bull-08),rgba(95,211,158,.02));border-color:var(--dp-bull-30);box-shadow:none;}
