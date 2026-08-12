@@ -302,7 +302,7 @@ describe('baselines', () => {
 
 describe('pickPrimary', () => {
   const f = (kind: string, score: number, status = 'confirmed'): BehaviorFinding =>
-    ({ kind, priorityScore: score, status } as unknown as BehaviorFinding);
+    ({ kind, priorityScore: score, status, contrast: 'present' } as unknown as BehaviorFinding);
 
   it('returns exactly one primary and keeps the rest quiet', () => {
     const out = pickPrimary([f('rule_violation', 5), f('size_spike', 9), f('no_confirmation', 2)]);
@@ -464,5 +464,62 @@ describe('insufficient evidence', () => {
   it('is deterministic', () => {
     const trades = history(20, 8);
     expect(findingOf(trades)).toEqual(findingOf(trades));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Contrast — a rate of 100% is a data shape, not a behaviour
+//
+// Found on real trades: six of six trades had no confirmation logged. Read as
+// a behaviour that is "you do this every single time", which is an accusation
+// built on an empty field. It can never produce a trigger — there is no
+// comparison group — so it would have sat as the primary behaviour forever,
+// repeating one number every morning.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('contrast', () => {
+  const allBad  = () => Array.from({ length: 8 }, (_, i) => bad(stamp(i)));
+  const allGood = () => Array.from({ length: 8 }, (_, i) => good(stamp(i)));
+
+  it('marks a behaviour with no counter-example as always', () => {
+    const f = findingOf(allBad());
+    expect(f.rate).toBe(1);
+    expect(f.contrast).toBe('always');
+  });
+
+  it('marks a behaviour that never happened as never', () => {
+    expect(findingOf(allGood()).contrast).toBe('never');
+  });
+
+  it('marks a normal split as present', () => {
+    expect(findingOf(history(20, 8)).contrast).toBe('present');
+  });
+
+  it('scores a contrastless finding at zero — nothing can be worked on yet', () => {
+    expect(findingOf(allBad()).priorityScore).toBe(0);
+  });
+
+  it('never makes a contrastless finding the primary', () => {
+    const always  = findingOf(allBad());
+    const normal  = { ...findingOf(history(20, 8)), priorityScore: 0.01 } as BehaviorFinding;
+    const out = pickPrimary([always, normal]);
+    expect(out.primary!.kind).toBe(normal.kind);
+  });
+
+  it('leaves nothing primary when every finding lacks contrast', () => {
+    expect(pickPrimary([findingOf(allBad())]).primary).toBeNull();
+  });
+
+  it('asks no question it could never answer', () => {
+    expect(findingOf(allBad()).question).toBeNull();
+  });
+
+  // "You did this every single time" reads as an accusation, and the usual
+  // cause is an empty field rather than a universal habit.
+  it('says what the absence of contrast means instead of dressing it as a pattern', () => {
+    const s = findingOf(allBad()).statements;
+    expect(s).toHaveLength(1);
+    expect(s[0].tier).toBe('observed');
+    expect(s[0].text).toMatch(/אין נקודת השוואה/);
   });
 });

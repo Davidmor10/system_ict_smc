@@ -66,10 +66,25 @@ export interface Baselines {
   rollingN:       number;
 }
 
+/** Whether the history contains a counter-example.
+ *
+ *  `always` and `never` are not behavioural findings, they are shapes of the
+ *  data. A behaviour that occurred on EVERY opportunity has no comparison
+ *  group, so it can never produce a trigger and can never be explained — the
+ *  analysis has nowhere to look. And in practice a 100% rate almost always
+ *  means a field is not being filled in rather than that a habit is
+ *  universal: "you never logged a confirmation" is a statement about the
+ *  journal, not about the trading.
+ *
+ *  Left in the results, because it is worth knowing. Kept out of the primary
+ *  slot, because it would sit there permanently repeating one number. */
+export type Contrast = 'present' | 'always' | 'never';
+
 export interface BehaviorFinding {
   kind:          BehaviorKind;
   label:         string;
   status:        FindingStatus;
+  contrast:      Contrast;
 
   occurrences:   number;
   opportunities: number;
@@ -184,9 +199,22 @@ export function buildStatements(
   tally: BehaviorTally,
   trigger: TriggerFinding | null,
   confidence: Confidence,
+  contrast: Contrast = 'present',
 ): Statement[] {
   const out: Statement[] = [];
   const occurredIds = tally.events.map(e => e.tradeId);
+
+  // No counter-example: say what that means about the data rather than
+  // dressing it up as a pattern. "You did this every single time" reads as an
+  // accusation, and the usual cause is an empty field.
+  if (contrast === 'always') {
+    out.push({
+      tier: 'observed',
+      text: `${BEHAVIOR_LABELS[tally.kind]}: בכל ${tally.opportunities} העסקאות, בלי יוצא דופן. אין נקודת השוואה, ולכן אי אפשר לנתח מתי זה קורה — ברוב המקרים זה מעיד על שדה שלא מתמלא ולא על הרגל.`,
+      tradeIds: occurredIds,
+    });
+    return out;
+  }
 
   // observed — always, and always first.
   out.push({
@@ -280,11 +308,18 @@ const CONFIDENCE_WEIGHT: Record<Confidence, number> = {
   high: 1, medium: 0.7, low: 0.4, unknown: 0.15,
 };
 
+function contrastOf(tally: BehaviorTally): Contrast {
+  if (tally.occurrences === 0) return 'never';
+  if (tally.occurrences === tally.opportunities) return 'always';
+  return 'present';
+}
+
 export function buildFinding(
   tally: BehaviorTally,
   contexts: Map<string, TradeContext>,
   opts: BuildFindingOptions = {},
 ): BehaviorFinding {
+  const contrast   = contrastOf(tally);
   const trigger    = analyzeTriggers(tally, contexts)[0] ?? null;
   const assessment = assessConfidence({ tally, trigger, extraFamilies: opts.extraFamilies });
   const status     = deriveStatus(tally, assessment.level, opts.previousStatus);
@@ -294,12 +329,17 @@ export function buildFinding(
   // costs nothing measurable ranks below a rarer one that reliably hurts —
   // and both rank below nothing at all when confidence is 'unknown'.
   const harm  = cost == null ? 1 : Math.max(0.2, Math.abs(Math.min(cost, 0)) + 0.2);
-  const score = round2(tally.occurrences * harm * CONFIDENCE_WEIGHT[assessment.level]);
+  // No counter-example, no score. Nothing here can be worked on until the
+  // history contains a trade where it didn't happen.
+  const score = contrast === 'present'
+    ? round2(tally.occurrences * harm * CONFIDENCE_WEIGHT[assessment.level])
+    : 0;
 
   return {
     kind:          tally.kind,
     label:         BEHAVIOR_LABELS[tally.kind],
     status,
+    contrast,
     occurrences:   tally.occurrences,
     opportunities: tally.opportunities,
     rate:          tally.rate,
@@ -307,8 +347,10 @@ export function buildFinding(
     trigger,
     confidence:    assessment.level,
     assessment,
-    statements:    buildStatements(tally, trigger, assessment.level),
-    question:      status === 'detected' ? null : buildQuestion(tally, trigger),
+    statements:    buildStatements(tally, trigger, assessment.level, contrast),
+    question:      status === 'detected' || contrast !== 'present'
+                     ? null
+                     : buildQuestion(tally, trigger),
     priorityScore: score,
     costPerOccurrenceR: cost,
   };
@@ -338,7 +380,12 @@ export function pickPrimary(
   findings: readonly BehaviorFinding[],
   previousPrimaryKind?: BehaviorKind,
 ): Prioritised {
-  const eligible = findings.filter(f => f.status !== 'archived' && f.status !== 'resolved');
+  // 'always' and 'never' are excluded: neither can produce a trigger, so
+  // neither can ever move forward. Left as primary, one of them would occupy
+  // the slot permanently and repeat a single number every morning.
+  const eligible = findings.filter(
+    f => f.status !== 'archived' && f.status !== 'resolved' && f.contrast === 'present',
+  );
   if (!eligible.length) return { primary: null, watching: [] };
 
   const inFlight = eligible.find(
