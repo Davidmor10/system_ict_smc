@@ -58,6 +58,16 @@ function readiness(trades: readonly TradeRow[]) {
   const decided = trades.filter(t => !t.deleted_at && DECIDED.has(t.result));
   const count = (p: (t: TradeRow) => boolean) => decided.filter(p).length;
 
+  // The confirmations field only becomes evidence once the trader has used it
+  // at least once — see detectNoConfirmation. Reporting all decided trades as
+  // usable here would contradict the detector by six, in the direction that
+  // reads as good news.
+  const everUsedConfirmations = decided.some(t => (t.confirmations?.length ?? 0) > 0);
+  const chronological = [...decided].sort((a, b) =>
+    (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')));
+  const adoptedAt = chronological.findIndex(t => (t.confirmations?.length ?? 0) > 0);
+  const confirmationsUsable = everUsedConfirmations ? chronological.length - adoptedAt : 0;
+
   return {
     tradesTotal:   trades.length,
     tradesDecided: decided.length,
@@ -73,9 +83,9 @@ function readiness(trades: readonly TradeRow[]) {
         blind:   count(t => t.followed_rules == null),
       },
       no_confirmation: {
-        needs:   'שדה האישורים (זמין תמיד)',
-        usable:  decided.length,
-        blind:   0,
+        needs:   'שדה האישורים — נספר רק מהעסקה הראשונה שבה מילאת אותו',
+        usable:  confirmationsUsable,
+        blind:   decided.length - confirmationsUsable,
       },
       size_spike: {
         needs:   'contracts (זמין תמיד) — צריך 5 עסקאות קודמות לבסיס',
