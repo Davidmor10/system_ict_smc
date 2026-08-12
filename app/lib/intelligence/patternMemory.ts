@@ -35,8 +35,19 @@ function pushHistory(existingHistory: PatternMemoryRow['history'], entry: Patter
   return [...existingHistory, entry].slice(-HISTORY_CAP);
 }
 
-function statusForNewOrReappeared(confidence: ConfidenceLevel): PatternStatus {
-  return confidence === 'low' ? 'insufficient_data' : 'active';
+/** A pattern only becomes 'active' — the status every downstream surface
+ *  treats as "this is real" — once it has survived the significance test that
+ *  discoverPatterns now applies.
+ *
+ *  Sample size alone was the previous bar, and sample size cannot see the
+ *  problem: discovery deliberately produces ~100 overlapping slices, and at
+ *  100 comparisons several of them clear any win-rate gap by chance, for every
+ *  trader, every run. Those slices were being promoted to 'active' and read
+ *  back out as the trader's edge, their dashboard headline, and their Edge
+ *  Score. Everything downstream inherits this one line. */
+function statusForCandidate(c: PatternCandidate): PatternStatus {
+  if (c.confidence.level === 'low') return 'insufficient_data';
+  return c.significant ? 'active' : 'insufficient_data';
 }
 
 function buildRow(
@@ -93,7 +104,7 @@ export function diffPatternMemory(
       // Brand new, or reappearing after having disappeared: judge purely on
       // current confidence, keep original identity (first_detected_at,
       // pattern_id) if this is a reappearance, otherwise start fresh.
-      const status = statusForNewOrReappeared(c.confidence.level);
+      const status = statusForCandidate(c);
       const firstDetectedAt = existing?.firstDetectedAt ?? nowISO;
       const history = pushHistory(existing?.history ?? [], {
         at: nowISO, winRate: c.metric.winRate, delta: c.delta, confidenceLevel: c.confidence.level, sampleSize: c.confidence.sampleSize, status,
@@ -112,14 +123,20 @@ export function diffPatternMemory(
     const signFlipped = (c.delta > 0 && existing.delta < 0) || (c.delta < 0 && existing.delta > 0);
 
     let status: PatternStatus;
-    if (signFlipped) {
+    if (!c.significant) {
+      // Lost the test — whatever the delta did. A slice whose gap no longer
+      // survives correction is not "strengthening", it is a slice that used to
+      // look convincing, and saying otherwise is how a pattern outlives the
+      // evidence that created it.
+      status = c.confidence.level === 'low' ? 'insufficient_data' : 'weakening';
+    } else if (signFlipped) {
       status = 'weakening';
     } else if (deltaVsBaseline >= STRENGTHEN_THRESHOLD || tierNow > tierBefore) {
       status = 'strengthening';
     } else if (deltaVsBaseline <= WEAKEN_THRESHOLD || tierNow < tierBefore) {
       status = 'weakening';
     } else {
-      status = c.confidence.level === 'low' ? 'insufficient_data' : 'active';
+      status = statusForCandidate(c);
     }
 
     const row = buildRow(clerkId, c, nowISO, status, existing.firstDetectedAt, pushHistory(existing.history, {

@@ -24,6 +24,23 @@ function average(nums: number[]): number {
   return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
 }
 
+/** Decided trades each side of a best-vs-worst spread needs before the gap
+    between them means anything. Matches the medium-confidence floor used
+    everywhere else in the analytics layer. */
+export const MIN_SPECIALIZATION_SAMPLE = 10;
+
+/** The gap between a trader's best and worst group, or a neutral 50 when the
+    two groups are too small for the gap to mean anything. */
+function specializationScore(
+  strongest: { winRate: number; confidence: { sampleSize: number } } | null,
+  weakest: { winRate: number; confidence: { sampleSize: number } } | null,
+): number {
+  if (!strongest || !weakest) return 50;
+  if (strongest.confidence.sampleSize < MIN_SPECIALIZATION_SAMPLE) return 50;
+  if (weakest.confidence.sampleSize < MIN_SPECIALIZATION_SAMPLE) return 50;
+  return clamp01to100(strongest.winRate - weakest.winRate);
+}
+
 /** Caps profit factor before it enters any averaging/differencing — an
     Infinity (zero losses) must never poison a mean. */
 function cappedPF(pf: number): number {
@@ -53,12 +70,18 @@ export function computeEdgeScore(
     ? average(profile.topConfirmations.map(c => c.winRate))
     : 50;
 
-  const sessionSpecialization = profile.strongestSession && profile.weakestSession
-    ? clamp01to100(profile.strongestSession.winRate - profile.weakestSession.winRate)
-    : 50;
-  const instrumentSpecialization = profile.strongestInstrument && profile.weakestInstrument
-    ? clamp01to100(profile.strongestInstrument.winRate - profile.weakestInstrument.winRate)
-    : 50;
+  // Specialization is the spread between the trader's best and worst group —
+  // and the spread between the max and min of several small samples is
+  // maximised by NOISE, not by skill. Two sessions of four trades each will
+  // routinely differ by fifty points for no reason at all, and the score would
+  // read that as a sharply specialized trader.
+  //
+  // So it only counts when both sides have a sample worth comparing; below
+  // that the factor sits at its neutral value and contributes nothing either
+  // way. A trader with thin data should score neither high nor low on a
+  // question their data cannot answer.
+  const sessionSpecialization = specializationScore(profile.strongestSession, profile.weakestSession);
+  const instrumentSpecialization = specializationScore(profile.strongestInstrument, profile.weakestInstrument);
 
   const bestTier = liveRows.reduce<ConfidenceLevel | null>((best, p) => {
     if (!best) return p.currentConfidenceLevel;

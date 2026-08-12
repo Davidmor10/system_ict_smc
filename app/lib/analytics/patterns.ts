@@ -6,23 +6,75 @@ import { hourOf, weekdayOf } from './time';
 import { analyzeInstruments } from './instruments';
 import { analyzeSessions } from './sessions';
 import type { PatternCandidate } from './types';
+import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
 
 const DIRECTIONS: Direction[] = ['LONG', 'SHORT'];
 
-/** Combines dimensions (instrument×session, session×direction, hour×instrument)
-    plus each single-dimension standout, and ranks every candidate by
-    confidence tier first, then by how far it deviates from the trader's
-    overall win rate. This is the raw material for "today's discovery" — the
-    AI layer only ever phrases the #1 candidate, never invents its own. */
+/** Adjusted p below this is a pattern; at or above it is a slice that happened
+ *  to look good. 0.05 after correction, which on a hundred comparisons means a
+ *  raw p of about 0.0005 — deliberately hard to reach, because the cost of
+ *  being wrong here is a trader sizing up on noise. */
+export const PATTERN_ALPHA = 0.05;
+/** Decided trades a slice needs before its p-value is even considered. Below
+ *  this, Fisher can still return a small number on a freak split, and a
+ *  "significant" finding built on four trades would be the exact failure the
+ *  test was added to prevent. */
+export const PATTERN_MIN_DECIDED = 8;
+
+/** One candidate with its raw p-value. `pAdjusted` and `significant` are
+ *  filled in at the end, when the number of comparisons is known — the
+ *  correction depends on how many slices this particular history produced,
+ *  which is not knowable while they are still being produced. */
+function rawCandidate(
+  id: string,
+  kind: PatternCandidate['kind'],
+  subject: Record<string, string | number>,
+  metric: PatternCandidate['metric'],
+  baseline: number,
+  allWins: number,
+  allLosses: number,
+): PatternCandidate {
+  // The slice against everything outside it. Subtracting the slice from the
+  // totals is what makes the two groups disjoint — testing a group against a
+  // pool that contains it understates every real difference, and the bigger
+  // the slice the more it understates.
+  const outWins   = allWins   - metric.wins;
+  const outLosses = allLosses - metric.losses;
+  const pValue = fisherExactTwoSided(metric.wins, metric.losses, outWins, outLosses);
+
+  return {
+    id, kind, subject, metric, baseline,
+    delta: metric.winRate - baseline,
+    confidence: metric.confidence,
+    pValue,
+    pAdjusted: 1,      // filled in below
+    significant: false,
+  };
+}
+
+/** Slice the history every way that might mean something, then test whether
+    any of it survives being tested.
+    
+    The first half is discovery and is meant to be greedy — instrument×session,
+    hour×instrument, tag combinations, weekday, emotion. The second half is the
+    part that decides what a trader is allowed to be told: each slice against
+    the trades outside it, corrected for how many slices were tried. Consumers
+    rank by `significant` first; a candidate that failed is still tracked, and
+    still may not be called an edge. */
 export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
   const overall = computeGroupPerformance(trades, 'ALL', 'All');
   const baseline = overall.winRate;
   const candidates: PatternCandidate[] = [];
 
+  // Wins and losses of the whole history, so each slice can be tested against
+  // everything it is not.
+  const allWins   = trades.filter(t => t.result === 'WIN').length;
+  const allLosses = trades.filter(t => t.result === 'LOSS').length;
+
   const push = (kind: PatternCandidate['kind'], id: string, subject: Record<string, string | number>, subset: TradeEntry[], label: string) => {
     if (subset.length < 3) return; // below this, "patterns" are just noise
     const metric = computeGroupPerformance(subset, id, label);
-    candidates.push({ id, kind, subject, metric, baseline, delta: metric.winRate - baseline, confidence: metric.confidence });
+    candidates.push(rawCandidate(id, kind, subject, metric, baseline, allWins, allLosses));
   };
 
   // instrument × session
@@ -127,16 +179,36 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
   // single-dimension standouts, in case combos stay too sparse for a while
   for (const g of analyzeInstruments(trades)) {
     if (g.trades < 3) continue;
-    candidates.push({ id: `inst_${g.key}`, kind: 'instrument_best', subject: { instrument: g.key }, metric: g, baseline, delta: g.winRate - baseline, confidence: g.confidence });
+    candidates.push(rawCandidate(`inst_${g.key}`, 'instrument_best', { instrument: g.key }, g, baseline, allWins, allLosses));
   }
   for (const g of analyzeSessions(trades)) {
     if (g.trades < 3) continue;
-    candidates.push({ id: `sess_${g.key}`, kind: 'session_vs_overall', subject: { session: g.key }, metric: g, baseline, delta: g.winRate - baseline, confidence: g.confidence });
+    candidates.push(rawCandidate(`sess_${g.key}`, 'session_vs_overall', { session: g.key }, g, baseline, allWins, allLosses));
+  }
+
+  // The correction, applied once every slice is known.
+  //
+  // This is the step the whole file was missing. Everything above deliberately
+  // slices the same trades a hundred different ways, which is the right way to
+  // FIND a candidate and a catastrophic way to CONFIRM one: at a hundred
+  // comparisons, several slices clear any win-rate gap you care to name by
+  // chance alone — for every trader, every time, including one trading at
+  // random. Ranking them and showing the top of the list is a machine for
+  // manufacturing confident nonsense.
+  const comparisons = candidates.length;
+  for (const c of candidates) {
+    c.pAdjusted = bonferroni(c.pValue, comparisons);
+    c.significant = c.pAdjusted < PATTERN_ALPHA
+      && c.metric.wins + c.metric.losses >= PATTERN_MIN_DECIDED;
   }
 
   const tierWeight = (c: PatternCandidate) => (c.confidence.level === 'high' ? 2 : c.confidence.level === 'medium' ? 1 : 0);
 
+  // Significant first, then the old ordering within each group. Candidates that
+  // failed the test are kept — they are the raw material for next month, when
+  // the sample may have grown — but nothing downstream may call them an edge.
   return candidates.sort((a, b) => {
+    if (a.significant !== b.significant) return a.significant ? -1 : 1;
     const tierDiff = tierWeight(b) - tierWeight(a);
     if (tierDiff !== 0) return tierDiff;
     return Math.abs(b.delta) - Math.abs(a.delta);

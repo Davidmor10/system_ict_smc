@@ -41,6 +41,21 @@ function winningTrades(symbol: 'ES' | 'NQ' | 'MNQ', session: string): TradeEntry
   return Array.from({ length: 12 }, () => makeTrade({ symbol, session, result: 'WIN', entry: 100, stop: 99, target: 103 }));
 }
 
+/** A history that contains an actual, separable edge: every trade in
+    `winSession` won, every trade in `loseSession` lost.
+    
+    Needed since patterns must now survive a significance test. A block of 12
+    identical wins has no discoverable edge in it — every slice of it is 100%,
+    which is exactly as informative as the whole, and the honest output for
+    such a history is no pattern at all. Splitting by session gives the test a
+    real signal to isolate. */
+function splitTrades(symbol: 'ES' | 'NQ' | 'MNQ', winSession: string, loseSession: string): TradeEntry[] {
+  return [
+    ...Array.from({ length: 12 }, () => makeTrade({ symbol, session: winSession,  result: 'WIN',  entry: 100, stop: 99, target: 103 })),
+    ...Array.from({ length: 12 }, () => makeTrade({ symbol, session: loseSession, result: 'LOSS', entry: 100, stop: 99, target: 103 })),
+  ];
+}
+
 beforeEach(() => {
   fakeDb.tables = {};
 });
@@ -96,17 +111,20 @@ describe('Trader Intelligence Service — cross-user isolation', () => {
   });
 
   it('generateDashboardPrimaryInsight for user A never reflects user B\'s data', async () => {
-    const aTrades = winningTrades('ES', 'nyam');
-    const bTrades = winningTrades('NQ', 'london');
+    // Each user's edge lives in sessions the other never traded, so the
+    // assertion is about isolation rather than about which of A's own slices
+    // happened to rank first.
+    const aTrades = splitTrades('ES', 'nyam', 'london');
+    const bTrades = splitTrades('NQ', 'asia', 'nypm');
     fakeDb.seed('journal_trades', [...aTrades.map(t => tradeRow('user_A', t)), ...bTrades.map(t => tradeRow('user_B', t))]);
 
     const insightA = await service.generateDashboardPrimaryInsight('user_A');
     const insightB = await service.generateDashboardPrimaryInsight('user_B');
 
-    expect(insightA?.title).toContain('ES');
-    expect(insightA?.title).not.toContain('NQ');
-    expect(insightB?.title).toContain('NQ');
-    expect(insightB?.title).not.toContain('ES');
+    expect(insightA).not.toBeNull();
+    expect(insightB).not.toBeNull();
+    for (const marker of ['asia', 'nypm']) expect(insightA!.title).not.toContain(marker);
+    for (const marker of ['nyam', 'london']) expect(insightB!.title).not.toContain(marker);
   });
 
   it('bootstraps trader_profiles/pattern_memory on a cold-start dashboard call, scoped to that user only', async () => {

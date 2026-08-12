@@ -63,3 +63,33 @@ describe('diagnoseRootCause', () => {
     expect(diagnoseRootCause(c, profile(1), profile(1))).toBeNull();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The sample floor
+//
+// The weekly report runs from 3 trades, which is fine for DESCRIBING a week
+// and not close to enough for explaining one. Three trades against three moves
+// every metric by large amounts on variance alone, and this function's output
+// is a labelled mechanism that the narrative then explains to the trader in
+// confident prose.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('sample floor before naming a mechanism', () => {
+  const thinWeek = { thisWeek: 4, prevWeek: 3 };
+  const exitShaped = () => comparison(metric(70, 68, 'flat'), metric(1.2, 2.1, 'down'), metric(1.5, 2.5, 'down'));
+
+  it('refuses to name exit management on a four-trade week', () => {
+    expect(diagnoseRootCause(exitShaped(), profile(0.6), null)?.kind).toBe('exit_management');
+    expect(diagnoseRootCause(exitShaped(), profile(0.6), null, thinWeek)?.kind).toBe('sample_variance');
+  });
+
+  it('names the mechanism once both weeks clear the floor', () => {
+    expect(diagnoseRootCause(exitShaped(), profile(0.6), null, { thisWeek: 12, prevWeek: 10 })?.kind)
+      .toBe('exit_management');
+  });
+
+  it('says nothing at all when a thin week did not move', () => {
+    const flat = comparison(metric(70, 70, 'flat'), metric(1.2, 1.2, 'flat'), metric(2, 2, 'flat'));
+    expect(diagnoseRootCause(flat, profile(0.6), null, thinWeek)).toBeNull();
+  });
+});

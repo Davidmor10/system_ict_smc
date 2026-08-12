@@ -123,6 +123,23 @@ export interface PatternCandidate {
   /** metric.winRate - baseline. Used for ranking, not shown raw to the user. */
   delta: number;
   confidence: Confidence;
+  /** Two-sided Fisher exact p-value: this slice's wins/losses against the
+   *  trades OUTSIDE it. Not against the overall rate — the overall rate
+   *  contains the slice, so comparing them compares a group with itself and
+   *  shrinks every real difference toward zero. */
+  pValue: number;
+  /** pValue × the number of slices tested this run, capped at 1.
+   *
+   *  Discovery crosses instrument, session, hour, direction, model,
+   *  confirmation tag, tag combination, emotion, bias, setup and weekday: on a
+   *  normal history that is roughly a hundred overlapping comparisons. At a
+   *  hundred comparisons, several slices reach a large win-rate gap by chance
+   *  alone, every time, for every trader. The correction is what separates
+   *  "this is your edge" from "this is the luckiest of a hundred coin flips". */
+  pAdjusted: number;
+  /** pAdjusted below the threshold AND a real sample behind it. Only these may
+   *  be presented to the trader as something that works. */
+  significant: boolean;
 }
 
 export interface FullAnalysis {

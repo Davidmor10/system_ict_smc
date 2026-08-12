@@ -6,7 +6,10 @@ import type { PatternMemoryRow, PatternStatus } from '../../app/lib/intelligence
 const CLERK_ID = 'user_A';
 const NOW = '2026-07-06T12:00:00.000Z';
 
-function candidate(id: string, delta: number, level: ConfidenceLevel, sampleSize = 20, winRate = 60): PatternCandidate {
+/** `significant` defaults to true so the existing lifecycle tests keep testing
+    the lifecycle. The significance gate itself is exercised explicitly below —
+    it is a separate question from "does a strengthening delta strengthen". */
+function candidate(id: string, delta: number, level: ConfidenceLevel, sampleSize = 20, winRate = 60, significant = true): PatternCandidate {
   return {
     id,
     kind: 'instrument_best',
@@ -15,6 +18,9 @@ function candidate(id: string, delta: number, level: ConfidenceLevel, sampleSize
     baseline: 50,
     delta,
     confidence: { level, sampleSize },
+    pValue: significant ? 0.0001 : 0.4,
+    pAdjusted: significant ? 0.01 : 1,
+    significant,
   };
 }
 
@@ -125,5 +131,44 @@ describe('diffPatternMemory', () => {
     const result = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 11, 'medium')], stored, NOW);
     expect(result.toUpsert[0].history.length).toBe(12);
     expect(result.toUpsert[0].history[11].at).toBe(NOW);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The significance gate
+//
+// 'active' is the status every downstream surface reads as "this is real" —
+// the dashboard headline, the personalized insights, Working Strengths, the
+// Edge Score. Sample size alone used to be the bar, and sample size cannot see
+// the problem: discovery produces ~100 overlapping slices, so several clear
+// any win-rate gap by chance for every trader, every run.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('significance gate', () => {
+  it('will not promote a large-sample slice that failed the correction', () => {
+    const c = candidate('p1', 20, 'high', 40, 70, false);
+    const { toUpsert } = diffPatternMemory(CLERK_ID, [c], [], NOW);
+    expect(toUpsert[0].status).toBe('insufficient_data');
+  });
+
+  it('promotes the same slice once it survives', () => {
+    const c = candidate('p1', 20, 'high', 40, 70, true);
+    const { toUpsert } = diffPatternMemory(CLERK_ID, [c], [], NOW);
+    expect(toUpsert[0].status).toBe('active');
+  });
+
+  // A pattern that stops surviving must not keep its standing on the strength
+  // of a delta that moved — that is how a pattern outlives its evidence.
+  it('demotes a live pattern that stops surviving, even when its delta grew', () => {
+    const first = diffPatternMemory(CLERK_ID, [candidate('p1', 10, 'high', 40, 65, true)], [], NOW);
+    expect(first.toUpsert[0].status).toBe('active');
+
+    const later = diffPatternMemory(
+      CLERK_ID,
+      [candidate('p1', 25, 'high', 40, 75, false)],   // bigger gap, no longer significant
+      first.toUpsert,
+      NOW,
+    );
+    expect(later.toUpsert[0].status).toBe('weakening');
   });
 });

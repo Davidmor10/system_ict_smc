@@ -77,52 +77,14 @@ export interface TriggerFinding {
 }
 
 // ── Fisher's exact test ─────────────────────────────────────────────────────
+//
+// Moved to lib/stats/fisher.ts. Re-exported here so this module's public
+// surface is unchanged — and so the pattern-discovery stack, which had no
+// significance test at all, can use the same one rather than a second
+// implementation that drifts from this one.
 
-const LOG_FACT: number[] = [0, 0];
-function logFactorial(n: number): number {
-  for (let i = LOG_FACT.length; i <= n; i += 1) {
-    LOG_FACT[i] = LOG_FACT[i - 1] + Math.log(i);
-  }
-  return LOG_FACT[n];
-}
-
-/** Hypergeometric probability of one specific 2×2 table with fixed margins. */
-function tableProbability(a: number, b: number, c: number, d: number): number {
-  const n = a + b + c + d;
-  return Math.exp(
-    logFactorial(a + b) + logFactorial(c + d) + logFactorial(a + c) + logFactorial(b + d)
-    - logFactorial(n) - logFactorial(a) - logFactorial(b) - logFactorial(c) - logFactorial(d),
-  );
-}
-
-/** Two-sided Fisher exact test.
- *
- *  Sums the probability of every table with these margins that is at least as
- *  unlikely as the one observed — the standard two-sided construction. Exact
- *  at any sample size, which is why it is here instead of a chi-square: at
- *  n = 12 the approximation is not trustworthy and this is.
- *
- *  Returns 1 for a degenerate table (an empty row or column), which is the
- *  honest answer — with nothing to compare, nothing is surprising. */
-export function fisherExactTwoSided(a: number, b: number, c: number, d: number): number {
-  if (a < 0 || b < 0 || c < 0 || d < 0) return 1;
-  const rowA = a + b, rowB = c + d, colA = a + c, colB = b + d;
-  if (rowA === 0 || rowB === 0 || colA === 0 || colB === 0) return 1;
-
-  const observed = tableProbability(a, b, c, d);
-  // Floating point: a table mathematically equal to the observed one can come
-  // back a hair larger and be wrongly excluded from the tail.
-  const tolerance = observed * 1e-7;
-
-  const lo = Math.max(0, colA - rowB);
-  const hi = Math.min(rowA, colA);
-  let total = 0;
-  for (let x = lo; x <= hi; x += 1) {
-    const p = tableProbability(x, rowA - x, colA - x, rowB - (colA - x));
-    if (p <= observed + tolerance) total += p;
-  }
-  return Math.min(1, total);
-}
+export { fisherExactTwoSided } from '../../stats/fisher';
+import { fisherExactTwoSided } from '../../stats/fisher';
 
 // ── analysis ────────────────────────────────────────────────────────────────
 
@@ -254,4 +216,4 @@ export function bestTrigger(
 }
 
 // ── exports for tests ───────────────────────────────────────────────────────
-export const __internals = { candidates, tableProbability, logFactorial };
+export const __internals = { candidates };

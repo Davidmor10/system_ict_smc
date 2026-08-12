@@ -313,7 +313,10 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
   const comparison = computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
 
-  const rootCause = diagnoseRootCause(comparison, result.profile, previousProfileRecord?.profile ?? null);
+  const rootCause = diagnoseRootCause(
+    comparison, result.profile, previousProfileRecord?.profile ?? null,
+    { thisWeek: closedThisWeek.length, prevWeek: prevClosed },
+  );
 
   const priorReports = await repo.getRecentWeeklyReports(supabase, userId, MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1);
   const isEarlyInHistory = priorReports.length < MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE;
