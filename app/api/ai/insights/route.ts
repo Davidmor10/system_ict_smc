@@ -6,6 +6,13 @@ import { logSecurityEvent } from '../../../lib/securityLog';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
 import { logger } from '../../../lib/logger';
 
+// Vercel's default function timeout is 10 seconds. This route reads the
+// trader's whole history, re-runs the intelligence refresh, and then waits on a
+// model — comfortably past 10s on a real account, which surfaces as a 504 the
+// client cannot distinguish from a broken feature. 60 is the Hobby ceiling.
+export const maxDuration = 60;
+
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {

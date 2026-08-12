@@ -6,6 +6,13 @@ import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
 
+// Vercel's default function timeout is 10 seconds. This route reads the
+// trader's whole history, re-runs the intelligence refresh, and then waits on a
+// model — comfortably past 10s on a real account, which surfaces as a 504 the
+// client cannot distinguish from a broken feature. 60 is the Hobby ceiling.
+export const maxDuration = 60;
+
+
 const chatSchema = z.object({
   question: z.string().min(1).max(1000),
   lang: z.enum(['he', 'en']).optional(),
