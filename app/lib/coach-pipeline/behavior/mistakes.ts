@@ -85,6 +85,14 @@ export interface MistakeTally {
   /** occurrences / opportunities. */
   rate:          number;
   events:        MistakeEvent[];
+  /** WHICH trades were opportunities, in chronological order.
+   *
+   *  The count alone is enough to state a rate, but not to split the history
+   *  into "it happened here" and "it didn't happen there" — and that split is
+   *  the entire basis of trigger analysis. Comparing occurrences against ALL
+   *  trades instead of against the trades that could have exhibited the
+   *  mistake would silently corrupt every rate downstream. */
+  opportunityTradeIds: string[];
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -217,31 +225,32 @@ export function detectMistakes(trades: readonly TradeRow[]): MistakeTally[] {
     t => !t.deleted_at && DECIDED.has(t.result),
   );
 
-  const acc = new Map<MistakeKind, { occ: number; opp: number; events: MistakeEvent[] }>();
-  const bump = (kind: MistakeKind, opportunity: boolean, event: MistakeEvent | null) => {
+  const acc = new Map<MistakeKind, { events: MistakeEvent[]; opps: string[] }>();
+  const bump = (kind: MistakeKind, tradeId: string, opportunity: boolean, event: MistakeEvent | null) => {
     if (!opportunity) return;
-    const cur = acc.get(kind) ?? { occ: 0, opp: 0, events: [] };
-    cur.opp += 1;
-    if (event) { cur.occ += 1; cur.events.push(event); }
+    const cur = acc.get(kind) ?? { events: [], opps: [] };
+    cur.opps.push(tradeId);
+    if (event) cur.events.push(event);
     acc.set(kind, cur);
   };
 
   const priorContracts: number[] = [];
   for (const t of decided) {
-    bump('early_exit',      ...detectEarlyExit(t));
-    bump('no_confirmation', ...detectNoConfirmation(t));
-    bump('rule_violation',  ...detectRuleViolation(t));
-    bump('size_spike',      ...detectSizeSpike(t, priorContracts));
+    bump('early_exit',      t.id, ...detectEarlyExit(t));
+    bump('no_confirmation', t.id, ...detectNoConfirmation(t));
+    bump('rule_violation',  t.id, ...detectRuleViolation(t));
+    bump('size_spike',      t.id, ...detectSizeSpike(t, priorContracts));
     priorContracts.push(t.contracts ?? 0);
   }
 
   return [...acc.entries()]
     .map(([kind, v]) => ({
       kind,
-      occurrences:   v.occ,
-      opportunities: v.opp,
-      rate:          round2(v.occ / v.opp),
-      events:        v.events,
+      occurrences:         v.events.length,
+      opportunities:       v.opps.length,
+      rate:                round2(v.events.length / v.opps.length),
+      events:              v.events,
+      opportunityTradeIds: v.opps,
     }))
     .sort((a, b) => b.rate - a.rate || b.occurrences - a.occurrences || a.kind.localeCompare(b.kind));
 }

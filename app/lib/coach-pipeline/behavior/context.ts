@@ -41,7 +41,6 @@ export interface TradeContext {
   symbol:       string;
   /* antecedent state */
   prevResult:   PrevResult;
-  afterLoss:    'yes' | 'no';
   nthOfDay:     NthOfDay;
   dayPnlBefore: DayPnlBefore;
 }
@@ -53,7 +52,6 @@ export interface TradeContext {
  *  both fit the data equally we should say the more useful one. */
 export const CONTEXT_DIMENSIONS = [
   'prevResult',
-  'afterLoss',
   'dayPnlBefore',
   'nthOfDay',
   'session',
@@ -68,7 +66,6 @@ export type ContextDimension = typeof CONTEXT_DIMENSIONS[number];
 /** Hebrew labels for the dimensions, used when a finding is put into words. */
 export const DIMENSION_LABELS: Record<ContextDimension, string> = {
   prevResult:   'תוצאת העסקה הקודמת',
-  afterLoss:    'אחרי הפסד',
   dayPnlBefore: 'מצב היום עד לאותו רגע',
   nthOfDay:     'מיקום בתוך היום',
   session:      'סשן',
@@ -133,7 +130,6 @@ export function buildContexts(trades: readonly TradeRow[]): Map<string, TradeCon
       setup:        t.setup     || UNKNOWN,
       symbol:       t.symbol    || UNKNOWN,
       prevResult,
-      afterLoss:    prevResult === 'LOSS' ? 'yes' : 'no',
       nthOfDay:     indexInDay === 0 ? 'first' : 'later',
       dayPnlBefore: pnlSoFar > 0 ? 'up' : pnlSoFar < 0 ? 'down' : 'flat',
     });

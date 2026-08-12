@@ -50,12 +50,11 @@ function T(overrides: Partial<TradeRow> = {}): TradeRow {
 // Antecedent state — where behavioural causes hide
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('prevResult / afterLoss', () => {
+describe('prevResult', () => {
   it('the first trade of a day has no predecessor', () => {
     const a = T({ time: '09:00' });
     const ctx = buildContexts([a]).get(a.id)!;
     expect(ctx.prevResult).toBe('none');
-    expect(ctx.afterLoss).toBe('no');
   });
 
   it('carries the previous trade’s result forward', () => {
@@ -63,7 +62,6 @@ describe('prevResult / afterLoss', () => {
     const b = T({ time: '10:00' });
     const ctx = buildContexts([a, b]).get(b.id)!;
     expect(ctx.prevResult).toBe('LOSS');
-    expect(ctx.afterLoss).toBe('yes');
   });
 
   it('a break-even predecessor is not a loss', () => {
@@ -71,7 +69,6 @@ describe('prevResult / afterLoss', () => {
     const b = T({ time: '10:00' });
     const ctx = buildContexts([a, b]).get(b.id)!;
     expect(ctx.prevResult).toBe('BE');
-    expect(ctx.afterLoss).toBe('no');
   });
 
   // Yesterday's loss is part of the trader's week, not what they carried into
@@ -82,7 +79,6 @@ describe('prevResult / afterLoss', () => {
     const today     = T({ date: '2026-08-02', time: '09:00' });
     const ctx = buildContexts([yesterday, today]).get(today.id)!;
     expect(ctx.prevResult).toBe('none');
-    expect(ctx.afterLoss).toBe('no');
     expect(ctx.nthOfDay).toBe('first');
     expect(ctx.dayPnlBefore).toBe('flat');
   });
@@ -205,8 +201,7 @@ describe('dimensions', () => {
   // equally well, the one that suggests a cause wins over the one that just
   // describes the trade.
   it('lists behavioural dimensions before descriptive ones', () => {
-    const behavioural = ['prevResult', 'afterLoss', 'dayPnlBefore', 'nthOfDay'];
-    const firstFour = CONTEXT_DIMENSIONS.slice(0, 4);
-    expect([...firstFour]).toEqual(behavioural);
+    const behavioural = ['prevResult', 'dayPnlBefore', 'nthOfDay'];
+    expect([...CONTEXT_DIMENSIONS.slice(0, 3)]).toEqual(behavioural);
   });
 });
