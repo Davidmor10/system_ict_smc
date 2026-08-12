@@ -34,6 +34,11 @@ import {
   INVESTIGATE_MIN_OCCURRENCES, INVESTIGATE_MIN_OPPORTUNITIES,
 } from '../../../lib/coach-pipeline/behavior/evidence';
 import { MIN_TOTAL_OCCURRENCES } from '../../../lib/coach-pipeline/behavior/contingency';
+import { computeGuardrails } from '../../../lib/coach-pipeline/behavior/guardrails';
+import { reconcile, familiesFor, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
+import { loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
+import { ROLLING_WINDOW } from '../../../lib/coach-pipeline/behavior/finding';
+import type { BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import type { TradeRow } from '../../../lib/coach-pipeline/types';
 import { logger } from '../../../lib/logger';
 
@@ -161,14 +166,68 @@ export async function GET(req: NextRequest) {
     const contexts = buildContexts(trades);
     const tallies  = detectBehaviors(trades);
 
+    // What the last run concluded. Missing table (the migration hasn't been
+    // run yet) is reported rather than thrown: the whole point of this route
+    // is to answer "what is missing", so it must survive its own answer.
+    let stored = new Map<BehaviorKind, StoredFinding>();
+    let memoryAvailable = true;
+    let memoryError: string | null = null;
+    try {
+      stored = await loadFindings(userId);
+    } catch (err) {
+      memoryAvailable = false;
+      memoryError = err instanceof Error ? err.message : String(err);
+    }
+
     // Average R per trade, for prioritising by cost. Only present on trades
     // whose R was measured rather than assumed.
     const rByTradeId = new Map<string, number | null>(
       trades.map(t => [t.id, t.r_multiple]),
     );
 
-    const findings = tallies.map(t => buildFinding(t, contexts, { rByTradeId }));
-    const { primary, watching } = pickPrimary(findings);
+    const findings = tallies.map(t => buildFinding(t, contexts, {
+      rByTradeId,
+      // Both come from memory, and both change the answer: a running
+      // experiment must not be recomputed back to 'investigating', and an
+      // answered question is the only evidence family that isn't telemetry.
+      previousStatus: stored.get(t.kind)?.status,
+      extraFamilies:  familiesFor(stored.get(t.kind) ?? null),
+    }));
+    const previousPrimary = [...stored.values()].find(s => s.isPrimary)?.kind;
+    const { primary, watching } = pickPrimary(findings, previousPrimary);
+
+    // Chronological, for the trailing guardrail window — listRecentTrades
+    // hands them back newest-first.
+    const chronological = [...trades].reverse();
+    const guardrailsTrailing = computeGuardrails(chronological.slice(-ROLLING_WINDOW));
+    const now = new Date().toISOString();
+
+    // What memory WOULD record tonight. Nothing is written here; the nightly
+    // run owns the write. Reading the transition before it happens is the
+    // only way to catch a lifecycle that moves for the wrong reason.
+    const wouldRecord = findings.map(f => {
+      const prior = stored.get(f.kind) ?? null;
+      const since = prior?.experimentStartedAt?.slice(0, 10);
+      const guardrailsNow = computeGuardrails(
+        since ? chronological.filter(t => t.date >= since) : chronological.slice(-ROLLING_WINDOW),
+      );
+      const { record, transition, measured } = reconcile({
+        stored: prior, fresh: f, guardrailsNow, guardrailsTrailing,
+        isPrimary: primary?.kind === f.kind, now,
+      });
+      return {
+        kind: f.kind,
+        knownSince:  prior?.firstDetectedAt ?? null,
+        statusNow:   prior?.status ?? null,
+        statusAfter: record.status,
+        transition,
+        relapses:    record.relapses,
+        experiment:  record.experiment,
+        measured,
+        openQuestion: record.question,
+        answered:     record.traderAnswer != null,
+      };
+    });
 
     return NextResponse.json({
       ranAt: new Date().toISOString(),
@@ -177,6 +236,15 @@ export async function GET(req: NextRequest) {
 
       readiness: readiness(trades),
       perTrade:  perTrade(trades),
+
+      memory: {
+        available: memoryAvailable,
+        error:     memoryError,
+        storedFindings: stored.size,
+        previousPrimary: previousPrimary ?? null,
+        guardrailsTrailing,
+        wouldRecord,
+      },
 
       thresholds: {
         detectTrigger:   MIN_TOTAL_OCCURRENCES,

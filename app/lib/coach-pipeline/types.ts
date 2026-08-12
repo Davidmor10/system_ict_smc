@@ -278,4 +278,6 @@ export const T = {
   featureFlags:      'feature_flags',
   aiProviderState:   'ai_provider_state',
   cronRuns:          'cron_runs',
+  behaviorFindings:  'behavior_findings',
+  behaviorEvents:    'behavior_finding_events',
 } as const;
