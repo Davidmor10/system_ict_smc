@@ -195,9 +195,15 @@ function detectNoConfirmation(t: TradeRow): [boolean, MistakeEvent | null] {
   }];
 }
 
-/** The trader's own rule checkbox. The most reliable signal here, because it
- *  is the trader's own verdict rather than our inference. */
+/** The trader's own rule verdict. The most reliable signal in the whole file,
+ *  because it is judgement rather than our inference from prices.
+ *
+ *  An unanswered trade is not an opportunity. Counting silence as compliance
+ *  would inflate the denominator with trades nobody graded and make the
+ *  adherence rate a flattering fiction; counting it as a violation would be
+ *  worse. The honest denominator is "trades the trader actually graded". */
 function detectRuleViolation(t: TradeRow): [boolean, MistakeEvent | null] {
+  if (t.followed_rules == null) return [false, null];
   if (t.followed_rules) return [true, null];
   return [true, {
     kind: 'rule_violation',

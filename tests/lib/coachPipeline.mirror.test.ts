@@ -68,7 +68,10 @@ describe('tradeEntryToIntelligenceRow', () => {
     expect(row.setup).toBeNull();     // legacy `model` maps NOT to setup; setup is its own field
     expect(row.r_multiple).toBe(1.5);
     expect(row.pnl_usd).toBe(750);
-    expect(row.followed_rules).toBe(true);   // legacy has no field → default true
+    // Ungraded, not compliant. This used to be hardcoded `true`, which meant
+    // every trade claimed perfect adherence and the violation detector could
+    // never fire.
+    expect(row.followed_rules).toBeNull();
     expect(row.notes).toBe('clean setup');
     expect(row.tags).toEqual([]);
     expect(row.deleted_at).toBeNull();

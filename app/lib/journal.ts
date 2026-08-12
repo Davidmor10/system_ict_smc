@@ -92,6 +92,14 @@ export interface TradeEntry {
   confirmations?: string[];
   /** Trader's emotional state right before entering. */
   emotionalState?: EmotionalState;
+  /** Did this trade follow the rules the trader set for themselves?
+   *
+   *  Three states, and the third is the important one. `true` and `false` are
+   *  the trader's own verdict — the most trustworthy signal in the journal,
+   *  because it is judgement rather than inference. `undefined` means they
+   *  didn't answer, and that is NOT the same as "yes": treating silence as
+   *  compliance is how a rule-adherence metric becomes a flattering fiction. */
+  followedRules?: boolean;
   /** Epoch-ms of the last edit. Set by saveTrades when a trade's content
       changes; drives the cross-device newest-wins merge on hydration. */
   updatedAt?: number;
@@ -314,6 +322,7 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     emotionalState: typeof r.emotionalState === 'string'
       ? r.emotionalState as EmotionalState
       : undefined,
+    followedRules: typeof r.followedRules === 'boolean' ? r.followedRules : undefined,
     updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : undefined,
   };
 }

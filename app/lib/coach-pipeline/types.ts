@@ -47,7 +47,9 @@ export interface TradeRow {
   setup:                  string | null;
   confirmations:          string[] | null;
   emotional_state:        string | null;
-  followed_rules:         boolean;
+  /** The trader's own verdict, or null when they didn't answer. Null is not
+   *  compliance — see detectRuleViolation. */
+  followed_rules:         boolean | null;
   notes:                  string;
   tags:                   string[];
   screenshots:            string[] | null;

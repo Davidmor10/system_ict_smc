@@ -79,7 +79,10 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     setup:           trade.setup ?? null,
     confirmations:   trade.confirmations ?? null,
     emotional_state: trade.emotionalState ?? null,
-    followed_rules:  true,                                 // legacy has no field for this — assume true
+    // null when the trader didn't grade the trade. Never `true` by default:
+    // this used to be hardcoded, which meant every trade claimed perfect rule
+    // adherence and the violation detector could not fire even once.
+    followed_rules:  typeof trade.followedRules === 'boolean' ? trade.followedRules : null,
     notes:           trade.notes ?? '',
     tags:            [],
     screenshots:     trade.screenshots ?? null,

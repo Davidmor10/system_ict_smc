@@ -78,7 +78,7 @@ describe('opportunities', () => {
   });
 
   it('ignores soft-deleted trades', () => {
-    const trades = [T({ deleted_at: '2026-08-02T00:00:00Z', followed_rules: false })];
+    const trades = [T({ deleted_at: '2026-08-02T00:00:00Z', followed_rules: false, exit_price: 20010 })];
     expect(detectMistakes(trades)).toEqual([]);
   });
 
@@ -178,10 +178,28 @@ describe('no_confirmation', () => {
 });
 
 describe('rule_violation', () => {
-  it('follows the trader’s own checkbox', () => {
+  it('follows the trader’s own verdict', () => {
     const t = tally([T({ followed_rules: false }), T({ followed_rules: true })], 'rule_violation')!;
     expect(t.occurrences).toBe(1);
     expect(t.opportunities).toBe(2);
+  });
+
+  // Counting silence as compliance would inflate the denominator with trades
+  // nobody graded and turn the adherence rate into a flattering fiction.
+  it('an ungraded trade is not an opportunity', () => {
+    expect(tally([T({ followed_rules: null })], 'rule_violation')).toBeUndefined();
+  });
+
+  it('the denominator is trades the trader actually graded', () => {
+    const trades = [
+      T({ followed_rules: false }),
+      T({ followed_rules: true }),
+      T({ followed_rules: null }),
+      T({ followed_rules: null }),
+    ];
+    const t = tally(trades, 'rule_violation')!;
+    expect(t.opportunities).toBe(2);
+    expect(t.rate).toBe(0.5);
   });
 });
 

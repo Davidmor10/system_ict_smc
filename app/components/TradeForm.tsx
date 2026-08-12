@@ -100,6 +100,7 @@ interface FormState {
   stop: string;
   target: string;
   exits: ExitRow[];
+  followedRules: '' | 'yes' | 'no';
   confirmations: string[];
   emotionalState: EmotionalState | '';
   model: string;
@@ -122,6 +123,7 @@ function empty(): FormState {
     stop: '',
     target: '',
     exits: [],
+    followedRules: '',
     confirmations: [],
     emotionalState: '',
     model: '',
@@ -145,6 +147,7 @@ function fromTrade(t: TradeEntry): FormState {
     stop: String(t.stop),
     target: String(t.target),
     exits: (t.exits ?? []).map(e => ({ price: String(e.price), contracts: String(e.contracts) })),
+    followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
     confirmations: t.confirmations ?? [],
     emotionalState: t.emotionalState ?? '',
     model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
@@ -407,6 +410,7 @@ export default function TradeForm({
       exits: hasExits ? parsedExits : undefined,
       confirmations: form.confirmations.length ? form.confirmations : undefined,
       emotionalState: form.emotionalState || undefined,
+      followedRules: form.followedRules === 'yes' ? true : form.followedRules === 'no' ? false : undefined,
       tradeR: realizedR ?? undefined,
       pnlUsd: realizedPnl ?? undefined,
       biasAlignment: alignment,
@@ -569,6 +573,35 @@ export default function TradeForm({
               חייב לבחור תוצאה — סטופ / BE / טייק. אחרת לא ניתן לשמור.
             </p>
           )}
+        </Group>
+
+        {/* ── RULE ADHERENCE — the trader's own verdict on their own trade.
+             The most trustworthy signal in the journal, because it is
+             judgement rather than something we inferred from prices.
+
+             Deliberately unanswered by default, and deliberately not a
+             checkbox: a checkbox has an implicit "no" and this question has
+             three answers. Silence must stay distinguishable from "yes",
+             otherwise every rule-adherence number becomes a flattering
+             fiction built from the trades nobody bothered to grade. ── */}
+        <Group label="עמדתי בחוקים שלי? (אופציונלי)">
+          <div className="flex items-center gap-2">
+            <FormResultBtn
+              label="עמדתי" glyph="✓" active={form.followedRules === 'yes'}
+              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
+              onClick={() => set('followedRules', form.followedRules === 'yes' ? '' : 'yes')}
+            />
+            <FormResultBtn
+              label="סטיתי" glyph="✕" active={form.followedRules === 'no'}
+              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
+              onClick={() => set('followedRules', form.followedRules === 'no' ? '' : 'no')}
+            />
+          </div>
+          <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
+            {form.followedRules === ''
+              ? 'אם תדלג — העסקה לא תיספר לשני הכיוונים. עדיף לא לענות מאשר לענות לא נכון.'
+              : 'התשובה שלך על העסקה הזו — לא נגזרת מהתוצאה.'}
+          </p>
         </Group>
 
         {/* ── EXITS — optional partial-exit legs; used to refine PnL/R when
