@@ -58,5 +58,6 @@ export async function POST(req: Request) {
   }
 }
 
-// No GET alias. A GET that mutates the queue is reachable from a browser
-// address bar, a prefetch, or a link preview — and this one spends money.
+/** Same as nightly-orchestrate: Vercel Cron issues GET, and the bearer guard
+ *  is what keeps this closed, not the HTTP verb. */
+export async function GET(req: Request) { return POST(req); }

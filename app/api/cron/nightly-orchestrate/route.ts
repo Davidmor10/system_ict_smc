@@ -78,6 +78,19 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
   return { picked, completed, failed, retried };
 }
 
+/** Vercel Cron invokes its target with GET, so GET is the handler that
+ *  actually matters here — POST exists for manual invocation.
+ *
+ *  An earlier pass deleted this alias on the grounds that "a GET which
+ *  mutates is reachable from a browser address bar". That reasoning doesn't
+ *  survive contact with the guard directly above it: the route requires a
+ *  bearer CRON_SECRET and fails closed without one, so an address bar was
+ *  never going to trigger it. Removing GET hardened nothing and disconnected
+ *  the only caller — the nightly run fired, got a 405, and left no trace
+ *  anywhere, because cron_runs is written from inside the handler that was
+ *  never reached. */
+export async function GET(req: Request) { return POST(req); }
+
 export async function POST(req: Request) {
   const denied = assertCronAuth(req, ROUTE);
   if (denied) return denied;
