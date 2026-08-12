@@ -11,7 +11,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type InstrumentKey, isKnownInstrument, pointValue } from './instruments';
-import { calcPnL, calcRR } from './calc/trade';
+import {
+  calcPnL, calcRR,
+  calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice,
+} from './calc/trade';
 import { mergeById, active, type Syncable } from './sync/merge';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
@@ -237,15 +240,45 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   const risk = Math.abs(entry - stop);
   const dir  = direction === 'LONG' ? 1 : -1;
   const ptVal = pointValue(symbol);
+
+  // Exits survive normalization. They used to be dropped here — the form
+  // collected them, saved them, and the very next load erased them, taking
+  // the only record of where the trade ACTUALLY closed with it.
+  const exits = Array.isArray(r.exits)
+    ? (r.exits as unknown[])
+        .map(e => {
+          const x = e as Record<string, unknown>;
+          return { price: Number(x?.price), contracts: Number(x?.contracts) };
+        })
+        .filter(e => Number.isFinite(e.price) && Number.isFinite(e.contracts) && e.contracts > 0)
+    : [];
+  const hasExits = exits.length > 0;
+
+  // MEASURED, then remembered, then assumed — in that order.
+  //
+  // The plan-derived branch below says a win banked exactly its target and a
+  // loss gave back exactly its stop. That is not what happened; it is what was
+  // supposed to happen. Every dollar figure in the product inherited it, and
+  // no analysis could ever detect a deviation from a plan, because the record
+  // WAS the plan.
+  //
+  // When exits exist they are recomputed rather than trusted: a stored tradeR
+  // may be a legacy plan-derived value, or stale after the trade was edited.
+  const realizedR   = hasExits ? calcMultiExitRealizedR(entry, stop, exits, direction) : null;
+  const realizedPnl = hasExits ? calcMultiExitPnL(entry, exits, direction, symbol)     : null;
+
   const plannedR = risk > 0 ? ((target - entry) * dir) / risk : 0;
-  const tradeR: number =
+  const assumedR: number =
     result === 'WIN'  ? plannedR :
     result === 'LOSS' ? -1 :
     0;
-  const pnlUsd: number =
-    result === 'WIN'  ? tradeR * ptVal * contractsVal :
+  const assumedPnl: number =
+    result === 'WIN'  ? assumedR * ptVal * contractsVal :
     result === 'LOSS' ? -risk * ptVal * contractsVal :
     0;
+
+  const tradeR = realizedR   ?? (typeof r.tradeR === 'number' ? r.tradeR : assumedR);
+  const pnlUsd = realizedPnl ?? (typeof r.pnlUsd === 'number' ? r.pnlUsd : assumedPnl);
 
   return {
     id,
@@ -266,9 +299,22 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     setup: setupVal,
     confirmation: confirmVal,
     biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : alignment,
-    tradeR: typeof r.tradeR === 'number' ? r.tradeR : tradeR,
-    pnlUsd: typeof r.pnlUsd === 'number' ? r.pnlUsd : pnlUsd,
+    tradeR,
+    pnlUsd,
     screenshots: Array.isArray(r.screenshots) ? r.screenshots.filter((s): s is string => typeof s === 'string') : undefined,
+    // These three were being discarded on every load. The form collects them,
+    // the analytics layer reads them, and nothing in between kept them alive —
+    // so confirmations and emotional state were permanently null downstream,
+    // which reads as "the trader never logs a confirmation" rather than as
+    // "we threw it away".
+    exits: hasExits ? exits : undefined,
+    confirmations: Array.isArray(r.confirmations)
+      ? r.confirmations.filter((c): c is string => typeof c === 'string')
+      : undefined,
+    emotionalState: typeof r.emotionalState === 'string'
+      ? r.emotionalState as EmotionalState
+      : undefined,
+    updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : undefined,
   };
 }
 

@@ -33,7 +33,7 @@
 import type { TradeRow } from '../types';
 
 export type MistakeKind =
-  | 'early_exit'
+  | 'discretionary_exit'
   | 'no_confirmation'
   | 'rule_violation'
   | 'size_spike';
@@ -42,7 +42,7 @@ export type MistakeKind =
  *  ACTION, never of a supposed state of mind — "closed short of target", not
  *  "fear of giving back profit". */
 export const MISTAKE_LABELS: Record<MistakeKind, string> = {
-  early_exit:      'סגירה מוקדמת לפני היעד המתוכנן',
+  discretionary_exit: 'סגירה שיקולית — לא ביעד ולא בסטופ',
   no_confirmation: 'כניסה בלי אישור מתועד',
   rule_violation:  'סטייה מהחוקים שהגדרת',
   size_spike:      'הגדלת גודל פוזיציה מעל הרגיל',
@@ -52,10 +52,10 @@ export const MISTAKE_LABELS: Record<MistakeKind, string> = {
  *  neither exhibit a mistake nor count as a chance to make one. */
 const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
 
-/** A win that banked less than this share of its planned reward counts as
- *  cut short. 0.6 is a judgement call, not a discovery — it is the point
- *  where "took a bit less" stops being noise and starts being a decision. */
-export const EARLY_EXIT_CAPTURE = 0.6;
+/** How close to the target or the stop still counts as having reached it.
+ *  Slippage and a few ticks of fill difference are not a decision; 3% of the
+ *  planned distance absorbs those without excusing a real early exit. */
+export const EXIT_TOLERANCE = 0.03;
 
 /** Size counts as elevated at 1.5× the recent median. Below that, ordinary
  *  position sizing across instruments would trip it constantly. */
@@ -127,33 +127,54 @@ function median(values: number[]): number {
 // Each returns [opportunity, event | null]. Keeping the two answers together
 // is what stops the denominator drifting away from the numerator.
 
-/** Cut a winner short of its plan.
+/** Closed the position somewhere other than the two places the plan named.
  *
- *  Restricted to wins on purpose. A break-even scratch on a trade with a 2R
- *  target might be a premature exit or might be a setup that never moved —
- *  telling those apart needs the maximum favourable excursion, which we don't
- *  record. Losses are excluded for the same reason: exiting a loser early is
- *  usually good risk management, not a mistake. */
-function detectEarlyExit(t: TradeRow): [boolean, MistakeEvent | null] {
-  const planned = t.rr_planned;
-  const actual  = t.r_multiple;
+ *  A trade is planned with exactly two exits: the target and the stop. Closing
+ *  anywhere between them was a decision taken mid-trade, and that decision —
+ *  not its outcome — is the behaviour.
+ *
+ *  Judged against the PLAN, never against the result. A discretionary exit
+ *  that happened to work is still a departure from the plan, and arguably the
+ *  more dangerous one, because it gets rewarded. Reading `result` here would
+ *  make the detector agree with hindsight, which is exactly what a behaviour
+ *  layer must not do.
+ *
+ *  Requires exit_price, so it only fires on trades where the exit was actually
+ *  recorded. A trade whose R was assumed from its result cannot testify about
+ *  where it closed — the assumption already decided the answer. */
+function detectDiscretionaryExit(t: TradeRow): [boolean, MistakeEvent | null] {
+  const exit   = t.exit_price;
+  const target = t.take_profit;
+  const stop   = t.stop_loss;
+  const entry  = t.entry_price;
   const opportunity =
-    t.take_profit != null && planned != null && planned > 0 && actual != null;
+    exit != null && target != null && stop != null && entry != null
+    && Number.isFinite(exit) && Number.isFinite(target) && Number.isFinite(stop);
   if (!opportunity) return [false, null];
 
-  const isCutShort = t.result === 'WIN' && actual! > 0 && actual! < planned! * EARLY_EXIT_CAPTURE;
-  if (!isCutShort) return [true, null];
+  const dir = t.direction === 'SHORT' ? -1 : 1;
+  // Distance travelled toward the target, as a share of the planned distance.
+  // 1 or more = the target was reached. 0 or less = it went to the stop side.
+  const planned  = (target! - entry) * dir;
+  if (planned <= 0) return [false, null];          // malformed plan, not a behaviour
+  const achieved = (exit! - entry) * dir;
+  const progress = achieved / planned;
+
+  const reachedTarget = progress >= 1 - EXIT_TOLERANCE;
+  const hitStop       = (exit! - stop!) * dir <= EXIT_TOLERANCE * Math.abs(entry - stop!);
+  if (reachedTarget || hitStop) return [true, null];
 
   return [true, {
-    kind: 'early_exit',
+    kind: 'discretionary_exit',
     tradeId: t.id,
     date: t.date,
     evidence: {
-      planned_r:  round2(planned!),
-      actual_r:   round2(actual!),
-      captured:   round2(actual! / planned!),
-      symbol:     t.symbol,
-      session:    t.session,
+      exit_price:      round2(exit!),
+      planned_target:  round2(target!),
+      planned_stop:    round2(stop!),
+      progress_to_target: round2(progress),
+      result:          t.result,      // context for the reader, not a criterion
+      session:         t.session,
     },
   }];
 }
@@ -236,7 +257,7 @@ export function detectMistakes(trades: readonly TradeRow[]): MistakeTally[] {
 
   const priorContracts: number[] = [];
   for (const t of decided) {
-    bump('early_exit',      t.id, ...detectEarlyExit(t));
+    bump('discretionary_exit', t.id, ...detectDiscretionaryExit(t));
     bump('no_confirmation', t.id, ...detectNoConfirmation(t));
     bump('rule_violation',  t.id, ...detectRuleViolation(t));
     bump('size_spike',      t.id, ...detectSizeSpike(t, priorContracts));
@@ -263,5 +284,5 @@ export function eventTradeIds(tally: MistakeTally): Set<string> {
 
 // ── exports for tests ───────────────────────────────────────────────────────
 export const __internals = {
-  detectEarlyExit, detectNoConfirmation, detectRuleViolation, detectSizeSpike, median,
+  detectDiscretionaryExit, detectNoConfirmation, detectRuleViolation, detectSizeSpike, median,
 };

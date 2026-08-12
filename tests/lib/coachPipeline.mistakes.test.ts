@@ -3,7 +3,7 @@ import {
   detectMistakes,
   eventTradeIds,
   sortChronologically,
-  EARLY_EXIT_CAPTURE,
+  EXIT_TOLERANCE,
   SIZE_BASELINE_MIN,
   __internals,
 } from '../../app/lib/coach-pipeline/behavior/mistakes';
@@ -59,14 +59,14 @@ function tally(trades: TradeRow[], kind: string) {
 
 describe('opportunities', () => {
   it('omits a mistake nobody had the chance to make', () => {
-    // No target set anywhere, so "exited before target" is not a thing that
-    // could have happened. Reporting 0/0 would read as a clean record.
-    const trades = [T({ take_profit: null, rr_planned: null }), T({ take_profit: null, rr_planned: null })];
-    expect(tally(trades, 'early_exit')).toBeUndefined();
+    // No exit recorded anywhere, so "closed away from the plan" is not a thing
+    // that could have been observed. Reporting 0/0 would read as a clean record.
+    const trades = [T({ exit_price: null }), T({ exit_price: null })];
+    expect(tally(trades, 'discretionary_exit')).toBeUndefined();
   });
 
   it('counts a clean trade as an opportunity, not an occurrence', () => {
-    const t = tally([T()], 'early_exit')!;
+    const t = tally([T({ exit_price: 20040 })], 'discretionary_exit')!;
     expect(t.opportunities).toBe(1);
     expect(t.occurrences).toBe(0);
     expect(t.rate).toBe(0);
@@ -84,12 +84,12 @@ describe('opportunities', () => {
 
   it('rate is occurrences over opportunities, not over all trades', () => {
     const trades = [
-      T({ rr_planned: 2, r_multiple: 0.5 }),               // early exit
-      T({ rr_planned: 2, r_multiple: 2 }),                 // clean
-      T({ take_profit: null, rr_planned: null }),          // not an opportunity
-      T({ take_profit: null, rr_planned: null }),          // not an opportunity
+      T({ exit_price: 20010 }),          // discretionary
+      T({ exit_price: 20040 }),          // clean
+      T({ exit_price: null }),           // not an opportunity
+      T({ exit_price: null }),           // not an opportunity
     ];
-    const t = tally(trades, 'early_exit')!;
+    const t = tally(trades, 'discretionary_exit')!;
     expect(t.opportunities).toBe(2);
     expect(t.occurrences).toBe(1);
     expect(t.rate).toBe(0.5);
@@ -97,41 +97,64 @@ describe('opportunities', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// early_exit
+// discretionary_exit — judged against the plan, never against the outcome
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe('early_exit', () => {
-  it('flags a win that banked well short of its plan', () => {
-    const t = tally([T({ rr_planned: 3, r_multiple: 0.8 })], 'early_exit')!;
+describe('discretionary_exit', () => {
+  // entry 20000, stop 19980, target 20040. Planned distance = 40 points.
+  const planned = (o: Partial<TradeRow> = {}) =>
+    T({ entry_price: 20000, stop_loss: 19980, take_profit: 20040, ...o });
+
+  it('flags an exit taken between the entry and the target', () => {
+    const t = tally([planned({ exit_price: 20010 })], 'discretionary_exit')!;
     expect(t.occurrences).toBe(1);
-    expect(t.events[0].evidence).toMatchObject({ planned_r: 3, actual_r: 0.8 });
+    expect(t.events[0].evidence).toMatchObject({ exit_price: 20010, progress_to_target: 0.25 });
   });
 
-  it('does not flag a win that reached its plan', () => {
-    expect(tally([T({ rr_planned: 2, r_multiple: 2 })], 'early_exit')!.occurrences).toBe(0);
+  it('does not flag an exit at the target', () => {
+    expect(tally([planned({ exit_price: 20040 })], 'discretionary_exit')!.occurrences).toBe(0);
   });
 
-  it('does not flag a win just under target — that is noise, not a decision', () => {
-    // 0.7 of a 2R plan is above the 0.6 threshold.
-    expect(tally([T({ rr_planned: 2, r_multiple: 1.4 })], 'early_exit')!.occurrences).toBe(0);
+  it('does not flag an exit at the stop', () => {
+    expect(tally([planned({ exit_price: 19980, result: 'LOSS' })], 'discretionary_exit')!.occurrences).toBe(0);
   });
 
-  it('is governed by the documented threshold', () => {
-    const planned = 2;
-    const justUnder = planned * EARLY_EXIT_CAPTURE - 0.01;
-    expect(tally([T({ rr_planned: planned, r_multiple: justUnder })], 'early_exit')!.occurrences).toBe(1);
+  it('does not flag a few ticks of slippage around the target', () => {
+    // Within EXIT_TOLERANCE of the 40-point planned distance.
+    const almost = 20040 - 40 * EXIT_TOLERANCE * 0.5;
+    expect(tally([planned({ exit_price: almost })], 'discretionary_exit')!.occurrences).toBe(0);
   });
 
-  // Exiting a loser early is risk management. Calling it a mistake would
-  // punish the one reflex we want traders to keep.
-  it('never flags a loss', () => {
-    expect(tally([T({ result: 'LOSS', rr_planned: 2, r_multiple: -0.3, pnl_usd: -30 })], 'early_exit')!.occurrences).toBe(0);
+  it('flags a runner beyond the target as reaching it, not as discretion', () => {
+    expect(tally([planned({ exit_price: 20080 })], 'discretionary_exit')!.occurrences).toBe(0);
   });
 
-  // A scratch on a trade that never moved is indistinguishable from a
-  // premature exit without maximum-favourable-excursion data we don't store.
-  it('never flags a break-even scratch', () => {
-    expect(tally([T({ result: 'BE', rr_planned: 2, r_multiple: 0, pnl_usd: 0 })], 'early_exit')!.occurrences).toBe(0);
+  // The whole point of correction #9: the behaviour is the decision, and the
+  // decision is the same whether or not it happened to pay.
+  it('flags a profitable discretionary exit exactly like a losing one', () => {
+    const won  = tally([planned({ exit_price: 20010, result: 'WIN',  pnl_usd: 50 })], 'discretionary_exit')!;
+    const lost = tally([planned({ exit_price: 19990, result: 'LOSS', pnl_usd: -25 })], 'discretionary_exit')!;
+    expect(won.occurrences).toBe(1);
+    expect(lost.occurrences).toBe(1);
+  });
+
+  it('works for shorts', () => {
+    const short = T({
+      direction: 'SHORT', entry_price: 20000, stop_loss: 20020, take_profit: 19960,
+      exit_price: 19990, result: 'WIN',
+    });
+    expect(tally([short], 'discretionary_exit')!.occurrences).toBe(1);
+  });
+
+  // A trade whose R was assumed from its result cannot testify about where it
+  // closed — the assumption already decided the answer.
+  it('is not an opportunity when the exit was never recorded', () => {
+    expect(tally([planned({ exit_price: null })], 'discretionary_exit')).toBeUndefined();
+  });
+
+  it('ignores a malformed plan rather than calling it a behaviour', () => {
+    // Target on the wrong side of entry for a long.
+    expect(tally([planned({ take_profit: 19950, exit_price: 19970 })], 'discretionary_exit')).toBeUndefined();
   });
 });
 

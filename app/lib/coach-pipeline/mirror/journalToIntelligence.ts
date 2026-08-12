@@ -18,6 +18,7 @@
 
 import { createHash } from 'crypto';
 import type { TradeEntry } from '../../journal';
+import { calcRR, calcWeightedExitPrice } from '../../calc/trade';
 import { T } from '../types';
 import { getClient } from '../db/client';
 import { logger } from '../../logger';
@@ -33,6 +34,15 @@ export function deterministicUuid(clerkId: string, legacyId: number): string {
   return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20, 32)}`;
 }
 
+/** Contract-weighted average of the real exits, or null when none were
+ *  logged. The null is load-bearing: it is how the behaviour layer tells a
+ *  measured trade from an assumed one. */
+function weightedExitPrice(trade: TradeEntry): number | null {
+  const exits = trade.exits ?? [];
+  if (!exits.length) return null;
+  return calcWeightedExitPrice(exits);
+}
+
 /** Translate a legacy TradeEntry into an intelligence_trades row. */
 export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, deleted = false) {
   return {
@@ -46,9 +56,21 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     entry_price:     trade.entry,
     stop_loss:       trade.stop,
     take_profit:     trade.target ?? null,
-    exit_price:      null,                                 // legacy doesn't track a single exit
+    // The plan and the outcome, kept apart on purpose.
+    //
+    // rr_planned is the reward-to-risk the trade was TAKEN for; r_multiple is
+    // what it actually returned. Both were null/derived before, which made the
+    // two indistinguishable — and a system that cannot tell the plan from the
+    // outcome cannot detect a deviation from the plan, which is the entire
+    // point of the behaviour layer.
+    //
+    // exit_price is the contract-weighted average of the real exits. It is
+    // null when the trader logged no exits, and that null is meaningful: it
+    // marks a trade whose R is assumed rather than measured, so a detector can
+    // refuse to draw conclusions from it.
+    exit_price:      weightedExitPrice(trade),
     exits:           trade.exits ?? null,
-    rr_planned:      null,
+    rr_planned:      calcRR(trade.entry, trade.stop, trade.target),
     r_multiple:      trade.tradeR ?? null,
     pnl_usd:         trade.pnlUsd ?? null,
     result:          trade.result,
