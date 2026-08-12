@@ -31,6 +31,11 @@ const STR = {
     helpful:      'עוזר',
     meh:          'ככה־ככה',
     notHelpful:   'לא עוזר',
+    answerLabel:  'התשובה שלך',
+    answerWhy:    'כל השאר מחושב מהעסקאות שלך. זה הדבר היחיד שרק אתה יכול לספר — ובלעדיו הניתוח לא יכול להתחזק.',
+    answerSend:   'שלח',
+    answerSaved:  'נשמר. זה ייכנס לניתוח.',
+    answerFailed: 'לא נשמר. נסה שוב.',
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'היום';
       const d = new Date(`${dateIso}T12:00:00Z`);
@@ -49,6 +54,11 @@ const STR = {
     helpful:      'Helpful',
     meh:          'Meh',
     notHelpful:   'Not helpful',
+    answerLabel:  'Your answer',
+    answerWhy:    'Everything else is computed from your trades. This is the one thing only you can tell it — and without it the analysis cannot get stronger.',
+    answerSend:   'Send',
+    answerSaved:  'Saved. This goes into the analysis.',
+    answerFailed: "Didn't save. Try again.",
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'Today';
       const d = new Date(`${dateIso}T12:00:00Z`);
@@ -56,6 +66,14 @@ const STR = {
     },
   },
 } as const;
+
+/** The one question waiting on an answer. `kind` identifies the finding the
+ *  answer attaches to — the question text alone would not, and attaching an
+ *  answer to the wrong behaviour is worse than not collecting it. */
+interface OpenQuestion {
+  kind:     string;
+  question: string;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function todayIsoIsrael(now: Date = new Date()): string {
@@ -74,6 +92,11 @@ export default function DailyInsightCard() {
   const [reaction, setReaction] = useState<UserReaction | null>(null);
   const readSent = useRef(false);
 
+  // The coach's open question, and the trader's reply to it.
+  const [question, setQuestion] = useState<OpenQuestion | null>(null);
+  const [draft, setDraft]       = useState('');
+  const [answerState, setAnswerState] = useState<'idle' | 'sending' | 'saved' | 'failed'>('idle');
+
   // Fetch on mount.
   useEffect(() => {
     let cancelled = false;
@@ -84,10 +107,31 @@ export default function DailyInsightCard() {
         const row = (j?.insight ?? null) as DailyInsightRow | null;
         setInsight(row);
         setReaction(row?.user_reaction ?? null);
+        setQuestion((j?.openQuestion ?? null) as OpenQuestion | null);
       })
       .catch(() => { if (!cancelled) { setError(true); setInsight(null); } });
     return () => { cancelled = true; };
   }, []);
+
+  /** Send the answer.
+   *
+   *  Not optimistic, unlike the reaction buttons. A reaction that silently
+   *  fails costs a thumb; an answer that silently fails costs the trader
+   *  something they took a minute to write, and they would never know it
+   *  hadn't landed. So the box stays put until the server confirms. */
+  const sendAnswer = useCallback(() => {
+    const text = draft.trim();
+    if (!question || !text || answerState === 'sending') return;
+    setAnswerState('sending');
+    fetch('/api/coach/daily-insight/answer', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: question.kind, answer: text }),
+    })
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); setAnswerState('saved'); })
+      .catch(() => setAnswerState('failed'));
+  }, [draft, question, answerState]);
 
   // Mark read on first successful view — one POST, one time.
   useEffect(() => {
@@ -172,6 +216,49 @@ export default function DailyInsightCard() {
           so dangerouslySetInnerHTML here only receives strings we produced from
           our own inlineFormat pipeline. */}
       <div className="di-body" dangerouslySetInnerHTML={{ __html: html }} />
+
+      {/* The answer box. Rendered only when a question is actually open — an
+          input with nothing to answer teaches the trader to ignore the one
+          that matters.
+
+          The question itself is NOT repeated here: the insight above closes
+          with it (prompt rule 16), and printing it twice makes the card read
+          like a form rather than a note. It becomes the placeholder instead,
+          which keeps the input self-explanatory if the model dropped it. */}
+      {question && (
+        <section className="di-answer" aria-label={t.answerLabel}>
+          {answerState === 'saved' ? (
+            <p className="di-answer-saved">✓ {t.answerSaved}</p>
+          ) : (
+            <>
+              <label className="di-answer-label" htmlFor="di-answer-input">{t.answerLabel}</label>
+              <textarea
+                id="di-answer-input"
+                className="di-answer-input"
+                rows={3}
+                maxLength={2000}
+                value={draft}
+                placeholder={question.question}
+                onChange={e => { setDraft(e.target.value); if (answerState === 'failed') setAnswerState('idle'); }}
+                disabled={answerState === 'sending'}
+              />
+              <div className="di-answer-foot">
+                <span className="di-answer-why">
+                  {answerState === 'failed' ? t.answerFailed : t.answerWhy}
+                </span>
+                <button
+                  type="button"
+                  className="di-answer-send"
+                  onClick={sendAnswer}
+                  disabled={!draft.trim() || answerState === 'sending'}
+                >
+                  {t.answerSend}
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       <footer className="di-foot">
         <span className="di-foot-hint">{t.hint}</span>

@@ -63,6 +63,11 @@ export interface BehaviorBlock {
     relapses:     number;
     statements:   BlockStatement[];
     question:     string | null;
+    /** What the trader said when they last answered. Their words, not a
+     *  finding — see prompt rule 20. Present so the coach can refer back to
+     *  it; without that the answer box is a place to type into a void, and
+     *  nobody types into one twice. */
+    traderAnswer: string | null;
     experiment:   { instruction: string; windowTrades: number } | null;
     /** Present on the run where an experiment window was judged. */
     outcome: PrimaryOutcome | null;
@@ -203,6 +208,7 @@ export async function analyzeBehavior(
           // An already-answered question is not asked again; the answer is
           // evidence now, and re-asking would read as not having listened.
           question: primaryRecord?.traderAnswer ? null : (primaryRecord?.question ?? primary.question),
+          traderAnswer: primaryRecord?.traderAnswer ?? null,
           experiment: primaryRecord?.experiment
             ? {
                 instruction:  primaryRecord.experiment.instruction,

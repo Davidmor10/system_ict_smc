@@ -170,6 +170,29 @@ export async function listFindingEvents(clerkId: string, limit = 50) {
   return data ?? [];
 }
 
+/** The one question waiting on an answer, or null.
+ *
+ *  Scoped to the primary finding and to questions that have not been answered:
+ *  a trader shown two open questions answers neither, and a question re-asked
+ *  after it was answered reads as not having listened. */
+export async function getOpenQuestion(
+  clerkId: string,
+): Promise<{ kind: BehaviorKind; question: string; askedAt: string | null } | null> {
+  const cid = requireClerkId(clerkId);
+  const { data, error } = await getClient()
+    .from(T.behaviorFindings)
+    .select('kind, question, question_asked_at')
+    .eq('clerk_id', cid)
+    .eq('is_primary', true)
+    .not('question', 'is', null)
+    .is('trader_answer', null)
+    .limit(1);
+  if (error) throw error;
+  const row = (data ?? [])[0] as { kind: string; question: string; question_asked_at: string | null } | undefined;
+  if (!row) return null;
+  return { kind: row.kind as BehaviorKind, question: row.question, askedAt: row.question_asked_at };
+}
+
 /** Record the trader's answer to a finding's open question.
  *
  *  This is the only write in the system that adds an evidence family beyond

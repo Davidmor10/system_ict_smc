@@ -133,6 +133,12 @@ spend your effort on making them land.
    history. "כבר שלושה שבועות" earns its place; "פעם שנייה שזה חוזר" earns it
    more. Use them when present — but never invent a duration when the field is
    null.
+20. "traderAnswer" is what they wrote when you last asked. Refer to it as
+   theirs — "כתבת ש..." — and build on it. Never restate it as your own
+   finding, never contradict it with a number, and never analyse it back at
+   them. It is the one thing here you did not work out, and treating it as
+   heard is what makes the next question worth answering. An answered question
+   is not re-asked; "question" will be null.
 
 ═══ WHAT THE TRADER SEES ═══
 The insight renders as markdown on their dashboard, above their trade calendar.
@@ -190,6 +196,7 @@ You will receive four blocks. Read them all before writing a single word.
                           You may use them as written or rephrase them, but you
                           may NOT add a fact that isn't in one of them.
       question            the one question to close with, or null
+      traderAnswer        what they wrote last time you asked, or null
       experiment          { instruction, windowTrades } — a running experiment
       outcome             { verdict, targetBefore, targetAfter, broken } — a
                           window that just finished being measured

@@ -114,3 +114,51 @@
 .di-skel-line.w80 { width: 80%; }
 .di-skel-line.w40 { width: 40%; }
 @keyframes di-skel-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── The answer box ──────────────────────────────────────────────────────────
+   Set apart from the note above it by a hairline and a faint gold wash, so it
+   reads as the trader's half of the card rather than as more of the coach's.
+   Deliberately quiet: this is a place to write a sentence, not a call to
+   action competing with the insight for attention. */
+.di-answer {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 18px; padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: var(--sans, system-ui, sans-serif);
+}
+.di-answer-label {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(212, 175, 55, 0.75);
+}
+.di-answer-input {
+  width: 100%; resize: vertical; min-height: 68px;
+  padding: 12px 14px; border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: #fff; font: inherit; font-size: 13px; line-height: 1.6;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.di-answer-input::placeholder { color: rgba(255, 255, 255, 0.32); }
+.di-answer-input:focus {
+  outline: none;
+  border-color: rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.03);
+}
+.di-answer-input:disabled { opacity: 0.6; }
+
+.di-answer-foot { display: flex; align-items: flex-start; gap: 14px; justify-content: space-between; }
+.di-answer-why { font-size: 11px; line-height: 1.5; color: rgba(255, 255, 255, 0.4); flex: 1; }
+.di-answer-send {
+  flex-shrink: 0;
+  padding: 8px 18px; border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.10);
+  color: #e8c66a; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 200ms ease, color 200ms ease, opacity 200ms ease;
+}
+.di-answer-send:hover:not(:disabled) { background: rgba(212, 175, 55, 0.18); color: #fff; }
+.di-answer-send:disabled { opacity: 0.35; cursor: default; }
+
+.di-answer-saved {
+  margin: 0; font-size: 12px; color: rgba(111, 165, 128, 0.95);
+}

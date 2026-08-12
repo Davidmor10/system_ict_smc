@@ -331,6 +331,7 @@ describe('the behaviour block', () => {
         { tier: 'possible' as const,  text: 'ייתכן שהשעה משפיעה.' },
       ],
       question: 'מה שונה בהחלטה שלך ברגעים האלה?',
+      traderAnswer: null,
       experiment: null,
       outcome: null,
     },
@@ -387,5 +388,12 @@ describe('SYSTEM_PROMPT — the rules that make the analysis binding', () => {
 
   it('confines the model to the behaviours it was given', () => {
     expect(SYSTEM_PROMPT).toContain('Use ONLY the behaviours in <behavior>');
+  });
+});
+
+describe('SYSTEM_PROMPT — the trader\'s own words', () => {
+  it('tells the model to attribute the answer rather than absorb it', () => {
+    expect(SYSTEM_PROMPT).toContain('traderAnswer');
+    expect(SYSTEM_PROMPT).toContain('Never restate it as your own');
   });
 });
