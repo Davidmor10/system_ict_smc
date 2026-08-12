@@ -183,8 +183,22 @@ function detectDiscretionaryExit(t: TradeRow): [boolean, BehaviorOccurrence | nu
  *
  *  This measures the JOURNAL, not the chart: an empty list means none was
  *  recorded, which is not proof none existed. That distinction has to survive
- *  all the way to the wording the trader reads. */
-function detectNoConfirmation(t: TradeRow): [boolean, BehaviorOccurrence | null] {
+ *  all the way to the wording the trader reads.
+ *
+ *  `adopted` is the guard that makes it a behaviour at all. Before the trader
+ *  had ever used the field, every trade is empty — not because they entered
+ *  without confirmation, but because they were not filling that box in yet.
+ *  Counting those produces a clean-looking finding ("6 of 9") whose real
+ *  correlate is the calendar: old trades versus new ones. We hit exactly that
+ *  here, and it is the third time the same shape has appeared — an unfilled
+ *  field reading as a discovered habit.
+ *
+ *  So opportunities start at the first trade that carries a confirmation. A
+ *  trader who has never used the field gets no opportunities and the detector
+ *  stays silent, which is the correct amount to say about a box nobody has
+ *  ticked. */
+function detectNoConfirmation(t: TradeRow, adopted: boolean): [boolean, BehaviorOccurrence | null] {
+  if (!adopted) return [false, null];
   const count = t.confirmations?.length ?? 0;
   if (count > 0) return [true, null];
   return [true, {
@@ -261,10 +275,14 @@ export function detectBehaviors(trades: readonly TradeRow[]): BehaviorTally[] {
     acc.set(kind, cur);
   };
 
+  // When the confirmations field entered service, in this history. Everything
+  // before it is silence about the journal rather than evidence about a trade.
+  const firstConfirmation = decided.findIndex(t => (t.confirmations?.length ?? 0) > 0);
+
   const priorContracts: number[] = [];
-  for (const t of decided) {
+  for (const [i, t] of decided.entries()) {
     bump('discretionary_exit', t.id, ...detectDiscretionaryExit(t));
-    bump('no_confirmation', t.id, ...detectNoConfirmation(t));
+    bump('no_confirmation', t.id, ...detectNoConfirmation(t, firstConfirmation >= 0 && i >= firstConfirmation));
     bump('rule_violation',  t.id, ...detectRuleViolation(t));
     bump('size_spike',      t.id, ...detectSizeSpike(t, priorContracts));
     priorContracts.push(t.contracts ?? 0);

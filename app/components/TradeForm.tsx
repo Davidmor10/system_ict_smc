@@ -737,6 +737,24 @@ export default function TradeForm({
               חייב לבחור תוצאה — סטופ / BE / טייק. אחרת לא ניתן לשמור.
             </p>
           )}
+
+          {/* The label and the exit price disagreeing is almost always a typo
+              — a price entered in points, a digit dropped, the wrong button.
+              It is worth catching here because the two are used for different
+              things downstream: the label drives the statistics the trader
+              reads, and the exit drives the behaviour analysis. Silently
+              storing a contradiction puts one number in each and leaves them
+              to disagree forever, in two places nobody compares.
+
+              Shown, not blocked: a trade CAN legitimately be labelled BE and
+              have closed a tick away. The trader is the authority — they just
+              need to see it. */}
+          {form.result && hasExits && derivedResult !== form.result && (
+            <p className="font-mono text-[11px] leading-relaxed mt-2 text-[#d4af37]">
+              סימנת {RESULT_HE[form.result]}, אבל מחיר היציאה שרשמת אומר {RESULT_HE[derivedResult]}
+              {realizedR !== null && ` (${realizedR.toFixed(2)}R)`}. בדוק שהמחירים נכונים — כניסה, סטופ, יעד ויציאה צריכים להיות מחירים מלאים, לא נקודות.
+            </p>
+          )}
         </Group>
 
         {/* ── RULE ADHERENCE — the trader's own verdict on their own trade.

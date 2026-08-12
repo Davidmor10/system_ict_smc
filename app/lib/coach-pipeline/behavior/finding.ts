@@ -383,8 +383,15 @@ export function pickPrimary(
   // 'always' and 'never' are excluded: neither can produce a trigger, so
   // neither can ever move forward. Left as primary, one of them would occupy
   // the slot permanently and repeat a single number every morning.
+  //
+  // 'detected' is excluded too, and by its own definition: seen enough to
+  // notice, not enough to discuss. Promoting one to primary is how a system
+  // ends up presenting "1 of 4" as the thing to work on today — which is not
+  // an insight, it is the absence of one wearing an insight's clothes. When
+  // nothing clears the bar the honest output is no primary at all.
   const eligible = findings.filter(
-    f => f.status !== 'archived' && f.status !== 'resolved' && f.contrast === 'present',
+    f => f.status !== 'archived' && f.status !== 'resolved'
+      && f.status !== 'detected' && f.contrast === 'present',
   );
   if (!eligible.length) return { primary: null, watching: [] };
 

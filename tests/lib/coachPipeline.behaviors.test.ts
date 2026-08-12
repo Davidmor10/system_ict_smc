@@ -163,16 +163,40 @@ describe('discretionary_exit', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('no_confirmation', () => {
-  it('flags an empty list and a null list alike', () => {
-    expect(tally([T({ confirmations: [] })], 'no_confirmation')!.occurrences).toBe(1);
-    expect(tally([T({ confirmations: null })], 'no_confirmation')!.occurrences).toBe(1);
+  it('flags an empty list and a null list alike, once the field is in use', () => {
+    const withEmpty = [T({ confirmations: ['SMT'] }), T({ confirmations: [] })];
+    const withNull  = [T({ confirmations: ['SMT'] }), T({ confirmations: null })];
+    expect(tally(withEmpty, 'no_confirmation')!.occurrences).toBe(1);
+    expect(tally(withNull,  'no_confirmation')!.occurrences).toBe(1);
   });
 
   it('does not flag a trade with any confirmation logged', () => {
     expect(tally([T({ confirmations: ['SMT'] })], 'no_confirmation')!.occurrences).toBe(0);
   });
 
-  it('every decided trade is an opportunity', () => {
+  // The guard against the failure that keeps recurring: an unfilled field
+  // reading as a discovered habit. Before the trader had ever used the box,
+  // every trade is empty for a reason that has nothing to do with trading.
+  it('stays silent for a trader who has never used the field', () => {
+    const trades = [T({ confirmations: [] }), T({ confirmations: null }), T({ confirmations: [] })];
+    expect(tally(trades, 'no_confirmation')).toBeUndefined();
+  });
+
+  it('counts only from the first trade that carried a confirmation', () => {
+    // Explicit times: adoption is a point in the HISTORY, so the order the
+    // detector sees has to be the chronological one, not the array one.
+    const trades = [
+      T({ time: '09:00', confirmations: [] }),        // before adoption — invisible
+      T({ time: '10:00', confirmations: [] }),        // before adoption — invisible
+      T({ time: '11:00', confirmations: ['SMT'] }),   // the field enters service
+      T({ time: '12:00', confirmations: [] }),        // a real omission
+    ];
+    const t = tally(trades, 'no_confirmation')!;
+    expect(t.opportunities).toBe(2);
+    expect(t.occurrences).toBe(1);
+  });
+
+  it('every decided trade after adoption is an opportunity', () => {
     expect(tally([T(), T(), T()], 'no_confirmation')!.opportunities).toBe(3);
   });
 });

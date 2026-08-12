@@ -315,6 +315,20 @@ describe('pickPrimary', () => {
     expect(pickPrimary([f('rule_violation', 9, 'resolved')]).primary).toBeNull();
   });
 
+  // "Seen enough to notice, not enough to discuss" is the definition of
+  // 'detected'. Promoted to primary it becomes "1 of 4" presented as today's
+  // work — the absence of an insight dressed as one. Silence is the answer.
+  it('will not promote a merely detected behaviour, however high it ranks', () => {
+    const out = pickPrimary([f('size_spike', 50, 'detected'), f('rule_violation', 1, 'detected')]);
+    expect(out.primary).toBeNull();
+    expect(out.watching).toHaveLength(0);
+  });
+
+  it('picks the investigating one over a higher-scoring detected one', () => {
+    const out = pickPrimary([f('size_spike', 50, 'detected'), f('rule_violation', 1, 'investigating')]);
+    expect(out.primary!.kind).toBe('rule_violation');
+  });
+
   // Without hysteresis the primary changes most mornings and nothing is ever
   // worked through.
   it('keeps the incumbent when a challenger is only marginally ahead', () => {
