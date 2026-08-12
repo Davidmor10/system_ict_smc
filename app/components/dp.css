@@ -26,7 +26,12 @@
   flex-direction:column;
   padding:12px 22px 16px;
   gap:8px;
-  overflow:hidden;
+  /* The page scrolls. It used to be a fixed-height board where every section
+     fought the others for the same pixels, and the calendar always lost —
+     day cells collapsed to slivers so the insight card and the KPI grid could
+     have their height. Content sets its own size now, and the page grows. */
+  overflow-y:auto;
+  overflow-x:hidden;
   color:var(--dp-w92);
   font-family:var(--dp-ff-sans);
   -webkit-font-smoothing:antialiased;
@@ -150,17 +155,10 @@
 /* ── Row 3: sessions (right) + unit toggle (left) ── */
 /* Daily insight card sits between the greeting and the sessions row — a full-
    width block so the coach's paragraph gets the reading width it deserves. */
-/* The insight card is the only element on this page whose height is set by a
-   language model. Left uncapped it took whatever it wanted out of the shared
-   column, and everything below it — the calendar most visibly — got whatever
-   was left. A four-paragraph day squeezed the month into unreadable slivers.
-
-   Capped at a fixed share of the viewport with its own scroll, so the coach
-   can be as talkative as it likes and the layout underneath never moves. */
-.dp-app .dp-daily-insight-wrap{margin:6px 0 4px;flex:0 0 auto;max-height:26vh;overflow-y:auto;overscroll-behavior:contain;}
-.dp-app .dp-daily-insight-wrap::-webkit-scrollbar{width:6px;}
-.dp-app .dp-daily-insight-wrap::-webkit-scrollbar-thumb{background:rgba(212,175,55,.22);border-radius:3px;}
-.dp-app .dp-daily-insight-wrap::-webkit-scrollbar-track{background:transparent;}
+/* No height cap. It needed one while the page was a fixed-height board and a
+   talkative coach stole the calendar's pixels; now that the page scrolls, a
+   long insight simply makes the page longer and nothing below it moves. */
+.dp-app .dp-daily-insight-wrap{margin:6px 0 4px;flex:0 0 auto;}
 
 .dp-app .dp-control-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;flex-wrap:wrap;}
 .dp-app .dp-sessions{display:flex;gap:8px;flex-wrap:wrap;}
@@ -185,7 +183,9 @@
 
 /* ── KPI grid ── */
 .dp-app .dp-kpis{flex:0 0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));grid-auto-rows:140px;gap:14px;}
-.dp-app .dp-body{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1.3fr;gap:12px;}
+/* align-items:start so the macro rail keeps its natural height instead of
+   being stretched to match a now-taller calendar. */
+.dp-app .dp-body{flex:0 0 auto;display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start;}
 .dp-app .dp-col{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;}
 .dp-app .dp-side > .dp-ai,.dp-app .dp-side > .dp-ai-locked{flex:0 0 auto;} .dp-app .dp-side > .dp-macro{flex:1;}
 .dp-app .dp-panel{background:linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));border:1px solid var(--dp-border);border-radius:14px;box-shadow:0 20px 44px -34px #000,inset 0 1px 0 rgba(255,255,255,.04);min-height:0;}
@@ -288,7 +288,7 @@
 .dp-app .dp-ai-locked-cta:hover{transform:translateY(-1px);}
 
 /* ── Calendar — warm parchment panel so empty days feel like part of the aurora, not holes ── */
-.dp-app .dp-cal{position:relative;flex:1;display:flex;flex-direction:column;padding:15px 17px;overflow:hidden;min-height:0;
+.dp-app .dp-cal{position:relative;flex:0 0 auto;display:flex;flex-direction:column;padding:15px 17px;
   background:
     radial-gradient(60% 80% at 15% 0%,rgba(230,198,101,.08),transparent 55%),
     radial-gradient(50% 70% at 85% 100%,rgba(240,160,90,.06),transparent 60%),
@@ -303,18 +303,17 @@
 .dp-app .dp-cal-monthly b{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;font-family:var(--dp-ff-mono);letter-spacing:-.01em;margin-inline-start:6px;}
 .dp-app .dp-cal-monthly b.win{color:var(--dp-bull);}
 .dp-app .dp-cal-monthly b.loss{color:var(--dp-bear);}
-.dp-app .dp-cal-dows{display:grid;grid-template-columns:repeat(7,1fr) 128px;gap:6px;flex-shrink:0;margin-bottom:6px;}
+.dp-app .dp-cal-dows{display:grid;grid-template-columns:repeat(7,1fr) 112px;gap:6px;flex-shrink:0;margin-bottom:6px;}
 .dp-app .dp-cal-dow{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-w72);text-align:center;}
 .dp-app .dp-cal-dow.wk{color:var(--dp-gold);}
-/* A day cell has to hold a date, a P&L figure and a trade count. Below about
-   58px those stack into an unreadable sliver, so that is the floor — the grid
-   scrolls before a row is allowed to collapse. `1fr` still lets cells grow to
-   fill a tall screen. */
-.dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 128px;grid-auto-rows:minmax(58px,1fr);gap:6px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
-.dp-app .dp-cal-grid::-webkit-scrollbar{width:6px;}
-.dp-app .dp-cal-grid::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:3px;}
-.dp-app .dp-cal-grid::-webkit-scrollbar-track{background:transparent;}
-.dp-app .dp-cal-cell{border-radius:8px;border:1px solid transparent;padding:5px 6px;display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;transition:transform .15s var(--dp-ease);
+/* Rows size to their content, which is now a square (see .dp-cal-cell). The
+   old `1fr` handed the calendar whatever height was left over after every
+   other section had taken its share, which is how a month ended up as a band
+   of slivers. */
+.dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 112px;grid-auto-rows:auto;gap:6px;}
+/* Square. A day is a square everywhere people read calendars, and the wide,
+   short cells this used to produce are what made the month unreadable. */
+.dp-app .dp-cal-cell{aspect-ratio:1/1;border-radius:8px;border:1px solid transparent;padding:6px 7px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;transition:transform .15s var(--dp-ease);
   background:linear-gradient(160deg,rgba(230,198,101,.04),rgba(230,198,101,.015));
   box-shadow:inset 0 0 0 1px rgba(230,198,101,.06);}
 .dp-app .dp-cal-cell.win{background:linear-gradient(160deg,var(--dp-bull-08),rgba(95,211,158,.02));border-color:var(--dp-bull-30);box-shadow:none;}
@@ -328,13 +327,16 @@
 .dp-app .dp-cal-pnl.win{color:var(--dp-bull);}
 .dp-app .dp-cal-pnl.loss{color:var(--dp-bear);}
 .dp-app .dp-cal-trades{font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;color:var(--dp-w72);direction:ltr;}
-.dp-app .dp-week-cell{border-radius:10px;border:1px solid var(--dp-gold-15);background:linear-gradient(155deg,rgba(230,198,101,.05),var(--dp-card-b));padding:8px 11px;display:flex;flex-direction:column;justify-content:center;gap:3px;}
-.dp-app .dp-week-cell-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dp-gold);}
-.dp-app .dp-week-cell-v{font-family:var(--dp-ff-mono);font-size:20px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;letter-spacing:-.01em;}
+/* Three lines, each with room of its own. They used to be sized for a cell
+   that had no height to give them, so the label, the figure and the trade
+   count sat on top of one another. */
+.dp-app .dp-week-cell{border-radius:10px;border:1px solid var(--dp-gold-15);background:linear-gradient(155deg,rgba(230,198,101,.05),var(--dp-card-b));padding:9px 10px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:5px;overflow:hidden;}
+.dp-app .dp-week-cell-k{font-family:var(--dp-ff-sans);font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--dp-gold);white-space:nowrap;}
+.dp-app .dp-week-cell-v{font-family:var(--dp-ff-mono);font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;letter-spacing:-.01em;white-space:nowrap;}
 .dp-app .dp-week-cell-v.win{color:var(--dp-bull);}
 .dp-app .dp-week-cell-v.loss{color:var(--dp-bear);}
 .dp-app .dp-week-cell-v.flat{color:var(--dp-w40);}
-.dp-app .dp-week-cell-d{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;color:var(--dp-w92);background:var(--dp-w06);border:1px solid var(--dp-w10);border-radius:6px;padding:4px 9px;align-self:flex-start;}
+.dp-app .dp-week-cell-d{font-family:var(--dp-ff-sans);font-size:10.5px;font-weight:800;color:var(--dp-w92);background:var(--dp-w06);border:1px solid var(--dp-w10);border-radius:6px;padding:3px 8px;align-self:flex-start;white-space:nowrap;}
 
 /* ── Macro list ── */
 .dp-app .dp-macro{flex-shrink:0;padding:14px 16px;display:flex;flex-direction:column;}
@@ -410,7 +412,11 @@
   .dp-app .dp-side{flex-direction:column-reverse;}
   .dp-app .dp-bar,.dp-app .dp-greet-row,.dp-app .dp-control-row{flex-wrap:wrap;}
   .dp-app .dp-cal,.dp-app .dp-side > .dp-macro{flex:none;}
-  .dp-app .dp-cal-grid{min-height:52vw;}
+  /* Cells are square now, so the grid sizes itself — the old min-height was
+     propping up rows that had been squeezed flat. On a narrow screen the
+     week rail would leave the day columns too thin to read, so it goes. */
+  .dp-app .dp-cal-grid,.dp-app .dp-cal-dows{grid-template-columns:repeat(7,1fr);}
+  .dp-app .dp-week-cell,.dp-app .dp-cal-dow.wk{display:none;}
   .dp-app .dp-palette{position:static;max-width:none;margin-top:6px;}
 }
 

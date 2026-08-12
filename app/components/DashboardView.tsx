@@ -588,11 +588,6 @@ export default function DashboardView() {
         <div className="dp-clock"><span className="dp-clock-k">{s.clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
       </div>
 
-      {/* Row 2.5 — daily AI insight card (self-contained: fetches + renders + reactions) */}
-      <div className="dp-daily-insight-wrap dp-rise">
-        <DailyInsightCard />
-      </div>
-
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">
         <div className="dp-sessions">
@@ -619,6 +614,14 @@ export default function DashboardView() {
       {/* KPI grid */}
       <div className="dp-kpis dp-rise" onMouseMove={onGridMove}>
         {widgets.map(id => renderWidget(id))}
+      </div>
+
+      {/* Daily AI insight — self-contained (fetches, renders, reactions).
+          Sits AFTER the numbers on purpose: the trader reads what happened,
+          then reads the coach responding to it. Above the stats it was
+          commenting on figures the reader hadn't seen yet. */}
+      <div className="dp-daily-insight-wrap dp-rise">
+        <DailyInsightCard />
       </div>
 
       {/* Body — side (AI + macro) + calendar */}
