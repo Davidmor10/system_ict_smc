@@ -35,6 +35,10 @@ import {
 } from '../../../lib/coach-pipeline/behavior/evidence';
 import { MIN_TOTAL_OCCURRENCES } from '../../../lib/coach-pipeline/behavior/contingency';
 import { computeGuardrails } from '../../../lib/coach-pipeline/behavior/guardrails';
+// One implementation of "what can the coach see", shared with the panel the
+// trader reads. Two copies of it would drift, and the version that drifted
+// would be the one nobody was looking at.
+import { computeReadiness } from '../../../lib/coach-pipeline/behavior/readiness';
 import { reconcile, familiesFor, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
 import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBehavior';
@@ -47,54 +51,6 @@ const ROUTE = '/api/coach/behavior-preview';
 
 export const maxDuration = 30;
 export const dynamic     = 'force-dynamic';
-
-const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
-
-/** What each detector needs in order to see a trade at all.
- *
- *  A trade missing the field isn't "clean" — it is invisible, which is a very
- *  different thing and the one most likely to be misread as good news. */
-function readiness(trades: readonly TradeRow[]) {
-  const decided = trades.filter(t => !t.deleted_at && DECIDED.has(t.result));
-  const count = (p: (t: TradeRow) => boolean) => decided.filter(p).length;
-
-  // The confirmations field only becomes evidence once the trader has used it
-  // at least once — see detectNoConfirmation. Reporting all decided trades as
-  // usable here would contradict the detector by six, in the direction that
-  // reads as good news.
-  const everUsedConfirmations = decided.some(t => (t.confirmations?.length ?? 0) > 0);
-  const chronological = [...decided].sort((a, b) =>
-    (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')));
-  const adoptedAt = chronological.findIndex(t => (t.confirmations?.length ?? 0) > 0);
-  const confirmationsUsable = everUsedConfirmations ? chronological.length - adoptedAt : 0;
-
-  return {
-    tradesTotal:   trades.length,
-    tradesDecided: decided.length,
-    detectors: {
-      discretionary_exit: {
-        needs:   'exit_price — נגזר מהיציאות שתיעדת',
-        usable:  count(t => t.exit_price != null && t.take_profit != null),
-        blind:   count(t => t.exit_price == null),
-      },
-      rule_violation: {
-        needs:   'תיבת "עמדתי בחוקים" בטופס',
-        usable:  count(t => t.followed_rules != null),
-        blind:   count(t => t.followed_rules == null),
-      },
-      no_confirmation: {
-        needs:   'שדה האישורים — נספר רק מהעסקה הראשונה שבה מילאת אותו',
-        usable:  confirmationsUsable,
-        blind:   decided.length - confirmationsUsable,
-      },
-      size_spike: {
-        needs:   'contracts (זמין תמיד) — צריך 5 עסקאות קודמות לבסיס',
-        usable:  Math.max(0, decided.length - 5),
-        blind:   Math.min(5, decided.length),
-      },
-    },
-  };
-}
 
 /** The raw fields the detectors read, one line per trade.
  *
@@ -245,7 +201,7 @@ export async function GET(req: NextRequest) {
       durationMs: Date.now() - started,
       cost: 'none — pure computation, no model call',
 
-      readiness: readiness(trades),
+      readiness: computeReadiness(trades),
       perTrade:  perTrade(trades),
 
       // Exactly what the model receives tonight — same function the nightly

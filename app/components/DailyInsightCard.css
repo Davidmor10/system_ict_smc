@@ -162,3 +162,54 @@
 .di-answer-saved {
   margin: 0; font-size: 12px; color: rgba(111, 165, 128, 0.95);
 }
+
+/* ── Coach readiness ─────────────────────────────────────────────────────────
+   Sits where the insight would be, or under it. Quieter than the note itself
+   on purpose: this is the trader's to-do, not the coach's observation. */
+.cr {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  font-family: var(--sans, system-ui, sans-serif);
+}
+.cr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cr-eyebrow {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(212, 175, 55, 0.75);
+}
+.cr-tally { font-size: 11px; color: rgba(255, 255, 255, 0.35); font-variant-numeric: tabular-nums; }
+
+.cr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cr-row { display: flex; gap: 10px; align-items: flex-start; }
+.cr-mark {
+  flex-shrink: 0; width: 14px; text-align: center;
+  font-size: 12px; line-height: 1.6;
+  color: rgba(255, 255, 255, 0.25);
+}
+.cr-row[data-state='ready'] { align-items: center; }
+.cr-row[data-state='ready'] .cr-mark { color: #6fa580; }
+.cr-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cr-label { font-size: 13.5px; color: rgba(255, 255, 255, 0.82); }
+.cr-row[data-state='ready'] .cr-label { color: rgba(255, 255, 255, 0.45); flex: 1; }
+.cr-count {
+  font-size: 12px; color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+
+.cr-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.cr-fill { height: 100%; background: rgba(212, 175, 55, 0.55); border-radius: 2px; transition: width 400ms ease; }
+.cr-row[data-state='blocked'] .cr-fill { background: rgba(255, 255, 255, 0.12); }
+
+.cr-action { margin: 0; font-size: 12px; line-height: 1.55; color: rgba(255, 255, 255, 0.42); }
+.cr-foot {
+  margin: 0; padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 11.5px; line-height: 1.55; color: rgba(255, 255, 255, 0.32);
+}
+
+@media (prefers-reduced-motion: reduce) { .cr-fill { transition: none; } }
+
+.di-empty-stack { display: flex; flex-direction: column; gap: 14px; }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import type { DailyInsightRow, UserReaction } from '../lib/coach-pipeline/types';
 import { renderInsightMarkdown } from './dailyInsightMarkdown';
+import CoachReadiness from './CoachReadiness';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DailyInsightCard — renders the newest daily_insights row for the signed-in
@@ -182,11 +183,18 @@ export default function DailyInsightCard() {
   }
 
   // ── Empty state (no insight yet) ── */
+  //
+  // The old version was a promise with no path: "your first insight is on the
+  // way". For a trader whose journal is missing the fields the analysis needs,
+  // it is on the way indefinitely, and nothing on screen says which field.
   if (!insight) {
     return (
-      <div className="di-empty">
-        <div className="di-error-title">{t.emptyTitle}</div>
-        <p className="di-empty-body">{t.emptyBody}</p>
+      <div className="di-empty-stack">
+        <div className="di-empty">
+          <div className="di-error-title">{t.emptyTitle}</div>
+          <p className="di-empty-body">{t.emptyBody}</p>
+        </div>
+        <CoachReadiness />
       </div>
     );
   }
@@ -259,6 +267,12 @@ export default function DailyInsightCard() {
           )}
         </section>
       )}
+
+      {/* Kept under a real insight too: a detector that is still blind is
+          worth knowing about even on a morning the coach did have something
+          to say — it is the difference between "nothing to report" and
+          "cannot see that part of your trading at all". */}
+      <CoachReadiness />
 
       <footer className="di-foot">
         <span className="di-foot-hint">{t.hint}</span>
