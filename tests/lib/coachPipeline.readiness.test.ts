@@ -22,7 +22,7 @@ function T(o: Partial<TradeRow> = {}): TradeRow {
     entry_price: 20000, stop_loss: 19980, take_profit: 20040, exit_price: null, exits: null,
     rr_planned: 2, r_multiple: null, pnl_usd: null, result: 'WIN',
     session: 'london', bias: null, setup: null, confirmations: null,
-    emotional_state: null, followed_rules: null, stop_moved: null, notes: '', tags: [], screenshots: null,
+    emotional_state: null, followed_rules: null, stop_moved: null, management: null, notes: '', tags: [], screenshots: null,
     profile_processed_at: null, profile_processed_rev: 0,
     ...o,
   };

@@ -103,9 +103,9 @@ export function computeReadiness(trades: readonly TradeRow[]): Readiness {
     {
       kind:  'stop_widened',
       label: 'הרחקת הסטופ אחרי הכניסה',
-      have:  count(t => t.stop_moved != null),
+      have:  count(t => t.stop_moved != null || (t.management ?? []).some(e => e.kind === 'stop')),
       need:  MIN_DECIDED_FOR_CLAIM,
-      action: 'ענה "מה קרה לסטופ" בסגירת העסקה. קידום והרחקה הם שני דברים הפוכים — לכן יש שלוש תשובות ולא שתיים.',
+      action: 'ענה "מה קרה לסטופ" בסגירה, או רשום את ההזזה בזמן אמת על עסקה פתוחה — רישום עדיף על זיכרון.',
       state: 'blocked',
     },
     {

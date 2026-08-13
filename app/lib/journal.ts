@@ -16,6 +16,7 @@ import {
   calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice,
 } from './calc/trade';
 import { mergeById, active, type Syncable } from './sync/merge';
+import type { ManagementEvent } from './trade/management';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -108,6 +109,14 @@ export interface TradeEntry {
    *  thing that empties accounts. A boolean would count them together and any
    *  detector built on it would be measuring nothing. */
   stopMoved?: 'none' | 'advanced' | 'widened';
+  /** What happened between entry and exit, each with the moment it happened.
+   *
+   *  The journal keeps one stop value — the one true at the last save — so a
+   *  stop widened at 10:42 was indistinguishable from a stop that was always
+   *  there, and everything a trader did mid-trade was invisible. These are the
+   *  record; `stopMoved` above is the recollection. Both are kept, and the
+   *  system never merges them into one number that hides which it is using. */
+  management?: ManagementEvent[];
   /** Server-side only: whether this trade has screenshots, without carrying
    *  them. Never written by the form, and stripped by validation on the way
    *  back up — it exists so the analysis layer can stop reading the images. */
@@ -337,6 +346,13 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     followedRules: typeof r.followedRules === 'boolean' ? r.followedRules : undefined,
     stopMoved: r.stopMoved === 'none' || r.stopMoved === 'advanced' || r.stopMoved === 'widened'
       ? r.stopMoved : undefined,
+    management: Array.isArray(r.management)
+      ? (r.management as unknown[])
+          .map(e => e as ManagementEvent)
+          .filter(e => typeof e?.at === 'string'
+            && (e.kind === 'stop' || e.kind === 'target' || e.kind === 'partial')
+            && Number.isFinite(e.to))
+      : undefined,
     updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : undefined,
   };
 }

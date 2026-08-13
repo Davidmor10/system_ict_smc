@@ -84,6 +84,7 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     // adherence and the violation detector could not fire even once.
     followed_rules:  typeof trade.followedRules === 'boolean' ? trade.followedRules : null,
     stop_moved:      trade.stopMoved ?? null,
+    management:      trade.management ?? null,
     notes:           trade.notes ?? '',
     tags:            [],
     screenshots:     trade.screenshots ?? null,

@@ -62,6 +62,16 @@ export const tradeEntrySchema = z.object({
    *  see TradeEntry.stopMoved for why advancing and widening must not be
    *  counted as the same act. */
   stopMoved: z.enum(['none', 'advanced', 'widened']).optional(),
+  /** Management events — stop moves, target moves and partials, each stamped
+   *  with when it happened. Bounded like every other array here: a trade with
+   *  200 stop moves is a bug or an attack, not a trade. */
+  management: z.array(z.object({
+    at:        z.string().max(40),
+    kind:      z.enum(['stop', 'target', 'partial']),
+    to:        z.number().finite(),
+    contracts: z.number().finite().min(0).optional(),
+    note:      z.string().max(200).optional(),
+  })).max(50).optional(),
   /** Epoch-ms of the last edit — drives cross-device newest-wins merge. */
   updatedAt: z.number().finite().optional(),
 });

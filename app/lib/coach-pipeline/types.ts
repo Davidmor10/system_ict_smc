@@ -53,6 +53,9 @@ export interface TradeRow {
   /** 'none' | 'advanced' | 'widened', or null when the trader didn't answer.
    *  Null is not "didn't move it" — see detectStopWidened. */
   stop_moved:             string | null;
+  /** Management events with timestamps. When present they OVERRIDE
+   *  stop_moved — a record beats a recollection. */
+  management:             Array<{ at: string; kind: string; to: number; contracts?: number; note?: string }> | null;
   notes:                  string;
   tags:                   string[];
   screenshots:            string[] | null;

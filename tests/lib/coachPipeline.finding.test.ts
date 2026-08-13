@@ -28,7 +28,7 @@ function T(overrides: Partial<TradeRow> = {}): TradeRow {
     entry_price: 20000, stop_loss: 19980, take_profit: 20040, exit_price: 20040, exits: null,
     rr_planned: 2, r_multiple: 2, pnl_usd: 100, result: 'WIN',
     session: 'london', bias: null, setup: 'REVERSAL', confirmations: ['SMT'],
-    emotional_state: null, followed_rules: true, stop_moved: null, notes: '', tags: [], screenshots: null,
+    emotional_state: null, followed_rules: true, stop_moved: null, management: null, notes: '', tags: [], screenshots: null,
     profile_processed_at: null, profile_processed_rev: 0,
     ...overrides,
   };

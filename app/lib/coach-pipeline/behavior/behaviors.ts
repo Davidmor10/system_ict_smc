@@ -27,6 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeRow } from '../types';
+import { resolveStopMoved, type ManagementEvent } from '../../trade/management';
 
 export type BehaviorKind =
   | 'discretionary_exit'
@@ -242,14 +243,33 @@ function detectRuleViolation(t: TradeRow): [boolean, BehaviorOccurrence | null] 
  *  Counting silence as "didn't move it" would dilute the denominator with
  *  trades nobody graded and make the rate a flattering fiction. */
 function detectStopWidened(t: TradeRow): [boolean, BehaviorOccurrence | null] {
-  const answer = t.stop_moved;
-  if (answer !== 'none' && answer !== 'advanced' && answer !== 'widened') return [false, null];
-  if (answer !== 'widened') return [true, null];
+  const reported = t.stop_moved === 'none' || t.stop_moved === 'advanced' || t.stop_moved === 'widened'
+    ? t.stop_moved : undefined;
+
+  // A logged move beats a remembered one. The events carry the level and the
+  // moment it changed, so the direction is computed rather than recalled — and
+  // the source travels with the finding, because a claim built on a record and
+  // a claim built on a recollection are different claims.
+  const { value, source } = resolveStopMoved(
+    t.stop_loss,
+    t.direction === 'SHORT' ? 'SHORT' : 'LONG',
+    (t.management ?? null) as ManagementEvent[] | null,
+    reported,
+  );
+
+  if (!value) return [false, null];
+  if (value !== 'widened') return [true, null];
   return [true, {
     kind: 'stop_widened',
     tradeId: t.id,
     date: t.date,
-    evidence: { planned_stop: t.stop_loss, result: t.result, session: t.session },
+    evidence: {
+      planned_stop: t.stop_loss,
+      source,
+      moves: (t.management ?? []).filter(e => e.kind === 'stop').length,
+      result: t.result,
+      session: t.session,
+    },
   }];
 }
 
