@@ -101,6 +101,14 @@ export function computeReadiness(trades: readonly TradeRow[]): Readiness {
       state: 'blocked',
     },
     {
+      kind:  'stop_widened',
+      label: 'הרחקת הסטופ אחרי הכניסה',
+      have:  count(t => t.stop_moved != null),
+      need:  MIN_DECIDED_FOR_CLAIM,
+      action: 'ענה "מה קרה לסטופ" בסגירת העסקה. קידום והרחקה הם שני דברים הפוכים — לכן יש שלוש תשובות ולא שתיים.',
+      state: 'blocked',
+    },
+    {
       kind:  'size_spike',
       label: 'הגדלת גודל פוזיציה מעל הרגיל',
       have:  Math.max(0, decided.length - SIZE_BASELINE_MIN),

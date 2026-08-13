@@ -77,6 +77,9 @@ const GUARDRAILS: Record<BehaviorKind, GuardrailKind[]> = {
   rule_violation:     ['trade_frequency', 'rule_adherence'],
   // Sizing down everywhere is not the same as sizing consistently.
   size_spike:         ['trade_frequency', 'avg_loss_r'],
+  // "Stop holding" is trivially satisfied by not trading, and the loss size is
+  // the thing widening a stop was hiding in the first place.
+  stop_widened:       ['trade_frequency', 'avg_loss_r', 'logging_rate'],
 };
 
 /** The instruction. Concrete, checkable, and about the next few trades — not
@@ -94,6 +97,8 @@ function instructionFor(kind: BehaviorKind, trigger: TriggerFinding | null): str
       return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: לפני כל כניסה, עבור על החוקים שלך וסמן אם עמדת בהם.${when}`;
     case 'size_spike':
       return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: החזק גודל פוזיציה קבוע, גם אחרי רצף.${when}`;
+    case 'stop_widened':
+      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: הסטופ שקבעת בכניסה נשאר במקומו. מותר לקדם אותו לטובתך, לא להרחיק אותו.${when}`;
   }
 }
 

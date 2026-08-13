@@ -369,7 +369,7 @@ function trade(o: Partial<TradeRow> = {}): TradeRow {
     entry_price: 100, stop_loss: 90, take_profit: 130, exit_price: 130, exits: null,
     rr_planned: 3, r_multiple: 3, pnl_usd: 300, result: 'WIN',
     session: 'london', bias: null, setup: null, confirmations: null,
-    emotional_state: null, followed_rules: true, notes: '', tags: [], screenshots: null,
+    emotional_state: null, followed_rules: true, stop_moved: null, notes: '', tags: [], screenshots: null,
     profile_processed_at: null, profile_processed_rev: 0,
     ...o,
   };

@@ -100,6 +100,14 @@ export interface TradeEntry {
    *  didn't answer, and that is NOT the same as "yes": treating silence as
    *  compliance is how a rule-adherence metric becomes a flattering fiction. */
   followedRules?: boolean;
+  /** What happened to the stop after entry.
+   *
+   *  Three answers and not two, because "moved the stop" merges the two
+   *  opposite behaviours in trade management: advancing it to protect a
+   *  position is discipline, widening it to avoid being stopped out is the
+   *  thing that empties accounts. A boolean would count them together and any
+   *  detector built on it would be measuring nothing. */
+  stopMoved?: 'none' | 'advanced' | 'widened';
   /** Server-side only: whether this trade has screenshots, without carrying
    *  them. Never written by the form, and stripped by validation on the way
    *  back up — it exists so the analysis layer can stop reading the images. */
@@ -327,6 +335,8 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
       ? r.emotionalState as EmotionalState
       : undefined,
     followedRules: typeof r.followedRules === 'boolean' ? r.followedRules : undefined,
+    stopMoved: r.stopMoved === 'none' || r.stopMoved === 'advanced' || r.stopMoved === 'widened'
+      ? r.stopMoved : undefined,
     updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : undefined,
   };
 }

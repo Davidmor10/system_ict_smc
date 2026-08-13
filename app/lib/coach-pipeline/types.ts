@@ -50,6 +50,9 @@ export interface TradeRow {
   /** The trader's own verdict, or null when they didn't answer. Null is not
    *  compliance — see detectRuleViolation. */
   followed_rules:         boolean | null;
+  /** 'none' | 'advanced' | 'widened', or null when the trader didn't answer.
+   *  Null is not "didn't move it" — see detectStopWidened. */
+  stop_moved:             string | null;
   notes:                  string;
   tags:                   string[];
   screenshots:            string[] | null;

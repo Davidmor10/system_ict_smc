@@ -83,6 +83,7 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     // this used to be hardcoded, which meant every trade claimed perfect rule
     // adherence and the violation detector could not fire even once.
     followed_rules:  typeof trade.followedRules === 'boolean' ? trade.followedRules : null,
+    stop_moved:      trade.stopMoved ?? null,
     notes:           trade.notes ?? '',
     tags:            [],
     screenshots:     trade.screenshots ?? null,

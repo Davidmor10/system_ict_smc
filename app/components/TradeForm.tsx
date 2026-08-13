@@ -118,6 +118,7 @@ interface FormState {
   target: string;
   exits: ExitRow[];
   followedRules: '' | 'yes' | 'no';
+  stopMoved: '' | 'none' | 'advanced' | 'widened';
   confirmations: string[];
   emotionalState: EmotionalState | '';
   model: string;
@@ -141,6 +142,7 @@ function empty(): FormState {
     target: '',
     exits: singleLeg('1'),
     followedRules: '',
+    stopMoved: '',
     confirmations: [],
     emotionalState: '',
     model: '',
@@ -169,6 +171,7 @@ function fromTrade(t: TradeEntry): FormState {
       ? t.exits.map(e => ({ price: String(e.price), contracts: String(e.contracts) }))
       : singleLeg(String(t.contracts ?? 1)),
     followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
+    stopMoved: t.stopMoved ?? '',
     confirmations: t.confirmations ?? [],
     emotionalState: t.emotionalState ?? '',
     model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
@@ -457,7 +460,20 @@ export default function TradeForm({
 
   /** Builds the trade record and runs the save animation flow. Called either
       directly (no warnings) or after the trader dismisses the guardian panel. */
-  function performSave() {
+  /** `asOpen` saves the plan while the position is still running.
+   *
+   *  Same form, same fields — the only difference is that the result is left
+   *  as OPEN and the record is written before the outcome exists. That timing
+   *  is the whole point: levels saved while a trade is live cannot have been
+   *  bent to match how it ended, because how it ended had not happened yet.
+   *
+   *  Deliberately NOT required, and a trade logged in one go afterwards is not
+   *  marked, excluded or nagged about. The moment a missing plan costs the
+   *  trader something, the cheapest way to get it back is to fill the plan in
+   *  after the fact — and a fabricated plan the system believes is worse than
+   *  no plan at all, because it turns "we don't know" into a confident wrong
+   *  answer. */
+  function performSave(asOpen = false) {
     const trade: TradeEntry = {
       // Preserve the id when editing so the save is an in-place update, not a
       // duplicate row.
@@ -472,7 +488,7 @@ export default function TradeForm({
       target,
       // Explicit result from the Stop/BE/Take buttons wins; the exits-derived
       // result stays as a fallback for legacy edits that still use partial exits.
-      result: form.result || derivedResult,
+      result: asOpen ? 'OPEN' : (form.result || derivedResult),
       session: autoSession ?? 'NONE',
       bias: declaredBias ?? 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
@@ -482,6 +498,7 @@ export default function TradeForm({
       confirmations: form.confirmations.length ? form.confirmations : undefined,
       emotionalState: form.emotionalState || undefined,
       followedRules: form.followedRules === 'yes' ? true : form.followedRules === 'no' ? false : undefined,
+      stopMoved: form.stopMoved || undefined,
       tradeR: realizedR ?? undefined,
       pnlUsd: realizedPnl ?? undefined,
       biasAlignment: alignment,
@@ -520,6 +537,14 @@ export default function TradeForm({
       return;
     }
     performSave();
+  }
+
+  /** Save the plan and leave the trade running. Skips the result requirement
+   *  and the guardian — the guardian warns about entering, and by the time
+   *  this button is pressed the trader is already in. */
+  function saveAsOpen() {
+    if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
+    performSave(true);
   }
 
   function logAnother() {
@@ -786,6 +811,36 @@ export default function TradeForm({
           </p>
         </Group>
 
+        {/* ── STOP MANAGEMENT — the one management decision the tables cannot
+             reconstruct. Three answers, not two: advancing a stop to protect a
+             position and widening it to avoid being stopped out are opposite
+             acts, and a yes/no would count them as the same thing and measure
+             nothing. Unanswered stays unanswered. ── */}
+        <Group label="מה קרה לסטופ אחרי הכניסה? (אופציונלי)">
+          <div className="flex items-center gap-2">
+            <FormResultBtn
+              label="לא נגעתי" glyph="=" active={form.stopMoved === 'none'}
+              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
+              onClick={() => set('stopMoved', form.stopMoved === 'none' ? '' : 'none')}
+            />
+            <FormResultBtn
+              label="קידמתי" glyph="▲" active={form.stopMoved === 'advanced'}
+              activeColor="#d4af37" activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
+              onClick={() => set('stopMoved', form.stopMoved === 'advanced' ? '' : 'advanced')}
+            />
+            <FormResultBtn
+              label="הרחקתי" glyph="▼" active={form.stopMoved === 'widened'}
+              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
+              onClick={() => set('stopMoved', form.stopMoved === 'widened' ? '' : 'widened')}
+            />
+          </div>
+          <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
+            {form.stopMoved === ''
+              ? 'קידום הוא משמעת, הרחקה היא סיכון — לכן זו לא שאלת כן/לא. אם תדלג, העסקה לא תיספר לשום כיוון.'
+              : 'הטבלה שומרת ערך סטופ אחד ולא היסטוריה שלו, אז זו התשובה היחידה שיכולה לספר מה קרה באמצע.'}
+          </p>
+        </Group>
+
         {/* ── MODEL / SETUP — the trader's own playbook models, sitting right beside
             the generic confirmations so they can tag which of their built setups
             this entry belonged to. Single-select. ── */}
@@ -917,6 +972,20 @@ export default function TradeForm({
           >
             {initial ? 'שמור שינויים' : 'שמור עסקה'}
           </button>
+          {/* Save the plan while the position is still running.
+              Hidden when editing — a trade already in the journal is reopened
+              to be finished, not to be re-planned. */}
+          {!initial && (
+            <button
+              type="button"
+              onClick={saveAsOpen}
+              disabled={!form.entry || !form.stop || !form.target}
+              title="שומר את הרמות עכשיו. תשלים מחיר יציאה כשתסגור."
+              className="px-5 py-3.5 rounded-xl border border-[#d4af37]/35 text-[#d4af37] font-mono text-sm uppercase tracking-[0.14em] hover:bg-[#d4af37]/10 transition-colors duration-150 disabled:text-white/20 disabled:border-white/[0.06] disabled:cursor-not-allowed"
+            >
+              שמור פתוחה
+            </button>
+          )}
           {onCancel && (
             <button
               type="button"
@@ -958,7 +1027,7 @@ export default function TradeForm({
               </button>
               <button
                 type="button"
-                onClick={performSave}
+                onClick={() => performSave()}
                 className="flex-1 py-3 rounded-xl bg-[#d4af37]/90 text-black hover:bg-[#d4af37] font-mono text-[12px] font-bold uppercase tracking-[0.12em] transition-all duration-150"
               >
                 שמור בכל זאת

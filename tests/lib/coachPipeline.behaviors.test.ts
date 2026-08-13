@@ -39,7 +39,7 @@ function T(overrides: Partial<TradeRow> = {}): TradeRow {
     setup: 'REVERSAL',
     confirmations: ['SMT'],
     emotional_state: 'CALM',
-    followed_rules: true,
+    followed_rules: true, stop_moved: null,
     notes: '',
     tags: [],
     screenshots: null,
@@ -320,5 +320,51 @@ describe('sortChronologically', () => {
     const before = trades.map(t => t.id);
     sortChronologically(trades);
     expect(trades.map(t => t.id)).toEqual(before);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// stop_widened — the one management decision the tables cannot reconstruct
+//
+// Three answers and not two, which is the entire reason this detector can
+// exist. Advancing a stop to protect a position and widening it to avoid being
+// stopped out are opposite acts; a boolean counts them together and measures
+// nothing.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('stop_widened', () => {
+  it('flags only a widened stop', () => {
+    const t = tally([
+      T({ stop_moved: 'widened' }),
+      T({ stop_moved: 'advanced' }),
+      T({ stop_moved: 'none' }),
+    ], 'stop_widened')!;
+    expect(t.opportunities).toBe(3);
+    expect(t.occurrences).toBe(1);
+  });
+
+  // Advancing is discipline. Counting it as the same act as widening is the
+  // failure this detector was designed around.
+  it('does not treat advancing the stop as the behaviour', () => {
+    expect(tally([T({ stop_moved: 'advanced' })], 'stop_widened')!.occurrences).toBe(0);
+  });
+
+  it('an unanswered trade is not an opportunity', () => {
+    expect(tally([T({ stop_moved: null })], 'stop_widened')).toBeUndefined();
+  });
+
+  it('the denominator is trades the trader actually answered', () => {
+    const t = tally([
+      T({ stop_moved: 'widened' }),
+      T({ stop_moved: 'none' }),
+      T({ stop_moved: null }),
+      T({ stop_moved: null }),
+    ], 'stop_widened')!;
+    expect(t.opportunities).toBe(2);
+    expect(t.rate).toBe(0.5);
+  });
+
+  it('ignores a value that is not one of the three', () => {
+    expect(tally([T({ stop_moved: 'maybe' })], 'stop_widened')).toBeUndefined();
   });
 });

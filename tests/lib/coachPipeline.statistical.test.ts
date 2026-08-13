@@ -32,7 +32,7 @@ function T(overrides: Partial<TradeRow> = {}): TradeRow {
     setup:                  'SMT',
     confirmations:          null,
     emotional_state:        null,
-    followed_rules:         true,
+    followed_rules:         true, stop_moved: null,
     notes:                  '',
     tags:                   [],
     screenshots:            null,

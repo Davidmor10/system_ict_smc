@@ -38,7 +38,7 @@ const TRADE_COLUMNS = [
   'id', 'clerk_id', 'date_iso', 'time_val', 'symbol', 'contracts', 'direction',
   'entry', 'stop_price', 'target', 'session', 'bias', 'model', 'result', 'notes',
   'account_id', 'setup', 'confirmation', 'bias_alignment', 'trade_r', 'pnl_usd',
-  'exits', 'confirmations', 'emotional_state', 'followed_rules',
+  'exits', 'confirmations', 'emotional_state', 'followed_rules', 'stop_moved',
   'deleted_at', 'updated_at', 'has_screenshot',
 ].join(',');
 

@@ -16,10 +16,6 @@
 //
 // WHAT IS DELIBERATELY MISSING
 //
-//   stop_moved   — the schema keeps one stop_loss value, not a history of
-//                  edits, so a widened stop is indistinguishable from a stop
-//                  that was always there. Detecting it needs the journal to
-//                  version the field on write.
 //   revenge_entry — needs the time the previous trade CLOSED. We store entry
 //                  time only, so "entered 4 minutes after taking a loss"
 //                  cannot be separated from "entered 4 minutes after opening
@@ -36,7 +32,8 @@ export type BehaviorKind =
   | 'discretionary_exit'
   | 'no_confirmation'
   | 'rule_violation'
-  | 'size_spike';
+  | 'size_spike'
+  | 'stop_widened';
 
 /** Human-readable, evidence-first labels. Deliberately descriptive of the
  *  ACTION, never of a supposed state of mind — "closed short of target", not
@@ -46,6 +43,7 @@ export const BEHAVIOR_LABELS: Record<BehaviorKind, string> = {
   no_confirmation: 'כניסה בלי אישור מתועד',
   rule_violation:  'סטייה מהחוקים שהגדרת',
   size_spike:      'הגדלת גודל פוזיציה מעל הרגיל',
+  stop_widened:    'הרחקת הסטופ אחרי הכניסה',
 };
 
 /** Decided trades only. An OPEN position hasn't finished happening, so it can
@@ -227,6 +225,34 @@ function detectRuleViolation(t: TradeRow): [boolean, BehaviorOccurrence | null] 
   }];
 }
 
+/** The stop was moved away from entry after the trade was live.
+ *
+ *  Asked rather than inferred, because the schema keeps one stop value and not
+ *  a history of edits — a widened stop is indistinguishable from a stop that
+ *  was always there. Until the journal versions the field, the trader is the
+ *  only witness.
+ *
+ *  Three answers and not two, which is the whole reason this detector can
+ *  exist at all. "Moved the stop" merges the two opposite acts in trade
+ *  management: advancing it to protect a position is discipline, widening it
+ *  to avoid being stopped out is the thing that empties accounts. A boolean
+ *  counts them together and measures nothing.
+ *
+ *  An unanswered trade is not an opportunity — same rule as the rule verdict.
+ *  Counting silence as "didn't move it" would dilute the denominator with
+ *  trades nobody graded and make the rate a flattering fiction. */
+function detectStopWidened(t: TradeRow): [boolean, BehaviorOccurrence | null] {
+  const answer = t.stop_moved;
+  if (answer !== 'none' && answer !== 'advanced' && answer !== 'widened') return [false, null];
+  if (answer !== 'widened') return [true, null];
+  return [true, {
+    kind: 'stop_widened',
+    tradeId: t.id,
+    date: t.date,
+    evidence: { planned_stop: t.stop_loss, result: t.result, session: t.session },
+  }];
+}
+
 /** Size well above the recent norm.
  *
  *  Needs history, so it is the one detector that reads more than its own
@@ -285,6 +311,7 @@ export function detectBehaviors(trades: readonly TradeRow[]): BehaviorTally[] {
     bump('no_confirmation', t.id, ...detectNoConfirmation(t, firstConfirmation >= 0 && i >= firstConfirmation));
     bump('rule_violation',  t.id, ...detectRuleViolation(t));
     bump('size_spike',      t.id, ...detectSizeSpike(t, priorContracts));
+    bump('stop_widened',    t.id, ...detectStopWidened(t));
     priorContracts.push(t.contracts ?? 0);
   }
 
@@ -308,5 +335,5 @@ export function occurrenceTradeIds(tally: BehaviorTally): Set<string> {
 
 // ── exports for tests ───────────────────────────────────────────────────────
 export const __internals = {
-  detectDiscretionaryExit, detectNoConfirmation, detectRuleViolation, detectSizeSpike, median,
+  detectDiscretionaryExit, detectNoConfirmation, detectRuleViolation, detectSizeSpike, detectStopWidened, median,
 };

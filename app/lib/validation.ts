@@ -58,6 +58,10 @@ export const tradeEntrySchema = z.object({
   // fail loudly: the form collected the answer, the request carried it, and
   // validation deleted it before either the row mapper or the mirror saw it.
   followedRules: z.boolean().optional(),
+  /** What happened to the stop after entry. Three states, not a boolean —
+   *  see TradeEntry.stopMoved for why advancing and widening must not be
+   *  counted as the same act. */
+  stopMoved: z.enum(['none', 'advanced', 'widened']).optional(),
   /** Epoch-ms of the last edit — drives cross-device newest-wins merge. */
   updatedAt: z.number().finite().optional(),
 });
