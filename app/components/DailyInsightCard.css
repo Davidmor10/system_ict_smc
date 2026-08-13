@@ -213,3 +213,35 @@
 @media (prefers-reduced-motion: reduce) { .cr-fill { transition: none; } }
 
 .di-empty-stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Evidence list ───────────────────────────────────────────────────────────
+   Collapsed by default. A claim the trader cannot open is an oracle — it can
+   be believed or abandoned, never corrected — so opening it has to be one
+   click and the wrong-looking rows have to be visible alongside the right
+   ones. */
+.ev { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06); font-family: var(--sans, system-ui, sans-serif); }
+.ev-toggle {
+  align-self: flex-start; padding: 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 12px; color: rgba(212, 175, 55, 0.8);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+}
+.ev-toggle:hover { color: #e8c66a; border-bottom-color: rgba(212, 175, 55, 0.7); }
+.ev-note { margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+.ev-foot { margin: 0; font-size: 11.5px; color: rgba(255, 255, 255, 0.32); }
+
+.ev-scroll { overflow-x: auto; }
+.ev-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ev-table th {
+  text-align: right; padding: 6px 10px 6px 0; white-space: nowrap;
+  font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3); border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ev-table td {
+  padding: 7px 10px 7px 0; white-space: nowrap;
+  color: rgba(255, 255, 255, 0.55); border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+/* The counted rows carry the claim, so they read first — but the others stay
+   on screen, because a list of only the hits is a prosecution. */
+.ev-table tr[data-counted='true'] td { color: rgba(255, 255, 255, 0.9); }
+.ev-table tr[data-counted='true'] td:last-child { color: #e8c66a; }

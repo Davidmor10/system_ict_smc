@@ -7,7 +7,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { listRecentInsights } from '../../../lib/coach-pipeline/db/insights';
-import { getOpenQuestion } from '../../../lib/coach-pipeline/db/behaviorFindings';
+import { getPrimaryFinding } from '../../../lib/coach-pipeline/db/behaviorFindings';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -39,16 +39,25 @@ export async function GET() {
     // Failure here is not failure of the insight. An un-migrated database or a
     // missing table costs the answer box, not the note the trader came to read.
     let question: { kind: string; question: string } | null = null;
+    // The behaviour being worked on, so the card can offer its evidence. Kept
+    // separate from the question: answering closes the question but must not
+    // hide the trades the answer was about.
+    let primaryKind: string | null = null;
     try {
-      const open = await getOpenQuestion(userId);
-      if (open) question = { kind: open.kind, question: open.question };
+      const primary = await getPrimaryFinding(userId);
+      if (primary) {
+        primaryKind = primary.kind;
+        if (primary.question && !primary.answered) {
+          question = { kind: primary.kind, question: primary.question };
+        }
+      }
     } catch (err) {
       logger.warn('open question lookup failed', {
         userId, error: err instanceof Error ? err.message : String(err),
       });
     }
 
-    return NextResponse.json({ insight: rows[0] ?? null, openQuestion: question });
+    return NextResponse.json({ insight: rows[0] ?? null, openQuestion: question, primaryKind });
   } catch (err) {
     logger.error('daily-insight GET failed', {
       userId, error: err instanceof Error ? err.message : String(err),

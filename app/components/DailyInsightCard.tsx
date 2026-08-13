@@ -6,6 +6,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import type { DailyInsightRow, UserReaction } from '../lib/coach-pipeline/types';
 import { renderInsightMarkdown } from './dailyInsightMarkdown';
 import CoachReadiness from './CoachReadiness';
+import EvidenceList from './EvidenceList';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DailyInsightCard — renders the newest daily_insights row for the signed-in
@@ -95,6 +96,7 @@ export default function DailyInsightCard() {
 
   // The coach's open question, and the trader's reply to it.
   const [question, setQuestion] = useState<OpenQuestion | null>(null);
+  const [primaryKind, setPrimaryKind] = useState<string | null>(null);
   const [draft, setDraft]       = useState('');
   const [answerState, setAnswerState] = useState<'idle' | 'sending' | 'saved' | 'failed'>('idle');
 
@@ -109,6 +111,7 @@ export default function DailyInsightCard() {
         setInsight(row);
         setReaction(row?.user_reaction ?? null);
         setQuestion((j?.openQuestion ?? null) as OpenQuestion | null);
+        setPrimaryKind((j?.primaryKind ?? null) as string | null);
       })
       .catch(() => { if (!cancelled) { setError(true); setInsight(null); } });
     return () => { cancelled = true; };
@@ -267,6 +270,12 @@ export default function DailyInsightCard() {
           )}
         </section>
       )}
+
+      {/* Every claim the coach makes has to be openable. The day it is wrong
+          about something — and it will be — the difference between a system
+          the trader corrects and one they stop believing is whether they can
+          see the trades it counted. */}
+      {primaryKind && <EvidenceList kind={primaryKind} />}
 
       {/* Kept under a real insight too: a detector that is still blind is
           worth knowing about even on a morning the coach did have something

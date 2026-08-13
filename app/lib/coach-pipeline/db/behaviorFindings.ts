@@ -178,19 +178,45 @@ export async function listFindingEvents(clerkId: string, limit = 50) {
 export async function getOpenQuestion(
   clerkId: string,
 ): Promise<{ kind: BehaviorKind; question: string; askedAt: string | null } | null> {
+  const primary = await getPrimaryFinding(clerkId);
+  if (!primary || !primary.question || primary.answered) return null;
+  return { kind: primary.kind, question: primary.question, askedAt: primary.askedAt };
+}
+
+/** The behaviour currently being worked on, whatever state it is in.
+ *
+ *  Separate from the open question because the two have different lifetimes: a
+ *  question closes the moment it is answered, while the finding stays primary
+ *  and stays worth being able to inspect. The evidence list hangs off this, not
+ *  off the question — otherwise answering would hide the trades that the answer
+ *  was about. */
+export async function getPrimaryFinding(clerkId: string): Promise<{
+  kind: BehaviorKind;
+  status: string;
+  question: string | null;
+  askedAt: string | null;
+  answered: boolean;
+} | null> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.behaviorFindings)
-    .select('kind, question, question_asked_at')
+    .select('kind, status, question, question_asked_at, trader_answer')
     .eq('clerk_id', cid)
     .eq('is_primary', true)
-    .not('question', 'is', null)
-    .is('trader_answer', null)
     .limit(1);
   if (error) throw error;
-  const row = (data ?? [])[0] as { kind: string; question: string; question_asked_at: string | null } | undefined;
+  const row = (data ?? [])[0] as {
+    kind: string; status: string; question: string | null;
+    question_asked_at: string | null; trader_answer: string | null;
+  } | undefined;
   if (!row) return null;
-  return { kind: row.kind as BehaviorKind, question: row.question, askedAt: row.question_asked_at };
+  return {
+    kind:     row.kind as BehaviorKind,
+    status:   row.status,
+    question: row.question,
+    askedAt:  row.question_asked_at,
+    answered: row.trader_answer != null,
+  };
 }
 
 /** Record the trader's answer to a finding's open question.
