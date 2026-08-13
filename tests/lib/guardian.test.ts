@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkTrade, type PendingTrade } from '../../app/lib/guardian/checkTrade';
 import { makeTrade } from '../helpers/trade';
+import { computeBiasAlignment } from '../../app/lib/dailyBias';
 
 const TODAY = '2026-07-09';
 
@@ -60,5 +61,45 @@ describe('checkTrade — counter bias', () => {
   it('says nothing for an aligned trade with no other issues', () => {
     const w = checkTrade(pending({ biasAlignment: 'ALIGNED' }), [makeTrade({ result: 'WIN' })], TODAY);
     expect(w).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bias alignment
+//
+// The live symptom: every trade the trader logged, long and short alike, came
+// back marked "aligned with today's bias". The cause was the same one that has
+// produced every other silent failure here — an absent answer read as a
+// positive one.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('computeBiasAlignment', () => {
+  it('answers nothing when no direction was declared', () => {
+    expect(computeBiasAlignment(null, 'LONG')).toBeNull();
+    expect(computeBiasAlignment(null, 'SHORT')).toBeNull();
+  });
+
+  // A trader with no directional view has nothing for a trade to agree or
+  // disagree with. Calling that alignment invents a comparison.
+  it('answers nothing for an explicitly undecided day', () => {
+    expect(computeBiasAlignment('INDECISIVE', 'LONG')).toBeNull();
+  });
+
+  it('reads a long under a bullish bias as aligned, a short as counter', () => {
+    expect(computeBiasAlignment('BULLISH', 'LONG')).toBe('ALIGNED');
+    expect(computeBiasAlignment('BULLISH', 'SHORT')).toBe('COUNTER');
+  });
+
+  it('reads a short under a bearish bias as aligned, a long as counter', () => {
+    expect(computeBiasAlignment('BEARISH', 'SHORT')).toBe('ALIGNED');
+    expect(computeBiasAlignment('BEARISH', 'LONG')).toBe('COUNTER');
+  });
+
+  // The bug in its exact shape: two opposite trades on the same day both
+  // reported as being with the day's direction.
+  it('cannot mark a long and a short on the same day as both aligned', () => {
+    const long  = computeBiasAlignment(null, 'LONG');
+    const short = computeBiasAlignment(null, 'SHORT');
+    expect([long, short].filter(a => a === 'ALIGNED')).toHaveLength(0);
   });
 });

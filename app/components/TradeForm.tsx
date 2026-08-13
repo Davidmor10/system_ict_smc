@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { TradeEntry, Direction, TradeResult, EmotionalState } from '../lib/journal';
+import type { TradeEntry, Direction, TradeResult, EmotionalState, Bias } from '../lib/journal';
 import { analyzeStopMoves, type ManagementEvent } from '../lib/trade/management';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
@@ -119,6 +119,9 @@ interface FormState {
   target: string;
   exits: ExitRow[];
   followedRules: '' | 'yes' | 'no';
+  /** The direction the trader had for the day. Asked here rather than read
+      from a dashboard plan they may never have saved. */
+  dayBias: Bias | '';
   stopMoved: '' | 'none' | 'advanced' | 'widened';
   management: ManagementEvent[];
   confirmations: string[];
@@ -144,6 +147,7 @@ function empty(): FormState {
     target: '',
     exits: singleLeg('1'),
     followedRules: '',
+    dayBias: getTodaysDeclaredBias() ?? '',
     stopMoved: '',
     management: [],
     confirmations: [],
@@ -174,6 +178,7 @@ function fromTrade(t: TradeEntry): FormState {
       ? t.exits.map(e => ({ price: String(e.price), contracts: String(e.contracts) }))
       : singleLeg(String(t.contracts ?? 1)),
     followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
+    dayBias: t.bias ?? '',
     stopMoved: t.stopMoved ?? '',
     management: t.management ?? [],
     confirmations: t.confirmations ?? [],
@@ -244,7 +249,11 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
     facts.push(`אחוז ההצלחה התעדכן ל-${after.winRate.toFixed(0)}%.`);
   }
 
-  facts.push(trade.biasAlignment === 'ALIGNED' ? 'מיושרת עם הביאס של היום.' : 'נרשמה כנגד המגמה, לשים לב.');
+  // Only says something when there IS a declared direction. Saying "aligned
+  // with today's bias" under a trade taken on a day with no bias is how this
+  // was appearing under a long and a short twenty minutes apart.
+  if (trade.biasAlignment === 'ALIGNED')      facts.push('מיושרת עם הכיוון שהגדרת להיום.');
+  else if (trade.biasAlignment === 'COUNTER') facts.push('נגד הכיוון שהגדרת להיום — לשים לב.');
 
   if (trade.confirmations && trade.confirmations.length > 0) {
     facts.push(`תויגה עם ${trade.confirmations.length} אישורי כניסה: ${trade.confirmations.join(', ')}.`);
@@ -489,8 +498,9 @@ export default function TradeForm({
 
   const entryHour: number | null = parseHour(form.time);
   const autoSession: SessionKey | null = entryHour !== null ? sessionForHour(entryHour) : getActiveSessionKey();
-  const declaredBias = getTodaysDeclaredBias();
-  const alignment = computeBiasAlignment(declaredBias, form.direction);
+  // From the field on this form, not from a plan somewhere else. `null` means
+  // "no directional view declared", which is a real state and not alignment.
+  const alignment = computeBiasAlignment(form.dayBias || null, form.direction);
 
   /** Builds the trade record and runs the save animation flow. Called either
       directly (no warnings) or after the trader dismisses the guardian panel. */
@@ -524,7 +534,7 @@ export default function TradeForm({
       // result stays as a fallback for legacy edits that still use partial exits.
       result: asOpen ? 'OPEN' : (form.result || derivedResult),
       session: autoSession ?? 'NONE',
-      bias: declaredBias ?? 'INDECISIVE',
+      bias: form.dayBias || 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
       notes: form.notes,
       screenshots: form.screenshots.length ? form.screenshots : undefined,
@@ -536,7 +546,7 @@ export default function TradeForm({
       management: form.management.length ? form.management : undefined,
       tradeR: realizedR ?? undefined,
       pnlUsd: realizedPnl ?? undefined,
-      biasAlignment: alignment,
+      biasAlignment: alignment ?? undefined,
     };
 
     const priorTrades = trades;
@@ -563,7 +573,7 @@ export default function TradeForm({
     // Discipline guardian — surface any evidence-backed concern before saving.
     // Never blocks: if warnings exist, show them and let the trader decide.
     const warnings = checkTrade(
-      { symbol: form.symbol, direction: form.direction, session: autoSession, emotionalState: form.emotionalState || undefined, biasAlignment: alignment },
+      { symbol: form.symbol, direction: form.direction, session: autoSession, emotionalState: form.emotionalState || undefined, biasAlignment: alignment ?? undefined },
       trades,
       todayISO(),
     );
@@ -653,6 +663,35 @@ export default function TradeForm({
               <input type="number" min={1} step="1" value={form.contracts} onChange={e => setContracts(e.target.value)} placeholder="1" className={inputCls} required />
             </Field>
           </div>
+
+          {/* The day's direction. Asked here because the alternative was
+              reading it from a dashboard plan the trader may never have saved
+              — and when it wasn't there, every trade was recorded as being
+              WITH the day's direction, long and short alike. */}
+          <Field label="הכיוון שלך להיום (אופציונלי)">
+            <div className="flex gap-1.5">
+              {([
+                ['BULLISH',    'שורי'],
+                ['BEARISH',    'דובי'],
+                ['INDECISIVE', 'ללא כיוון'],
+              ] as [Bias, string][]).map(([b, he]) => (
+                <button type="button" key={b} onClick={() => set('dayBias', form.dayBias === b ? '' : b)}
+                  className={toggleBtn(form.dayBias === b,
+                    b === 'BULLISH' ? 'border-[#22c55e]/60 bg-[#22c55e]/10 text-[#22c55e]'
+                    : b === 'BEARISH' ? 'border-[#ef4444]/60 bg-[#ef4444]/10 text-[#ef4444]'
+                    : 'border-white/25 bg-white/[0.04] text-white/60')}>
+                  {he}
+                </button>
+              ))}
+            </div>
+            <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
+              {form.dayBias === ''
+                ? 'בלי כיוון מוצהר, העסקה לא נספרת כמיושרת ולא כמנוגדת — היא פשוט לא נשאלת.'
+                : alignment === 'ALIGNED' ? 'העסקה הזו עם הכיוון שהגדרת.'
+                : alignment === 'COUNTER' ? 'העסקה הזו נגד הכיוון שהגדרת.'
+                : 'ללא כיוון אין למה להשוות, וזו תשובה תקפה.'}
+            </p>
+          </Field>
         </Group>
 
         {/* ── EXECUTION — entry/stop/target and the planned RR ── */}
@@ -1023,12 +1062,15 @@ export default function TradeForm({
           <span>
             מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? (SESS.find(s => s.key === autoSession)?.he ?? autoSession) : 'מחוץ לשעות מסחר'}</b>
           </span>
-          {declaredBias && (
+          {/* Only when a direction was actually declared. The readout used to
+              render for every trade and always said "aligned", because the
+              alignment it read defaulted to ALIGNED whenever no bias existed. */}
+          {form.dayBias && form.dayBias !== 'INDECISIVE' && (
             <span>
-              הביאס של היום: <b className="text-white/60">{BIAS_HE[declaredBias] ?? declaredBias}</b>{' '}
+              הכיוון שהגדרת: <b className="text-white/60">{BIAS_HE[form.dayBias] ?? form.dayBias}</b>{' '}
               {alignment === 'ALIGNED'
                 ? <span className="text-[#22c55e]">✓ מיושר</span>
-                : <span className="text-[#d4af37]">⚠ נגד המגמה</span>}
+                : <span className="text-[#d4af37]">⚠ נגד הכיוון</span>}
             </span>
           )}
         </div>

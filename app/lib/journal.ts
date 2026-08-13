@@ -17,6 +17,7 @@ import {
 } from './calc/trade';
 import { mergeById, active, type Syncable } from './sync/merge';
 import type { ManagementEvent } from './trade/management';
+import { computeBiasAlignment } from './dailyBias';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -260,11 +261,13 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     (['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).includes(r.confirmation as IFVGConfirmation)
     ? r.confirmation as IFVGConfirmation : 'IFVG_2M';
 
-  const isBullBias = bias === 'BULLISH';
-  const isBearBias = bias === 'BEARISH';
-  const alignment: BiasAlignment =
-    (isBullBias && direction === 'LONG') || (isBearBias && direction === 'SHORT')
-      ? 'ALIGNED' : 'COUNTER';
+  // One implementation, shared with the form. These had drifted into
+  // opposites: this one called a trade with no declared bias COUNTER, while
+  // the form called the same situation ALIGNED — so the same trade meant
+  // different things depending on whether it had just been saved or just been
+  // loaded. Both are now null, which is what "no direction was declared"
+  // actually is.
+  const alignment = computeBiasAlignment(bias, direction);
 
   const risk = Math.abs(entry - stop);
   const dir  = direction === 'LONG' ? 1 : -1;
@@ -327,7 +330,7 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     accountId: typeof r.accountId === 'string' ? r.accountId : undefined,
     setup: setupVal,
     confirmation: confirmVal,
-    biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : alignment,
+    biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : (alignment ?? undefined),
     tradeR,
     pnlUsd,
     screenshots: Array.isArray(r.screenshots) ? r.screenshots.filter((s): s is string => typeof s === 'string') : undefined,
