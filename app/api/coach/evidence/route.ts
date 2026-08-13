@@ -31,6 +31,8 @@ import { listRecentTrades } from '../../../lib/coach-pipeline/db/trades';
 import {
   detectBehaviors, occurrenceTradeIds, BEHAVIOR_LABELS, type BehaviorKind,
 } from '../../../lib/coach-pipeline/behavior/behaviors';
+import { verifyTrade } from '../../../lib/trade/verification';
+import type { ManagementEvent } from '../../../lib/trade/management';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -103,6 +105,20 @@ export async function GET(req: NextRequest) {
         /** The numbers the detector actually used. This is what makes the
          *  claim checkable rather than assertable. */
         evidence:    evidenceById.get(id) ?? null,
+        /** Which of this trade's self-reported claims the records can check,
+         *  and whether they agree. A disagreement is a prompt to look, never
+         *  a verdict — see lib/trade/verification. */
+        checks: verifyTrade({
+          direction:  t.direction === 'SHORT' ? 'SHORT' : 'LONG',
+          entry:      t.entry_price,
+          stop:       t.stop_loss,
+          target:     t.take_profit,
+          contracts:  t.contracts,
+          result:     t.result,
+          exits:      t.exits,
+          stopMoved:  (t.stop_moved as 'none' | 'advanced' | 'widened' | null) ?? null,
+          management: (t.management ?? null) as ManagementEvent[] | null,
+        }).filter(c => c.status !== 'unverifiable'),
       };
     }).filter(Boolean);
 

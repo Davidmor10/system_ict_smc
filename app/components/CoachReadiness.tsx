@@ -24,11 +24,18 @@ interface Detector {
   action: string;
 }
 
+interface Verification {
+  disagreeing: number;
+  checkable:   number;
+  byCheck:     Array<{ id: string; label: string; disagrees: number }>;
+}
+
 interface Readiness {
   tradesTotal:   number;
   tradesDecided: number;
   detectors:     Detector[];
   readyCount:    number;
+  verification?: Verification;
 }
 
 export default function CoachReadiness() {
@@ -91,6 +98,24 @@ export default function CoachReadiness() {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Trades where the trader's answer and the trade's own numbers point
+          different ways. Almost always a typo, occasionally memory drifting
+          toward the outcome — and never phrased as either, because the trader
+          is the one who knows which. */}
+      {data.verification && data.verification.disagreeing > 0 && (
+        <div className="cr-mismatch">
+          <span className="cr-mismatch-head">
+            {data.verification.disagreeing} עסקאות שבהן מה שכתבת ומה שהמספרים אומרים לא מסתדרים
+          </span>
+          {data.verification.byCheck.map(c => (
+            <span key={c.id} className="cr-mismatch-row">{c.label} · {c.disagrees}</span>
+          ))}
+          <span className="cr-mismatch-note">
+            כנראה טעות הקלדה. שווה לפתוח אותן — הניתוח קורא את המספרים, לא את הכוונה.
+          </span>
+        </div>
       )}
 
       <p className="cr-foot">

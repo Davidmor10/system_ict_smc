@@ -24,6 +24,8 @@
 import type { TradeRow } from '../types';
 import { MIN_DECIDED_FOR_CLAIM } from '../../stats/evidence';
 import { SIZE_BASELINE_MIN } from './behaviors';
+import { summarizeVerification, type VerificationSummary } from '../../trade/verification';
+import type { ManagementEvent } from '../../trade/management';
 
 const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
 
@@ -54,6 +56,14 @@ export interface Readiness {
   detectors:     DetectorReadiness[];
   /** How many detectors can currently see anything. The headline number. */
   readyCount:    number;
+  /** Where what the trader wrote and what the numbers say disagree.
+   *
+   *  Kept beside readiness rather than in its own place because it answers the
+   *  same question from the other side: readiness is what the coach cannot see
+   *  yet, this is what it can see but does not trust. Both are reasons a
+   *  finding is weaker than it looks, and both are fixable by the trader in a
+   *  minute. */
+  verification:  VerificationSummary;
 }
 
 function stateFor(have: number, need: number): ReadinessState {
@@ -118,10 +128,23 @@ export function computeReadiness(trades: readonly TradeRow[]): Readiness {
     },
   ].map(d => ({ ...d, state: stateFor(d.have, d.need) }));
 
+  const verification = summarizeVerification(decided.map(t => ({
+    direction:  t.direction === 'SHORT' ? 'SHORT' : 'LONG',
+    entry:      t.entry_price,
+    stop:       t.stop_loss,
+    target:     t.take_profit,
+    contracts:  t.contracts,
+    result:     t.result,
+    exits:      t.exits,
+    stopMoved:  (t.stop_moved as 'none' | 'advanced' | 'widened' | null) ?? null,
+    management: (t.management ?? null) as ManagementEvent[] | null,
+  })));
+
   return {
     tradesTotal:   trades.length,
     tradesDecided: decided.length,
     detectors,
     readyCount:    detectors.filter(d => d.state === 'ready').length,
+    verification,
   };
 }

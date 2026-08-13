@@ -15,6 +15,12 @@ import { useEffect, useState } from 'react';
 // feature working, not the feature failing.
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface Check {
+  id: string; label: string;
+  status: 'agrees' | 'disagrees' | 'unverifiable';
+  reported?: string; recorded?: string;
+}
+
 interface EvidenceTrade {
   id: string;
   date: string;
@@ -29,6 +35,7 @@ interface EvidenceTrade {
   rMultiple: number | null;
   session: string | null;
   counted: boolean;
+  checks?: Check[];
 }
 
 interface Evidence {
@@ -75,7 +82,7 @@ export default function EvidenceList({ kind }: { kind: string }) {
               <thead>
                 <tr>
                   <th>תאריך</th><th>נכס</th><th>כניסה</th><th>סטופ</th>
-                  <th>יעד</th><th>יציאה</th><th>R</th><th>נספרה</th>
+                  <th>יעד</th><th>יציאה</th><th>R</th><th>נספרה</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -89,6 +96,13 @@ export default function EvidenceList({ kind }: { kind: string }) {
                     <td>{num(t.exit)}</td>
                     <td>{t.rMultiple == null ? '—' : `${t.rMultiple.toFixed(2)}R`}</td>
                     <td>{t.counted ? '●' : '·'}</td>
+                    {/* A trade whose own numbers contradict what was written
+                        about it. Marked, not hidden: it is still evidence, it
+                        is just evidence worth checking first. */}
+                    <td title={(t.checks ?? []).filter(c => c.status === 'disagrees')
+                      .map(c => `${c.label}: ${c.reported} מול ${c.recorded}`).join(' · ')}>
+                      {(t.checks ?? []).some(c => c.status === 'disagrees') ? '⚠' : ''}
+                    </td>
                   </tr>
                 ))}
               </tbody>
