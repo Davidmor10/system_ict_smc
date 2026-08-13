@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyReportPanel from '../../components/WeeklyReportPanel';
+import WeeklyBehaviorReview from '../../components/WeeklyBehaviorReview';
 
 /** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
     return shapes as local types (not imported) so this client component
@@ -957,6 +958,12 @@ export default function AiAnalyticsPage() {
           description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא. הארכיון שומר את כל הדוחות הקודמים כדי שתוכל לחזור אליהם."
         >
           <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} />
+
+          {/* The behaviour half of the week, under the results half.
+              Different question, same seven days: the panel above says what
+              the week LOOKED like, this one says whether anything about how
+              you trade actually moved. Renders nothing when it has nothing. */}
+          <WeeklyBehaviorReview />
         </NumberedSection>
 
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}

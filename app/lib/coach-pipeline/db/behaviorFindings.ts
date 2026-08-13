@@ -156,6 +156,24 @@ export async function saveFinding(
   if (evErr) logger.warn('behavior event insert failed', { clerkId: cid, kind: finding.kind, error: evErr.message });
 }
 
+/** Lifecycle events inside a window. Feeds the weekly review, which is the
+ *  only surface that asks "what changed since last week" rather than "what is
+ *  true now". */
+export async function listFindingEventsSince(clerkId: string, sinceIso: string) {
+  const cid = requireClerkId(clerkId);
+  const { data, error } = await getClient()
+    .from(T.behaviorEvents)
+    .select('kind, at, from_status, to_status, reason')
+    .eq('clerk_id', cid)
+    .gte('at', sinceIso)
+    .order('at', { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    kind: string; at: string; from_status: string | null; to_status: string; reason: string;
+  }>;
+}
+
 /** The lifecycle timeline, newest first. Feeds "this is the second time" and
  *  anything that needs to show change over weeks rather than over one run. */
 export async function listFindingEvents(clerkId: string, limit = 50) {

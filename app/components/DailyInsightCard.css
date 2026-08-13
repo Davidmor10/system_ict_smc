@@ -245,3 +245,42 @@
    on screen, because a list of only the hits is a prosecution. */
 .ev-table tr[data-counted='true'] td { color: rgba(255, 255, 255, 0.9); }
 .ev-table tr[data-counted='true'] td:last-child { color: #e8c66a; }
+
+/* ── Weekly behaviour review ─────────────────────────────────────────────────
+   Sits under the weekly performance report. Quieter than it, because it is the
+   second answer to the same week and it earns attention by having something to
+   say — not by taking up space when it doesn't. */
+.wbr {
+  display: flex; flex-direction: column; gap: 18px;
+  margin-top: 20px; padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  font-family: var(--sans, system-ui, sans-serif);
+}
+.wbr-head { display: flex; align-items: baseline; justify-content: space-between; }
+.wbr-eyebrow { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(212, 175, 55, 0.75); }
+.wbr-quiet { margin: 0; font-size: 13.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.5); }
+
+.wbr-block { display: flex; flex-direction: column; gap: 6px; }
+.wbr-block h4 {
+  margin: 0; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+.wbr-block p { margin: 0; font-size: 13.5px; line-height: 1.55; color: rgba(255, 255, 255, 0.8); }
+.wbr-block[data-tone='good'] p  { color: #6fa580; }
+.wbr-block[data-tone='bad'] p   { color: #c98080; }
+.wbr-block[data-tone='muted'] p { color: rgba(255, 255, 255, 0.42); font-size: 12.5px; }
+.wbr-block p[data-dir='improving'] { color: #6fa580; }
+.wbr-block p[data-dir='worsening'] { color: #c98080; }
+
+.wbr-test { display: flex; flex-direction: column; gap: 6px; }
+.wbr-bar { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.wbr-fill { height: 100%; background: rgba(212, 175, 55, 0.55); border-radius: 2px; }
+.wbr-count { font-size: 11.5px; color: rgba(255, 255, 255, 0.35); font-variant-numeric: tabular-nums; }
+
+.wbr-focus {
+  display: flex; flex-direction: column; gap: 4px;
+  padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.wbr-focus p { margin: 0; font-size: 15px; font-weight: 600; color: #fff; }
