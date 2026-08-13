@@ -36,6 +36,7 @@
 
 import type { BehaviorTally } from './behaviors';
 import type { TriggerFinding } from './contingency';
+import { MIN_DECIDED_FOR_CLAIM, MIN_DECIDED_FOR_CONFIRMED } from '../../stats/evidence';
 
 // ── Tiers ───────────────────────────────────────────────────────────────────
 
@@ -87,10 +88,15 @@ export interface ConfidenceFactors {
 
 /** Enough evidence to call it a repeated behaviour at all. */
 export const CONFIRM_MIN_OCCURRENCES   = 6;
-export const CONFIRM_MIN_OPPORTUNITIES = 15;
-/** Enough to say anything beyond "we noticed". */
+export const CONFIRM_MIN_OPPORTUNITIES = MIN_DECIDED_FOR_CONFIRMED;
+/** Enough to say anything beyond "we noticed".
+ *
+ *  The opportunity floors come from lib/stats/evidence, shared with the
+ *  pattern engine and the root-cause labeller. Two stacks analysing the same
+ *  trades must not disagree about how much evidence it takes to speak — the
+ *  contradiction is invisible in review and obvious on the screen. */
 export const INVESTIGATE_MIN_OCCURRENCES   = 3;
-export const INVESTIGATE_MIN_OPPORTUNITIES = 8;
+export const INVESTIGATE_MIN_OPPORTUNITIES = MIN_DECIDED_FOR_CLAIM;
 
 /** Split the opportunity timeline in half and count occurrences on each side.
  *

@@ -12,14 +12,19 @@ import { fmtPF } from './factsBlock';
 import { generateInsightText } from './client';
 import { HEBREW_MENTOR_STYLE } from './styleGuide';
 import { logger } from '../logger';
+import type { AiCallMeta } from './client';
 
 /** Wraps generateInsightText so a total provider failure (e.g. missing/
     invalid API keys) is logged with which caller hit it and resolves to
     null, instead of throwing uncaught up into the API route as an
     unexplained 500. */
-async function tryGenerate(caller: string, prompt: string): Promise<string | null> {
+async function tryGenerate(caller: string, prompt: string, clerkId?: string | null): Promise<string | null> {
   try {
-    return await generateInsightText(prompt);
+    // `caller` doubles as the purpose on the usage row — the same string that
+    // identifies the failure in the log identifies the spend in the ledger.
+    const meta: AiCallMeta | undefined =
+      clerkId === undefined ? undefined : { clerkId, purpose: caller };
+    return await generateInsightText(prompt, meta);
   } catch (err) {
     logger.error('AI text generation failed', { caller, error: err instanceof Error ? err.message : String(err) });
     return null;
@@ -46,7 +51,7 @@ export interface HypothesisPhrasing {
     e.g. "Long MNQ during NY AM when IFVG confirmation is present." Only
     called when the hypothesis's identity actually changed (a fresh anchor
     pattern) — a continuing hypothesis reuses its cached phrasing instead. */
-export async function generateHypothesisPhrasing(input: HypothesisPhrasingInput, lang: 'he' | 'en'): Promise<HypothesisPhrasing | null> {
+export async function generateHypothesisPhrasing(input: HypothesisPhrasingInput, lang: 'he' | 'en', clerkId?: string | null): Promise<HypothesisPhrasing | null> {
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const metricsList = Object.entries(input.supportingMetrics)
     .map(([id, g]) => `${id} — ${fmtMetric(id, g)}`)
@@ -74,7 +79,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await tryGenerate('generateHypothesisPhrasing', prompt);
+  const raw = await tryGenerate('generateHypothesisPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
   let parsed: { description?: string; evidence?: string } = {};
@@ -102,7 +107,7 @@ export interface InsightPhrasingItem {
     call for the whole batch instead of one per item. No forced category
     names (no "opportunity"/"warning"/"pattern" schema): each insight is just
     text, grounded only in the numbers given, in the same order as `items`. */
-export async function generateInsightsPhrasing(items: InsightPhrasingItem[], lang: 'he' | 'en'): Promise<string[] | null> {
+export async function generateInsightsPhrasing(items: InsightPhrasingItem[], lang: 'he' | 'en', clerkId?: string | null): Promise<string[] | null> {
   if (items.length === 0) return [];
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const list = items
@@ -125,7 +130,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await tryGenerate('generateInsightsPhrasing', prompt);
+  const raw = await tryGenerate('generateInsightsPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
   let parsed: unknown[] = [];
@@ -157,7 +162,7 @@ export interface StrengthPhrasingItem {
     generateInsightsPhrasing: every item here is a genuine, above-baseline edge,
     so the prompt leans on trend (strengthening/stable/weakening) rather than a
     fresh discovery framing. */
-export async function generateWorkingStrengthsPhrasing(items: StrengthPhrasingItem[], lang: 'he' | 'en'): Promise<string[] | null> {
+export async function generateWorkingStrengthsPhrasing(items: StrengthPhrasingItem[], lang: 'he' | 'en', clerkId?: string | null): Promise<string[] | null> {
   if (items.length === 0) return [];
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const trendWord = (t: StrengthPhrasingItem['trend']) =>
@@ -187,7 +192,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await tryGenerate('generateWorkingStrengthsPhrasing', prompt);
+  const raw = await tryGenerate('generateWorkingStrengthsPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
   let parsed: unknown[] = [];
@@ -215,7 +220,7 @@ export interface PatternPhrasing {
     (title/evidence/action) as the dashboard's AiDiscovery, but phrases an
     already-selected pattern_memory row instead of re-running analysis over
     raw trades. */
-export async function generatePatternPhrasing(row: PatternMemoryRow, lang: 'he' | 'en'): Promise<PatternPhrasing | null> {
+export async function generatePatternPhrasing(row: PatternMemoryRow, lang: 'he' | 'en', clerkId?: string | null): Promise<PatternPhrasing | null> {
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const g = row.currentMetric;
 
@@ -239,7 +244,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await tryGenerate('generatePatternPhrasing', prompt);
+  const raw = await tryGenerate('generatePatternPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
   let parsed: { title?: string; evidence?: string; action?: string } = {};

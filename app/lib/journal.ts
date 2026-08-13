@@ -100,6 +100,10 @@ export interface TradeEntry {
    *  didn't answer, and that is NOT the same as "yes": treating silence as
    *  compliance is how a rule-adherence metric becomes a flattering fiction. */
   followedRules?: boolean;
+  /** Server-side only: whether this trade has screenshots, without carrying
+   *  them. Never written by the form, and stripped by validation on the way
+   *  back up — it exists so the analysis layer can stop reading the images. */
+  hasScreenshot?: boolean;
   /** Epoch-ms of the last edit. Set by saveTrades when a trade's content
       changes; drives the cross-device newest-wins merge on hydration. */
   updatedAt?: number;

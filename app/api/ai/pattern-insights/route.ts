@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ insights: [] });
     }
 
-    const insights = await generatePatternInsights(trades as TradeEntry[], lang === 'en' ? 'en' : 'he');
+    const insights = await generatePatternInsights(trades as TradeEntry[], lang === 'en' ? 'en' : 'he', userId);
     return NextResponse.json({ insights });
   } catch (err) {
     console.error('[AI Pattern Insights]', err);

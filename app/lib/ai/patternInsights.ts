@@ -44,7 +44,7 @@ function describeCandidate(c: PatternCandidate): string {
     Confidence and sample size always come from the computed candidate, never
     from the model's output — the AI is only allowed to describe numbers that
     already exist. */
-export async function generatePatternInsights(trades: TradeEntry[], lang: 'he' | 'en'): Promise<PatternInsight[]> {
+export async function generatePatternInsights(trades: TradeEntry[], lang: 'he' | 'en', clerkId?: string | null): Promise<PatternInsight[]> {
   if (trades.length < 3) return [];
 
   const analysis = runFullAnalysis(trades);
@@ -77,7 +77,7 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt);
+  const raw = await generateInsightText(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'pattern_insights' });
   let parsed: Array<{ title?: string; evidence?: string }> = [];
   try {
     const match = raw.match(/\[[\s\S]*\]/);

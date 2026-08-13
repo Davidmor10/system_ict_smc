@@ -60,7 +60,9 @@ export function deriveTraderProfile(
   const exitRatio = avgRR > 0 && avgLoser > 0 ? (avgWinner / avgLoser) / avgRR : null;
 
   const closed = trades.filter(t => t.result !== 'OPEN');
-  const withScreenshots = closed.filter(t => (t.screenshots?.length ?? 0) > 0);
+  // hasScreenshot comes from a generated column when the analysis read them;
+  // the array is the fallback for any caller that has the real thing.
+  const withScreenshots = closed.filter(t => t.hasScreenshot ?? ((t.screenshots?.length ?? 0) > 0));
   const notesObservations = trades
     .filter(t => t.notes && t.notes.trim().length > 0)
     .sort((a, b) => b.id - a.id)

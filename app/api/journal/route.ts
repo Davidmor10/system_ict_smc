@@ -44,6 +44,11 @@ export type TradeRow = {
   trade_r: number | null;
   pnl_usd: number | null;
   screenshots: string[] | null;
+  /** Generated column — whether `screenshots` is a non-empty array. Present so
+   *  the intelligence layer can answer "did they screenshot this trade" without
+   *  pulling megabytes of base64 across the wire. Optional: a database that
+   *  hasn't run the migration simply doesn't return it. */
+  has_screenshot?: boolean | null;
   exits: TradeExit[] | null;
   confirmations: string[] | null;
   emotional_state: string | null;
@@ -75,6 +80,10 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     tradeR: row.trade_r ?? undefined,
     pnlUsd: row.pnl_usd ?? undefined,
     screenshots: row.screenshots ?? undefined,
+    // Prefer the generated column; fall back to the blobs when they were
+    // selected. Either way the answer is the same, and one of the two paths
+    // does not cost an image library.
+    hasScreenshot: row.has_screenshot ?? ((row.screenshots?.length ?? 0) > 0),
     exits: row.exits ?? undefined,
     confirmations: row.confirmations ?? undefined,
     emotionalState: (row.emotional_state as EmotionalState) ?? undefined,

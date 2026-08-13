@@ -7,6 +7,7 @@ import { analyzeInstruments } from './instruments';
 import { analyzeSessions } from './sessions';
 import type { PatternCandidate } from './types';
 import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 
 const DIRECTIONS: Direction[] = ['LONG', 'SHORT'];
 
@@ -18,8 +19,11 @@ export const PATTERN_ALPHA = 0.05;
 /** Decided trades a slice needs before its p-value is even considered. Below
  *  this, Fisher can still return a small number on a freak split, and a
  *  "significant" finding built on four trades would be the exact failure the
- *  test was added to prevent. */
-export const PATTERN_MIN_DECIDED = 8;
+ *  test was added to prevent.
+ *
+ *  Shared with the behaviour layer and the root-cause labeller — see
+ *  lib/stats/evidence for why the number is defined once. */
+export const PATTERN_MIN_DECIDED = MIN_DECIDED_FOR_CLAIM;
 
 /** One candidate with its raw p-value. `pAdjusted` and `significant` are
  *  filled in at the end, when the number of comparisons is known — the

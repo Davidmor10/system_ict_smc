@@ -129,10 +129,11 @@ export async function answerCoachQuestion(
   const CORRECTIVE = '\n\nYour previous reply could not be parsed. Respond again with ONLY a valid JSON object of the exact shape {"reasoning": "...", "final_answer": "..."} and nothing else.';
   let answer: string | null;
   try {
-    answer = parseCoachJson(await generateCoachJson(prompt));
+    const meta = { clerkId: userId, purpose: 'coach_chat' };
+    answer = parseCoachJson(await generateCoachJson(prompt, meta));
     if (!answer) {
       await logCoachFallback(supabase, userId, 'retry', question);
-      answer = parseCoachJson(await generateCoachJson(prompt + CORRECTIVE));
+      answer = parseCoachJson(await generateCoachJson(prompt + CORRECTIVE, { ...meta, purpose: 'coach_chat_retry' }));
     }
   } catch (err) {
     logger.error('chat coach generation failed', { error: err instanceof Error ? err.message : String(err) });

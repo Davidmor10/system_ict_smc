@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import Groq from "groq-sdk";
 import { logger } from "../logger";
+import { logUsage } from "../coach-pipeline/db/usage";
 
 /** Single shared clients — every AI route in the app goes through these.
     Groq's constructor throws immediately on a missing key (unlike
@@ -15,6 +16,69 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || "unset" });
 type Provider = "gemini" | "groq";
 interface Attempt { provider: Provider; model: string }
 
+/** Who the call was for, and what it was for.
+ *
+ *  Optional only so a caller that genuinely has no user (a script, a test) can
+ *  omit it. Everything reached from a request should pass it: ai_usage_log's
+ *  header says every AI call gets a row, always, and until now that was true
+ *  of exactly one of the two AI stacks in this app. The other five surfaces —
+ *  insights, weekly report, strengths, pattern insights, the coach chat — ran
+ *  on the free tiers and reported nothing, so call volume and how close a
+ *  daily quota was to being exhausted were invisible until something stopped
+ *  working. Free is not the same as unmeasured. */
+export interface AiCallMeta {
+  clerkId: string | null;
+  purpose: string;
+}
+
+/** Free-tier models. The row is written for the token counts and the failure
+ *  record, not for the money — but the field has to say something, and 0 is
+ *  what it actually costs. */
+const FREE_TIER_COST_USD = 0;
+
+interface Usage { tokensIn: number; tokensOut: number }
+
+function geminiUsage(result: unknown): Usage {
+  const u = (result as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } })?.usageMetadata;
+  return { tokensIn: u?.promptTokenCount ?? 0, tokensOut: u?.candidatesTokenCount ?? 0 };
+}
+function groqUsage(result: unknown): Usage {
+  const u = (result as { usage?: { prompt_tokens?: number; completion_tokens?: number } })?.usage;
+  return { tokensIn: u?.prompt_tokens ?? 0, tokensOut: u?.completion_tokens ?? 0 };
+}
+
+/** Never throws and never blocks: a logging failure must not take down the
+ *  call it was accounting for. */
+async function record(
+  meta: AiCallMeta | undefined,
+  provider: Provider,
+  model: string,
+  usage: Usage,
+  latencyMs: number,
+  ok: boolean,
+  errorKind?: string,
+): Promise<void> {
+  if (!meta) return;
+  try {
+    await logUsage({
+      clerkId: meta.clerkId,
+      // ai_usage_log's provider column is free text; the coach pipeline only
+      // ever writes two values, and this stack adds the third.
+      provider: (provider === "gemini" ? "google" : "groq") as "google",
+      model,
+      purpose: meta.purpose,
+      tokensIn: usage.tokensIn,
+      tokensOut: usage.tokensOut,
+      costUsdEst: FREE_TIER_COST_USD,
+      latencyMs,
+      ok,
+      errorKind,
+    });
+  } catch {
+    /* accounted for above */
+  }
+}
+
 /** Runs an ordered list of (provider, model) attempts, returning the first
     non-empty completion. Falls through on overload (503) / quota (429) / any
     error to the next attempt, so one model being down never fails the request
@@ -24,9 +88,10 @@ interface Attempt { provider: Provider; model: string }
     This is what makes reasoning-leakage structurally impossible for the coach:
     the caller parses a JSON object and reads only its `final_answer` field, so
     the model's private `reasoning` field is never eligible to reach the user. */
-async function runAttempts(prompt: string, attempts: Attempt[], json = false): Promise<string> {
+async function runAttempts(prompt: string, attempts: Attempt[], json = false, meta?: AiCallMeta): Promise<string> {
   let lastErr: unknown;
   for (const { provider, model } of attempts) {
+    const started = Date.now();
     try {
       if (provider === "gemini") {
         const result = await genAI.models.generateContent({
@@ -34,8 +99,12 @@ async function runAttempts(prompt: string, attempts: Attempt[], json = false): P
           contents: prompt,
           ...(json ? { config: { responseMimeType: "application/json" } } : {}),
         });
-        if (result.text) return result.text;
+        if (result.text) {
+          await record(meta, provider, model, geminiUsage(result), Date.now() - started, true);
+          return result.text;
+        }
         logger.warn("gemini returned no text", { model });
+        await record(meta, provider, model, geminiUsage(result), Date.now() - started, false, "empty_text");
       } else {
         const result = await groq.chat.completions.create({
           model,
@@ -43,12 +112,23 @@ async function runAttempts(prompt: string, attempts: Attempt[], json = false): P
           ...(json ? { response_format: { type: "json_object" } } : {}),
         });
         const text = result.choices[0]?.message?.content;
-        if (text) return text;
+        if (text) {
+          await record(meta, provider, model, groqUsage(result), Date.now() - started, true);
+          return text;
+        }
         logger.warn("groq returned no text", { model });
+        await record(meta, provider, model, groqUsage(result), Date.now() - started, false, "empty_text");
       }
     } catch (err) {
       lastErr = err;
       logger.warn(`${provider} model failed`, { model, error: err instanceof Error ? err.message : String(err) });
+      // Failed attempts are logged too, and they are the rows that matter
+      // most here: a fallback chain that quietly slides down to the weakest
+      // model every afternoon looks identical to a healthy one from the
+      // outside. The failures are how an exhausted daily quota becomes
+      // visible before it becomes an outage.
+      await record(meta, provider, model, { tokensIn: 0, tokensOut: 0 }, Date.now() - started, false,
+        err instanceof Error ? err.message.slice(0, 80) : "error");
     }
   }
   logger.error("all AI providers failed", { error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
@@ -82,19 +162,19 @@ const COACH_ATTEMPTS: Attempt[] = [
   { provider: "groq", model: "llama-3.1-8b-instant" },
 ];
 
-export function generateInsightText(prompt: string): Promise<string> {
-  return runAttempts(prompt, INSIGHT_ATTEMPTS);
+export function generateInsightText(prompt: string, meta?: AiCallMeta): Promise<string> {
+  return runAttempts(prompt, INSIGHT_ATTEMPTS, false, meta);
 }
 
 /** Higher-quality generation for the AI Coach — same free providers, but the
     strongest models first. */
-export function generateCoachText(prompt: string): Promise<string> {
-  return runAttempts(prompt, COACH_ATTEMPTS);
+export function generateCoachText(prompt: string, meta?: AiCallMeta): Promise<string> {
+  return runAttempts(prompt, COACH_ATTEMPTS, false, meta);
 }
 
 /** Coach generation constrained to a JSON object at the API level. Returns the
     raw JSON string (still parsed + validated by the caller, which is the layer
     that enforces the fail-safe when a provider ignores the constraint). */
-export function generateCoachJson(prompt: string): Promise<string> {
-  return runAttempts(prompt, COACH_ATTEMPTS, true);
+export function generateCoachJson(prompt: string, meta?: AiCallMeta): Promise<string> {
+  return runAttempts(prompt, COACH_ATTEMPTS, true, meta);
 }

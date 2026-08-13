@@ -43,7 +43,7 @@ BAD (never write like this): "Your performance improved." — this only states a
     checklist. Everything cited must already exist in the facts blocks passed
     in; this function only builds the prompt, calls the LLM, and parses the
     result — it never computes a statistic itself. */
-export async function generateNarrativeText(facts: NarrativeFacts, lang: 'he' | 'en'): Promise<WeeklyNarrative | null> {
+export async function generateNarrativeText(facts: NarrativeFacts, lang: 'he' | 'en', clerkId?: string | null): Promise<WeeklyNarrative | null> {
   const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const challengeInstruction = facts.notesObservations.length > 0 ? `\n\n${CHALLENGE_TRADER_STYLE}` : '';
 
@@ -99,7 +99,7 @@ Rules:
 
   let raw: string;
   try {
-    raw = await generateInsightText(prompt);
+    raw = await generateInsightText(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'weekly_narrative' });
   } catch (err) {
     logger.error('generateNarrativeText: AI generation failed', { error: err instanceof Error ? err.message : String(err) });
     return null;

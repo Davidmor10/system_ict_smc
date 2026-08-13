@@ -16,6 +16,7 @@ import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/se
 import { todayISO, type TradeEntry } from '../journal';
 import { SESS } from '../sessions';
 import { logger } from '../logger';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing, generateWorkingStrengthsPhrasing } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
@@ -51,7 +52,16 @@ export interface AiDiscovery {
 }
 
 const MAX_RECURRING_PATTERNS = 5;
-const MIN_TRADES_FOR_WEEKLY = 3;       // matches the old weeklyReport.ts's threshold
+/** Decided trades this week before a weekly report is written at all. Three
+    was the old bar, inherited from weeklyReport.ts. Describing a three-trade
+    week is fine; the report's whole structure is comparison, and a three-trade
+    week compared against another one is noise with a narrative on top. */
+const MIN_TRADES_FOR_WEEKLY = 5;
+/** Decided trades a PREVIOUS week needs before it is used as a comparison.
+    Higher than the bar for writing the report: a thin week can still be
+    described, it just cannot be measured against. Shared floor — see
+    lib/stats/evidence. */
+const MIN_TRADES_FOR_COMPARISON = MIN_DECIDED_FOR_CLAIM;
 const MIN_BASELINE_TRADES = 10;        // aligned to confidenceLevelFor's low/medium boundary
 const MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE = 2;
 /** Below this, the dashboard falls back to the single strongest tracked
@@ -123,6 +133,7 @@ async function refreshIntelligence(supabase: SupabaseClient, userId: string, lan
     const phrasing = await generateHypothesisPhrasing(
       { status: hypothesis.status, confidenceScore: hypothesis.confidenceScore, supportingMetrics: hypothesis.supportingMetrics },
       lang,
+      userId,
     );
     if (phrasing) {
       hypothesis = { ...hypothesis, description: phrasing.description, evidence: phrasing.evidence };
@@ -263,7 +274,7 @@ export async function comparePeriods(userId: string): Promise<PeriodComparison |
   const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
   const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
   const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
-  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_WEEKLY ? runFullAnalysis(windows.prevWeekTrades) : null;
+  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_COMPARISON ? runFullAnalysis(windows.prevWeekTrades) : null;
   const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
 
   return computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
@@ -309,7 +320,7 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
   const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
   const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
-  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_WEEKLY ? runFullAnalysis(windows.prevWeekTrades) : null;
+  const prevAnalysis = prevClosed >= MIN_TRADES_FOR_COMPARISON ? runFullAnalysis(windows.prevWeekTrades) : null;
   const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
   const comparison = computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
 
@@ -341,7 +352,7 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
     sampleSize: closedThisWeek.length,
   };
 
-  const narrative = await generateNarrativeText(facts, lang);
+  const narrative = await generateNarrativeText(facts, lang, userId);
   if (!narrative) return null;
 
   await repo.saveWeeklyReport(supabase, {
@@ -390,6 +401,7 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
       const phrasing = await generateHypothesisPhrasing(
         { status: hypothesis.status, confidenceScore: hypothesis.confidenceScore, supportingMetrics: hypothesis.supportingMetrics },
         lang,
+        userId,
       );
       if (!phrasing) return null;
       description = phrasing.description;
@@ -427,7 +439,7 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
     };
   }
 
-  const phrased = await generatePatternPhrasing(anchor, lang);
+  const phrased = await generatePatternPhrasing(anchor, lang, userId);
   if (!phrased) return null;
 
   await repo.savePatternMemory(supabase, [{
@@ -621,6 +633,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
   const phrased = await generateInsightsPhrasing(
     trimmed.map(c => ({ subject: c.subject, metric: c.metric, extra: c.extra })),
     lang,
+    userId,
   );
   if (!phrased) {
     logger.warn('generatePersonalizedInsights: phrasing failed, returning empty', { userId, candidateCount: trimmed.length });
@@ -728,6 +741,7 @@ export async function generateWorkingStrengths(userId: string, lang: 'he' | 'en'
           trend: trendForStatus(p.status),
         })),
         lang,
+        userId,
       )
     : [];
   const explanationById = new Map(toPhrase.map((p, i) => [p.patternId, phrased?.[i] ?? '']));

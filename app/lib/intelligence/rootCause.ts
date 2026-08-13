@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PeriodComparison, RootCauseFinding, TraderProfile } from './types';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 
 /** Pure: classifies why performance moved this week vs last week. Requires
     `comparison.hasPrevWeek` — with no prior week there's nothing to explain
@@ -24,7 +25,7 @@ import type { PeriodComparison, RootCauseFinding, TraderProfile } from './types'
  *  because "your numbers moved and the sample is too small to say why" is a
  *  true and useful thing to be told, and silence would be filled by the model
  *  guessing. */
-export const MIN_WEEK_SAMPLE_FOR_MECHANISM = 8;
+export const MIN_WEEK_SAMPLE_FOR_MECHANISM = MIN_DECIDED_FOR_CLAIM;
 
 export function diagnoseRootCause(
   comparison: PeriodComparison,
