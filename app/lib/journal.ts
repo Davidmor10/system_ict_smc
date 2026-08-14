@@ -495,15 +495,44 @@ export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
 // lib/calc/trade.ts) — never from a manually-entered dollar amount.
 
 /** Realized PnL in USD, contract-size aware; null for still-open trades. */
+/** What the trade actually returned, in dollars.
+ *
+ *  MEASURED first, assumed only as a fallback. This used to be the assumption
+ *  alone — a win credited with the full target, a loss debited the full stop —
+ *  which meant the journal's headline "net profit" was the profit the PLAN
+ *  would have made, not the one the account did. The dashboard already
+ *  preferred the recorded figure, so the same trades produced two different
+ *  totals on two screens.
+ *
+ *  The fallback stays for trades logged before exits were collected. It is not
+ *  wrong to show it — it is the best available — but it must never win over a
+ *  number that was actually recorded. */
 export function tradePnL(t: TradeEntry): number | null {
   if (t.result === 'OPEN') return null;
+  if (typeof t.pnlUsd === 'number' && Number.isFinite(t.pnlUsd)) return t.pnlUsd;
   if (t.result === 'BE') return 0;
   const exit = t.result === 'WIN' ? t.target : t.stop;
   return calcPnL(t.entry, exit, t.direction, t.symbol, t.contracts || 1);
 }
 
-/** Planned reward-to-risk of a trade (target distance / stop distance). */
+/** What the trade actually returned, in R.
+ *
+ *  Same precedence and the same history: this returned the PLANNED
+ *  reward-to-risk while every caller displayed it as the realized R, so a
+ *  trader who took a 3R-planned trade and closed it at +0.4R saw 3R. Use
+ *  plannedRR below when the plan is what you want. */
 export function rMultiple(t: TradeEntry): number | null {
+  if (t.result === 'OPEN') return null;
+  if (typeof t.tradeR === 'number' && Number.isFinite(t.tradeR)) return t.tradeR;
+  if (t.result === 'BE') return 0;
+  const planned = calcRR(t.entry, t.stop, t.target);
+  if (planned == null) return null;
+  return t.result === 'WIN' ? planned : -1;
+}
+
+/** The reward-to-risk the trade was TAKEN for. The plan, kept apart from the
+ *  outcome — comparing the two is the whole point of a journal. */
+export function plannedRR(t: TradeEntry): number | null {
   return calcRR(t.entry, t.stop, t.target);
 }
 
