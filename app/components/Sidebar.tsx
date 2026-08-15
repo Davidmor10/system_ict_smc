@@ -19,6 +19,10 @@ function IconGrid()      { return <svg {...iconProps}><rect x="3" y="3"  width="
 function IconBook()      { return <svg {...iconProps}><path d="M3 4h14a2 2 0 0 1 2 2v14a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2Z" /><path d="M7 4v16" /></svg>; }
 function IconNotebook()  { return <svg {...iconProps}><path d="M6 4h11a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" /><path d="M12 8h3M12 12h3M12 16h3" /></svg>; }
 function IconChart()     { return <svg {...iconProps}><path d="M4 20V10M10 20V4M16 20v-7M22 20h-20" /></svg>; }
+// Two sparks — the house mark for anything the AI wrote rather than counted.
+// Keeps the bar chart free for Statistics, which is the page that actually
+// plots bars.
+function IconSparkles()  { return <svg {...iconProps}><path d="M10 3l1.7 5.3L17 10l-5.3 1.7L10 17l-1.7-5.3L3 10l5.3-1.7Z" /><path d="M17.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" /></svg>; }
 function IconCoach()     { return <svg {...iconProps}><path d="M8 9h8M8 13h5" /><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg>; }
 function IconPlaybook()  { return <svg {...iconProps}><path d="M12 4v16" /><path d="M3 6a3 3 0 0 1 3-3h5v18H6a3 3 0 0 1-3-3Z" /><path d="M21 6a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 0 3-3Z" /></svg>; }
 function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z" /><path d="M9 12l2 2 4-4" /></svg>; }
@@ -33,7 +37,7 @@ const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolea
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'free',   Icon: IconBook     },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'free',   Icon: IconNotebook },
   { href: '/dashboard/stats',        key: 'nav_stats',        min: 'deluxe', Icon: IconChart, child: true },
-  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconChart    },
+  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconSparkles },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free',   Icon: IconPlaybook },
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free',   Icon: IconRules    },
@@ -105,11 +109,9 @@ export default function Sidebar() {
                   order: rtl ? 1 : 0,
                 }}
               />
-              {!child && (
-                <span className={`shrink-0 ${active ? 'text-[#d4af37]' : locked ? 'text-white/30' : 'text-white/50'}`}>
-                  <Icon />
-                </span>
-              )}
+              <span className={`shrink-0 ${active ? 'text-[#d4af37]' : locked ? 'text-white/30' : 'text-white/50'}`}>
+                <Icon />
+              </span>
               <span className="flex-1">{t(key)}</span>
               {locked && <span className="shrink-0 text-[#d4af37]/50" style={{ order: rtl ? -1 : 1 }}><LockIcon /></span>}
             </Link>

@@ -732,21 +732,26 @@ export default function StatsView() {
                   <tbody>
                     {s.recent.map(t => (
                       <tr key={t.id}>
-                        <td className="st-n" style={{ color: 'rgba(255,255,255,0.45)' }}>{fmtDate(t.dateISO)}</td>
+                        {/* The cell handles alignment, the span handles the
+                            number. Neither job may be given to the other: a
+                            styled <td> leaves the table layout, and an
+                            unwrapped "+$261.00" has its sign flipped to the
+                            far side by the RTL paragraph around it. */}
+                        <td style={{ color: 'rgba(255,255,255,0.45)' }}><span className="st-n">{fmtDate(t.dateISO)}</span></td>
                         <td style={{ color: '#fff', fontWeight: 900 }}>{t.symbol}</td>
                         <td data-soft style={{ color: t.direction === 'LONG' ? '#6ea87f' : '#c05d5d' }}>
                           {t.direction === 'LONG' ? 'לונג' : 'שורט'}
                         </td>
-                        <td data-num className="st-n" style={{ color: 'rgba(255,255,255,0.62)' }}>{nf(t.entry, 2)}</td>
-                        <td data-num className="st-n" style={{ color: t.exit == null ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.62)' }}>
-                          {orDash(t.exit, v => nf(v, 2))}
+                        <td data-num style={{ color: 'rgba(255,255,255,0.62)' }}><span className="st-n">{nf(t.entry, 2)}</span></td>
+                        <td data-num style={{ color: t.exit == null ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.62)' }}>
+                          <span className="st-n">{orDash(t.exit, v => nf(v, 2))}</span>
                         </td>
-                        <td data-num className="st-n" style={{ color: 'rgba(255,255,255,0.28)' }}>{orDash(t.plannedR, v => nf(v, 2))}</td>
-                        <td data-num className="st-n" style={{ fontWeight: 900, color: pnlColor(t.realizedR ?? 0) }}>
-                          {orDash(t.realizedR, v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${nf(Math.abs(v), 2)}R`)}
+                        <td data-num style={{ color: 'rgba(255,255,255,0.28)' }}><span className="st-n">{orDash(t.plannedR, v => nf(v, 2))}</span></td>
+                        <td data-num style={{ fontWeight: 900, color: pnlColor(t.realizedR ?? 0) }}>
+                          <span className="st-n">{orDash(t.realizedR, v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${nf(Math.abs(v), 2)}R`)}</span>
                         </td>
-                        <td data-num className="st-n" style={{ fontWeight: 900, color: pnlColor(t.pnl ?? 0) }}>
-                          {orDash(t.pnl, v => money(v))}
+                        <td data-num style={{ fontWeight: 900, color: pnlColor(t.pnl ?? 0) }}>
+                          <span className="st-n">{orDash(t.pnl, v => money(v))}</span>
                         </td>
                         <td data-soft style={{ color: 'rgba(255,255,255,0.45)' }}>{t.session}</td>
                         <td data-soft style={{ color: t.bias === 'BULLISH' ? 'rgba(110,168,127,0.85)' : t.bias === 'BEARISH' ? 'rgba(192,93,93,0.85)' : 'rgba(255,255,255,0.4)' }}>

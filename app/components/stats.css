@@ -67,6 +67,11 @@
 
 /* Numbers everywhere: one class, tabular figures, always LTR so a minus
    sign and a currency symbol never swap sides inside an RTL line. */
+/* inline-block is load-bearing: it keeps an LTR number box shrink-wrapped and
+   sitting at the start of its RTL parent. Which is exactly why this class must
+   never land on a <td> — an inline-block cell leaves the table's layout, and
+   the header row and body row then size their columns independently and stop
+   lining up. Inside a table cell, wrap the number in a span. */
 .st-n {
   font-family: var(--st-num);
   font-variant-numeric: tabular-nums;
@@ -400,7 +405,9 @@
 
 /* ── execution log ──────────────────────────────────────────────── */
 .st-tablewrap { overflow-x: auto; }
-.st-table { width: 100%; min-width: 820px; border-collapse: collapse; }
+/* Eleven columns with Hebrew headers. Below this the header words wrap and the
+   column edges stop reading as columns, so the wrapper scrolls instead. */
+.st-table { width: 100%; min-width: 940px; border-collapse: collapse; }
 .st-table thead tr { background: var(--st-head); }
 .st-table th {
   padding: 12px 14px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em;
