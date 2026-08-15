@@ -25,10 +25,14 @@ function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3
 function IconReports()   { return <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M8 13h5M8 17h4M16 12l3 3-3 3" /></svg>; }
 function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>; }
 
-const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl }[] = [
+// `child: true` nests an item under the one above it — indented, no icon, a
+// smaller label. Statistics sits under Notebook because it is a view of the
+// same record rather than a section of its own.
+const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolean }[] = [
   { href: '/dashboard',              key: 'nav_workspace',    min: 'free',   Icon: IconGrid     },
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'free',   Icon: IconBook     },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'free',   Icon: IconNotebook },
+  { href: '/dashboard/stats',        key: 'nav_stats',        min: 'deluxe', Icon: IconChart, child: true },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconChart    },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free',   Icon: IconPlaybook },
@@ -67,7 +71,7 @@ export default function Sidebar() {
 
       {/* ── Navigation ───────────────────────────────────────── */}
       <nav className="flex-1 px-3 py-5 flex flex-col gap-0.5">
-        {NAV.map(({ href, key, min, Icon }) => {
+        {NAV.map(({ href, key, min, Icon, child }) => {
           const locked = !canAccess(min);
           const active = !locked && (pathname === href || (href !== '/dashboard' && pathname.startsWith(href)));
           return (
@@ -76,10 +80,14 @@ export default function Sidebar() {
               href={locked ? '/checkout' : href}
               dir={rtl ? 'rtl' : 'ltr'}
               title={locked ? t('nav_locked_hint') : undefined}
-              style={{ transition: 'color 250ms cubic-bezier(0.16,1,0.3,1), background-color 250ms cubic-bezier(0.16,1,0.3,1), border-color 250ms cubic-bezier(0.16,1,0.3,1)' }}
+              style={{
+                transition: 'color 250ms cubic-bezier(0.16,1,0.3,1), background-color 250ms cubic-bezier(0.16,1,0.3,1), border-color 250ms cubic-bezier(0.16,1,0.3,1)',
+                ...(child ? { paddingInlineStart: 26 } : null),
+              }}
               className={[
                 'flex items-center gap-2.5 px-3 py-2.5 rounded-xl',
-                'text-[13px] font-bold font-mono tracking-[0.1em] uppercase',
+                child ? 'text-[12px] tracking-[0.08em]' : 'text-[13px] tracking-[0.1em]',
+                'font-bold font-mono uppercase',
                 rtl ? 'pr-[10px] pl-3 border-r-2 border-l-0' : 'pl-[10px] pr-3 border-l-2',
                 active
                   ? 'border-[#d4af37] bg-[#d4af37]/[0.08] text-white'
@@ -97,9 +105,11 @@ export default function Sidebar() {
                   order: rtl ? 1 : 0,
                 }}
               />
-              <span className={`shrink-0 ${active ? 'text-[#d4af37]' : locked ? 'text-white/30' : 'text-white/50'}`}>
-                <Icon />
-              </span>
+              {!child && (
+                <span className={`shrink-0 ${active ? 'text-[#d4af37]' : locked ? 'text-white/30' : 'text-white/50'}`}>
+                  <Icon />
+                </span>
+              )}
               <span className="flex-1">{t(key)}</span>
               {locked && <span className="shrink-0 text-[#d4af37]/50" style={{ order: rtl ? -1 : 1 }}><LockIcon /></span>}
             </Link>
