@@ -2,13 +2,51 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { UserButton, useAuth } from '@clerk/nextjs';
 import { useMarketingLang } from './LangProvider';
+
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const NAV_LINKS = [
   { he: "פיצ'רים",     href: '/features' },
   { he: 'ביצועים',     href: '/performance' },
   { he: 'מנוי',        href: '/pricing' },
 ] as const;
+
+function GuestControls() {
+  return (
+    <>
+      <Link href="/sign-in" className="btn-ghost" style={{ padding: '8px 14px' } as React.CSSProperties}>
+        התחברות
+      </Link>
+      <Link href="/pricing" className="btn-gold max-[900px]:px-5 max-[900px]:py-[9px]">
+        לרכישת מנוי
+      </Link>
+    </>
+  );
+}
+
+/** Clerk v7 dropped the <SignedIn>/<SignedOut> wrappers in favour of
+ *  resource-based checks, so the two states are chosen here.
+ *
+ *  This lives in its own component because useAuth() throws outside a
+ *  <ClerkProvider>, and the root layout only mounts the provider once a
+ *  publishable key exists. A hook cannot be called conditionally — a
+ *  conditionally MOUNTED component can. Until Clerk resolves, `isSignedIn` is
+ *  undefined and the guest controls show, which is the right guess on a public
+ *  page. */
+function AuthControls() {
+  const { isSignedIn } = useAuth();
+  if (!isSignedIn) return <GuestControls />;
+  return (
+    <>
+      <Link href="/dashboard" className="btn-gold max-[900px]:px-5 max-[900px]:py-[9px]">
+        כניסה למערכת
+      </Link>
+      <UserButton />
+    </>
+  );
+}
 
 export default function MarketingNav() {
   useMarketingLang();
@@ -59,24 +97,11 @@ export default function MarketingNav() {
         </div>
 
         {/* ── Controls ─────────────────────────────────────────── */}
+        {/* Two states. A signed-in visitor is offered the way in and their own
+            account; pitching a subscription to someone who already holds one
+            is the product failing to recognise them. */}
         <div className="flex items-center gap-[10px] shrink-0 max-[900px]:basis-full max-[900px]:justify-center max-[900px]:flex-wrap">
-
-          {/* Sign in — visible on all screen sizes */}
-          <Link
-            href="/sign-in"
-            className="btn-ghost"
-            style={{ padding: '8px 14px' } as React.CSSProperties}
-          >
-            התחברות
-          </Link>
-
-          {/* Subscribe CTA */}
-          <Link
-            href="/pricing"
-            className="btn-gold max-[900px]:px-5 max-[900px]:py-[9px]"
-          >
-            לרכישת מנוי
-          </Link>
+          {CLERK_ENABLED ? <AuthControls /> : <GuestControls />}
         </div>
       </div>
     </nav>
