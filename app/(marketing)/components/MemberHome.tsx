@@ -53,8 +53,9 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
       {/* The brand moment belongs to the first screen of a visit, whichever
           screen that turns out to be. A member who goes straight here never
           passes the landing page, and would otherwise never see it.
-          SplashIntro is session-once, so landing → member → dashboard still
-          plays it exactly once. */}
+          Behind the login the scope is the Clerk session id, so it plays once
+          per sign-in — member → dashboard is one visit, but signing out and
+          back in is a new one. */}
       <SplashIntro scope={splashScope} />
       <div className="lp-member">
         <div className="wrap">

@@ -21,7 +21,18 @@ import { logger } from '../../logger';
 // rescue every single call to Gemini: the pipeline would "work" while never
 // once reaching Claude, and paying a wasted round-trip to find out.
 export const CLAUDE_MODEL      = 'claude-sonnet-5';
-export const CLAUDE_MAX_TOKENS = 500;
+
+// The working limit is the prompt's own "hard cap: 500 tokens, aim for
+// 300-400". This ceiling is a safety net above it, not the same number.
+//
+// It used to be 500 — the prompt's cap and the API's cap set to the identical
+// value, which means the model is aimed squarely at the wall. Sonnet 5 counts
+// Hebrew heavier than the tokenizer the 300-400 target was tuned against, so a
+// four-paragraph note that reads as normal length can cross 500 and come back
+// cut mid-word. Headroom costs nothing (we are billed per token produced, not
+// per token allowed) and it turns a truncated insight into a rare event rather
+// than a boundary case. The trim below covers what is left.
+export const CLAUDE_MAX_TOKENS = 800;
 
 // 15s was too tight. The first live call took 28.8s wall-clock for a 384-token
 // Hebrew answer — one attempt timed out and the SDK silently retried, so we
@@ -112,10 +123,31 @@ export async function callClaudeInsight(
 
     // Content is an array of blocks; concatenate every text block. Non-text
     // blocks (unlikely for a plain response) are skipped.
-    const text = res.content
+    const raw = res.content
       .filter(b => b.type === 'text')
       .map(b => (b as { text: string }).text)
       .join('');
+
+    // Never persist a sentence that stops mid-word. The Gemini path has always
+    // done this; Claude's did not, so on the one run where the answer crossed
+    // the ceiling the trader got a note that ends in the middle of a Hebrew
+    // word and reads as broken software. A missing insight is recoverable — the
+    // orchestrator falls back or the row simply isn't written — a broken-looking
+    // one is not. Cut back to the last completed sentence, and refuse outright
+    // if nothing usable survives the cut.
+    let text = raw;
+    if (res.stop_reason === 'max_tokens') {
+      const cut = Math.max(raw.lastIndexOf('.'), raw.lastIndexOf('!'), raw.lastIndexOf('?'));
+      text = cut > 0 ? raw.slice(0, cut + 1) : '';
+      logger.warn('claude hit max_tokens', { rawLength: raw.length, keptLength: text.length });
+      if (text.trim().length < 80) {
+        return {
+          ok: false, errorKind: 'other',
+          message: `claude truncated at max_tokens with nothing usable (${raw.length} chars)`,
+          latencyMs: Date.now() - started,
+        };
+      }
+    }
 
     const tokensIn  = res.usage.input_tokens;
     const tokensOut = res.usage.output_tokens;

@@ -31,6 +31,57 @@ async function tryGenerate(caller: string, prompt: string, clerkId?: string | nu
   }
 }
 
+/** The JSON shape both batch-phrasing prompts ask for, and the parser that
+ *  turns it back into one string per input item, in the caller's order.
+ *
+ *  WHY AN INDEX AND NOT JUST AN ARRAY
+ *
+ *  The caller pairs each returned string with a computed item — a pattern, a
+ *  confirmed strength — and the UI then prints that item's real subject label,
+ *  sample size and confidence next to the model's sentence. Pairing by array
+ *  position means a single dropped or reordered element prints one pattern's
+ *  sentence under another pattern's header, carrying a sample size that was
+ *  never behind it. That is not a vaguer insight, it is a false one, and no
+ *  later layer can tell. Asking the model to echo which item it is describing
+ *  makes the pairing its own claim; unmatched items come back empty and the
+ *  caller drops them.
+ *
+ *  A model that ignores the shape and returns a bare array of strings still
+ *  works positionally — that is the old behaviour, kept as the floor rather
+ *  than the contract. */
+const INDEXED_ARRAY_SPEC = (count: number) =>
+  `Produce exactly one JSON array of ${count} object(s), one per numbered item above, each carrying the "i" of the item it describes:
+[{"i": <item number>, "text": "<the sentence for that item>"}, ...]`;
+
+function parseIndexedTexts(raw: string, count: number): string[] | null {
+  let parsed: unknown = null;
+  try {
+    const match = raw.match(/\[[\s\S]*\]/);
+    parsed = match ? JSON.parse(match[0]) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+
+  const out = Array<string>(count).fill('');
+  let matched = 0;
+  parsed.forEach((item, pos) => {
+    if (typeof item === 'string') {
+      // Bare-array fallback: position is all we have.
+      if (pos < count && !out[pos]) { out[pos] = item; matched += 1; }
+      return;
+    }
+    const o = item as { i?: unknown; text?: unknown };
+    const n = typeof o?.i === 'number' ? o.i : Number(o?.i);
+    const text = typeof o?.text === 'string' ? o.text : '';
+    if (Number.isInteger(n) && n >= 1 && n <= count && text && !out[n - 1]) {
+      out[n - 1] = text;
+      matched += 1;
+    }
+  });
+  return matched > 0 ? out : null;
+}
+
 function fmtMetric(label: string, g: GroupPerformance): string {
   return `${label}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}%, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, PnL $${g.totalPnl.toFixed(0)}`;
 }
@@ -121,8 +172,8 @@ ${langInstruction}
 ITEMS (already computed — cite only these numbers, keep the same order):
 ${list}
 
-Produce exactly one JSON array of ${items.length} string(s), one per item above, in order, each 1-2 sentences:
-["<insight for item 1>", "<insight for item 2>", ...]
+${INDEXED_ARRAY_SPEC(items.length)}
+Each "text" is 1-2 sentences.
 
 Rules:
 - Every number must come directly from the data above. Never invent, round dramatically, or estimate.
@@ -133,18 +184,12 @@ Rules:
   const raw = await tryGenerate('generateInsightsPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
-  let parsed: unknown[] = [];
-  try {
-    const match = raw.match(/\[[\s\S]*\]/);
-    parsed = match ? JSON.parse(match[0]) : [];
-  } catch {
-    parsed = [];
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
+  const texts = parseIndexedTexts(raw, items.length);
+  if (!texts) {
     logger.warn('generateInsightsPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
     return null;
   }
-  return parsed.map(p => (typeof p === 'string' ? p : ''));
+  return texts;
 }
 
 export interface StrengthPhrasingItem {
@@ -181,8 +226,8 @@ Write in natural, conversational language with no unnecessary jargon. Do NOT mix
 STRENGTHS (already computed — cite only these numbers, keep the same order):
 ${list}
 
-Produce exactly one JSON array of ${items.length} string(s), one per strength above, in order, each ONE short sentence (max ~25 words):
-["<explanation for strength 1>", ...]
+${INDEXED_ARRAY_SPEC(items.length)}
+Each "text" is ONE short sentence (max ~25 words).
 
 Rules:
 - Every number must come directly from the data above. Never invent, round dramatically, or estimate.
@@ -195,18 +240,12 @@ Rules:
   const raw = await tryGenerate('generateWorkingStrengthsPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
-  let parsed: unknown[] = [];
-  try {
-    const match = raw.match(/\[[\s\S]*\]/);
-    parsed = match ? JSON.parse(match[0]) : [];
-  } catch {
-    parsed = [];
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
+  const texts = parseIndexedTexts(raw, items.length);
+  if (!texts) {
     logger.warn('generateWorkingStrengthsPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
     return null;
   }
-  return parsed.map(p => (typeof p === 'string' ? p : ''));
+  return texts;
 }
 
 export interface PatternPhrasing {

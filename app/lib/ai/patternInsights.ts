@@ -63,13 +63,14 @@ ${langInstruction}
 Below are pre-ranked statistical patterns already discovered in this trader's data (already computed — cite only these numbers, never recompute or invent new ones):
 ${list}
 
-For EACH pattern above, produce one JSON object, in the same order:
+For EACH pattern above, produce one JSON object:
 {
+  "i": <the number of the pattern above this object describes>,
   "title": "<one sentence naming the pattern, citing its specific numbers>",
   "evidence": "<one sentence starting with 'Based on' citing the exact sample size and stats used>"
 }
 
-Return a JSON array of exactly ${candidates.length} objects.
+Return a JSON array of exactly ${candidates.length} objects, each carrying the "i" of the pattern it describes.
 
 Rules:
 - Every number must come directly from the data given above. Never invent, round dramatically, or estimate.
@@ -78,21 +79,43 @@ Rules:
 - JSON only, no extra text.`;
 
   const raw = await generateInsightText(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'pattern_insights' });
-  let parsed: Array<{ title?: string; evidence?: string }> = [];
+  let parsed: Array<{ i?: unknown; title?: string; evidence?: string }> = [];
   try {
     const match = raw.match(/\[[\s\S]*\]/);
     parsed = match ? JSON.parse(match[0]) : [];
   } catch {
     parsed = [];
   }
+  if (!Array.isArray(parsed)) parsed = [];
+
+  // Match on the echoed "i", not on array position.
+  //
+  // Everything the trader reads as fact here — the subject label, the
+  // confidence tier, the sample size — is computed; only the sentence is the
+  // model's. Pairing the two by position means one dropped or reordered object
+  // silently prints MNQ's sentence under the ES header, with a real sample size
+  // attached to it. That is not a worse insight, it is a false one, and nothing
+  // downstream could detect it. An echoed index is cheap and makes the pairing
+  // the model's own claim rather than our assumption; anything that doesn't
+  // match a pattern we actually sent is dropped.
+  const byIndex = new Map<number, { title?: string; evidence?: string }>();
+  for (const item of parsed) {
+    const n = typeof item?.i === 'number' ? item.i : Number(item?.i);
+    if (Number.isInteger(n) && n >= 1 && n <= candidates.length && !byIndex.has(n)) {
+      byIndex.set(n, item);
+    }
+  }
 
   return candidates
-    .map((c, i) => ({
-      subject: subjectLabel(c),
-      title: parsed[i]?.title ?? '',
-      evidence: parsed[i]?.evidence ?? '',
-      confidenceLevel: c.confidence.level,
-      sampleSize: c.confidence.sampleSize,
-    }))
+    .map((c, i) => {
+      const phrased = byIndex.get(i + 1);
+      return {
+        subject: subjectLabel(c),
+        title: phrased?.title ?? '',
+        evidence: phrased?.evidence ?? '',
+        confidenceLevel: c.confidence.level,
+        sampleSize: c.confidence.sampleSize,
+      };
+    })
     .filter(p => p.title && p.evidence);
 }
