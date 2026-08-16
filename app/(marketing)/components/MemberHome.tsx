@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
+import SplashIntro from '../../components/SplashIntro';
 import './landing.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ export default function MemberHome({ role }: { role: string }) {
 
   return (
     <div className="lp">
+      {/* The brand moment belongs to the first screen of a visit, whichever
+          screen that turns out to be. A member who goes straight here never
+          passes the landing page, and would otherwise never see it.
+          SplashIntro is session-once, so landing → member → dashboard still
+          plays it exactly once. */}
+      <SplashIntro />
       <div className="lp-member">
         <div className="wrap">
           <div className="lp-member-card lp-in">

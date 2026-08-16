@@ -1,4 +1,5 @@
 import Sidebar from '../components/Sidebar';
+import SplashIntro from '../components/SplashIntro';
 import MobileNav from '../components/MobileNav';
 import MobileHeader from '../components/MobileHeader';
 import PageTransition from '../components/PageTransition';
@@ -14,6 +15,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const role = await getUserRole();
   return (
     <PlanProvider role={role}>
+      {/* Same overlay, same session key: whichever screen the visit starts
+          on shows it, and only that one. Someone deep-linking straight to
+          the dashboard gets the opening; someone who arrived through the
+          landing page does not get it twice. */}
+      <SplashIntro />
       <div className="onyx-layout h-screen flex overflow-hidden bg-black text-[#c0c0c0]">
         <Sidebar />
         {/* Spacer pushes content below the fixed mobile header */}
