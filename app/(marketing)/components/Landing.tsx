@@ -86,11 +86,18 @@ function HeroMock() {
 
 // ── copy ────────────────────────────────────────────────────────────────────
 
-const QUOTES = [
-  'היה לי חודש טוב. אין לי מושג אם זה אני או שהשוק היה נדיב.',
-  'אני יודע שיש לי טעות שחוזרת. אני לא יודע כמה היא עולה לי בשנה.',
-  'פתחתי אקסל. מילאתי שבועיים. לא חזרתי אליו מאז.',
-  'שיניתי משהו בגישה. אין לי שום דרך לדעת אם זה עזר.',
+/** Questions, not testimonials.
+ *
+ *  This strip's job is recognition — the reader seeing their own situation
+ *  before anything is claimed. A quote does that by putting words in someone's
+ *  mouth, and there is no one to attribute them to. A question does it better
+ *  anyway: the reader answers it themselves, and an answer they produced is
+ *  worth more than a stranger's sentence they were asked to believe. */
+const ASK_STRIP = [
+  'היה לך חודש טוב — אתה יודע להגיד למה?',
+  'יש לך טעות שחוזרת — אתה יודע כמה היא עולה לך בשנה?',
+  'פתחת פעם אקסל למעקב — חזרת אליו?',
+  'שינית משהו בגישה — יש לך דרך לדעת אם זה עזר?',
 ];
 
 const COSTS = [
@@ -201,7 +208,7 @@ const FAQ = [
   },
   {
     q: 'למה לשלם על עוד מנוי?',
-    a: 'היומן עצמו חינם, לתמיד, בלי כרטיס אשראי. משלמים רק על שכבת הניתוח. PRO עולה 99 ₪ בחודש — פחות ממה שעולה עסקה גרועה אחת בחוזה NQ. אם המערכת תמנע ממך עסקה כזאת אחת בחודש, היא החזירה את עצמה.',
+    a: 'היומן עצמו חינם, לתמיד. משלמים רק על שכבת הניתוח. PRO עולה 99 ₪ בחודש — פחות ממה שעולה עסקה גרועה אחת בחוזה NQ. אם המערכת תמנע ממך עסקה כזאת אחת בחודש, היא החזירה את עצמה.',
   },
   {
     q: 'מה אם לא אתעד כל עסקה?',
@@ -244,10 +251,12 @@ export default function Landing() {
                 <Link href="/sign-up" className="btn-lg-gold">התחל בחינם</Link>
                 <a href="#how" className="btn-lg-ghost">איך זה עובד</a>
               </div>
+              {/* Three facts that are true of the product as built. Nothing
+                  about billing — that is a promise this page cannot keep. */}
               <p className="lp-chips">
-                <span>ללא כרטיס אשראי</span>
-                <span>שתי דקות לעסקה</span>
-                <span>עברית מלאה</span>
+                <span>תיעוד בשתי דקות</span>
+                <span>11 חתכי ניתוח</span>
+                <span>ES ו-NQ</span>
               </p>
             </div>
 
@@ -258,9 +267,9 @@ export default function Landing() {
 
       {/* ── recognition ────────────────────────────────────── */}
       <div className="lp-quotes">
-        {QUOTES.map((q, i) => (
+        {ASK_STRIP.map((q, i) => (
           <Reveal className="lp-quote" key={q} delay={i * 80}>
-            <i>”</i>
+            <i>?</i>
             <p>{q}</p>
           </Reveal>
         ))}
@@ -339,7 +348,7 @@ export default function Landing() {
             kicker="איך זה עובד"
             title={<>שלושה שלבים. רק אחד מהם שלך.</>}
           />
-          <div className="lp-steps">
+          <div className="lp-steps" style={{ ['--lp-step-count' as string]: STEPS.length }}>
             {STEPS.map((s, i) => (
               <Reveal className="lp-step" key={s.n} delay={i * 100}>
                 <b>{s.n}</b>
@@ -501,7 +510,7 @@ export default function Landing() {
               העסקה הבאה שלך יכולה להיות הראשונה שנספרת.
             </h2>
             <p className="lp-lead" style={{ marginInline: 'auto' }}>
-              פתיחת חשבון בחינם, בלי כרטיס אשראי. תעד עסקה אחת וראה מה המערכת כבר יודעת לומר עליה.
+              פתח חשבון, תעד עסקה אחת, וראה מה המערכת כבר יודעת לומר עליה.
             </p>
             <div className="lp-cta" style={{ justifyContent: 'center' }}>
               <Link href="/sign-up" className="btn-lg-gold">פתיחת חשבון חינם</Link>

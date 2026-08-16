@@ -62,11 +62,15 @@
 
 /* ── sales furniture ────────────────────────────────────────────── */
 
-/* "Sounds familiar?" — the quotes a trader recognises as their own. */
+/* "Sounds familiar?" — questions the reader answers for themselves. */
 .lp-quotes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--lp-line); border-block: 1px solid var(--lp-line); }
-.lp-quote { background: #0a0a0b; padding: 30px 24px; display: flex; flex-direction: column; gap: 12px; }
-.lp-quote i { font-style: normal; font-family: var(--serif); font-size: 30px; line-height: 0.6; color: var(--lp-gold-34); }
-.lp-quote p { margin: 0; font-size: 0.95rem; line-height: 1.7; color: rgba(255, 255, 255, 0.72); }
+.lp-quote { background: #0a0a0b; padding: 30px 24px; display: flex; flex-direction: column; gap: 14px; transition: background 320ms var(--lp-ease); }
+.lp-quote:hover { background: #0e0e11; }
+.lp-quote i {
+  font-style: normal; font-family: var(--serif); font-size: 30px; line-height: 1;
+  color: var(--lp-gold); opacity: 0.55;
+}
+.lp-quote p { margin: 0; font-size: 0.95rem; line-height: 1.75; color: rgba(255, 255, 255, 0.78); }
 
 /* The three questions — the page's spine, set large and quiet. */
 .lp-asks { display: flex; flex-direction: column; margin-top: 44px; border-top: 1px solid var(--lp-line); }
@@ -302,7 +306,14 @@
 .lp-msg em { font-style: normal; color: var(--lp-gold); font-weight: 700; }
 
 /* ── steps ──────────────────────────────────────────────────────── */
-.lp-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--lp-line); margin-top: 46px; border: 1px solid var(--lp-line); border-radius: 13px; overflow: hidden; }
+/* Column count is driven by the number of steps, not hardcoded — a stale `4`
+   here left a fourth empty cell after the steps went from four to three, and
+   an empty cell reads as a step nobody wrote. */
+.lp-steps {
+  display: grid; grid-template-columns: repeat(var(--lp-step-count, 3), minmax(0, 1fr));
+  gap: 1px; background: var(--lp-line); margin-top: 46px;
+  border: 1px solid var(--lp-line); border-radius: 13px; overflow: hidden;
+}
 .lp-step { background: #0b0b0d; padding: 26px 22px; }
 .lp-step b {
   display: block; font-family: var(--font-geist-mono, monospace); font-size: 10px; font-weight: 700;
