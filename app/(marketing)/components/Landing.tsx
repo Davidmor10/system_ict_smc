@@ -201,7 +201,7 @@ const PLANS = [
     who: 'לסוחר שרוצה לדעת מה באמת עובד לו — ולא לנחש.',
     cta: 'לבחור ב־PRO',
     inherits: 'STARTER',
-    feat: ['אנליטיקת AI — 11 חתכים על העסקאות', 'זיכרון דפוסים שנבנה עליך שבוע אחר שבוע', 'סימולטור תרחישים על עסקאות אמת', 'דוח שבועי אישי עם ארכיון מלא'],
+    feat: ['אנליטיקת AI: אחת עשרה זוויות על אותן עסקאות', 'זיכרון דפוסים שנבנה עליך שבוע אחר שבוע', 'סימולטור תרחישים על עסקאות אמת', 'דוח שבועי אישי עם ארכיון מלא'],
   },
   {
     n: 'DELUXE',
@@ -493,11 +493,6 @@ export default function Landing() {
                   <div className="lp-plan-price">
                     <b className="lp-n">{p.p}</b>
                     <span>₪ לחודש</span>
-                  </div>
-                  {/* The same price in the unit a person weighs against a
-                      coffee rather than against a salary. */}
-                  <div className="lp-plan-day">
-                    ≈ <span className="lp-n">{(p.p / 30).toFixed(1)}</span> ₪ ליום
                   </div>
 
                   <div className="lp-plan-cta">

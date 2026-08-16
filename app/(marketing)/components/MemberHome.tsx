@@ -16,7 +16,7 @@ import './landing.css';
 const D = '◈';
 
 const PLAN_LABEL: Record<string, string> = {
-  free: 'FREE', starter: 'STARTER', pro: 'PRO', deluxe: 'DELUXE',
+  starter: 'STARTER', pro: 'PRO', deluxe: 'DELUXE',
 };
 
 /** Only the destinations this plan can actually open. A tile that bounces the
@@ -66,7 +66,9 @@ export default function MemberHome({ role }: { role: string }) {
                 </div>
                 {email && <div className="lp-member-mail">{email}</div>}
               </div>
-              <span className="lp-badge">{D} {PLAN_LABEL[role] ?? 'FREE'}</span>
+              <span className="lp-badge" data-plan={member ? 'on' : 'off'}>
+                {D} {member ? PLAN_LABEL[role] : 'אין מנוי פעיל'}
+              </span>
             </div>
 
             <div className="lp-member-mid">

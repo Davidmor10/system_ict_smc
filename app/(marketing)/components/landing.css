@@ -390,10 +390,6 @@
 }
 .lp-plan[data-featured="true"] .lp-plan-price b { color: var(--lp-gold); text-shadow: 0 0 30px rgba(212, 175, 55, 0.4); }
 .lp-plan-price span { font-size: 12px; font-weight: 700; color: var(--lp-ink-3); }
-/* The per-day figure is the same price said in the unit a person can weigh
-   against a coffee rather than against a salary. */
-.lp-plan-day { margin-top: 8px; font-size: 11px; color: var(--lp-ink-4); }
-
 .lp-plan-cta { margin-top: 20px; }
 .lp-plan-cta a {
   display: block; text-align: center; padding: 13px 18px; border-radius: 8px;
