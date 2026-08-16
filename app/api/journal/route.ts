@@ -6,6 +6,7 @@ import { logSecurityEvent } from '../../lib/securityLog';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logger } from '../../lib/logger';
 import { mirrorTrades } from '../../lib/coach-pipeline/mirror/journalToIntelligence';
+import { requirePlanApi } from '../../lib/withRoleCheck';
 
 // Returns null (and never throws) on a malformed body — lets callers turn it
 // into a clean 400 instead of an unhandled exception bubbling out of the route.
@@ -135,6 +136,12 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
 
 /** GET /api/journal — returns all trades (active + trash) for the current user. */
 export async function GET() {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/journal');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal GET' });
@@ -165,6 +172,12 @@ export async function GET() {
 
 /** POST /api/journal — upsert a single trade. Body: TradeEntry (JSON). */
 export async function POST(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/journal');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal POST' });
@@ -213,6 +226,12 @@ export async function POST(req: Request) {
 
 /** PUT /api/journal — bulk upsert (used for initial localStorage → cloud migration). */
 export async function PUT(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/journal');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal PUT' });

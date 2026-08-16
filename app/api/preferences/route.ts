@@ -5,6 +5,7 @@ import { userPrefsPatchSchema } from '../../lib/validation';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logger } from '../../lib/logger';
+import { requirePlanApi } from '../../lib/withRoleCheck';
 
 export type UserPrefs = {
   chart_tf_es: string;
@@ -16,6 +17,12 @@ export type UserPrefs = {
 
 /** GET /api/preferences — returns stored preferences for the current user. */
 export async function GET() {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/preferences');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/preferences GET' });
@@ -46,6 +53,12 @@ export async function GET() {
 
 /** PUT /api/preferences — upserts a partial preferences patch for the current user. */
 export async function PUT(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/preferences');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/preferences PUT' });

@@ -33,16 +33,16 @@ function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r=
 // smaller label. Statistics sits under Notebook because it is a view of the
 // same record rather than a section of its own.
 const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolean }[] = [
-  { href: '/dashboard',              key: 'nav_workspace',    min: 'free',   Icon: IconGrid     },
-  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'free',   Icon: IconBook     },
-  { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'free',   Icon: IconNotebook },
+  { href: '/dashboard',              key: 'nav_workspace',    min: 'starter',   Icon: IconGrid     },
+  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter',   Icon: IconBook     },
+  { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter',   Icon: IconNotebook },
   { href: '/dashboard/stats',        key: 'nav_stats',        min: 'deluxe', Icon: IconChart, child: true },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconSparkles },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
-  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'free',   Icon: IconPlaybook },
-  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'free',   Icon: IconRules    },
-  { href: '/dashboard/reports',      key: 'nav_reports',      min: 'free',   Icon: IconReports  },
-  { href: '/dashboard/settings',     key: 'nav_settings',     min: 'free',   Icon: IconSettings },
+  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter',   Icon: IconPlaybook },
+  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'starter',   Icon: IconRules    },
+  { href: '/dashboard/reports',      key: 'nav_reports',      min: 'starter',   Icon: IconReports  },
+  { href: '/dashboard/settings',     key: 'nav_settings',     min: 'starter',   Icon: IconSettings },
 ];
 
 function LockIcon() {

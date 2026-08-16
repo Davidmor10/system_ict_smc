@@ -7,6 +7,7 @@ import { logSecurityEvent } from '../../lib/securityLog';
 import { logger } from '../../lib/logger';
 import { syncNotebook, type SyncNotebookResult } from '../../lib/coach-pipeline/pipelines/syncNotebook';
 import type { ClientNotebookEntry } from '../../lib/coach-pipeline/mirror/notebookToIntelligence';
+import { requirePlanApi } from '../../lib/withRoleCheck';
 
 // Must match ENTRIES_KIND in app/lib/notebook/store.ts. Not imported from
 // there: that module is client-side and pulls in the whole notebook store.
@@ -31,6 +32,12 @@ const MAX_BYTES = 1_500_000; // ~1.5 MB per collection
 /** GET /api/collections            → { collections: { [kind]: data } } (all for the user)
     GET /api/collections?kind=setups → { collections: { setups: data } } */
 export async function GET(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/collections');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/collections GET' });
@@ -68,6 +75,12 @@ export async function GET(req: Request) {
 
 /** PUT /api/collections — full-replace one collection. Body: { kind, data }. */
 export async function PUT(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/collections');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/collections PUT' });

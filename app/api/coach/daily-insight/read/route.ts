@@ -13,10 +13,17 @@ import { markInsightRead } from '../../../../lib/coach-pipeline/db/insights';
 import { checkRateLimit } from '../../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../../lib/securityLog';
 import { logger } from '../../../../lib/logger';
+import { requirePlanApi } from '../../../../lib/withRoleCheck';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/coach/daily-insight/read');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/coach/daily-insight/read POST' });

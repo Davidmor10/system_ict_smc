@@ -24,6 +24,7 @@ import { buildWeeklyReview } from '../../../lib/coach-pipeline/behavior/weekly';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -31,6 +32,12 @@ export const maxDuration = 30;
 const WINDOW_DAYS = 7;
 
 export async function GET() {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/coach/weekly-review');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/coach/weekly-review GET' });

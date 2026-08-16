@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { assertOwner } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
 import { logger } from '../../../lib/logger';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 const ROUTE = '/api/coach/usage-summary';
 
@@ -62,6 +63,12 @@ function bucketMap(rows: RollupRow[], bucket: RollupRow['bucket'], limit?: numbe
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000;
 
 export async function GET() {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/coach/usage-summary');
+  if (denied) return denied;
+
   const gate = await assertOwner(ROUTE);
   if (gate instanceof NextResponse) return gate;
 

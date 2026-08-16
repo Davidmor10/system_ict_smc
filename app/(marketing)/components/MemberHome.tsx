@@ -22,13 +22,18 @@ const PLAN_LABEL: Record<string, string> = {
 /** Only the destinations this plan can actually open. A tile that bounces the
  *  trader to /checkout is an advert wearing a shortcut's clothes. */
 const LINKS: Array<{ href: string; t: string; b: string; min: string }> = [
-  { href: '/dashboard',              t: 'דשבורד',        b: 'התובנה של היום והלוח החודשי', min: 'free' },
-  { href: '/dashboard/journal',      t: 'יומן',           b: 'לתעד עסקה חדשה',              min: 'free' },
+  { href: '/dashboard',              t: 'דשבורד',        b: 'התובנה של היום והלוח החודשי', min: 'starter' },
+  { href: '/dashboard/journal',      t: 'יומן',           b: 'לתעד עסקה חדשה',              min: 'starter' },
   { href: '/dashboard/stats',        t: 'סטטיסטיקה',      b: 'עקומת ההון והמספרים שלך',     min: 'deluxe' },
   { href: '/dashboard/ai-analytics', t: 'אנליטיקת AI',    b: 'דפוסים ודוח שבועי',           min: 'pro' },
   { href: '/dashboard/coach',        t: 'Onyx Trainer',   b: 'לשאול על המסחר שלך',          min: 'deluxe' },
-  { href: '/dashboard/playbook',     t: 'סטאפים',         b: 'ספר הסטאפים והחוקים',         min: 'free' },
+  { href: '/dashboard/playbook',     t: 'סטאפים',         b: 'ספר הסטאפים והחוקים',         min: 'starter' },
 ];
+
+/** No subscription. Every plan is paid, so `free` means "signed in, not a
+ *  member yet" — and this page must say that plainly instead of offering a way
+ *  in that the dashboard gate will bounce them straight back out of. */
+const NO_PLAN = 'free';
 
 const RANK: Record<string, number> = { free: 0, starter: 1, pro: 2, deluxe: 3 };
 
@@ -39,6 +44,7 @@ export default function MemberHome({ role }: { role: string }) {
   const name = user?.firstName || user?.username || '';
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const initial = (name || email || '?').trim().charAt(0).toUpperCase();
+  const member = role !== NO_PLAN;
   const open = LINKS.filter(l => RANK[role] >= RANK[l.min]);
 
   return (
@@ -64,37 +70,53 @@ export default function MemberHome({ role }: { role: string }) {
             </div>
 
             <div className="lp-member-mid">
-              <span className="lp-kicker">{D} אתה מחובר</span>
+              <span className="lp-kicker">{D} {member ? 'אתה מחובר' : 'החשבון שלך מוכן'}</span>
               <h2 className="lp-h2" style={{ fontSize: 'clamp(1.4rem, 2.6vw, 1.9rem)' }}>
-                המערכת מחכה לך.
+                {member ? 'המערכת מחכה לך.' : 'נשאר לבחור מסלול.'}
               </h2>
               <p className="lp-lead" style={{ fontSize: '0.96rem' }}>
-                כל מה שתיעדת שמור. תיכנס להמשיך מאיפה שעצרת, או קפוץ ישר למקום שאתה צריך.
+                {member
+                  ? 'כל מה שתיעדת שמור. תיכנס להמשיך מאיפה שעצרת, או קפוץ ישר למקום שאתה צריך.'
+                  : 'ההרשמה הושלמה, אבל עדיין אין מנוי פעיל על החשבון. בחר מסלול והמערכת נפתחת מיד.'}
               </p>
 
               <div className="lp-cta" style={{ marginTop: 26 }}>
-                <Link href="/dashboard" className="btn-lg-gold">כניסה למערכת</Link>
-                <Link href="/dashboard/journal" className="btn-lg-ghost">לתעד עסקה</Link>
+                {member ? (
+                  <>
+                    <Link href="/dashboard" className="btn-lg-gold">כניסה למערכת</Link>
+                    <Link href="/dashboard/journal" className="btn-lg-ghost">לתעד עסקה</Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/pricing" className="btn-lg-gold">בחירת מסלול</Link>
+                    <Link href="/checkout" className="btn-lg-ghost">להשלמת התשלום</Link>
+                  </>
+                )}
               </div>
 
-              <div className="lp-member-links">
-                {open.map(l => (
-                  <Link className="lp-link" key={l.href} href={l.href}>
-                    <i>{D}</i>
-                    <b>{l.t}</b>
-                    <span>{l.b}</span>
-                  </Link>
-                ))}
-              </div>
+              {member && (
+                <div className="lp-member-links">
+                  {open.map(l => (
+                    <Link className="lp-link" key={l.href} href={l.href}>
+                      <i>{D}</i>
+                      <b>{l.t}</b>
+                      <span>{l.b}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="lp-member-foot">
-              <Link
-                href="/dashboard/settings"
-                style={{ fontSize: 13, color: 'var(--lp-ink-3)' }}
-              >
-                הגדרות חשבון
-              </Link>
+              {member ? (
+                <Link href="/dashboard/settings" style={{ fontSize: 13, color: 'var(--lp-ink-3)' }}>
+                  הגדרות חשבון
+                </Link>
+              ) : (
+                <span style={{ fontSize: 13, color: 'var(--lp-ink-4)' }}>
+                  שאלות? צור קשר לפני שאתה בוחר.
+                </span>
+              )}
               <button
                 type="button"
                 className="lp-signout"

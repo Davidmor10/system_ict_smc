@@ -5,12 +5,18 @@ import { logSecurityEvent } from '../../../lib/securityLog';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logger } from '../../../lib/logger';
 import { mirrorTradeDeleted } from '../../../lib/coach-pipeline/mirror/journalToIntelligence';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 /** DELETE /api/journal/[id] — soft-delete (sets deleted_at). */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/journal/[id]');
+  if (denied) return denied;
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal/[id] DELETE' });
@@ -55,6 +61,11 @@ export async function PATCH(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/journal/[id]');
+  if (denied) return denied;
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal/[id] PATCH' });

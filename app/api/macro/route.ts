@@ -5,6 +5,7 @@ import { getMacroEvents, israelToday } from '../../lib/ai/macroCalendar';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { logger } from '../../lib/logger';
+import { requirePlanApi } from '../../lib/withRoleCheck';
 
 /** GET /api/macro — real macro events in Israel time, for the dashboard
     briefing. Same cached feed the coach reads; never invents an event ([] when
@@ -12,6 +13,12 @@ import { logger } from '../../lib/logger';
     the rest of the current week (the feed itself is already a weekly pull, so
     this is just a wider filter on the same cached data). */
 export async function GET(req: NextRequest) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/macro');
+  if (denied) return denied;
+
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/macro GET' });

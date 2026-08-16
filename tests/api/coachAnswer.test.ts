@@ -12,6 +12,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let currentUserId: string | null = 'user_1';
 
+// Every route now sits behind a paid-plan gate. These suites are about
+// isolation and scope, not billing, so the caller is a subscriber here and the
+// gate itself is covered by tests/api/planGate.test.ts.
+vi.mock('../../app/lib/getUserRole', () => ({
+  getUserRole: vi.fn(async () => 'deluxe'),
+  ROLE_RANK: { free: 0, starter: 1, pro: 2, deluxe: 3 },
+}));
+
 vi.mock('@clerk/nextjs/server', () => ({
   auth: vi.fn(async () => ({ userId: currentUserId })),
 }));

@@ -46,6 +46,7 @@ import { ROLLING_WINDOW } from '../../../lib/coach-pipeline/behavior/finding';
 import type { BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import type { TradeRow } from '../../../lib/coach-pipeline/types';
 import { logger } from '../../../lib/logger';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 const ROUTE = '/api/coach/behavior-preview';
 
@@ -115,6 +116,12 @@ function authorize(req: NextRequest): { userId: string } | NextResponse | 'sessi
 }
 
 export async function GET(req: NextRequest) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/coach/behavior-preview');
+  if (denied) return denied;
+
   const viaKey = authorize(req);
   let userId: string;
   if (viaKey === 'session') {

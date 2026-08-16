@@ -44,6 +44,7 @@ import { normalizeRole } from '../../../lib/getUserRole';
 import { listTradesForDate } from '../../../lib/coach-pipeline/db/trades';
 import { getUserProfile } from '../../../lib/coach-pipeline/db/profile';
 import { logger } from '../../../lib/logger';
+import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 const ROUTE = '/api/coach/run-now';
 
@@ -134,6 +135,12 @@ function authorizeByKey(req: NextRequest): KeyAuth {
 }
 
 export async function GET(req: NextRequest) {
+  // Every plan is paid. A signed-in account without a subscription is
+  // refused here as well as in the UI, so the route cannot be called
+  // directly to work around the gate.
+  const denied = await requirePlanApi('starter', '/api/coach/run-now');
+  if (denied) return denied;
+
   // GET is deliberate here — the whole point is that you can hit this from a
   // browser address bar to see whether the pipeline works. It's owner-gated,
   // and the worst a cross-site trigger can do is generate one insight the
