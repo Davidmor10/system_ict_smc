@@ -2,8 +2,14 @@ import type { TradeEntry } from '../journal';
 import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
-import { generateInsightText } from './client';
+import { generateInsightJson } from './client';
 import { HEBREW_MENTOR_STYLE } from './styleGuide';
+import { logger } from '../logger';
+
+function tryParse(json: string | undefined): unknown {
+  if (!json) return null;
+  try { return JSON.parse(json); } catch { return null; }
+}
 
 export interface PatternInsight {
   /** Short dimension label (e.g. "MNQ · ניו יורק AM") — computed, never AI-generated. */
@@ -63,14 +69,14 @@ ${langInstruction}
 Below are pre-ranked statistical patterns already discovered in this trader's data (already computed — cite only these numbers, never recompute or invent new ones):
 ${list}
 
-For EACH pattern above, produce one JSON object:
-{
-  "i": <the number of the pattern above this object describes>,
-  "title": "<one sentence naming the pattern, citing its specific numbers>",
-  "evidence": "<one sentence starting with 'Based on' citing the exact sample size and stats used>"
-}
-
-Return a JSON array of exactly ${candidates.length} objects, each carrying the "i" of the pattern it describes.
+Return exactly one JSON object with a single field "items", holding ${candidates.length} object(s) — one per pattern above, each carrying the "i" of the pattern it describes:
+{"items": [
+  {
+    "i": <the number of the pattern above this object describes>,
+    "title": "<one sentence naming the pattern, citing its specific numbers>",
+    "evidence": "<one sentence starting with 'Based on' citing the exact sample size and stats used>"
+  }
+]}
 
 Rules:
 - Every number must come directly from the data given above. Never invent, round dramatically, or estimate.
@@ -78,15 +84,24 @@ Rules:
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
 - JSON only, no extra text.`;
 
-  const raw = await generateInsightText(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'pattern_insights' });
-  let parsed: Array<{ i?: unknown; title?: string; evidence?: string }> = [];
+  let raw: string;
   try {
-    const match = raw.match(/\[[\s\S]*\]/);
-    parsed = match ? JSON.parse(match[0]) : [];
-  } catch {
-    parsed = [];
+    raw = await generateInsightJson(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'pattern_insights' });
+  } catch (err) {
+    logger.error('generatePatternInsights: AI generation failed', { error: err instanceof Error ? err.message : String(err) });
+    return [];
   }
-  if (!Array.isArray(parsed)) parsed = [];
+
+  // Wrapped object first (what the prompt asks for, and the only shape Groq's
+  // JSON mode will return), bare array second. Separate parses: a bare array of
+  // objects makes the object regex match something invalid, and a shared try
+  // would let that failure swallow the fallback.
+  const wrapped = tryParse(raw.match(/\{[\s\S]*\}/)?.[0]);
+  const items =
+    Array.isArray((wrapped as { items?: unknown })?.items)
+      ? (wrapped as { items: unknown[] }).items
+      : tryParse(raw.match(/\[[\s\S]*\]/)?.[0]);
+  const parsed = (Array.isArray(items) ? items : []) as Array<{ i?: unknown; title?: string; evidence?: string }>;
 
   // Match on the echoed "i", not on array position.
   //

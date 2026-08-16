@@ -115,9 +115,36 @@ describe('inventing a pattern out of nothing', () => {
 });
 
 describe('behaviours the model was not given', () => {
-  it('catches something from the watching list', () => {
-    const b: BehaviorBlock = { ...EMPTY, watching: ['size_spike'] };
-    expect(rules('שים לב גם ל-size_spike.', b)).toContain('unlisted_behavior');
+  // This used to look for the internal key inside a Hebrew note, so it could
+  // only ever fire on text that FIELD_NAMES already caught — the rule passed
+  // its own test while never once doing its job. What it is actually for is
+  // the model raising a watched behaviour in ordinary Hebrew prose.
+  const watching = (kind: string): BehaviorBlock => ({ ...EMPTY, watching: [kind] });
+
+  it('catches a watched behaviour raised in Hebrew', () => {
+    expect(rules('הגדלת את הפוזיציה בעסקה השלישית.', watching('size_spike')))
+      .toContain('unlisted_behavior');
+    expect(rules('יצאת לפני היעד בשלוש מתוך ארבע.', watching('discretionary_exit')))
+      .toContain('unlisted_behavior');
+    expect(rules('נכנסת בלי אישור מתועד.', watching('no_confirmation')))
+      .toContain('unlisted_behavior');
+    expect(rules('הרחקת את הסטופ אחרי הכניסה.', watching('stop_widened')))
+      .toContain('unlisted_behavior');
+  });
+
+  it('stays quiet when that behaviour is not on the watch list', () => {
+    expect(rules('הגדלת את הפוזיציה בעסקה השלישית.', EMPTY))
+      .not.toContain('unlisted_behavior');
+  });
+
+  it('does not fire on the bare noun', () => {
+    // The margin that makes this rule safe to enable: /חוקים/ belongs to any
+    // sentence about a trading plan, and firing on it would cost a retry and
+    // often a blander note than the one it rejected.
+    expect(rules('החוקים שהגדרת עבדו היום.', watching('rule_violation')))
+      .not.toContain('unlisted_behavior');
+    expect(rules('גודל הפוזיציה שלך היה יציב.', watching('size_spike')))
+      .not.toContain('unlisted_behavior');
   });
 });
 

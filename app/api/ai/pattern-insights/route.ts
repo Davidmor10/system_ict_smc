@@ -1,7 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePatternInsights } from '../../../lib/ai/patternInsights';
-import type { TradeEntry } from '../../../lib/journal';
+import { getRecentTrades } from '../../../lib/intelligence/repository';
+import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/supabase/server';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
@@ -32,13 +33,22 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const { trades, lang = 'he' } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const lang = body?.lang === 'en' ? 'en' : 'he';
 
-    if (!Array.isArray(trades)) {
-      return NextResponse.json({ insights: [] });
-    }
+    // Trades are read here, from this account's rows — the request body is
+    // ignored, exactly as the other five AI routes already do.
+    //
+    // It used to analyse whatever the browser posted. Nothing leaked (it is the
+    // trader's own journal either way), but every number in the answer was
+    // computed from a client-side copy rather than from the record itself, so a
+    // stale tab or a half-synced edit produced a confidently-stated pattern the
+    // database never supported. The pattern and its sample size have to come
+    // from the same place the journal page's own totals come from.
+    if (!isSupabaseConfigured()) return NextResponse.json({ insights: [] });
+    const trades = await getRecentTrades(createServerSupabaseClient(), userId);
 
-    const insights = await generatePatternInsights(trades as TradeEntry[], lang === 'en' ? 'en' : 'he', userId);
+    const insights = await generatePatternInsights(trades, lang, userId);
     return NextResponse.json({ insights });
   } catch (err) {
     console.error('[AI Pattern Insights]', err);

@@ -9,22 +9,27 @@
 import type { GroupPerformance } from '../analytics';
 import type { HypothesisStatus, PatternMemoryRow } from '../intelligence/types';
 import { fmtPF } from './factsBlock';
-import { generateInsightText } from './client';
+import { generateInsightJson } from './client';
 import { HEBREW_MENTOR_STYLE } from './styleGuide';
 import { logger } from '../logger';
 import type { AiCallMeta } from './client';
 
-/** Wraps generateInsightText so a total provider failure (e.g. missing/
+/** Wraps generateInsightJson so a total provider failure (e.g. missing/
     invalid API keys) is logged with which caller hit it and resolves to
     null, instead of throwing uncaught up into the API route as an
-    unexplained 500. */
+    unexplained 500.
+
+    Every prompt here asks the provider for JSON at the API level, not only in
+    words — so the shape is enforced before the text comes back rather than
+    hoped for and then dug out with a regex. Each one must therefore ask for an
+    OBJECT: Groq rejects a top-level array in this mode. */
 async function tryGenerate(caller: string, prompt: string, clerkId?: string | null): Promise<string | null> {
   try {
     // `caller` doubles as the purpose on the usage row — the same string that
     // identifies the failure in the log identifies the spend in the ledger.
     const meta: AiCallMeta | undefined =
       clerkId === undefined ? undefined : { clerkId, purpose: caller };
-    return await generateInsightText(prompt, meta);
+    return await generateInsightJson(prompt, meta);
   } catch (err) {
     logger.error('AI text generation failed', { caller, error: err instanceof Error ? err.message : String(err) });
     return null;
@@ -48,19 +53,32 @@ async function tryGenerate(caller: string, prompt: string, clerkId?: string | nu
  *
  *  A model that ignores the shape and returns a bare array of strings still
  *  works positionally — that is the old behaviour, kept as the floor rather
- *  than the contract. */
+ *  than the contract.
+ *
+ *  The list is wrapped in an object because these calls run in the provider's
+ *  JSON mode, and Groq rejects a top-level array there. The parser accepts the
+ *  bare array too, so a provider that answers with one is still understood. */
 const INDEXED_ARRAY_SPEC = (count: number) =>
-  `Produce exactly one JSON array of ${count} object(s), one per numbered item above, each carrying the "i" of the item it describes:
-[{"i": <item number>, "text": "<the sentence for that item>"}, ...]`;
+  `Produce exactly one JSON object with a single field "items", holding ${count} object(s) — one per numbered item above, each carrying the "i" of the item it describes:
+{"items": [{"i": <item number>, "text": "<the sentence for that item>"}, ...]}`;
+
+function tryParse(json: string | undefined): unknown {
+  if (!json) return null;
+  try { return JSON.parse(json); } catch { return null; }
+}
 
 function parseIndexedTexts(raw: string, count: number): string[] | null {
-  let parsed: unknown = null;
-  try {
-    const match = raw.match(/\[[\s\S]*\]/);
-    parsed = match ? JSON.parse(match[0]) : null;
-  } catch {
-    parsed = null;
-  }
+  // Two independent reads, each in its own try. A bare array of objects makes
+  // the object regex match from its first "{" to its last "}" and throw — so a
+  // single shared try would let the wrapped read's failure swallow the fallback
+  // that was about to succeed.
+  const wrapped = tryParse(raw.match(/\{[\s\S]*\}/)?.[0]);
+  const items =
+    Array.isArray((wrapped as { items?: unknown })?.items)
+      ? (wrapped as { items: unknown[] }).items
+      : tryParse(raw.match(/\[[\s\S]*\]/)?.[0]);
+
+  const parsed: unknown = items;
   if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
   const out = Array<string>(count).fill('');

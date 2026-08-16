@@ -307,7 +307,10 @@ export default function AiAnalyticsPage() {
     fetch('/api/ai/pattern-insights', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trades, lang: 'he' }),
+      // No trades in the body: the route reads them from this account's rows.
+      // Posting a client-side copy meant the answer could describe a journal
+      // that no longer matched the database.
+      body: JSON.stringify({ lang: 'he' }),
     })
       .then(r => r.json())
       .then(({ insights }) => {

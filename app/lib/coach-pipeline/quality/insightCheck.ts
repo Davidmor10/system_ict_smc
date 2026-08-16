@@ -92,6 +92,7 @@ const FIELD_NAMES = [
   'win_rate', 'profit_factor', 'insufficientEvidence', 'knownForDays',
   'trade_frequency', 'logging_rate', 'rule_adherence', 'avg_loss_r',
   'discretionary_exit', 'no_confirmation', 'rule_violation', 'size_spike',
+  'stop_widened',
 ];
 /** Two-letter ones need boundaries a Hebrew string won't accidentally satisfy.
  *
@@ -127,6 +128,32 @@ const SEQUENCE_CLAIMS: RegExp[] = [
 
 /** Durations. Only banned when the block has no duration to report. */
 const DURATION_WORDS = /(שבוע|שבועות|חודש|חודשים)/;
+
+/** How each tracked behaviour actually surfaces in Hebrew prose.
+ *
+ *  The `watching` rule used to look for the internal key — `discretionary_exit`
+ *  — inside a Hebrew note. That can only fire if the model writes the field
+ *  name, which FIELD_NAMES already catches, so the rule never once did its own
+ *  job: naming a behaviour the analysis deliberately held back.
+ *
+ *  Every phrase here describes the ACTION, never the noun. That distinction is
+ *  the whole safety margin: /חוקים/ appears in any sentence about a trading
+ *  plan and would fire on good insights, while /סטית מהחוקים/ is the model
+ *  raising the behaviour itself. A false hard violation costs a retry and
+ *  often a blander note than the one it rejected, so a phrase that is merely
+ *  probable does not belong in this table — a missing check is cheaper than a
+ *  wrong one. Behaviours whose vocabulary has no unambiguous action phrase get
+ *  no entry, and are simply not checked.
+ *
+ *  Only ever applied to `watching` — the primary behaviour is what the model
+ *  was ASKED to write about, and is never matched against this. */
+const BEHAVIOR_PHRASES: Record<string, RegExp> = {
+  discretionary_exit: /(לפני\s+היעד|לפני\s+שהגיע\s+ליעד|סגירה\s+שיקולית)/,
+  no_confirmation:    /(בלי|ללא)\s+אישור/,
+  rule_violation:     /(סטית|סטייה|חרגת|חריגה)\s+(מ|מה)?(חוקים|כללים|החוקים|הכללים)/,
+  size_spike:         /(הגדלת|הכפלת)\s+(את\s+)?(ה)?(פוזיציה|גודל|כמות)/,
+  stop_widened:       /(הרחקת|הרחבת|הזזת)\s+(את\s+)?(ה)?סטופ/,
+};
 
 const GUARDRAIL_WORDS: Record<string, RegExp> = {
   trade_frequency: /(מספר\s+העסקאות|כמות\s+העסקאות|פחות\s+עסקאות|תדירות)/,
@@ -170,9 +197,13 @@ export function checkInsight(text: string, block: BehaviorBlock): Violation[] {
     if (invented) push('invented_pattern', 'hard', invented);
   }
 
-  // A behaviour the model was not given. `watching` is explicitly off limits.
+  // A behaviour the model was not given. `watching` is explicitly off limits —
+  // those are tracked and deliberately held back this run, so raising one is
+  // the model deciding for itself what the trader's problem is.
   for (const kind of block.watching) {
-    if (text.includes(kind)) push('unlisted_behavior', 'hard', kind);
+    const phrase = BEHAVIOR_PHRASES[kind];
+    const hit = phrase?.exec(text);
+    if (hit) push('unlisted_behavior', 'hard', hit[0]);
   }
 
   const sequence = find(text, SEQUENCE_CLAIMS);

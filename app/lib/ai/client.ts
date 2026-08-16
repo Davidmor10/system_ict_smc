@@ -162,8 +162,21 @@ const COACH_ATTEMPTS: Attempt[] = [
   { provider: "groq", model: "llama-3.1-8b-instant" },
 ];
 
-export function generateInsightText(prompt: string, meta?: AiCallMeta): Promise<string> {
-  return runAttempts(prompt, INSIGHT_ATTEMPTS, false, meta);
+/** Insight generation constrained to a JSON object at the API level.
+ *
+ *  Every phrasing surface already asks for JSON in words and digs the object
+ *  back out with a regex. That works, and when it fails the caller returns null
+ *  rather than something wrong — but "null" here means a section quietly did
+ *  not appear on the trader's screen, which nobody finds out about. Asking the
+ *  provider to enforce the shape removes most of that failure class.
+ *
+ *  IMPORTANT — the object is not decoration. Groq's json_object mode rejects a
+ *  response whose top level is an array, so every prompt reaching this function
+ *  must ask for an object, wrapping any list in a named field. Gemini would
+ *  accept a bare array; matching the stricter provider is what keeps one
+ *  fallback chain instead of two. */
+export function generateInsightJson(prompt: string, meta?: AiCallMeta): Promise<string> {
+  return runAttempts(prompt, INSIGHT_ATTEMPTS, true, meta);
 }
 
 /** Higher-quality generation for the AI Coach — same free providers, but the

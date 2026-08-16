@@ -1,5 +1,5 @@
 import type { ConfidenceLevel } from '../analytics';
-import { generateInsightText } from './client';
+import { generateInsightJson } from './client';
 import { logger } from '../logger';
 import { CHALLENGE_TRADER_STYLE, HEBREW_MENTOR_STYLE } from './styleGuide';
 
@@ -99,7 +99,9 @@ Rules:
 
   let raw: string;
   try {
-    raw = await generateInsightText(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'weekly_narrative' });
+    // JSON at the API level, not only in the prompt's words. The letter already
+    // asks for an object, which is the shape this mode requires.
+    raw = await generateInsightJson(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'weekly_narrative' });
   } catch (err) {
     logger.error('generateNarrativeText: AI generation failed', { error: err instanceof Error ? err.message : String(err) });
     return null;

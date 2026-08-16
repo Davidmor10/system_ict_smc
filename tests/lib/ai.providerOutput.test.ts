@@ -27,9 +27,9 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }));
 
-const generateInsightTextMock = vi.fn();
+const generateInsightJsonMock = vi.fn();
 vi.mock('../../app/lib/ai/client', () => ({
-  generateInsightText: (...args: unknown[]) => generateInsightTextMock(...args),
+  generateInsightJson: (...args: unknown[]) => generateInsightJsonMock(...args),
 }));
 
 const { callClaudeInsight, CLAUDE_MAX_TOKENS } = await import('../../app/lib/coach-pipeline/providers/anthropic');
@@ -90,7 +90,7 @@ describe('Claude output that hit the token ceiling', () => {
 });
 
 describe('batch phrasing is matched by the index the model echoes', () => {
-  beforeEach(() => generateInsightTextMock.mockReset());
+  beforeEach(() => generateInsightJsonMock.mockReset());
 
   const items = [
     { subject: 'A', metric: METRIC(), extra: '' },
@@ -98,41 +98,55 @@ describe('batch phrasing is matched by the index the model echoes', () => {
     { subject: 'C', metric: METRIC(), extra: '' },
   ];
 
+  // The shape the prompt asks for, and the only one Groq's JSON mode returns.
+  const wrapped = (...list: Array<{ i: number; text: string }>) =>
+    JSON.stringify({ items: list });
+
   it('places each sentence on the item it names, not the slot it arrived in', async () => {
-    generateInsightTextMock.mockResolvedValue(JSON.stringify([
+    generateInsightJsonMock.mockResolvedValue(wrapped(
       { i: 3, text: 'about C' },
       { i: 1, text: 'about A' },
       { i: 2, text: 'about B' },
-    ]));
+    ));
     expect(await generateInsightsPhrasing(items, 'he')).toEqual(['about A', 'about B', 'about C']);
   });
 
   it('leaves a skipped item empty instead of shifting the rest onto it', async () => {
     // The old positional read gave item 2 the sentence written about item 3.
-    generateInsightTextMock.mockResolvedValue(JSON.stringify([
+    generateInsightJsonMock.mockResolvedValue(wrapped(
       { i: 1, text: 'about A' },
       { i: 3, text: 'about C' },
-    ]));
+    ));
     expect(await generateInsightsPhrasing(items, 'he')).toEqual(['about A', '', 'about C']);
   });
 
   it('drops an index that refers to an item we never sent', async () => {
-    generateInsightTextMock.mockResolvedValue(JSON.stringify([
+    generateInsightJsonMock.mockResolvedValue(wrapped(
       { i: 1, text: 'about A' },
       { i: 9, text: 'about nothing' },
-    ]));
+    ));
     expect(await generateInsightsPhrasing(items, 'he')).toEqual(['about A', '', '']);
   });
 
+  it('still reads a bare array of objects, unwrapped', async () => {
+    // A provider that answers with the list itself must not fall through the
+    // wrapped read's failed parse — the two reads are deliberately separate.
+    generateInsightJsonMock.mockResolvedValue(JSON.stringify([
+      { i: 2, text: 'about B' },
+      { i: 1, text: 'about A' },
+    ]));
+    expect(await generateInsightsPhrasing(items, 'he')).toEqual(['about A', 'about B', '']);
+  });
+
   it('still reads a bare array of strings positionally', async () => {
-    // The floor, not the contract: a model that ignores the shape is no worse
-    // off than it was before the index existed.
-    generateInsightTextMock.mockResolvedValue(JSON.stringify(['a', 'b', 'c']));
+    // The floor, not the contract: a model that ignores the shape entirely is
+    // no worse off than it was before the index existed.
+    generateInsightJsonMock.mockResolvedValue(JSON.stringify(['a', 'b', 'c']));
     expect(await generateInsightsPhrasing(items, 'he')).toEqual(['a', 'b', 'c']);
   });
 
   it('returns null — not a row of blanks — when nothing usable came back', async () => {
-    generateInsightTextMock.mockResolvedValue('not json at all');
+    generateInsightJsonMock.mockResolvedValue('not json at all');
     expect(await generateInsightsPhrasing(items, 'he')).toBeNull();
   });
 
@@ -141,10 +155,10 @@ describe('batch phrasing is matched by the index the model echoes', () => {
       { subjectLabel: 'ES · ניו יורק AM', metric: METRIC(), baseline: 50, trend: 'up' as const },
       { subjectLabel: 'NQ · לונדון', metric: METRIC(), baseline: 50, trend: 'down' as const },
     ];
-    generateInsightTextMock.mockResolvedValue(JSON.stringify([
+    generateInsightJsonMock.mockResolvedValue(wrapped(
       { i: 2, text: 'about NQ' },
       { i: 1, text: 'about ES' },
-    ]));
+    ));
     expect(await generateWorkingStrengthsPhrasing(strengths, 'he')).toEqual(['about ES', 'about NQ']);
   });
 });
