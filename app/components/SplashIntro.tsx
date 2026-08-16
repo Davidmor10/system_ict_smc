@@ -16,6 +16,19 @@ const EASE_IN = 'cubic-bezier(0.7,0,0.84,0)';  // expo-in  (--ease-in-expo)
 const GOLD = '#d4af37';
 const KEY = 'onyx_splash_shown';
 
+/** What "once" is counted against.
+ *
+ *  On the public site it is the browser session — a visitor should not be made
+ *  to sit through the opening on every page they click.
+ *
+ *  Behind the login it is the sign-in session instead. Signing in IS the
+ *  arrival, and a member who logs out and back in has arrived again; keying
+ *  that to the browser session would have shown it to them once and then never
+ *  again, which is what happened before this change. */
+function storageKey(scope?: string): string {
+  return scope ? `${KEY}:${scope}` : KEY;
+}
+
 // Three grey smoke blobs: [base offset, disperse target], px.
 const BLOBS = [
   { size: 360, color: 'rgba(120,120,124,0.50)', base: [-46, -14], to: [-190, -130], delay: 0 },
@@ -23,7 +36,7 @@ const BLOBS = [
   { size: 340, color: 'rgba(120,120,124,0.50)', base: [2, 42], to: [10, 210], delay: 240 },
 ];
 
-export default function SplashIntro() {
+export default function SplashIntro({ scope }: { scope?: string } = {}) {
   const [show, setShow] = useState(false);
   const [phase, setPhase] = useState<Phase>('pre');
   const [reduced, setReduced] = useState(false);
@@ -35,9 +48,10 @@ export default function SplashIntro() {
 
   useEffect(() => {
     let seen = false;
-    try { seen = sessionStorage.getItem(KEY) === '1'; } catch { /* private mode */ }
+    const key = storageKey(scope);
+    try { seen = sessionStorage.getItem(key) === '1'; } catch { /* private mode */ }
     if (seen) return;                                  // repeat visit → never mount
-    try { sessionStorage.setItem(KEY, '1'); } catch { /* ignore */ }
+    try { sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
 
     const rm = typeof window.matchMedia === 'function'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -55,7 +69,7 @@ export default function SplashIntro() {
     }
     return clearTimers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [scope]);
 
   function finish() {
     if (finished.current) return;

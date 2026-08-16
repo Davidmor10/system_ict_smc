@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import Landing from './components/Landing';
 import MemberHome from './components/MemberHome';
-import { getUserRole } from '../lib/getUserRole';
+import { getSessionId, getUserRole } from '../lib/getUserRole';
 
 // "/" is two pages behind one address.
 //
@@ -25,5 +25,5 @@ export default async function HomePage() {
   const { userId } = await auth();
   if (!userId) return <Landing />;
 
-  return <MemberHome role={await getUserRole()} />;
+  return <MemberHome role={await getUserRole()} splashScope={(await getSessionId()) ?? undefined} />;
 }

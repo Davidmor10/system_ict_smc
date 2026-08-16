@@ -38,7 +38,7 @@ const NO_PLAN = 'free';
 
 const RANK: Record<string, number> = { free: 0, starter: 1, pro: 2, deluxe: 3 };
 
-export default function MemberHome({ role }: { role: string }) {
+export default function MemberHome({ role, splashScope }: { role: string; splashScope?: string }) {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
 
@@ -55,7 +55,7 @@ export default function MemberHome({ role }: { role: string }) {
           passes the landing page, and would otherwise never see it.
           SplashIntro is session-once, so landing → member → dashboard still
           plays it exactly once. */}
-      <SplashIntro />
+      <SplashIntro scope={splashScope} />
       <div className="lp-member">
         <div className="wrap">
           <div className="lp-member-card lp-in">

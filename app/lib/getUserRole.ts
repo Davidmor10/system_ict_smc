@@ -84,3 +84,17 @@ export async function getUserContext(): Promise<UserContext> {
     return { role: 'free', isOwner: false };
   }
 }
+
+/** The current Clerk session id, or null. Same defensive shape as
+ *  getUserContext: never throws, and stays null when Clerk is unconfigured.
+ *
+ *  Used to scope the splash to a sign-in rather than to a browser session. */
+export async function getSessionId(): Promise<string | null> {
+  try {
+    if (!process.env.CLERK_SECRET_KEY) return null;
+    const { sessionId } = await auth();
+    return sessionId ?? null;
+  } catch {
+    return null;
+  }
+}
