@@ -333,24 +333,107 @@
 .lp-truth-row p { margin: 0; font-size: 0.93rem; line-height: 1.78; color: var(--lp-ink-2); max-width: 74ch; }
 
 /* ── plans ──────────────────────────────────────────────────────── */
-/* Driven by the plan count for the same reason the steps grid is — a stale
-   column count leaves an empty cell that reads as a plan nobody wrote. */
-.lp-plans { display: grid; grid-template-columns: repeat(var(--lp-plan-count, 3), minmax(0, 1fr)); gap: 16px; margin-top: 46px; }
+/* ── plans ──────────────────────────────────────────────────────── */
+
+/* Column count follows the plan count for the same reason the steps grid does:
+   a stale number leaves an empty cell that reads as a plan nobody wrote.
+   align-items:start so the featured card can stand taller than its siblings
+   instead of stretching them to match it. */
+.lp-plans {
+  display: grid; grid-template-columns: repeat(var(--lp-plan-count, 3), minmax(0, 1fr));
+  gap: 18px; margin-top: 54px; align-items: start;
+}
+
 .lp-plan {
-  border: 1px solid var(--lp-line); border-radius: 13px; padding: 24px 20px;
-  background: rgba(13, 13, 15, 0.6); display: flex; flex-direction: column; gap: 12px;
+  position: relative; display: flex; flex-direction: column;
+  border: 1px solid var(--lp-line); border-radius: 16px; padding: 28px 24px 24px;
+  background: linear-gradient(180deg, rgba(17, 17, 20, 0.9), rgba(9, 9, 11, 0.9));
+  transition: transform 340ms var(--lp-ease), border-color 340ms var(--lp-ease), box-shadow 340ms var(--lp-ease);
 }
+.lp-plan:hover { transform: translateY(-6px); border-color: var(--lp-gold-34); }
+
+/* The recommended plan is lifted out of the row rather than merely tinted.
+   Anything subtler and the eye has to be told where to look in words. */
 .lp-plan[data-featured="true"] {
-  border-color: var(--lp-gold-34); background: rgba(212, 175, 55, 0.045);
-  box-shadow: 0 0 60px -30px rgba(212, 175, 55, 0.5);
+  border-color: var(--lp-gold-34);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(212, 175, 55, 0.10), transparent 62%),
+    linear-gradient(180deg, rgba(24, 21, 12, 0.95), rgba(11, 10, 8, 0.95));
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.95), 0 0 70px -34px rgba(212, 175, 55, 0.55);
+  transform: translateY(-18px);
+  padding-top: 34px;
 }
-.lp-plan-n { font-family: var(--font-geist-mono, monospace); font-size: 11px; font-weight: 900; letter-spacing: 0.24em; color: #fff; }
+.lp-plan[data-featured="true"]:hover { transform: translateY(-24px); }
+.lp-plan[data-featured="true"]::before {
+  content: ""; position: absolute; inset-block-start: 0; inset-inline: 18%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lp-gold), transparent);
+}
+
+.lp-ribbon {
+  position: absolute; inset-block-start: 0; inset-inline-start: 50%;
+  transform: translate(50%, -50%);
+  padding: 5px 14px; border-radius: 999px; white-space: nowrap;
+  background: var(--lp-gold); color: #0a0a0b;
+  font-family: var(--font-geist-mono, monospace); font-size: 9px; font-weight: 900;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(212, 175, 55, 0.5);
+}
+
+.lp-plan-n { font-family: var(--font-geist-mono, monospace); font-size: 11px; font-weight: 900; letter-spacing: 0.26em; color: var(--lp-ink-2); }
 .lp-plan[data-featured="true"] .lp-plan-n { color: var(--lp-gold); }
-.lp-plan-p { font-family: var(--font-geist-mono, monospace); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 900; color: #fff; }
-.lp-plan-p small { font-family: var(--sans); font-size: 11px; font-weight: 700; color: var(--lp-ink-3); margin-inline-start: 7px; }
-.lp-plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.lp-plan li { font-size: 0.86rem; line-height: 1.6; color: var(--lp-ink-2); padding-inline-start: 16px; position: relative; }
-.lp-plan li::before { content: "◈"; position: absolute; inset-inline-start: 0; font-size: 7px; top: 6px; color: var(--lp-gold); }
+.lp-plan-for { margin-top: 10px; font-size: 0.86rem; line-height: 1.6; color: var(--lp-ink-3); min-height: 2.6em; }
+
+.lp-plan-price { margin-top: 18px; display: flex; align-items: baseline; gap: 7px; }
+.lp-plan-price b {
+  font-family: var(--font-geist-mono, monospace); font-variant-numeric: tabular-nums;
+  font-size: 46px; line-height: 1; font-weight: 900; letter-spacing: -0.03em; color: #fff;
+}
+.lp-plan[data-featured="true"] .lp-plan-price b { color: var(--lp-gold); text-shadow: 0 0 30px rgba(212, 175, 55, 0.4); }
+.lp-plan-price span { font-size: 12px; font-weight: 700; color: var(--lp-ink-3); }
+/* The per-day figure is the same price said in the unit a person can weigh
+   against a coffee rather than against a salary. */
+.lp-plan-day { margin-top: 8px; font-size: 11px; color: var(--lp-ink-4); }
+
+.lp-plan-cta { margin-top: 20px; }
+.lp-plan-cta a {
+  display: block; text-align: center; padding: 13px 18px; border-radius: 8px;
+  font-family: var(--font-geist-mono, monospace); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  border: 1px solid var(--lp-line-2); color: var(--lp-ink);
+  transition: background 260ms var(--lp-ease), border-color 260ms var(--lp-ease), color 260ms var(--lp-ease), box-shadow 260ms var(--lp-ease);
+}
+.lp-plan-cta a:hover { border-color: var(--lp-gold-34); background: var(--lp-gold-07); color: var(--lp-gold); }
+.lp-plan[data-featured="true"] .lp-plan-cta a {
+  background: var(--lp-gold); border-color: var(--lp-gold); color: #0a0a0b;
+  box-shadow: 0 0 30px rgba(212, 175, 55, 0.35);
+}
+.lp-plan[data-featured="true"] .lp-plan-cta a:hover {
+  background: #e3c768; border-color: #e3c768; color: #0a0a0b;
+  box-shadow: 0 0 46px rgba(212, 175, 55, 0.6);
+}
+
+.lp-plan-inherits {
+  margin: 22px 0 16px; padding-top: 16px; border-top: 1px solid var(--lp-line);
+  font-size: 0.82rem; font-weight: 700; color: var(--lp-ink-3);
+  display: flex; align-items: center; gap: 8px;
+}
+.lp-plan-inherits i { font-style: normal; color: var(--lp-gold); font-size: 11px; }
+
+.lp-plan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+.lp-plan li {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start;
+  font-size: 0.89rem; line-height: 1.55; color: var(--lp-ink-2);
+}
+.lp-plan li i { font-style: normal; color: var(--lp-gold); font-size: 11px; line-height: 1.5; }
+.lp-plan[data-featured="true"] li { color: rgba(255, 255, 255, 0.82); }
+
+/* Risk reversal, once, under the row — not repeated on three cards. */
+.lp-plan-note {
+  margin-top: 40px; display: flex; flex-wrap: wrap; justify-content: center; gap: 0;
+  font-family: var(--font-geist-mono, monospace); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--lp-ink-3);
+}
+.lp-plan-note span:not(:last-child)::after { content: "·"; margin: 0 14px; color: var(--lp-ink-4); }
 
 /* ── closing CTA ────────────────────────────────────────────────── */
 .lp-close {

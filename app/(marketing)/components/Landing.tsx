@@ -187,9 +187,30 @@ const TRUTHS = [
 ];
 
 const PLANS = [
-  { n: 'STARTER', p: '49', feat: ['יומן מסחר מלא', 'דשבורד ולוח חודשי', 'סטאפים, חוקים ומחברת', 'תובנת AI על כל עסקה'] },
-  { n: 'PRO', p: '99', featured: true, feat: ['כל מה שב־STARTER', 'אנליטיקת AI המלאה', 'זיכרון דפוסים אישי', 'סימולטור תרחישים', 'דוח שבועי + ארכיון'] },
-  { n: 'DELUXE', p: '199', feat: ['כל מה שב־PRO', 'Onyx Trainer — צ׳אט אישי', 'עמוד סטטיסטיקה מלא', 'ציון יתרון ומעקב משמעת'] },
+  {
+    n: 'STARTER',
+    p: 49,
+    who: 'לסוחר שרוצה סוף סוף לתעד ברצינות ולקבל משהו בחזרה.',
+    cta: 'להתחיל עם STARTER',
+    feat: ['יומן מסחר מלא — תיעוד בשתי דקות', 'דשבורד יומי ולוח חודשי', 'ספר סטאפים, חוקים ומחברת', 'תובנת AI על כל עסקה שתיעדת'],
+  },
+  {
+    n: 'PRO',
+    p: 99,
+    featured: true,
+    who: 'לסוחר שרוצה לדעת מה באמת עובד לו — ולא לנחש.',
+    cta: 'לבחור ב־PRO',
+    inherits: 'STARTER',
+    feat: ['אנליטיקת AI — 11 חתכים על העסקאות', 'זיכרון דפוסים שנבנה עליך שבוע אחר שבוע', 'סימולטור תרחישים על עסקאות אמת', 'דוח שבועי אישי עם ארכיון מלא'],
+  },
+  {
+    n: 'DELUXE',
+    p: 199,
+    who: 'לסוחר שרוצה שותף לחשיבה, לא רק דוחות.',
+    cta: 'לבחור ב־DELUXE',
+    inherits: 'PRO',
+    feat: ['Onyx Trainer — צ׳אט שקרא את היומן שלך', 'עמוד סטטיסטיקה מלא ועקומת הון', 'ציון יתרון משוקלל', 'מעקב משמעת והרגלים לאורך זמן'],
+  },
 ];
 
 const FAQ = [
@@ -462,18 +483,47 @@ export default function Landing() {
           </Reveal>
           <div className="lp-plans" style={{ ['--lp-plan-count' as string]: PLANS.length }}>
             {PLANS.map((p, i) => (
-              <Reveal key={p.n} delay={i * 90}>
-                <div className="lp-plan" data-featured={!!p.featured} style={{ height: '100%' }}>
+              <Reveal key={p.n} delay={i * 110}>
+                <div className="lp-plan" data-featured={!!p.featured}>
+                  {p.featured && <span className="lp-ribbon">המסלול המומלץ</span>}
+
                   <span className="lp-plan-n">{p.n}</span>
-                  <span className="lp-plan-p">
-                    <><span className="lp-n">{p.p}</span><small>₪ לחודש</small></>
-                  </span>
-                  <ul>{p.feat.map(f => <li key={f}>{f}</li>)}</ul>
+                  <p className="lp-plan-for">{p.who}</p>
+
+                  <div className="lp-plan-price">
+                    <b className="lp-n">{p.p}</b>
+                    <span>₪ לחודש</span>
+                  </div>
+                  {/* The same price in the unit a person weighs against a
+                      coffee rather than against a salary. */}
+                  <div className="lp-plan-day">
+                    ≈ <span className="lp-n">{(p.p / 30).toFixed(1)}</span> ₪ ליום
+                  </div>
+
+                  <div className="lp-plan-cta">
+                    <Link href="/pricing">{p.cta}</Link>
+                  </div>
+
+                  <div className="lp-plan-inherits">
+                    <i>{D}</i>
+                    {p.inherits ? <>כל מה שב־{p.inherits}, ובנוסף:</> : <>מה שנפתח:</>}
+                  </div>
+
+                  <ul>
+                    {p.feat.map(f => <li key={f}><i>✓</i><span>{f}</span></li>)}
+                  </ul>
                 </div>
               </Reveal>
             ))}
           </div>
-          <Reveal className="lp-cta" style={{ justifyContent: 'center', marginTop: 34 }}>
+          <Reveal>
+            <p className="lp-plan-note">
+              <span>ביטול בכל רגע</span>
+              <span>שדרוג או הורדה בכל שלב</span>
+              <span>חיוב חודשי, בלי התחייבות</span>
+            </p>
+          </Reveal>
+          <Reveal className="lp-cta" style={{ justifyContent: 'center', marginTop: 30 }}>
             <Link href="/pricing" className="btn-lg-ghost">השוואה מלאה בין המסלולים</Link>
           </Reveal>
         </div>
