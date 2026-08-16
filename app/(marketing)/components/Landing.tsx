@@ -149,15 +149,15 @@ const STEPS = [
 ];
 
 const TOOLS = [
-  { t: 'יומן מסחר', p: 'FREE', b: 'תיעוד בשתי דקות: יציאות מרובות, אישורי כניסה, מצב רגשי, צילומי מסך, ואירועי ניהול עם שעה.' },
+  { t: 'דשבורד יומי', p: 'STARTER', b: 'התובנה של היום בכניסה, לוח חודשי עם התוצאה של כל יום, והסשן שפעיל עכשיו.' },
+  { t: 'יומן מסחר', p: 'STARTER', b: 'תיעוד בשתי דקות: יציאות מרובות, אישורי כניסה, מצב רגשי, צילומי מסך, ואירועי ניהול עם שעה.' },
   { t: 'סטטיסטיקות', p: 'DELUXE', b: 'עקומת הון, הירידה הכי כואבת, רווח יומי, רצפים, תוחלת, ציון יתרון, ופילוח לפי סשן ויום.' },
   { t: 'אנליטיקת AI', p: 'PRO', b: 'אחת עשרה זוויות על אותן עסקאות, גילוי דפוסים, ו"מה באמת עובד לך" — עם מבחן מובהקות.' },
   { t: 'Onyx Trainer', p: 'DELUXE', b: 'צ׳אט שקרא את היומן שלך. עונה על שאלות מהנתונים, ומסביר מושגי מסחר כשצריך.' },
   { t: 'דוחות שבועיים', p: 'PRO', b: 'סיכום אישי של השבוע עם ארכיון מלא, כדי שתוכל להשוות חודש מול חודש.' },
-  { t: 'מחברת', p: 'FREE', b: 'התוכנית לפני הפתיחה ומה שקרה אחריה. ה־AI קורא גם אותה ומצליב מול מה שבאמת עשית.' },
-  { t: 'ספר סטאפים', p: 'FREE', b: 'כל הסטאפים שלך במקום אחד, כל אחד מחובר לביצועים האמיתיים שלו.' },
-  { t: 'חוקים אישיים', p: 'FREE', b: 'החוקים שקבעת לעצמך, ומעקב אחרי כמה פעמים באמת עמדת בהם.' },
-  { t: 'מחשבון פוזיציה', p: 'FREE', b: 'כמה חוזים לפי הסיכון שהגדרת, למיקרו ולרגיל, לפני שאתה נכנס.' },
+  { t: 'מחברת', p: 'STARTER', b: 'התוכנית לפני הפתיחה ומה שקרה אחריה. ה־AI קורא גם אותה ומצליב מול מה שבאמת עשית.' },
+  { t: 'ספר סטאפים', p: 'STARTER', b: 'כל הסטאפים שלך במקום אחד, כל אחד מחובר לביצועים האמיתיים שלו.' },
+  { t: 'חוקים אישיים', p: 'STARTER', b: 'החוקים שקבעת לעצמך, ומעקב אחרי כמה פעמים באמת עמדת בהם.' },
 ];
 
 const CHAT = [
@@ -187,8 +187,7 @@ const TRUTHS = [
 ];
 
 const PLANS = [
-  { n: 'FREE', p: '0', feat: ['יומן מסחר מלא', 'דשבורד ולוח חודשי', 'סטאפים, חוקים ומחברת', 'מחשבון פוזיציה'] },
-  { n: 'STARTER', p: '49', feat: ['כל מה שב־FREE', 'תובנת AI על כל עסקה שתיעדת'] },
+  { n: 'STARTER', p: '49', feat: ['יומן מסחר מלא', 'דשבורד ולוח חודשי', 'סטאפים, חוקים ומחברת', 'תובנת AI על כל עסקה'] },
   { n: 'PRO', p: '99', featured: true, feat: ['כל מה שב־STARTER', 'אנליטיקת AI המלאה', 'זיכרון דפוסים אישי', 'סימולטור תרחישים', 'דוח שבועי + ארכיון'] },
   { n: 'DELUXE', p: '199', feat: ['כל מה שב־PRO', 'Onyx Trainer — צ׳אט אישי', 'עמוד סטטיסטיקה מלא', 'ציון יתרון ומעקב משמעת'] },
 ];
@@ -208,7 +207,7 @@ const FAQ = [
   },
   {
     q: 'למה לשלם על עוד מנוי?',
-    a: 'היומן עצמו חינם, לתמיד. משלמים רק על שכבת הניתוח. PRO עולה 99 ₪ בחודש — פחות ממה שעולה עסקה גרועה אחת בחוזה NQ. אם המערכת תמנע ממך עסקה כזאת אחת בחודש, היא החזירה את עצמה.',
+    a: 'כי זה המנוי היחיד שמחזיר לך את עצמו במספרים שאתה כבר עוקב אחריהם. STARTER עולה 49 ₪ בחודש ו־PRO עולה 99 ₪ — פחות ממה שעולה עסקה גרועה אחת בחוזה NQ. אם המערכת תמנע ממך עסקה כזאת אחת בחודש, היא כבר שילמה על עצמה. אפשר לבטל בכל רגע.',
   },
   {
     q: 'מה אם לא אתעד כל עסקה?',
@@ -248,7 +247,7 @@ export default function Landing() {
                 לתוכו ולא מקבלים ממנו כלום.
               </p>
               <div className="lp-cta">
-                <Link href="/sign-up" className="btn-lg-gold">התחל בחינם</Link>
+                <Link href="/pricing" className="btn-lg-gold">בחירת מסלול</Link>
                 <a href="#how" className="btn-lg-ghost">איך זה עובד</a>
               </div>
               {/* Three facts that are true of the product as built. Nothing
@@ -398,7 +397,7 @@ export default function Landing() {
                 בין עצה שאפשר לסמוך עליה לבין עצה שנשמעת טוב.
               </p>
               <div className="lp-cta">
-                <Link href="/sign-up" className="btn-lg-gold">נסה בעצמך</Link>
+                <Link href="/pricing" className="btn-lg-gold">לראות את המסלולים</Link>
               </div>
             </Reveal>
 
@@ -452,8 +451,8 @@ export default function Landing() {
         <div className="wrap">
           <Head
             kicker="מסלולים"
-            title={<>היומן חינם. תמיד.</>}
-            lead="משלמים רק על שכבת הניתוח, ואפשר לבטל בכל רגע."
+            title={<>שלושה מסלולים. אותו יומן.</>}
+            lead="כל מסלול כולל את היומן המלא. ההבדל ביניהם הוא כמה עומק ניתוח אתה מקבל מעליו. אפשר לבטל בכל רגע."
           />
           <Reveal>
             <p className="lp-anchor">
@@ -461,13 +460,13 @@ export default function Landing() {
               אחת כזאת בחודש — היא כבר החזירה את עצמה.
             </p>
           </Reveal>
-          <div className="lp-plans">
+          <div className="lp-plans" style={{ ['--lp-plan-count' as string]: PLANS.length }}>
             {PLANS.map((p, i) => (
               <Reveal key={p.n} delay={i * 90}>
                 <div className="lp-plan" data-featured={!!p.featured} style={{ height: '100%' }}>
                   <span className="lp-plan-n">{p.n}</span>
                   <span className="lp-plan-p">
-                    {p.p === '0' ? 'חינם' : <><span className="lp-n">{p.p}</span><small>₪ לחודש</small></>}
+                    <><span className="lp-n">{p.p}</span><small>₪ לחודש</small></>
                   </span>
                   <ul>{p.feat.map(f => <li key={f}>{f}</li>)}</ul>
                 </div>
@@ -513,7 +512,7 @@ export default function Landing() {
               פתח חשבון, תעד עסקה אחת, וראה מה המערכת כבר יודעת לומר עליה.
             </p>
             <div className="lp-cta" style={{ justifyContent: 'center' }}>
-              <Link href="/sign-up" className="btn-lg-gold">פתיחת חשבון חינם</Link>
+              <Link href="/pricing" className="btn-lg-gold">בחירת מסלול</Link>
               <Link href="/sign-in" className="btn-lg-ghost">כבר יש לי חשבון</Link>
             </div>
           </Reveal>

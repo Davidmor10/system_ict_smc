@@ -333,7 +333,9 @@
 .lp-truth-row p { margin: 0; font-size: 0.93rem; line-height: 1.78; color: var(--lp-ink-2); max-width: 74ch; }
 
 /* ── plans ──────────────────────────────────────────────────────── */
-.lp-plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 46px; }
+/* Driven by the plan count for the same reason the steps grid is — a stale
+   column count leaves an empty cell that reads as a plan nobody wrote. */
+.lp-plans { display: grid; grid-template-columns: repeat(var(--lp-plan-count, 3), minmax(0, 1fr)); gap: 16px; margin-top: 46px; }
 .lp-plan {
   border: 1px solid var(--lp-line); border-radius: 13px; padding: 24px 20px;
   background: rgba(13, 13, 15, 0.6); display: flex; flex-direction: column; gap: 12px;
