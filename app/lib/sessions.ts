@@ -1,3 +1,5 @@
+import { hourFloatInZone } from './time/zone';
+
 /** Single source of truth for trading-session windows (Israel time). Shared by the
  * dashboard hero and the trade form so a trade's "session" always means the same thing. */
 export const SESS = [
@@ -9,9 +11,14 @@ export const SESS = [
 
 export type SessionKey = typeof SESS[number]['key'];
 
-function getIdtHourFloat(): number {
-  const idt = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
-  return idt.getHours() + idt.getMinutes() / 60;
+/** The clock the session windows are read against.
+ *
+ *  Was hardcoded to Asia/Jerusalem, which made "which session is open" correct
+ *  for a trader sitting in Israel and wrong for everyone else. It now follows
+ *  the timezone chosen in settings — which still defaults to Israel, so nothing
+ *  changes for an account that never touches the picker. */
+function getZoneHourFloat(): number {
+  return hourFloatInZone();
 }
 
 /** Pure: maps an arbitrary Israel-time hour (0-24) to a session index, or -1
@@ -29,7 +36,7 @@ export function sessionForHour(hourFloat: number): SessionKey | null {
 }
 
 export function getActiveSessionIdx(): number {
-  return sessionIdxForHour(getIdtHourFloat());
+  return sessionIdxForHour(getZoneHourFloat());
 }
 
 /** Returns the session key for "right now", or null if outside all tracked windows. */

@@ -10,7 +10,7 @@
 // useUser(); a link opens Clerk's own profile modal for changing them so
 // we never mirror or intercept identity data.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser, useClerk, SignOutButton } from '@clerk/nextjs';
 import { hydrateDoc, saveDoc } from '../lib/sync/collections';
 import { usePlan } from './PlanProvider';
@@ -19,13 +19,13 @@ import {
   type UserSettings, type Density, type NumberFormat, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
+import { ZONES, clockInZone, zoneAbbreviation } from '../lib/time/zone';
 
-type SectionKey = 'profile' | 'trading' | 'notifications' | 'appearance' | 'account';
+type SectionKey = 'profile' | 'trading' | 'appearance' | 'account';
 
 const SECTIONS: { key: SectionKey; label: string; hint: string; icon: string }[] = [
   { key: 'profile',       label: 'פרופיל',   hint: 'איך המערכת פונה אליך', icon: '◉' },
-  { key: 'trading',       label: 'מסחר',     hint: 'ברירות מחדל וקנה מידה', icon: '⇅' },
-  { key: 'notifications', label: 'התראות',   hint: 'משמר את המשמעת',        icon: '◈' },
+  { key: 'trading',       label: 'מסחר',     hint: 'ברירות מחדל, שעון וקנה מידה', icon: '⇅' },
   { key: 'appearance',    label: 'עיצוב',    hint: 'צפיפות, ניגודיות, תנועה', icon: '◐' },
   { key: 'account',       label: 'חשבון',    hint: 'מסלול, יציאה, מחיקה',    icon: '⌘' },
 ];
@@ -51,27 +51,60 @@ export default function SettingsView() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [section, setSection]   = useState<SectionKey>('profile');
   const [saved, setSaved]       = useState(false);
+  /** The last saved state. Anything different from this is unsaved work, and
+   *  comparing against it — rather than tracking a boolean — means undoing an
+   *  edit by hand correctly clears the dirty flag. */
+  const [baseline, setBaseline] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cloud hydrate on mount — same shape as every other synced doc in the app.
   useEffect(() => {
     hydrateDoc<UserSettings>(SETTINGS_KIND, SETTINGS_KEY)
-      .then(doc => { if (doc) setSettings(withDefaults(doc)); })
+      .then(doc => {
+        if (!doc) return;
+        const full = withDefaults(doc);
+        setSettings(full);
+        setBaseline(full);
+      })
       .catch(() => { /* keep defaults on failure */ });
   }, []);
 
-  // Debounced save + a brief "נשמר" flash so the trader gets confirmation
-  // without a dialog. Every field change updates local state instantly;
-  // the debounced write commits to storage + cloud 500ms later.
-  useEffect(() => {
+  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);
+
+  // NOTHING SAVES ON ITS OWN.
+  //
+  // This page used to write 500ms after every keystroke. That is fine for a
+  // toggle and wrong for everything else here: a half-typed nickname, a bio
+  // abandoned mid-sentence, and a timezone scrolled past on the way to the one
+  // below it were all committed and synced to every device. The trader now says
+  // when they are done.
+  const dirty = useMemo(
+    () => JSON.stringify({ ...settings, updatedAt: 0 }) !== JSON.stringify({ ...baseline, updatedAt: 0 }),
+    [settings, baseline],
+  );
+
+  function save() {
     const stamped = { ...settings, updatedAt: Date.now() };
-    const t = setTimeout(() => {
-      void saveDoc(SETTINGS_KIND, SETTINGS_KEY, stamped);
-      setSaved(true);
-      const clear = setTimeout(() => setSaved(false), 1500);
-      return () => clearTimeout(clear);
-    }, 500);
-    return () => clearTimeout(t);
-  }, [settings]);
+    void saveDoc(SETTINGS_KIND, SETTINGS_KEY, stamped);
+    setSettings(stamped);
+    setBaseline(stamped);
+    setSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 2000);
+  }
+
+  function revert() {
+    setSettings(baseline);
+    setSaved(false);
+  }
+
+  // Leaving with unsaved changes should cost a confirmation, not the changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   const displayName = useMemo(() => {
     return settings.nickname || user?.firstName || user?.username || 'סוחר';
@@ -103,7 +136,7 @@ export default function SettingsView() {
           <p className="mt-3 text-[15px] text-white/60 max-w-[540px] leading-relaxed">
             כל מה שצריך כדי שהמערכת תרגיש שלך — מהצורה שהמאמן פונה אליך ועד ברירות המחדל של הטופס.
             {' '}
-            <span className="text-white/40">שינויים נשמרים אוטומטית ומסונכרנים בין המכשירים שלך.</span>
+            <span className="text-white/40">שינויים נשמרים רק כשתלחץ שמירה, ואז מסונכרנים בין המכשירים שלך.</span>
           </p>
         </div>
       </div>
@@ -143,7 +176,7 @@ export default function SettingsView() {
           {/* Content */}
           <main className="min-w-0">
             <div className="rounded-[16px] border border-[#1c1c1e] bg-[#0a0a0b] p-8 max-[880px]:p-5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.8)]">
-              <SectionHeader title={activeSection.label} eyebrow={activeSection.icon + ' · ' + activeSection.hint} saved={saved} />
+              <SectionHeader title={activeSection.label} eyebrow={activeSection.icon + ' · ' + activeSection.hint} saved={saved} dirty={dirty} />
 
               {section === 'profile' && (
                 <div className="flex flex-col gap-6 mt-8">
@@ -151,8 +184,16 @@ export default function SettingsView() {
                   <Field label="כינוי לתצוגה" hint="ככה המאמן והמערכת יפנו אליך. ריק = השם מ-Clerk.">
                     <TextInput value={settings.nickname} onChange={v => patch('nickname', v)} placeholder={user?.firstName ?? 'הכנס כינוי'} maxLength={40} />
                   </Field>
-                  <Field label="ביו" hint="1-2 משפטים על מי אתה כסוחר. המאמן משתמש בזה כדי לנסח עצות בהתאם.">
-                    <TextArea value={settings.bio} onChange={v => patch('bio', v)} placeholder="סוחר חוזים עתידיים על ES, מתמקד בסשן ה-NY AM, אחרי שנתיים של practice…" maxLength={240} />
+                  <Field
+                    label="ביו"
+                    hint="מי אתה כסוחר — ניסיון, מה אתה סוחר, באילו שעות, איך אתה עובד ומה אתה מנסה לתקן. זה נשלח למאמן ולתובנה היומית כרקע קבוע עליך, כך שהם לא מנתחים אותך מאפס בכל פעם. עובדות בלבד: מספרים על הביצועים תמיד נלקחים מהיומן, לא מכאן."
+                  >
+                    <TextArea
+                      value={settings.bio}
+                      onChange={v => patch('bio', v)}
+                      placeholder="סוחר חוזים עתידיים על NQ ו-ES, שנתיים בשוק. סוחר בעיקר NY AM ומדי פעם לונדון, מודלים של ICT — סוויפ נזילות ו-FVG. עובד עם סיכון קבוע לעסקה ומנסה להפסיק לצאת מוקדם מהיעד."
+                      maxLength={600}
+                    />
                   </Field>
                   <Field label="סגנון מסחר" hint="עוזר למאמן לדעת אם לחשוב במונחי דקות או ימים.">
                     <PillGroup
@@ -189,30 +230,9 @@ export default function SettingsView() {
                       ]}
                     />
                   </Field>
-                  <Field label="אזור זמן" hint="לתצוגה בלבד — כל השעות מחושבות באזור ישראל.">
-                    <TextInput value={settings.timezoneLabel} onChange={v => patch('timezoneLabel', v)} maxLength={60} />
+                  <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, ולאיזה יום עסקה חדשה נרשמת.">
+                    <ZonePicker value={settings.timezone} onChange={v => patch('timezone', v)} />
                   </Field>
-                </div>
-              )}
-
-              {section === 'notifications' && (
-                <div className="flex flex-col gap-4 mt-8">
-                  <ToggleRow
-                    label="שומר משמעת" description="לפני שמירת עסקה, המערכת בודקת חוקים ומזהירה על סכנות (over-trading, ניגוד ל-bias וכו')."
-                    value={settings.guardianEnabled} onChange={v => patch('guardianEnabled', v)}
-                  />
-                  <ToggleRow
-                    label="תזכורת לתוכנית יומית" description="בבוקר, אם עוד לא כתבת את התוכנית — המערכת מזכירה."
-                    value={settings.dailyPlanReminder} onChange={v => patch('dailyPlanReminder', v)}
-                  />
-                  <ToggleRow
-                    label="תזכורת לדוח שבועי" description="בסוף השבוע — מזכירה לפתוח את הדוח החדש."
-                    value={settings.weeklyReportReminder} onChange={v => patch('weeklyReportReminder', v)}
-                  />
-                  <ToggleRow
-                    label="אפקטים קוליים" description="פידבק קל כשאתה שומר עסקה או מקבל תובנה חדשה."
-                    value={settings.soundEffects} onChange={v => patch('soundEffects', v)}
-                  />
                 </div>
               )}
 
@@ -278,6 +298,47 @@ export default function SettingsView() {
                 </div>
               )}
             </div>
+
+            {/* The save bar. Present on every section, and it states which of
+                the three states the page is in rather than leaving the trader
+                to guess whether their edit took. */}
+            <div
+              className="mt-5 flex items-center gap-3 flex-wrap rounded-[14px] border px-5 py-4 transition-colors duration-200"
+              style={{
+                borderColor: dirty ? 'rgba(212,175,55,0.35)' : '#1c1c1e',
+                background: dirty ? 'rgba(212,175,55,0.05)' : '#0a0a0b',
+              }}
+            >
+              <button
+                type="button"
+                onClick={save}
+                disabled={!dirty}
+                className="rounded-sm px-5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-[0.16em] transition-all duration-200"
+                style={{
+                  background: dirty ? '#d4af37' : 'transparent',
+                  color: dirty ? '#000' : 'rgba(255,255,255,0.3)',
+                  border: `1px solid ${dirty ? '#d4af37' : '#1c1c1e'}`,
+                  cursor: dirty ? 'pointer' : 'not-allowed',
+                  boxShadow: dirty ? '0 0 24px rgba(212,175,55,0.35)' : 'none',
+                }}
+              >
+                שמירת שינויים
+              </button>
+
+              {dirty && (
+                <button
+                  type="button"
+                  onClick={revert}
+                  className="rounded-sm px-4 py-2.5 font-mono text-[12px] font-bold uppercase tracking-[0.16em] text-white/40 hover:text-white/70 border border-[#1c1c1e] transition-colors duration-200"
+                >
+                  ביטול שינויים
+                </button>
+              )}
+
+              <span className="text-[12.5px] mr-auto" style={{ color: dirty ? '#d4af37' : 'rgba(255,255,255,0.35)' }}>
+                {dirty ? 'יש שינויים שלא נשמרו' : saved ? 'נשמר וסונכרן' : 'הכל שמור'}
+              </span>
+            </div>
           </main>
         </div>
       </div>
@@ -287,7 +348,7 @@ export default function SettingsView() {
 
 /* ── Building blocks ─────────────────────────────────────────────────── */
 
-function SectionHeader({ title, eyebrow, saved }: { title: string; eyebrow: string; saved: boolean }) {
+function SectionHeader({ title, eyebrow, saved, dirty }: { title: string; eyebrow: string; saved: boolean; dirty: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#1c1c1e]">
       <div>
@@ -295,7 +356,12 @@ function SectionHeader({ title, eyebrow, saved }: { title: string; eyebrow: stri
         <h2 style={{ fontFamily: 'var(--serif)' }} className="text-[28px] font-bold text-white m-0 leading-none">{title}</h2>
       </div>
       <div className="shrink-0 min-w-[80px] text-left" aria-live="polite">
-        {saved && (
+        {dirty && (
+          <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-[11px] font-bold text-[#d4af37] bg-[#d4af37]/10 border border-[#d4af37]/35">
+            <span>●</span> לא נשמר
+          </span>
+        )}
+        {!dirty && saved && (
           <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-[11px] font-bold text-[#5fd39e] bg-[#5fd39e]/10 border border-[#5fd39e]/35">
             <span>✓</span> נשמר
           </span>
@@ -426,6 +492,64 @@ function ToggleRow({
         />
       </div>
     </button>
+  );
+}
+
+/** The timezone control.
+ *
+ *  A `select` over real IANA identifiers, not a text box. The previous field
+ *  accepted any string, stored it, and was read by nothing — so it could say
+ *  one thing while the app ran on another. The live clock underneath is the
+ *  proof the choice took: it is rendered through the same helper the session
+ *  detector uses, so if it shows the wrong hour, the sessions are wrong too. */
+function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [now, setNow] = useState(() => clockInZone(value));
+
+  useEffect(() => {
+    const tick = () => setNow(clockInZone(value));
+    tick();
+    const id = setInterval(tick, 20_000);
+    return () => clearInterval(id);
+  }, [value]);
+
+  const groups = useMemo(() => {
+    const out = new Map<string, typeof ZONES[number][]>();
+    for (const z of ZONES) {
+      const list = out.get(z.group) ?? [];
+      list.push(z);
+      out.set(z.group, list);
+    }
+    return [...out.entries()];
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        dir="rtl"
+        className="w-full rounded-sm bg-[#111] border border-[#222] px-3 py-2.5 text-[14px] text-white outline-none focus:border-[#d4af37]/60 transition-colors duration-200"
+      >
+        {groups.map(([group, zones]) => (
+          <optgroup key={group} label={group}>
+            {zones.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+      <div className="flex items-center gap-2 text-[12.5px] text-white/40">
+        <span className="text-[#d4af37]">◈</span>
+        <span>השעה כרגע באזור שנבחר:</span>
+        <span
+          className="font-mono font-bold text-white/80"
+          style={{ direction: 'ltr', unicodeBidi: 'isolate', fontVariantNumeric: 'tabular-nums' }}
+        >
+          {now}
+        </span>
+        <span className="font-mono" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
+          {zoneAbbreviation(value)}
+        </span>
+      </div>
+    </div>
   );
 }
 

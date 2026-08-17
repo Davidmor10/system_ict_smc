@@ -44,6 +44,10 @@ export function buildChatPrompt(
   /** Router categories deciding which rule blocks to inject (from classifyQuestion).
       Empty = base prompt only (no domain/macro blocks) — avoids Lost-in-the-Middle. */
   categories: RouteCategory[] = [],
+  /** What the trader wrote about themselves in settings (from
+      lib/settings/server). Empty when they have written nothing — which must
+      stay empty rather than become a heading with "unknown" under it. */
+  traderProfile = '',
 ): string {
   const smc = categories.includes('SMC_TECHNICAL');
   const macro = categories.includes('MACRO_NEWS');
@@ -120,6 +124,8 @@ ABSOLUTE RULES:
     discretion ? DISCRETION_OVERRIDE : '',
     psych ? PSYCHOLOGY_NOTE : '',
     knowledgeBlock.trim(),
+    // Ahead of the numbers: it frames how to read them, and it is short.
+    traderProfile.trim(),
     factsSection,
     macroData,
     overlapSection,

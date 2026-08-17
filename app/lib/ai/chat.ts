@@ -22,6 +22,7 @@ import { parseCoachJson } from './coachOutput';
 import { logCoachFallback } from './coachFallbackLog';
 import { retrieveKnowledge, renderKnowledge } from './kb';
 import { classifyQuestion } from './router';
+import { traderProfileBlock } from '../settings/server';
 import { logger } from '../logger';
 
 export type { ChatTurn } from './chatPrompt';
@@ -67,6 +68,10 @@ export async function answerCoachQuestion(
   // Real macro calendar (Israel time) — runs regardless of journal data, and
   // in parallel with everything else. Never throws; [] on any failure.
   const macroPromise = getMacroEvents(supabase);
+
+  // What the trader wrote about themselves. Started in parallel: it is a single
+  // indexed row and must never be the reason an answer is slow.
+  const profilePromise = traderProfileBlock(userId).catch(() => '');
 
   // Journal facts — best effort. Missing or too-few trades no longer blocks the
   // coach; the prompt is told to admit it has no journal data for personal
@@ -118,7 +123,10 @@ export async function answerCoachQuestion(
   // Layer 1 — retrieve book-depth knowledge for the concepts this question
   // touches (injected only when relevant; never the whole KB).
   const knowledgeBlock = renderKnowledge(retrieveKnowledge(question));
-  const prompt = buildChatPrompt(facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock, categories);
+  const prompt = buildChatPrompt(
+    facts, existing, question, lang, macroBlock, overlapHint, knowledgeBlock, categories,
+    await profilePromise,
+  );
 
   // Structured-output pipeline. The model must return {reasoning, final_answer};
   // we read ONLY final_answer, so its private reasoning can never reach the user

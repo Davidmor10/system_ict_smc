@@ -34,6 +34,7 @@ import { retrievePastWriting } from './retrievePastWriting';
 import { analyzeBehavior } from './analyzeBehavior';
 import { checkInsight, hasHardViolation, buildCorrection } from '../quality/insightCheck';
 import { requireClerkId } from '../db/client';
+import { traderProfileBlock } from '../../settings/server';
 import { logger } from '../../logger';
 
 export type PlanTier = 'free' | 'starter' | 'pro' | 'deluxe';
@@ -130,9 +131,12 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   if (existing) return { status: 'exists', row: existing };
 
   // 3. Load context in parallel where possible.
-  const [profile, todayTrades] = await Promise.all([
+  const [profile, todayTrades, traderProfile] = await Promise.all([
     getUserProfile(cid),
     listTradesForDate(cid, inputs.date),
+    // What the trader wrote about themselves. Never throws — an absent bio
+    // shortens the prompt, it does not fail the night's run.
+    traderProfileBlock(cid).catch(() => ''),
   ]);
   const signals = computeTodaySignals(todayTrades);
 
@@ -183,6 +187,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     pastWritingBlock: retrieval.block,
     statisticalFallback,
     behavior: behavior.block,
+    traderProfile,
   });
 
   // 6. Run the primary. If primary is Claude and it fails, try Gemini once
@@ -345,6 +350,10 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     profile_updated_at:   profile?.updated_at ?? null,
     analyzer_version:     profile?.analyzer_version ?? null,
     statistical_source:   statisticalFallback ? 'computed_fallback' : (profile ? 'rolling_profile' : 'none'),
+    // Whether the note was written knowing who this trader says they are. Two
+    // insights that read differently for the same numbers are explained by
+    // this flag more often than by anything else in the snapshot.
+    trader_profile_used:  traderProfile.length > 0,
     statistical_n:        statisticalFallback?.n ?? profile?.statistical?.n ?? 0,
     trade_ids:            todayTrades.map(t => t.id),
     today_signals:        signals,

@@ -44,8 +44,16 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       upstream, deterministically, and arrives as statements that are
  *       already true and already carry the strength of their evidence. The
  *       model's remaining job is prose — and the tier rules below are what
- *       stop it from promoting a correlation into a cause on the way. */
-export const DAILY_INSIGHT_PROMPT_VERSION = 5;
+ *       stop it from promoting a correlation into a cause on the way.
+ *
+ *  v6 — the trader's own description of themselves, from settings. The field
+ *       had existed for months, described in the UI as something the coach
+ *       reads, and nothing read it: every insight met the trader as a stranger
+ *       and inferred their horizon from a day of trades. It arrives as
+ *       background with an explicit rule that it can never outrank the data,
+ *       because it is the one input here the trader can simply be wrong about.
+ */
+export const DAILY_INSIGHT_PROMPT_VERSION = 6;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -145,7 +153,8 @@ The insight renders as markdown on their dashboard, above their trade calendar.
 It is the first thing they read in the morning. Write like you know that.
 
 ═══ DATA CONTRACT ═══
-You will receive four blocks. Read them all before writing a single word.
+You will receive five blocks (the last may be absent). Read them all before
+writing a single word.
 
 <user_profile>
   The rolling profile — a compressed snapshot of who this trader is right now.
@@ -182,6 +191,18 @@ You will receive four blocks. Read them all before writing a single word.
   are semantically related to today's context. Each: { date, snippet, kind }.
   May be []. If empty or irrelevant — ignore, do not reference the notebook.
 </past_writing>
+
+<trader_self_description>
+  Two or three sentences the trader wrote about themselves in settings — what
+  they trade, when, how, and what they are working on. MAY BE ABSENT.
+
+  It is background, not evidence. Use it to pitch the horizon and the level of
+  what you say; a scalper and a swing trader need different framing for the same
+  number. Every statistic still comes from the blocks above. If they describe
+  themselves as disciplined and the data disagrees, the data is what happened —
+  say what the data shows and do not argue with them about the description.
+  Never quote it back to them, and never mention that you were given it.
+</trader_self_description>
 
 <behavior>
   The completed behavioural analysis. See rules 12-19.
@@ -236,6 +257,9 @@ export interface DailyInsightInputs {
   /** The completed behavioural analysis. Omitted only when the layer failed;
    *  the empty block is a valid input and produces a shorter, honest note. */
   behavior?:        BehaviorBlock;
+  /** What the trader wrote about themselves in settings. '' when they have
+   *  written nothing, which omits the block entirely. */
+  traderProfile?:   string;
   /** Deterministic stats to use when the rolling profile has none yet.
    *  Computed by analyzers/statistical.ts from the user's real trade history —
    *  never invented, never a placeholder. Ignored when the profile already
@@ -335,5 +359,10 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
     '<behavior>',
     safeJson(inputs.behavior ?? EMPTY_BLOCK),
     '</behavior>',
+    // Omitted entirely when the trader has written nothing. An empty section
+    // is an invitation to fill it.
+    ...(inputs.traderProfile?.trim()
+      ? ['', '<trader_self_description>', safeBlock(inputs.traderProfile.trim()), '</trader_self_description>']
+      : []),
   ].join('\n');
 }

@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type InstrumentKey, isKnownInstrument, pointValue } from './instruments';
+import { todayISOInZone } from './time/zone';
 import {
   calcPnL, calcRR,
   calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice,
@@ -204,8 +205,14 @@ export function daysUntilExpiry(_deletedAt: string): number {
 export const JOURNAL_KEY = 'fractal_engine_journal';
 
 /** Local calendar day as `YYYY-MM-DD`, matching the user's wall clock. */
+/** The date a trade logged right now gets filed under.
+ *
+ *  Was the browser's own local date. A trader whose machine sits in one zone
+ *  while they trade another market filed the 09:00 entry under yesterday, and
+ *  no amount of correct arithmetic downstream could put it back. It now
+ *  follows the timezone chosen in settings, which defaults to Israel. */
 export function todayISO(): string {
-  return toLocalISO(new Date());
+  return todayISOInZone();
 }
 
 function toLocalISO(d: Date): string {

@@ -7,6 +7,7 @@
 // hydration flows without any new plumbing.
 
 import type { InstrumentKey } from '../instruments';
+import { resolveZone } from '../time/zone';
 
 export const SETTINGS_KIND = 'user_settings_v1';
 export const SETTINGS_KEY  = 'onyx_user_settings_v1';
@@ -46,19 +47,15 @@ export interface UserSettings {
   accountStartUsd: number;
   /** Preferred display unit for stats — dollar, R, points, ticks, percent. */
   displayUnit: 'dollar' | 'percent' | 'r' | 'ticks' | 'points';
-  /** Preferred timezone label — displayed only; times are always
-      Israel-local under the hood. */
-  timezoneLabel: string;
-
-  /** ── Notifications / discipline prompts ─────────────────────────── */
-  /** Show the Discipline Guardian warnings before saving a trade. */
-  guardianEnabled: boolean;
-  /** Nudge the trader to write a daily plan every morning. */
-  dailyPlanReminder: boolean;
-  /** Nudge for the weekly AI report on Sunday. */
-  weeklyReportReminder: boolean;
-  /** Save-trade sound feedback. */
-  soundEffects: boolean;
+  /** The clock the app runs on, as an IANA identifier.
+   *
+   *  This is a real setting, not a caption. Session detection and the date a
+   *  trade is filed under both resolve through it — see lib/time/zone.ts. It
+   *  replaces `timezoneLabel`, which was free text nothing ever read. */
+  timezone: string;
+  /** @deprecated The old free-text field. Kept so an existing doc can be
+   *  migrated on read — never written again. */
+  timezoneLabel?: string;
 
   /** ── Appearance ─────────────────────────────────────────────────── */
   density: Density;
@@ -84,12 +81,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   defaultSymbol: 'ES',
   accountStartUsd: 25_000,
   displayUnit: 'dollar',
-  timezoneLabel: 'Israel (Asia/Jerusalem)',
-
-  guardianEnabled: true,
-  dailyPlanReminder: true,
-  weeklyReportReminder: true,
-  soundEffects: true,
+  timezone: 'Asia/Jerusalem',
 
   density: 'comfortable',
   numberFormat: 'us',
@@ -101,5 +93,11 @@ export const DEFAULT_SETTINGS: UserSettings = {
     settings page from breaking when the schema grows a new field before
     an old user's cloud doc has been re-saved. */
 export function withDefaults(partial: Partial<UserSettings> | null | undefined): UserSettings {
-  return { ...DEFAULT_SETTINGS, ...(partial ?? {}) };
+  const merged = { ...DEFAULT_SETTINGS, ...(partial ?? {}) };
+  // Migrate the old free-text timezone. A doc written before the picker
+  // existed carries something like "Israel (Asia/Jerusalem)" — or whatever was
+  // typed into it — and no `timezone` at all. Reading an id out of it is what
+  // keeps an existing account from being silently reset to the default.
+  if (!partial?.timezone) merged.timezone = resolveZone(partial?.timezoneLabel);
+  return merged;
 }
