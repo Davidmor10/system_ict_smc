@@ -16,17 +16,16 @@ import { hydrateDoc, saveDoc } from '../lib/sync/collections';
 import { usePlan } from './PlanProvider';
 import {
   DEFAULT_SETTINGS, SETTINGS_KEY, SETTINGS_KIND, withDefaults,
-  type UserSettings, type Density, type NumberFormat, type TradingStyle,
+  type UserSettings, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { ZONES, clockInZone, zoneAbbreviation } from '../lib/time/zone';
 
-type SectionKey = 'profile' | 'trading' | 'appearance' | 'account';
+type SectionKey = 'profile' | 'trading' | 'account';
 
 const SECTIONS: { key: SectionKey; label: string; hint: string; icon: string }[] = [
   { key: 'profile',       label: 'פרופיל',   hint: 'איך המערכת פונה אליך', icon: '◉' },
   { key: 'trading',       label: 'מסחר',     hint: 'ברירות מחדל, שעון וקנה מידה', icon: '⇅' },
-  { key: 'appearance',    label: 'עיצוב',    hint: 'צפיפות, ניגודיות, תנועה', icon: '◐' },
   { key: 'account',       label: 'חשבון',    hint: 'מסלול, יציאה, מחיקה',    icon: '⌘' },
 ];
 
@@ -36,12 +35,6 @@ const TRADING_STYLE_LABEL: Record<TradingStyle, string> = {
   swing:   'סווינג · ימים עד שבועות',
   position:'פוזיציה · שבועות ומעלה',
 };
-const DENSITY_LABEL: Record<Density, string> = {
-  compact:     'צפוף',
-  comfortable: 'רגיל',
-  spacious:    'מרווח',
-};
-const NUM_FMT_LABEL: Record<NumberFormat, string> = { us: 'US · 1,234.56', eu: 'EU · 1.234,56' };
 
 export default function SettingsView() {
   const { user, isLoaded } = useUser();
@@ -233,29 +226,6 @@ export default function SettingsView() {
                   <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, ולאיזה יום עסקה חדשה נרשמת.">
                     <ZonePicker value={settings.timezone} onChange={v => patch('timezone', v)} />
                   </Field>
-                </div>
-              )}
-
-              {section === 'appearance' && (
-                <div className="flex flex-col gap-6 mt-8">
-                  <Field label="צפיפות תצוגה" hint="כמה מידע נדחס במסך. משפיע על ריווח וגדלים ברוב הדפים.">
-                    <PillGroup
-                      value={settings.density}
-                      onChange={v => patch('density', v as Density)}
-                      options={(['compact','comfortable','spacious'] as Density[]).map(k => ({ value: k, label: DENSITY_LABEL[k] }))}
-                    />
-                  </Field>
-                  <Field label="פורמט מספרים">
-                    <PillGroup
-                      value={settings.numberFormat}
-                      onChange={v => patch('numberFormat', v as NumberFormat)}
-                      options={(['us','eu'] as NumberFormat[]).map(k => ({ value: k, label: NUM_FMT_LABEL[k] }))}
-                    />
-                  </Field>
-                  <ToggleRow
-                    label="הקטן תנועה" description="מבטל את אנימציית ה-aurora ברקע הדשבורד. גם מכובד אוטומטית עבור מערכות הפעלה שהגדירו reduced-motion."
-                    value={settings.reduceMotion} onChange={v => patch('reduceMotion', v)}
-                  />
                 </div>
               )}
 
@@ -466,32 +436,6 @@ function PillGroup<T extends string>({
         );
       })}
     </div>
-  );
-}
-
-function ToggleRow({
-  label, description, value, onChange,
-}: { label: string; description: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!value)}
-      className="text-right flex items-start justify-between gap-4 py-4 px-5 rounded-[12px] border border-[#1c1c1e] bg-white/[0.02] hover:border-[#d4af37]/25 hover:bg-[#d4af37]/[0.03] transition-all"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="text-[15px] font-bold text-white">{label}</div>
-        <div className="text-[12.5px] text-white/50 mt-1 leading-relaxed">{description}</div>
-      </div>
-      <div
-        className="shrink-0 mt-1 relative w-[44px] h-[24px] rounded-full transition-colors duration-200"
-        style={{ background: value ? '#d4af37' : 'rgba(255,255,255,0.14)' }}
-      >
-        <span
-          className="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white transition-all duration-200"
-          style={{ [value ? 'right' : 'left']: '3px' }}
-        />
-      </div>
-    </button>
   );
 }
 

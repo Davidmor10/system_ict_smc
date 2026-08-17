@@ -12,14 +12,6 @@ import { resolveZone } from '../time/zone';
 export const SETTINGS_KIND = 'user_settings_v1';
 export const SETTINGS_KEY  = 'onyx_user_settings_v1';
 
-/** Density affects paddings/gaps across the app. Compact = pack more info,
-    spacious = breathe more. Comfortable is the default. */
-export type Density = 'compact' | 'comfortable' | 'spacious';
-
-/** Number formatting locale — traders working from Israel default to US
-    formatting for prices but many expect thousands separators the EU way. */
-export type NumberFormat = 'us' | 'eu';
-
 /** Which trading style the trader identifies with — used by the AI coach
     to phrase advice for a scalper vs a swing trader. */
 export type TradingStyle =
@@ -57,13 +49,6 @@ export interface UserSettings {
    *  migrated on read — never written again. */
   timezoneLabel?: string;
 
-  /** ── Appearance ─────────────────────────────────────────────────── */
-  density: Density;
-  numberFormat: NumberFormat;
-  /** When true, the dashboard's aurora background animation is disabled
-      (also honored automatically for `prefers-reduced-motion`). */
-  reduceMotion: boolean;
-
   /** Bookkeeping — used by the sync layer to pick a winner across
       devices (newest updatedAt wins). */
   updatedAt?: number;
@@ -82,10 +67,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   accountStartUsd: 25_000,
   displayUnit: 'dollar',
   timezone: 'Asia/Jerusalem',
-
-  density: 'comfortable',
-  numberFormat: 'us',
-  reduceMotion: false,
 };
 
 /** Coalesce a partial (possibly cloud-hydrated) settings doc into a full
