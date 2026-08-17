@@ -84,7 +84,7 @@ function blankDraft(): Draft {
 
 // ── Small building blocks ────────────────────────────────────────────────────
 
-function Segmented<T extends string>({ options, value, onChange, labelOf, ltr }: {
+function Segmented<T extends string>({ options, value, onChange, labelOf, ltr, tone }: {
   options: readonly T[];
   value: T;
   onChange: (v: T) => void;
@@ -92,9 +92,12 @@ function Segmented<T extends string>({ options, value, onChange, labelOf, ltr }:
   /** Isolate each label. `A+` unisolated renders as `+A`: the plus is a neutral
    *  character at the end of the run, so it takes the paragraph's RTL direction. */
   ltr?: boolean;
+  /** Which fill the selected option takes. White is the design system's
+   *  default; gold is only for the control the design marks that way. */
+  tone?: 'white' | 'gold';
 }) {
   return (
-    <div className="su-seg">
+    <div className="su-seg" data-tone={tone}>
       {options.map(o => (
         <button key={o} type="button" aria-pressed={value === o} onClick={() => onChange(o)}>
           {ltr ? <span className="su-ltr">{labelOf ? labelOf(o) : o}</span> : (labelOf ? labelOf(o) : o)}
@@ -252,7 +255,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         {!trashed ? (
           <>
             <button type="button" className="su-btn su-btn-sm su-btn-ghost" onClick={onUse}>שימוש בסטאפ ←</button>
-            <button type="button" className="su-btn su-btn-sm" onClick={onEdit}>עריכה</button>
+            <button type="button" className="su-btn su-btn-sm su-btn-subtle" onClick={onEdit}>עריכה</button>
           </>
         ) : (
           <button type="button" className="su-btn su-btn-sm su-btn-ghost" onClick={onRestore}>שחזור ↺</button>
@@ -260,7 +263,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
 
         <button
           type="button"
-          className="su-btn su-btn-sm su-btn-del"
+          className="su-btn-del"
           data-armed={confirming}
           onClick={onDelete}
         >
@@ -533,7 +536,13 @@ export default function PlaybookPage() {
               </p>
             </div>
             <div className="su-head-actions">
-              <button type="button" className={`su-btn${inTrash ? ' su-btn-ghost' : ''}`} onClick={toggleView}>
+              <button
+                type="button"
+                className="su-btn-rail"
+                data-on={inTrash}
+                data-full={trashSetups.length > 0}
+                onClick={toggleView}
+              >
                 {inTrash ? '← חזרה לפלייבוק' : `סל מחזור · ${trashSetups.length}`}
               </button>
               {/* No "new setup" inside the bin. */}
@@ -780,7 +789,7 @@ export default function PlaybookPage() {
                     <span className="su-field-label" style={{ marginBottom: 0 }}>צ׳קליסט כניסה</span>
                     <button
                       type="button"
-                      className="su-btn su-btn-sm su-btn-ghost"
+                      className="su-btn-add"
                       onClick={() => setD('checklist', [...draft.checklist, { text: '', required: true }])}
                     >
                       סעיף +
@@ -823,7 +832,7 @@ export default function PlaybookPage() {
                     <span className="su-field-label" style={{ marginBottom: 0 }}>דירוג</span>
                     <span style={{ fontSize: 11, color: 'var(--white-30)' }}>רמת הביטחון שאתה נותן לסטאפ</span>
                   </div>
-                  <Segmented options={GRADES} value={draft.grade} onChange={v => setD('grade', v)} ltr />
+                  <Segmented options={GRADES} value={draft.grade} onChange={v => setD('grade', v)} ltr tone="gold" />
                 </div>
 
                 <div>
@@ -839,7 +848,7 @@ export default function PlaybookPage() {
 
               <div className="su-drawer-foot">
                 <button type="button" className="su-btn su-btn-primary" onClick={saveDraft}>שמירת סטאפ</button>
-                <button type="button" className="su-btn" onClick={closeDrawer}>ביטול</button>
+                <button type="button" className="su-btn su-btn-subtle" onClick={closeDrawer}>ביטול</button>
                 <span className="su-drawer-hint">
                   {editingId ? 'שינויים נשמרים לסטאפ הקיים' : 'אפשר לערוך הכל אחר כך'}
                 </span>

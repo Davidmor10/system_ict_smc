@@ -111,13 +111,12 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  /* 1120px was starving the page. The design runs edge to edge, and at 1120
-     the three filter groups cannot fit one row and the cards drop to three
-     narrow columns instead of four — the two things that still read as
-     "not the same design". 1600 keeps the centring on an ultra-wide monitor
-     and gets the density back everywhere else. */
-  max-width: 1600px;
-  margin-inline: auto;
+  /* No cap and no centring. The design has no content wrapper at all — the
+     root carries `padding: 40px 48px 120px` and every section is a direct
+     child of it, edge to edge. Every width I imposed here (1120, then 1600)
+     was mine, and each one changed how many filter chips fit a row and how
+     many card columns the grid resolved to. */
+  max-width: none;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -188,48 +187,87 @@
   flex-shrink: 0; margin-top: 1px; width: 100%;
 }
 .su-sweep {
-  position: absolute; top: 0; left: 0; width: 45%; height: 1px;
+  position: absolute; top: 0; inset-inline-start: 0; width: 45%; height: 1px;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.9), rgba(212,175,55,0));
   animation: suSweep 2600ms var(--su-ease) 300ms both;
 }
 
-/* ── Buttons ────────────────────────────────────────────────────────────── */
+/* ── Buttons ──────────────────────────────────────────────────────────────
+   Transcribed from the design system's Button component rather than eyeballed
+   from the render. Three things I had wrong: primary is a FLAT gold fill with
+   a standing glow, not a gradient; the sizes are 8px 16px / 10px 22px, not my
+   own; and there is a press state — scale(0.97) while held. */
 .su-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.18em; text-transform: uppercase;
-  border-radius: 2px; padding: 9px 14px; cursor: pointer; white-space: nowrap;
-  background: transparent; border: 1px solid var(--su-border); color: var(--white-40);
-  transition: color 250ms var(--su-ease), border-color 250ms var(--su-ease),
-              background-color 250ms var(--su-ease), box-shadow 250ms var(--su-ease);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font-mono); font-weight: 700; text-transform: uppercase;
+  border-radius: 2px; cursor: pointer; white-space: nowrap;
+  padding: 10px 22px; font-size: 13px; letter-spacing: 0.18em;
+  background: transparent; border: 1px solid transparent; color: var(--white-55);
+  transition: color 200ms var(--ease-smooth), background-color 200ms var(--ease-smooth),
+              border-color 200ms var(--ease-smooth), box-shadow 250ms var(--ease-smooth),
+              transform 150ms var(--ease-smooth);
 }
-.su-btn:hover { color: var(--white-70); border-color: var(--su-border-strong); }
+.su-btn:active { transform: scale(0.97); }
 .su-btn:focus-visible { outline: 2px solid var(--gold-60); outline-offset: 2px; }
 
+.su-btn-sm { padding: 8px 16px; font-size: 12px; letter-spacing: 0.18em; }
+
+/* subtle — the default look above, named so the intent is legible at the tag. */
+.su-btn-subtle:hover { color: var(--gold); }
+
 .su-btn-primary {
-  background: linear-gradient(180deg, var(--gold-soft), var(--gold));
-  border-color: var(--gold); color: #000; letter-spacing: 0.14em;
-  box-shadow: 0 0 30px -12px rgba(212,175,55,0.9);
+  background: var(--gold); color: var(--onyx-black); border-color: var(--gold);
+  box-shadow: 0 0 24px rgba(212,175,55,0.40);
 }
-.su-btn-primary:hover { color: #000; border-color: var(--gold-soft); box-shadow: 0 0 34px -8px rgba(212,175,55,1); }
+.su-btn-primary:hover { box-shadow: 0 0 40px rgba(212,175,55,0.65); }
 
-.su-btn-ghost { color: var(--gold); border-color: var(--gold-45); }
-.su-btn-ghost:hover { color: var(--gold-soft); border-color: var(--gold); background: var(--gold-04); }
+.su-btn-ghost { background: transparent; color: var(--gold); border-color: var(--gold-45); }
+.su-btn-ghost:hover { background: var(--gold-10); border-color: var(--gold); }
 
-.su-btn-sm { padding: 7px 12px; font-size: 10px; letter-spacing: 0.16em; }
+.su-btn-secondary {
+  background: var(--su-surface-raised); color: var(--white-70); border-color: var(--su-border-strong);
+}
+.su-btn-secondary:hover { color: var(--white-90); }
 
-/* Two-step delete: no border at rest, burgundy once armed. --white-40 rather
-   than --white-30 — at 10px on this ground the dimmer tone was barely there. */
-.su-btn-del { border-color: transparent; color: var(--white-40); }
-.su-btn-del:hover { color: var(--white-70); border-color: var(--su-border); }
+/* The trash toggle is a raw button in the design, not a Button variant, and
+   its resting colour reports whether the bin holds anything. */
+.su-btn-rail {
+  background: transparent; border: 1px solid var(--su-border); border-radius: 2px;
+  padding: 9px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--white-40);
+  cursor: pointer; white-space: nowrap;
+  transition: color 250ms var(--ease-smooth), border-color 250ms var(--ease-smooth),
+              background-color 250ms var(--ease-smooth);
+}
+.su-btn-rail[data-full='true'] { color: var(--white-70); }
+.su-btn-rail[data-on='true']   { color: var(--gold); border-color: var(--gold-45); }
+.su-btn-rail:hover { color: var(--gold); border-color: var(--gold-45); background: var(--gold-04); }
+
+/* Two-step delete, verbatim: no border until armed, --white-30 at rest. */
+.su-btn-del {
+  background: transparent; border: 1px solid transparent; border-radius: 2px;
+  padding: 5px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--white-30);
+  cursor: pointer; white-space: nowrap;
+  transition: color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth);
+}
+.su-btn-del:hover { color: var(--white-70); }
 .su-btn-del[data-armed='true'] { border-color: rgba(139,58,58,0.6); color: var(--short); }
-.su-btn-del[data-armed='true']:hover { border-color: var(--short); color: #c98080; }
+
+/* "סעיף +" in the drawer. */
+.su-btn-add {
+  background: transparent; border: 1px solid var(--gold-45); border-radius: 2px;
+  padding: 5px 12px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold);
+  cursor: pointer; transition: background-color 200ms var(--ease-smooth);
+}
+.su-btn-add:hover { background: var(--gold-10); }
 
 .su-icon-btn {
   flex-shrink: 0;
   background: transparent; border: 1px solid var(--su-border); border-radius: 2px;
   width: 32px; height: 32px; color: var(--white-40); font-size: 15px; cursor: pointer;
-  transition: color 200ms var(--su-ease), border-color 200ms var(--su-ease);
+  transition: color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth);
 }
 .su-icon-btn:hover { color: var(--gold); border-color: var(--gold-45); }
 
@@ -559,13 +597,22 @@
   display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 13px;
   font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--white-70);
 }
+/* The design-system Input is mono, 16px, bold, tabular — not a 14px sans
+   field. The textarea and the checklist rows are raw fields in the design and
+   keep their own, deliberately different, sans sizes. */
 .su-input, .su-textarea {
   width: 100%; background: var(--su-surface-raised); border: 1px solid var(--su-border-strong);
-  border-radius: 2px; padding: 11px 12px; font-family: var(--font-sans); font-size: 14px;
-  color: var(--text-primary); outline: none;
-  transition: border-color 300ms var(--su-ease);
+  border-radius: 2px; color: var(--text-primary); outline: none;
+  transition: border-color 300ms var(--ease-smooth);
 }
-.su-textarea { line-height: 1.7; resize: vertical; }
+.su-input {
+  padding: 10px 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+}
+.su-textarea {
+  padding: 12px; font-family: var(--font-sans); font-size: 14px;
+  line-height: 1.7; resize: vertical;
+}
 .su-input:focus, .su-textarea:focus { border-color: var(--gold-60); }
 .su-input::placeholder, .su-textarea::placeholder { color: var(--onyx-muted); }
 .su-input[aria-invalid='true'] { border-color: var(--short); }
@@ -573,30 +620,42 @@
 .su-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 560px) { .su-pair { grid-template-columns: 1fr; } }
 
-/* direction is pinned rather than inherited: the first DOM child has to be the
-   first one READ, and in RTL that is the rightmost. Left to inherit, a stray
-   LTR ancestor silently reverses A+ / A / B / C. */
+/* ── Segmented ────────────────────────────────────────────────────────────
+   A bare grid, not a flex row inside a bordered frame — the frame was mine.
+   The selected option FILLS: white on black by default, gold on black only
+   where the design asks for it (the grade control). Everything unselected is
+   charcoal with a strong border, not transparent.
+
+   direction is pinned so the first DOM child is the first one read; in RTL
+   that is the rightmost, which is what keeps the grades reading A+ A B C. */
 .su-seg {
-  display: flex; gap: 4px; direction: rtl;
-  background: var(--su-void); border: 1px solid var(--su-border);
-  border-radius: 4px; padding: 4px; min-width: 0;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 8px; direction: rtl; min-width: 0;
 }
 .su-seg button {
-  flex: 1 1 0; min-width: 0; padding: 8px 6px; border-radius: 2px; cursor: pointer;
-  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
-  background: transparent; border: 1px solid transparent; color: var(--white-40);
-  transition: color 250ms var(--su-ease), background 250ms var(--su-ease),
-              border-color 250ms var(--su-ease);
+  min-width: 0; padding: 10px 8px; border-radius: 2px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  background: var(--su-surface-raised); color: var(--white-55);
+  border: 1px solid var(--su-border-strong);
+  transition: color 300ms var(--ease-smooth), background-color 300ms var(--ease-smooth),
+              border-color 300ms var(--ease-smooth);
 }
-.su-seg button:hover { color: var(--white-70); }
+.su-seg button:hover { color: var(--text-primary); }
 .su-seg button[aria-pressed='true'] {
-  background: linear-gradient(180deg, rgba(212,175,55,0.20), rgba(212,175,55,0.06));
-  border-color: var(--gold-45); color: var(--gold);
+  background: var(--onyx-white); color: var(--onyx-black); border-color: var(--onyx-white);
+}
+.su-seg[data-tone='gold'] button[aria-pressed='true'] {
+  background: var(--gold); color: var(--onyx-black); border-color: var(--gold);
 }
 
 .su-draft-check { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.su-draft-check .su-input { flex: 1; min-width: 0; padding: 9px 11px; font-size: 13px; }
+/* A checklist row is prose, not a figure: sans 13px, normal weight. */
+.su-draft-check .su-input {
+  flex: 1; min-width: 0; padding: 9px 11px;
+  font-family: var(--font-sans); font-size: 13px; font-weight: 400; letter-spacing: normal;
+}
 .su-req {
   flex-shrink: 0; font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   letter-spacing: 0.1em; padding: 6px 8px; border-radius: 2px; cursor: pointer;
@@ -634,7 +693,7 @@
   to   { opacity: 1; transform: none; filter: blur(0); }
 }
 @keyframes suFade  { from { opacity: 0; } to { opacity: 1; } }
-@keyframes suSweep { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
+@keyframes suSweep { from { transform: translateX(120%); } to { transform: translateX(-220%); } }
 @keyframes suToast {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
