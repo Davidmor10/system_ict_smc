@@ -115,9 +115,7 @@ function ChipRow<T extends string>({ label, options, value, onSelect, labelOf, l
   return (
     <div className="su-filter-group">
       <span className="su-filter-label">{label}</span>
-      {/* Same frame the sort chips wear, so each filter reads as one control
-          rather than as buttons loose on the row. */}
-      <div className="su-chip-frame">
+      <div className="su-chip-set">
         {options.map(o => (
           <button key={o} type="button" className="su-chip" aria-pressed={value === o} onClick={() => onSelect(o)}>
             {ltrOptions && o !== 'all' ? <span className="su-ltr">{labelOf(o)}</span> : labelOf(o)}
@@ -151,7 +149,6 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
     ...setup.checklist.filter(c => c.required),
     ...setup.checklist.filter(c => !c.required),
   ].slice(0, 3);
-  const requiredCount = setup.checklist.filter(c => c.required).length;
 
   const pinned = setup.pinned && !trashed;
 
@@ -172,14 +169,15 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         </span>
       </div>
 
-      {/* The asset chip leads, always. A setup saved before the field existed
-          has no instrument on it — that is not "unknown", it is "not narrowed
-          to one", so it says so rather than leaving the row to start on the
-          direction. */}
+      {/* ONE asset chip, always, reading "ES / NQ" — not one chip per
+          instrument. The instruments a setup trades are a single fact about it,
+          and splitting them made a two-instrument setup look like it carried
+          two separate tags. A setup saved before the field existed has no
+          instrument on it, which is not "unknown" but "not narrowed to one". */}
       <div className="su-tags">
-        {setup.assets.length > 0
-          ? setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)
-          : <span className="su-tag" data-kind="asset">כל הנכסים</span>}
+        <span className="su-tag su-ltr" data-kind="asset">
+          {setup.assets.length > 0 ? setup.assets.join(' / ') : 'ALL'}
+        </span>
         <span className="su-tag" data-dir={setup.direction}>{DIRECTION_HE[setup.direction]}</span>
         {setup.sessions.map(s => <span key={s} className="su-tag">{sessionHe(s)}</span>)}
         {setup.tags.map(t => <span key={t} className="su-tag su-ltr" data-kind="tag">{t}</span>)}
@@ -233,7 +231,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         <div className="su-check-head">
           <span className="su-section-label">צ׳קליסט כניסה</span>
           <span className="su-section-label">
-            {setup.checklist.length ? `${setup.checklist.length} סעיפים · ${requiredCount} חובה` : 'ריק'}
+            {setup.checklist.length ? `${setup.checklist.length} סעיפים` : 'ריק'}
           </span>
         </div>
         <div className="su-checklist">

@@ -111,7 +111,12 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1120px;
+  /* 1120px was starving the page. The design runs edge to edge, and at 1120
+     the three filter groups cannot fit one row and the cards drop to three
+     narrow columns instead of four — the two things that still read as
+     "not the same design". 1600 keeps the centring on an ultra-wide monitor
+     and gets the density back everywhere else. */
+  max-width: 1600px;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
@@ -288,9 +293,12 @@
   letter-spacing: 0.28em; text-transform: uppercase; color: var(--white-30);
   white-space: nowrap;
 }
+/* Filter chips sit bare; only the SORT set is framed. That asymmetry is the
+   design's, verified against its source: the sort group wraps its chips in a
+   bordered box, the three filter groups do not. Framing all four made the row
+   read as four identical controls and cost the width that keeps them on one
+   line. */
 .su-chip-set { display: flex; gap: 6px; min-width: 0; }
-/* Sort and every filter group share the same frame, so each set reads as one
-   control rather than as loose buttons. */
 .su-chip-frame {
   display: flex; gap: 6px; min-width: 0; flex-wrap: wrap;
   background: var(--su-void); border: 1px solid var(--su-border);
@@ -299,7 +307,7 @@
 
 .su-chip {
   position: relative; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 13px;
+  letter-spacing: 0.16em; text-transform: uppercase; padding: 8px 15px;
   border-radius: 2px; cursor: pointer; white-space: nowrap;
   background: var(--onyx-900); border: 1px solid var(--su-border); color: var(--white-40);
   transition: color 300ms var(--su-ease), background 300ms var(--su-ease),
