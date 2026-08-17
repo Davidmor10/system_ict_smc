@@ -1,0 +1,247 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Member Entry — what "/" shows a signed-in trader.
+
+   Scoped to .me. The handoff's token names are kept verbatim so the two can be
+   diffed later; the values are the ones it specifies.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.me {
+  /* Bound to the next/font variables, NOT to --font-serif / --font-sans /
+     --font-mono. Those three live in globals.css inside `@theme inline`, which
+     Tailwind v4 substitutes at BUILD time and never emits as a custom property
+     — so `var(--font-serif)` resolves to nothing at runtime and the element
+     silently inherits. That is what put the setups page in the wrong face, and
+     this design leans on Playfair for the wordmark and every heading.
+     A Hebrew face sits behind each named one, so Hebrew glyphs fall through
+     per-glyph while Latin and digits get the faces the handoff names. */
+  --me-serif: var(--font-playfair), var(--font-frank), Georgia, 'Times New Roman', serif;
+  --me-sans:  var(--font-geist-sans), var(--font-heebo), system-ui, sans-serif;
+  --me-mono:  var(--font-geist-mono), var(--font-heebo), ui-monospace, monospace;
+
+  --onyx-950:    #050505;
+  --onyx-900:    #0a0a0b;
+  --onyx-850:    #0d0d0f;
+  --onyx-800:    #1c1c1e;
+  --onyx-700:    #2a2a2d;
+  --onyx-silver: #c0c0c0;
+
+  --me-gold:      #d4af37;
+  --me-gold-soft: #e3c768;
+  --gold-04: rgba(212,175,55,0.04);
+  --gold-05: rgba(212,175,55,0.05);
+  --gold-08: rgba(212,175,55,0.08);
+  --gold-20: rgba(212,175,55,0.20);
+  --gold-30: rgba(212,175,55,0.30);
+  --gold-45: rgba(212,175,55,0.45);
+
+  --white-90: rgba(255,255,255,0.90);
+  --white-55: rgba(255,255,255,0.55);
+  --white-40: rgba(255,255,255,0.40);
+  --white-30: rgba(255,255,255,0.30);
+
+  --me-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  direction: rtl;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--onyx-950);
+  overflow-x: hidden;
+}
+
+.me a { text-decoration: none; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.me-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; min-height: 64px;
+  padding: 12px clamp(18px, 4vw, 32px);
+  border-bottom: 1px solid var(--onyx-800);
+  background: rgba(13, 13, 15, 0.6);
+}
+.me-mark { display: flex; flex-direction: column; align-items: flex-start; }
+.me-mark-a {
+  font-family: var(--me-serif); font-size: clamp(17px, 2.2vw, 20px);
+  font-weight: 800; letter-spacing: 0.04em; color: #fff; line-height: 1.1;
+}
+.me-mark-b {
+  font-family: var(--me-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.34em; color: var(--me-gold); line-height: 1.4;
+}
+.me-head-right { display: flex; align-items: center; gap: clamp(10px, 1.6vw, 16px); min-width: 0; }
+.me-plan {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--me-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.18em; color: var(--me-gold);
+  background: var(--gold-08); border: 1px solid var(--gold-20);
+  border-radius: 999px; padding: 5px 12px; white-space: nowrap; flex-shrink: 0;
+}
+.me-email {
+  font-family: var(--me-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; color: var(--white-40);
+  overflow: hidden; text-overflow: ellipsis; max-width: 34vw; white-space: nowrap;
+  direction: ltr; unicode-bidi: isolate;
+}
+.me-avatar {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--onyx-850); border: 1px solid var(--gold-30);
+  font-family: var(--me-serif); font-size: 15px; font-weight: 800; color: var(--me-gold);
+}
+.me-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.me-hero {
+  position: relative; overflow: hidden; text-align: center;
+  padding: clamp(52px, 8vw, 96px) clamp(20px, 5vw, 72px) clamp(34px, 4vw, 56px);
+}
+.me-hero-wash, .me-hero-grid { position: absolute; inset: 0; pointer-events: none; }
+.me-hero-wash {
+  background: radial-gradient(ellipse 65% 70% at 50% -10%, rgba(212,175,55,0.12), transparent 65%);
+}
+.me-hero-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 62px 62px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black, transparent);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black, transparent);
+}
+.me-hero-in {
+  position: relative; max-width: 1120px; margin: 0 auto;
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(16px, 2.4vw, 22px);
+}
+.me-kicker {
+  font-family: var(--me-mono); font-size: clamp(10px, 1.4vw, 11px); font-weight: 700;
+  letter-spacing: 0.3em; color: var(--me-gold); text-transform: uppercase;
+}
+.me-h1 {
+  margin: 0; font-family: var(--me-serif); font-size: clamp(2rem, 5.4vw, 4rem);
+  font-weight: 800; line-height: 1.06; color: #fff; text-wrap: balance;
+}
+.me-h1 span { color: var(--me-gold); text-shadow: 0 0 22px rgba(212,175,55,0.35); }
+.me-lead {
+  margin: 0; max-width: 52ch; font-family: var(--me-sans);
+  font-size: clamp(0.92rem, 1.6vw, 1.02rem); line-height: 1.85;
+  color: var(--white-55); text-wrap: pretty;
+}
+.me-cta {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+  margin-top: 8px; width: 100%; max-width: 440px;
+}
+.me-btn {
+  text-align: center; font-family: var(--me-mono); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.08em; border-radius: 2px;
+  transition: color 200ms var(--me-ease), border-color 200ms var(--me-ease),
+              background-color 200ms var(--me-ease), box-shadow 250ms var(--me-ease),
+              transform 150ms var(--me-ease);
+}
+.me-btn-primary {
+  flex: 1 1 190px; color: #000; background: var(--me-gold);
+  padding: 15px 30px; box-shadow: 0 0 24px rgba(212,175,55,0.4);
+  border: 1px solid var(--me-gold);
+}
+.me-btn-primary:hover { color: #000; box-shadow: 0 0 40px rgba(212,175,55,0.65); }
+.me-btn-secondary {
+  flex: 1 1 150px; color: var(--onyx-silver); background: transparent;
+  border: 1px solid var(--onyx-700); padding: 15px 26px;
+}
+.me-btn-secondary:hover { color: var(--me-gold); border-color: var(--me-gold); background: var(--gold-08); }
+.me-btn:active { transform: scale(0.97); }
+.me-btn:focus-visible { outline: 2px solid var(--gold-45); outline-offset: 3px; }
+
+/* ── Continue strip ─────────────────────────────────────────────────────── */
+.me-continue-pad { padding: 0 clamp(20px, 5vw, 72px); }
+.me-continue {
+  max-width: 1120px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 20px clamp(18px, 2.4vw, 26px);
+  background: var(--onyx-850); border: 1px solid var(--onyx-800); border-radius: 2px;
+  transition: border-color 250ms var(--me-ease), background-color 250ms var(--me-ease);
+}
+.me-continue:hover { border-color: var(--gold-30); background: var(--gold-04); }
+.me-continue-txt { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; min-width: 0; }
+.me-continue-kick {
+  font-family: var(--me-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.26em; color: var(--me-gold);
+}
+.me-continue-title {
+  font-family: var(--me-serif); font-size: clamp(16px, 2.2vw, 19px);
+  font-weight: 700; color: #fff;
+}
+.me-continue-arrow { font-family: var(--me-mono); font-size: 20px; color: var(--me-gold); flex-shrink: 0; }
+
+/* ── Destination grid ───────────────────────────────────────────────────── */
+.me-grid-pad { padding: clamp(20px, 3vw, 28px) clamp(20px, 5vw, 72px) clamp(20px, 2vw, 12px); }
+.me-grid {
+  max-width: 1120px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1px; background: transparent;
+}
+/* The hairline is a box-shadow, not a border. With a border, a row that does
+   not fill its columns paints a grey rectangle around the gap; a shadow ring
+   hugs each card and the short row just ends. */
+.me-dest {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  padding: clamp(20px, 2.4vw, 26px) clamp(18px, 2vw, 22px) clamp(24px, 2.8vw, 30px);
+  background: var(--onyx-950); box-shadow: 0 0 0 1px var(--onyx-800);
+  transition: background-color 250ms var(--me-ease);
+}
+.me-dest:hover { background: var(--gold-05); }
+.me-dest:focus-visible { outline: 2px solid var(--gold-45); outline-offset: -2px; }
+.me-dest-n {
+  font-family: var(--me-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.22em; color: var(--gold-45);
+  direction: ltr; unicode-bidi: isolate;
+}
+.me-dest-t { font-family: var(--me-serif); font-size: clamp(17px, 2.2vw, 20px); font-weight: 700; color: #fff; }
+.me-dest-d { font-family: var(--me-sans); font-size: 0.86rem; line-height: 1.6; color: var(--white-40); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.me-foot {
+  margin-top: auto;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+  padding: clamp(20px, 2.4vw, 26px) clamp(20px, 5vw, 72px) clamp(26px, 3vw, 34px);
+  border-top: 1px solid var(--onyx-800);
+}
+.me-disclaimer {
+  font-family: var(--me-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--white-30);
+}
+.me-foot-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.me-foot-link {
+  font-family: var(--me-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.06em; color: var(--white-55);
+  transition: color 200ms var(--me-ease);
+}
+.me-foot-link:hover { color: var(--me-gold); }
+.me-signout {
+  font-family: var(--me-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--white-40); background: transparent;
+  border: 1px solid var(--onyx-800); border-radius: 2px; padding: 9px 18px; cursor: pointer;
+  transition: color 200ms var(--me-ease), border-color 200ms var(--me-ease);
+}
+.me-signout:hover { color: #fff; border-color: var(--onyx-700); }
+
+/* ── No active subscription ─────────────────────────────────────────────────
+   Not in the handoff, which covers the subscribed member. The route still has
+   to answer a signed-in account without a plan — every tier is paid, so this
+   is a real state — and it wears the same shell rather than looking like a
+   different product. Nothing here is a destination the gate would bounce. */
+.me-plan[data-off='true'] {
+  color: var(--white-40); background: transparent; border-color: var(--onyx-700);
+}
+.me-note {
+  max-width: 1120px; margin: 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .me *, .me *::before, .me *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .me-btn:active { transform: none; }
+}
