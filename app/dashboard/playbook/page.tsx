@@ -1,279 +1,830 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useLanguage } from '../../hooks/useLanguage';
-import { groupByKey, loadTrades, UNSPECIFIED_MODEL } from '../../lib/journal';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { loadTrades } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { hydrateList, commitList } from '../../lib/sync/collections';
-import ConfirmDialog from '../../components/ConfirmDialog';
+import { INSTRUMENT_KEYS, type InstrumentKey } from '../../lib/instruments';
+import { SESS, type SessionKey } from '../../lib/sessions';
+import { hydrateList, saveList } from '../../lib/sync/collections';
+import {
+  DEFAULT_FILTER, DIRECTIONS, DIRECTION_HE, EMPTY_STATS, GRADES,
+  PLAYBOOK_COLLECTION, PLAYBOOK_STORAGE_KEY, STATUSES, STATUS_HE,
+  emptySetup, normalizeSetup, renameCost, statsBySetupName, visibleSetups,
+  type ChecklistItem, type Grade, type Setup, type SetupDirection,
+  type SetupFilter, type SetupStats, type SetupStatus, type SortKey,
+} from '../../lib/playbook';
+import './setups.css';
 
-const STORAGE_KEY = 'onyx_playbook';
+// ─────────────────────────────────────────────────────────────────────────────
+// The setups page.
+//
+// Every number a card shows is computed from the trade log, never stored on the
+// setup. A setup is the trader's own writing — name, conditions, checklist —
+// and its performance is whatever the journal says it was. Storing a win rate
+// on the setup would let the two disagree, and the stored one would win by
+// virtue of being the one on screen.
+//
+// The design this implements ships a `trades/winRate/avgR/pnl` field per setup
+// because a mockup has no journal behind it. Those are derived here instead.
+// ─────────────────────────────────────────────────────────────────────────────
 
-interface ChecklistItem { text: string; required: boolean; }
-interface Setup { id: string; name: string; description: string; checklist: ChecklistItem[]; tags: string[]; updatedAt?: number; deleted?: boolean; }
+const D = '◈';
 
-function emptySetup(): Setup {
-  return { id: Date.now().toString(), name: '', description: '', checklist: [], tags: [] };
+/** Confirm-in-place window for a destructive button. Long enough to read the
+ *  second label, short enough that a stray click doesn't stay armed. */
+const CONFIRM_MS = 3500;
+const TOAST_MS = 2600;
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'grade',  label: 'דירוג' },
+  { key: 'win',    label: 'WIN %' },
+  { key: 'r',      label: 'AVG R' },
+  { key: 'trades', label: 'עסקאות' },
+];
+
+const sessionHe = (k: SessionKey) => SESS.find(s => s.key === k)?.he ?? k;
+
+/** dd.MM — the card's "last touched" stamp. */
+function shortDate(iso: string | null): string {
+  if (!iso) return '—';
+  const [, m, d] = iso.split('-');
+  return m && d ? `${d}.${m}` : '—';
 }
 
-function SetupCard({ setup, stats, onEdit, onDelete }: {
+// ── Draft (the drawer's working copy) ────────────────────────────────────────
+
+interface Draft {
+  name: string;
+  description: string;
+  howItWorks: string;
+  grade: Grade;
+  assets: InstrumentKey[];
+  direction: SetupDirection;
+  sessions: SessionKey[];
+  status: SetupStatus;
+  tags: string;
+  checklist: ChecklistItem[];
+}
+
+function draftFrom(s: Setup): Draft {
+  return {
+    name: s.name, description: s.description, howItWorks: s.howItWorks,
+    grade: s.grade, assets: [...s.assets], direction: s.direction,
+    sessions: [...s.sessions], status: s.status,
+    tags: s.tags.join(', '),
+    checklist: s.checklist.length ? s.checklist.map(c => ({ ...c })) : [{ text: '', required: true }],
+  };
+}
+
+function blankDraft(): Draft {
+  return {
+    name: '', description: '', howItWorks: '', grade: 'B', assets: [],
+    direction: 'BOTH', sessions: [], status: 'active', tags: '',
+    checklist: [{ text: '', required: true }, { text: '', required: true }, { text: '', required: true }],
+  };
+}
+
+// ── Small building blocks ────────────────────────────────────────────────────
+
+function Segmented<T extends string>({ options, value, onChange, labelOf, ltr }: {
+  options: readonly T[];
+  value: T;
+  onChange: (v: T) => void;
+  labelOf?: (v: T) => string;
+  ltr?: boolean;
+}) {
+  return (
+    <div className="su-seg">
+      {options.map(o => (
+        <button
+          key={o}
+          type="button"
+          aria-pressed={value === o}
+          onClick={() => onChange(o)}
+          className={ltr ? 'su-ltr' : undefined}
+        >
+          {labelOf ? labelOf(o) : o}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChipRow<T extends string>({ label, options, value, onSelect, labelOf }: {
+  label: string;
+  options: readonly (T | 'all')[];
+  value: T | 'all';
+  onSelect: (v: T | 'all') => void;
+  labelOf: (v: T | 'all') => string;
+}) {
+  return (
+    <div className="su-filter-group">
+      <span className="su-filter-label">{label}</span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {options.map(o => (
+          <button
+            key={o}
+            type="button"
+            className="su-chip"
+            aria-pressed={value === o}
+            onClick={() => onSelect(o)}
+          >
+            {labelOf(o)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Card ─────────────────────────────────────────────────────────────────────
+
+function metricTone(kind: 'r' | 'pnl' | 'win', v: number | null): 'gold' | 'short' | 'dim' | undefined {
+  if (v === null) return 'dim';
+  if (kind === 'r')   return v >= 1 ? 'gold' : undefined;
+  if (kind === 'pnl') return v > 0 ? 'gold' : v < 0 ? 'short' : 'dim';
+  return v >= 50 ? undefined : 'dim';
+}
+
+const money = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
+
+function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, onStatus, onDelete, onRestore }: {
   setup: Setup;
-  stats?: { winRate: number; tradeCount: number; totalPnl: number; avgR: number };
+  stats: SetupStats;
+  trashed: boolean;
+  confirming: boolean;
+  onUse: () => void;
   onEdit: () => void;
+  onPin: () => void;
+  onStatus: () => void;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
-
-  const allRequired = setup.checklist.filter(i => i.required);
-  const allChecked  = allRequired.every((_, idx) => checked[idx]);
+  // Required conditions first. The card shows three of what may be ten, and the
+  // three worth showing are the ones that gate the entry — otherwise the flag
+  // set in the drawer would be a toggle nothing on screen ever reflects.
+  const preview = [
+    ...setup.checklist.filter(c => c.required),
+    ...setup.checklist.filter(c => !c.required),
+  ].slice(0, 3);
+  const requiredCount = setup.checklist.filter(c => c.required).length;
 
   return (
-    <div className="border border-[#1c1c1e] rounded-sm bg-[#0a0a0b] p-5 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-serif text-lg font-bold text-white">{setup.name || 'Unnamed Setup'}</h3>
-          {setup.description && <p className="font-mono text-xs text-white/40 mt-1">{setup.description}</p>}
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={onEdit} className="font-mono text-[10px] text-white/30 hover:text-white/70 transition-colors uppercase tracking-[0.14em]">Edit</button>
-          <button onClick={onDelete} className="font-mono text-[10px] text-white/20 hover:text-[#ef4444] transition-colors">✕</button>
-        </div>
-      </div>
+    <article className="su-card" data-pinned={setup.pinned && !trashed} data-trashed={trashed}>
+      <div className="su-card-rule" />
 
-      {/* Stats from journal */}
-      {stats && stats.tradeCount > 0 && (
-        <div className="flex gap-3 flex-wrap">
-          {[
-            { label: 'Trades', value: stats.tradeCount.toString() },
-            { label: 'Win%',   value: `${stats.winRate.toFixed(0)}%`, color: stats.winRate >= 50 ? '#22c55e' : '#ef4444' },
-            { label: 'Avg R',  value: `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`, color: stats.avgR >= 0 ? '#22c55e' : '#ef4444' },
-            { label: 'P&L',    value: `${stats.totalPnl >= 0 ? '+' : ''}$${Math.abs(stats.totalPnl).toFixed(0)}`, color: stats.totalPnl >= 0 ? '#22c55e' : '#ef4444' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="px-3 py-1.5 border border-[#1c1c1e] rounded-sm">
-              <span className="font-mono text-[9px] text-white/30 block">{label}</span>
-              <span className="font-mono text-xs font-bold" style={{ color: color ?? '#fff' }}>{value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Checklist */}
-      {setup.checklist.length > 0 && (
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/30 mb-2">Pre-entry Checklist</p>
-          {setup.checklist.map((item, idx) => (
-            <label key={idx} className="flex items-center gap-3 cursor-pointer group">
-              <span
-                onClick={() => setChecked(c => ({ ...c, [idx]: !c[idx] }))}
-                className={`w-4 h-4 rounded-sm border flex items-center justify-center transition-colors shrink-0 ${checked[idx] ? 'bg-[#d4af37] border-[#d4af37]' : 'border-[#333] group-hover:border-[#d4af37]/40'}`}
-              >
-                {checked[idx] && <span className="text-black text-[10px] font-bold leading-none">✓</span>}
-              </span>
-              <span className={`font-mono text-xs ${checked[idx] ? 'text-white/30 line-through' : 'text-white/60'} ${item.required ? '' : 'opacity-70'}`}>
-                {item.text} {item.required && <span className="text-[#ef4444]/60 text-[9px]">*</span>}
-              </span>
-            </label>
-          ))}
-          {allRequired.length > 0 && (
-            <div className={`mt-2 px-3 py-1.5 rounded-sm font-mono text-[10px] uppercase tracking-[0.14em] transition-colors ${allChecked ? 'bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30' : 'bg-[#1c1c1e] text-white/30 border border-transparent'}`}>
-              {allChecked ? '✓ Ready to Trade' : `${allRequired.filter((_, i) => checked[i]).length}/${allRequired.length} required`}
-            </div>
+      <div className="su-card-head">
+        <div style={{ minWidth: 0 }}>
+          {setup.pinned && !trashed && (
+            <div className="su-pinned-tag"><span style={{ fontSize: 8 }}>{D}</span><span>מוצמד</span></div>
           )}
+          <h2 className="su-card-name">{setup.name || 'ללא שם'}</h2>
+          {setup.description && <p className="su-card-summary">{setup.description}</p>}
+        </div>
+        <span className="su-grade su-ltr" data-grade={setup.grade} title={`דירוג ${setup.grade}`}>
+          {setup.grade}
+        </span>
+      </div>
+
+      {(setup.assets.length > 0 || setup.sessions.length > 0 || setup.tags.length > 0) && (
+        <div className="su-tags">
+          {setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)}
+          <span className="su-tag" data-dir={setup.direction}>{DIRECTION_HE[setup.direction]}</span>
+          {setup.sessions.map(s => <span key={s} className="su-tag">{sessionHe(s)}</span>)}
+          {setup.tags.map(t => <span key={t} className="su-tag su-ltr" data-kind="tag">{t}</span>)}
         </div>
       )}
-    </div>
-  );
-}
 
-function SetupEditor({ setup, onChange, onSave, onCancel }: {
-  setup: Setup;
-  onChange: (s: Setup) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const [newItem, setNewItem] = useState('');
-
-  function addItem() {
-    if (!newItem.trim()) return;
-    onChange({ ...setup, checklist: [...setup.checklist, { text: newItem.trim(), required: true }] });
-    setNewItem('');
-  }
-
-  function removeItem(idx: number) {
-    onChange({ ...setup, checklist: setup.checklist.filter((_, i) => i !== idx) });
-  }
-
-  function toggleRequired(idx: number) {
-    const updated = setup.checklist.map((item, i) => i === idx ? { ...item, required: !item.required } : item);
-    onChange({ ...setup, checklist: updated });
-  }
-
-  return (
-    <div className="border border-[#d4af37]/20 rounded-sm bg-[#0a0a0b] p-5 space-y-4">
-      <div className="grid grid-cols-1 min-[600px]:grid-cols-2 gap-3">
-        <div>
-          <label className="block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1.5">Setup Name</label>
-          <input
-            value={setup.name}
-            onChange={e => onChange({ ...setup, name: e.target.value })}
-            placeholder="e.g. Reversal at PDH"
-            className="w-full bg-[#111] border border-[#222] rounded-sm px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/40 transition-colors"
-            dir="ltr"
-          />
+      {setup.howItWorks && (
+        <div className="su-how">
+          <div className="su-section-label">איך הסטאפ עובד</div>
+          <p>{setup.howItWorks}</p>
         </div>
-        <div>
-          <label className="block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1.5">Description</label>
-          <input
-            value={setup.description}
-            onChange={e => onChange({ ...setup, description: e.target.value })}
-            placeholder="Short description..."
-            className="w-full bg-[#111] border border-[#222] rounded-sm px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/40 transition-colors"
-            dir="ltr"
-          />
+      )}
+
+      {/* Four numbers, all of them from the journal. An em-dash where there is
+          nothing to show — a setup with no trades yet has no win rate, and
+          printing 0% would be a claim rather than a blank. */}
+      <div className="su-metrics">
+        <div className="su-metric">
+          <div className="su-metric-label">עסקאות</div>
+          <div className="su-metric-value" data-tone={stats.trades === 0 ? 'dim' : undefined}>{stats.trades}</div>
         </div>
-      </div>
-
-      {/* Checklist builder */}
-      <div>
-        <label className="block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40 mb-2">Checklist Items</label>
-        <div className="space-y-2 mb-3">
-          {setup.checklist.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <button
-                onClick={() => toggleRequired(idx)}
-                className={`font-mono text-[9px] px-1.5 py-0.5 rounded-sm border transition-colors ${item.required ? 'border-[#ef4444]/40 text-[#ef4444]/70' : 'border-[#333] text-white/30'}`}
-                title="Toggle required"
-              >REQ</button>
-              <span className="flex-1 font-mono text-sm text-white/70">{item.text}</span>
-              <button onClick={() => removeItem(idx)} className="font-mono text-[10px] text-white/20 hover:text-[#ef4444] transition-colors">✕</button>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={newItem}
-            onChange={e => setNewItem(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addItem()}
-            placeholder="Add checklist item..."
-            className="flex-1 bg-[#111] border border-[#222] rounded-sm px-3 py-2 font-mono text-sm text-white placeholder-white/20 outline-none focus:border-[#d4af37]/40 transition-colors"
-            dir="ltr"
-          />
-          <button onClick={addItem} className="px-4 py-2 rounded-sm border border-[#d4af37]/30 text-[#d4af37]/70 hover:text-[#d4af37] hover:border-[#d4af37]/50 font-mono text-xs transition-colors">+</button>
-        </div>
-      </div>
-
-      <div className="flex gap-3 pt-2">
-        <button onClick={onSave} className="px-5 py-2 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold uppercase tracking-[0.12em] hover:bg-[#e5c84a] transition-colors">Save Setup</button>
-        <button onClick={onCancel} className="px-5 py-2 rounded-sm border border-[#1c1c1e] text-white/40 font-mono text-xs uppercase tracking-[0.12em] hover:text-white/70 transition-colors">Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-export default function PlaybookPage() {
-  const { lang } = useLanguage();
-  const en = lang === 'en';
-  const [setups, setSetups] = useState<Setup[]>([]);
-  const [editing, setEditing] = useState<Setup | null>(null);
-  const [isNew, setIsNew] = useState(false);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<Setup | null>(null);
-
-  useEffect(() => {
-    // Instant paint from cache, then reconcile with the cloud (cross-device).
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) try { setSetups((JSON.parse(raw) as Setup[]).filter(s => !s.deleted)); } catch { /* ignore */ }
-    hydrateList<Setup>('setups', STORAGE_KEY).then(setSetups).catch(() => { /* keep local */ });
-    setTrades(loadTrades());
-  }, []);
-
-  function persist(updated: Setup[]) {
-    setSetups(updated);
-    // commitList stamps changes, tombstones removals, writes local + pushes cloud.
-    void commitList<Setup>('setups', STORAGE_KEY, updated);
-  }
-
-  function saveEdit() {
-    if (!editing) return;
-    const updated = isNew
-      ? [editing, ...setups]
-      : setups.map(s => s.id === editing.id ? editing : s);
-    persist(updated);
-    setEditing(null);
-    setIsNew(false);
-  }
-
-  function deleteSetup(id: string) {
-    persist(setups.filter(s => s.id !== id));
-  }
-
-  const statsBySetup = groupByKey(trades, t => t.model || UNSPECIFIED_MODEL);
-
-  return (
-    <div className="flex-1 overflow-y-auto" dir={en ? 'ltr' : 'rtl'}>
-      <div className="px-8 max-[880px]:px-4 py-8 pb-24 max-w-4xl mx-auto space-y-6">
-
-        <div className="flex items-end justify-between">
-          <div>
-            <h1 className="font-serif text-3xl font-bold text-white">{en ? 'Playbook' : 'פלייבוק'}</h1>
-            <p className="font-mono text-xs text-white/30 mt-1 uppercase tracking-[0.18em]">{setups.length} setups</p>
+        <div className="su-metric">
+          <div className="su-metric-label">WIN</div>
+          <div className="su-metric-value" data-tone={metricTone('win', stats.winRate)}>
+            {stats.winRate === null ? '—' : `${stats.winRate.toFixed(0)}%`}
           </div>
-          {!editing && (
-            <button
-              onClick={() => { setEditing(emptySetup()); setIsNew(true); }}
-              className="px-5 py-2.5 rounded-sm bg-[#d4af37] text-black font-mono text-xs font-bold tracking-[0.12em] uppercase hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.3)]"
-            >
-              {en ? '+ New Setup' : '+ Setup חדש'}
-            </button>
-          )}
         </div>
+        <div className="su-metric">
+          <div className="su-metric-label">AVG R</div>
+          <div className="su-metric-value" data-tone={metricTone('r', stats.avgR)}>
+            {stats.avgR === null ? '—' : `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
+          </div>
+        </div>
+        <div className="su-metric">
+          <div className="su-metric-label">PNL</div>
+          <div className="su-metric-value" data-tone={metricTone('pnl', stats.trades ? stats.pnl : null)}>
+            {stats.trades === 0 ? '—' : money(stats.pnl)}
+          </div>
+        </div>
+      </div>
 
-        {editing && (
-          <SetupEditor
-            setup={editing}
-            onChange={setEditing}
-            onSave={saveEdit}
-            onCancel={() => { setEditing(null); setIsNew(false); }}
-          />
-        )}
-
-        {setups.length === 0 && !editing ? (
-          <div className="py-20 text-center border border-[#1c1c1e] rounded-sm">
-            <p className="font-mono text-sm text-white/20">{en ? 'No setups yet' : 'אין Setups עדיין'}</p>
-            <button
-              onClick={() => { setEditing(emptySetup()); setIsNew(true); }}
-              className="mt-4 font-mono text-xs text-[#d4af37]/60 hover:text-[#d4af37] transition-colors"
-            >
-              {en ? '+ Create your first setup' : '+ צור את ה-Setup הראשון שלך'}
-            </button>
+      <div>
+        <div className="su-check-head">
+          <span className="su-section-label">צ׳קליסט כניסה</span>
+          <span className="su-section-label">
+            {setup.checklist.length
+              ? `${setup.checklist.length} סעיפים · ${requiredCount} חובה`
+              : 'ריק'}
+          </span>
+        </div>
+        {preview.length > 0 ? (
+          <div className="su-checklist">
+            {preview.map((c, i) => (
+              <div className="su-check-line" key={i} data-optional={!c.required}>
+                <i title={c.required ? 'תנאי חובה' : 'תנאי רשות'}>{D}</i>
+                <span>{c.text}</span>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="space-y-4">
-            {setups.map(s => (
+          <div className="su-checklist">
+            <div className="su-check-line" style={{ color: 'var(--white-30)' }}>
+              <i>{D}</i><span>עוד לא הוגדרו תנאי כניסה</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="su-card-foot">
+        {!trashed && (
+          <>
+            <button type="button" className="su-btn su-btn-sm su-btn-gold" onClick={onUse}>שימוש בסטאפ ←</button>
+            <button type="button" className="su-btn su-btn-sm" onClick={onEdit}>עריכה</button>
+          </>
+        )}
+        {trashed && (
+          <button type="button" className="su-btn su-btn-sm su-btn-gold" onClick={onRestore}>שחזור ↺</button>
+        )}
+        <button
+          type="button"
+          className={`su-btn su-btn-sm${confirming ? ' su-btn-danger' : ''}`}
+          onClick={onDelete}
+        >
+          {trashed
+            ? (confirming ? 'מחיקה לצמיתות' : 'מחיקה סופית')
+            : (confirming ? 'לאשר מחיקה' : 'מחיקה')}
+        </button>
+        {!trashed && (
+          <>
+            <button type="button" className="su-status" data-status={setup.status} onClick={onStatus} title="החלפת סטטוס">
+              {STATUS_HE[setup.status]}
+            </button>
+            <button type="button" className="su-pin" aria-pressed={setup.pinned} onClick={onPin}>
+              <span style={{ fontSize: 9 }}>{D}</span>
+              <span>{setup.pinned ? 'ביטול הצמדה' : 'הצמדה'}</span>
+            </button>
+          </>
+        )}
+        <span className="su-updated">{shortDate(stats.lastTradeISO)}</span>
+      </div>
+    </article>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+export default function PlaybookPage() {
+  const router = useRouter();
+  /** The FULL store, tombstones included. The recycle bin is exactly the
+   *  tombstones, so the page cannot work off the active-only list the rest of
+   *  the app uses. */
+  const [store, setStore] = useState<Setup[]>([]);
+  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  const [filter, setFilter] = useState<SetupFilter>(DEFAULT_FILTER);
+  const [view, setView] = useState<'active' | 'trash'>('active');
+  const [drawer, setDrawer] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>(blankDraft);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [nameError, setNameError] = useState(false);
+
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawerRef    = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Paint from cache first, then reconcile with the cloud. hydrateList writes
+    // the merged store (tombstones and all) back to localStorage, so reading it
+    // afterwards is what makes the bin correct across devices.
+    const readStore = (): Setup[] => {
+      try {
+        const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed)
+          ? parsed.map(normalizeSetup).filter((s): s is Setup => s !== null)
+          : [];
+      } catch { return []; }
+    };
+
+    setStore(readStore());
+    setTrades(loadTrades());
+    hydrateList<Setup>(PLAYBOOK_COLLECTION, PLAYBOOK_STORAGE_KEY)
+      .then(() => setStore(readStore()))
+      .catch(() => { /* keep the local copy */ });
+  }, []);
+
+  useEffect(() => () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
+  const flash = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+
+  /** Persist the whole store — the active list AND the tombstones.
+   *
+   *  Deliberately `saveList` and not `commitList`: commitList derives
+   *  tombstones by diffing an active-only list, which would re-tombstone every
+   *  restore the moment it was made. This page owns the `deleted` flag, so it
+   *  has to own the write too. */
+  const persist = useCallback((next: Setup[]) => {
+    setStore(next);
+    void saveList<Setup>(PLAYBOOK_COLLECTION, PLAYBOOK_STORAGE_KEY, next);
+  }, []);
+
+  const patch = useCallback((id: string, fn: (s: Setup) => Setup) => {
+    persist(store.map(s => (s.id === id ? { ...fn(s), updatedAt: Date.now() } : s)));
+  }, [persist, store]);
+
+  const stats = useMemo(() => statsBySetupName(trades), [trades]);
+
+  const activeSetups = useMemo(() => store.filter(s => !s.deleted), [store]);
+  const trashSetups  = useMemo(() => store.filter(s => s.deleted && !s.purged), [store]);
+
+  const inTrash = view === 'trash';
+  const source  = inTrash ? trashSetups : activeSetups;
+  const list    = useMemo(() => visibleSetups(source, stats, filter), [source, stats, filter]);
+
+  const pinnedCount = activeSetups.filter(s => s.pinned).length;
+  const sourceEmpty = source.length === 0;
+
+  // ── Drawer ────────────────────────────────────────────────────────────────
+
+  function openNew() {
+    setDraft(blankDraft());
+    setEditingId(null);
+    setNameError(false);
+    setDrawer(true);
+  }
+
+  function openEdit(s: Setup) {
+    setDraft(draftFrom(s));
+    setEditingId(s.id);
+    setNameError(false);
+    setDrawer(true);
+  }
+
+  const closeDrawer = useCallback(() => { setDrawer(false); setEditingId(null); }, []);
+
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDrawer(); };
+    window.addEventListener('keydown', onKey);
+    // Move focus into the panel so the keyboard follows the eye, and so Escape
+    // reaches the handler above without a click first.
+    drawerRef.current?.focus();
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawer, closeDrawer]);
+
+  function saveDraft() {
+    const name = draft.name.trim();
+    if (!name) {
+      setNameError(true);
+      flash('חסר שם לסטאפ');
+      return;
+    }
+    const checklist = draft.checklist
+      .map(c => ({ text: c.text.trim(), required: c.required }))
+      .filter(c => c.text !== '');
+    const tags = draft.tags.split(',').map(t => t.trim()).filter(Boolean);
+
+    const fields = {
+      name, description: draft.description.trim(), howItWorks: draft.howItWorks.trim(),
+      checklist, tags, grade: draft.grade, assets: draft.assets,
+      direction: draft.direction, sessions: draft.sessions, status: draft.status,
+    };
+
+    if (editingId) {
+      const before = store.find(s => s.id === editingId);
+      persist(store.map(s => (s.id === editingId ? { ...s, ...fields, updatedAt: Date.now() } : s)));
+      // Attribution is by name, so a rename detaches the history. Say the
+      // number rather than letting them find the empty card afterwards.
+      const detached = before && before.name.trim() !== name ? renameCost(stats, before.name) : 0;
+      flash(detached > 0 ? `הסטאפ עודכן · ${detached} עסקאות עדיין רשומות על השם הקודם` : 'הסטאפ עודכן');
+    } else {
+      const created: Setup = { ...emptySetup(), ...fields, updatedAt: Date.now() };
+      persist([created, ...store]);
+      flash('הסטאפ נוסף לפלייבוק');
+    }
+    closeDrawer();
+  }
+
+  // ── Destructive actions ───────────────────────────────────────────────────
+
+  function armOrRun(s: Setup, run: () => void) {
+    if (confirmId === s.id) {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      setConfirmId(null);
+      run();
+      return;
+    }
+    setConfirmId(s.id);
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = setTimeout(() => setConfirmId(null), CONFIRM_MS);
+  }
+
+  function handleDelete(s: Setup) {
+    armOrRun(s, () => {
+      if (inTrash) {
+        // Purge keeps the tombstone. Dropping the row entirely would let a
+        // device that never saw the delete resurrect it on the next merge.
+        patch(s.id, x => ({ ...x, purged: true }));
+        flash('הסטאפ נמחק לצמיתות');
+      } else {
+        patch(s.id, x => ({ ...x, deleted: true, pinned: false }));
+        flash('הסטאפ הועבר לסל המחזור');
+      }
+    });
+  }
+
+  function handleRestore(s: Setup) {
+    patch(s.id, x => ({ ...x, deleted: false, purged: false }));
+    flash('הסטאפ שוחזר לפלייבוק');
+  }
+
+  function cycleStatus(s: Setup) {
+    const next = STATUSES[(STATUSES.indexOf(s.status) + 1) % STATUSES.length];
+    patch(s.id, x => ({ ...x, status: next }));
+  }
+
+  // ── Draft helpers ─────────────────────────────────────────────────────────
+
+  const setD = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft(d => ({ ...d, [k]: v }));
+  const toggleIn = <T,>(arr: T[], v: T): T[] => (arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
+
+  function setCheck(i: number, next: Partial<ChecklistItem>) {
+    setDraft(d => ({ ...d, checklist: d.checklist.map((c, j) => (j === i ? { ...c, ...next } : c)) }));
+  }
+
+  // ── Copy that changes with the view ───────────────────────────────────────
+
+  const emptyTitle = !sourceEmpty
+    ? 'אין תוצאות לסינון'
+    : inTrash ? 'אין סטאפים שנמחקו' : 'הפלייבוק ריק';
+  const emptyBody = !sourceEmpty
+    ? 'נסה לשנות את החיפוש או להסיר פילטרים.'
+    : inTrash
+      ? 'כל סטאפ שתמחק יישמר כאן, ואפשר יהיה לשחזר אותו בלחיצה אחת.'
+      : 'סטאפ הוא הכלל שאתה כותב לעצמך — שם, הסבר חופשי איך הוא עובד, וצ׳קליסט שמלווה אותך בכניסה.';
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="setups">
+        <div className="su-glow su-glow-a" aria-hidden />
+        <div className="su-glow su-glow-b" aria-hidden />
+
+        <header className="su-head">
+          <div>
+            <div className="su-kicker"><span>{D}</span><span>{inTrash ? 'RECYCLE BIN' : 'PLAYBOOK'}</span></div>
+            <h1 className="su-title">{inTrash ? 'סל המחזור' : 'הסטאפים שלי'}</h1>
+            <p className="su-lead">
+              {inTrash
+                ? 'סטאפים שנמחקו נשמרים כאן. אפשר לשחזר אותם לפלייבוק או למחוק לצמיתות.'
+                : 'כל סטאפ הוא כלל שאתה כותב לעצמך — שם, תנאים, וצ׳קליסט כניסה. הביצועים מתעדכנים מתיעוד העסקאות.'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`su-btn${inTrash ? ' su-btn-gold' : ''}`}
+              onClick={() => { setView(v => (v === 'trash' ? 'active' : 'trash')); setConfirmId(null); }}
+            >
+              {inTrash ? '← חזרה לפלייבוק' : `סל מחזור · ${trashSetups.length}`}
+            </button>
+            {!inTrash && (
+              <button type="button" className="su-btn su-btn-primary" onClick={openNew}>סטאפ חדש +</button>
+            )}
+          </div>
+        </header>
+
+        <div className="su-sweep-rail"><div className="su-sweep" /></div>
+
+        <section className="su-filters" style={{ position: 'relative' }}>
+          <div className="su-filters-top-rule" />
+
+          <div className="su-search-row">
+            <div className="su-search">
+              <span style={{ fontSize: 12, color: 'var(--gold-45)' }}>{D}</span>
+              <input
+                value={filter.query}
+                onChange={e => setFilter(f => ({ ...f, query: e.target.value }))}
+                placeholder="חיפוש לפי שם, תגית או תנאי"
+                aria-label="חיפוש סטאפים"
+              />
+              <span className="su-mono su-ltr" style={{ fontSize: 10, letterSpacing: '0.22em', color: 'var(--white-30)' }}>SEARCH</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span className="su-filter-label" style={{ color: 'var(--gold-60)' }}>מיון</span>
+              <div style={{ display: 'flex', gap: 6, background: 'var(--su-void)', border: '1px solid var(--su-border)', borderRadius: 4, padding: 4, flexWrap: 'wrap' }}>
+                {SORTS.map(s => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className="su-chip"
+                    aria-pressed={filter.sort === s.key}
+                    onClick={() => setFilter(f => ({ ...f, sort: s.key }))}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="su-divider" />
+
+          <div className="su-filter-row">
+            <ChipRow<InstrumentKey>
+              label="נכס"
+              options={['all', ...INSTRUMENT_KEYS]}
+              value={filter.asset}
+              onSelect={v => setFilter(f => ({ ...f, asset: v }))}
+              labelOf={v => (v === 'all' ? 'הכל' : v)}
+            />
+            <ChipRow<SessionKey>
+              label="סשן"
+              options={['all', ...SESS.map(s => s.key)]}
+              value={filter.session}
+              onSelect={v => setFilter(f => ({ ...f, session: v }))}
+              labelOf={v => (v === 'all' ? 'הכל' : sessionHe(v))}
+            />
+            <ChipRow<SetupStatus>
+              label="סטטוס"
+              options={['all', ...STATUSES]}
+              value={filter.status}
+              onSelect={v => setFilter(f => ({ ...f, status: v }))}
+              labelOf={v => (v === 'all' ? 'הכל' : STATUS_HE[v])}
+            />
+          </div>
+        </section>
+
+        <div className="su-count">
+          <span>
+            {inTrash
+              ? `${list.length} סטאפים בסל המחזור`
+              : `${list.length} סטאפים · ${pinnedCount} מוצמדים`}
+          </span>
+          <span className="su-count-hint">
+            {inTrash ? 'שחזור מחזיר את הסטאפ עם כל ההיסטוריה' : 'הביצועים מחושבים מהעסקאות המשויכות'}
+          </span>
+        </div>
+
+        {list.length > 0 ? (
+          <section className="su-grid">
+            {list.map(s => (
               <SetupCard
                 key={s.id}
                 setup={s}
-                stats={statsBySetup.get(s.name) as { winRate: number; tradeCount: number; totalPnl: number; avgR: number } | undefined}
-                onEdit={() => { setEditing(s); setIsNew(false); }}
-                onDelete={() => setDeleteTarget(s)}
+                stats={stats.get(s.name.trim()) ?? EMPTY_STATS}
+                trashed={inTrash}
+                confirming={confirmId === s.id}
+                onUse={() => router.push(`/dashboard/journal?setup=${encodeURIComponent(s.name)}`)}
+                onEdit={() => openEdit(s)}
+                onPin={() => patch(s.id, x => ({ ...x, pinned: !x.pinned }))}
+                onStatus={() => cycleStatus(s)}
+                onDelete={() => handleDelete(s)}
+                onRestore={() => handleRestore(s)}
               />
             ))}
+          </section>
+        ) : (
+          <section className="su-empty">
+            <div className="su-empty-glow" aria-hidden />
+            <span style={{ fontSize: 26, color: 'var(--gold)', textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{D}</span>
+            <h2>{emptyTitle}</h2>
+            <p>{emptyBody}</p>
+            {!inTrash && sourceEmpty && (
+              <div style={{ marginTop: 10 }}>
+                <button type="button" className="su-btn su-btn-primary" onClick={openNew}>הגדרת סטאפ ראשון</button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {drawer && (
+          <>
+            <button type="button" className="su-scrim" aria-label="סגירה" onClick={closeDrawer} />
+            <aside
+              className="su-drawer"
+              ref={drawerRef}
+              tabIndex={-1}
+              role="dialog"
+              aria-modal="true"
+              aria-label={editingId ? 'עריכת סטאפ' : 'סטאפ חדש'}
+            >
+              <div className="su-drawer-head">
+                <div className="su-drawer-head-glow" aria-hidden />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                  <div>
+                    <div className="su-mono su-ltr" style={{ fontSize: 10, letterSpacing: '0.3em', color: 'var(--gold)' }}>
+                      {editingId ? 'EDIT SETUP' : 'NEW SETUP'}
+                    </div>
+                    <h2 className="su-drawer-title">{editingId ? 'עריכת סטאפ' : 'סטאפ חדש'}</h2>
+                  </div>
+                  <button type="button" className="su-icon-btn" onClick={closeDrawer} aria-label="סגירה">×</button>
+                </div>
+              </div>
+
+              <div className="su-drawer-body">
+                <label>
+                  <span className="su-field-label">שם הסטאפ</span>
+                  <input
+                    className="su-input"
+                    value={draft.name}
+                    onChange={e => { setD('name', e.target.value); if (nameError) setNameError(false); }}
+                    placeholder="לדוגמה: סוויפ אסיה + CHoCH"
+                    style={nameError ? { borderColor: 'var(--short)' } : undefined}
+                    aria-invalid={nameError}
+                  />
+                  {/* The name is the join key to the journal — worth saying once,
+                      in the one place where it is about to be chosen. */}
+                  <span style={{ display: 'block', marginTop: 6, fontSize: 11, color: 'var(--white-30)' }}>
+                    השם הוא מה שמקשר את הסטאפ לעסקאות ביומן.
+                  </span>
+                </label>
+
+                <label>
+                  <span className="su-field-label">תיאור קצר</span>
+                  <input
+                    className="su-input"
+                    value={draft.description}
+                    onChange={e => setD('description', e.target.value)}
+                    placeholder="שורה אחת שמסבירה מתי הסטאפ רלוונטי"
+                  />
+                </label>
+
+                <label>
+                  <span className="su-field-label">איך הסטאפ עובד</span>
+                  <textarea
+                    className="su-textarea"
+                    rows={6}
+                    value={draft.howItWorks}
+                    onChange={e => setD('howItWorks', e.target.value)}
+                    placeholder="כתוב בחופשיות: מבנה, אזור עניין, טריגר כניסה, ניהול, יציאה."
+                  />
+                </label>
+
+                <div>
+                  <span className="su-field-label">נכס</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {INSTRUMENT_KEYS.map(k => (
+                      <button
+                        key={k}
+                        type="button"
+                        className="su-chip su-ltr"
+                        aria-pressed={draft.assets.includes(k)}
+                        onClick={() => setD('assets', toggleIn(draft.assets, k))}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="su-field-label">כיוון</span>
+                  <Segmented
+                    options={DIRECTIONS}
+                    value={draft.direction}
+                    onChange={v => setD('direction', v)}
+                    labelOf={v => DIRECTION_HE[v]}
+                  />
+                </div>
+
+                <div>
+                  <span className="su-field-label">סשנים</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {SESS.map(s => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        className="su-chip"
+                        aria-pressed={draft.sessions.includes(s.key)}
+                        onClick={() => setD('sessions', toggleIn(draft.sessions, s.key))}
+                      >
+                        {s.he}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label>
+                  <span className="su-field-label">תגיות</span>
+                  <input
+                    className="su-input su-ltr"
+                    value={draft.tags}
+                    onChange={e => setD('tags', e.target.value)}
+                    placeholder="FVG, CHoCH, SWEEP"
+                  />
+                </label>
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <span className="su-field-label" style={{ marginBottom: 0 }}>צ׳קליסט כניסה</span>
+                    <button
+                      type="button"
+                      className="su-btn su-btn-sm su-btn-gold"
+                      onClick={() => setD('checklist', [...draft.checklist, { text: '', required: true }])}
+                    >
+                      סעיף +
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {draft.checklist.map((c, i) => (
+                      <div className="su-draft-check" key={i}>
+                        <span style={{ color: 'var(--gold-45)', fontSize: 10 }}>{D}</span>
+                        <input
+                          className="su-input"
+                          value={c.text}
+                          onChange={e => setCheck(i, { text: e.target.value })}
+                          placeholder="תנאי שחייב להתקיים לפני כניסה"
+                        />
+                        <button
+                          type="button"
+                          className="su-req"
+                          aria-pressed={c.required}
+                          title={c.required ? 'תנאי חובה' : 'תנאי רשות'}
+                          onClick={() => setCheck(i, { required: !c.required })}
+                        >
+                          חובה
+                        </button>
+                        <button
+                          type="button"
+                          className="su-x"
+                          aria-label="הסרת סעיף"
+                          onClick={() => setD('checklist', draft.checklist.filter((_, j) => j !== i))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                    <span className="su-field-label" style={{ marginBottom: 0 }}>דירוג</span>
+                    <span style={{ fontSize: 11, color: 'var(--white-30)' }}>רמת הביטחון שאתה נותן לסטאפ</span>
+                  </div>
+                  <Segmented options={GRADES} value={draft.grade} onChange={v => setD('grade', v)} ltr />
+                </div>
+
+                <div>
+                  <span className="su-field-label">סטטוס</span>
+                  <Segmented
+                    options={STATUSES}
+                    value={draft.status}
+                    onChange={v => setD('status', v)}
+                    labelOf={v => STATUS_HE[v]}
+                  />
+                </div>
+              </div>
+
+              <div className="su-drawer-foot">
+                <button type="button" className="su-btn su-btn-primary" onClick={saveDraft}>שמירת סטאפ</button>
+                <button type="button" className="su-btn" onClick={closeDrawer}>ביטול</button>
+                <span className="su-updated" style={{ letterSpacing: '0.18em' }}>
+                  {editingId ? 'שינויים נשמרים לסטאפ הקיים' : 'אפשר לערוך הכל אחר כך'}
+                </span>
+              </div>
+            </aside>
+          </>
+        )}
+
+        {toast && (
+          <div className="su-toast" role="status" aria-live="polite">
+            <span style={{ color: 'var(--gold)', fontSize: 11 }}>{D}</span>
+            <span>{toast}</span>
           </div>
         )}
       </div>
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title={en ? 'Delete setup?' : 'למחוק Setup?'}
-        message={en
-          ? <>This will permanently delete the setup <span className="text-white">“{deleteTarget?.name || 'Unnamed Setup'}”</span>.</>
-          : <>ה-Setup <span className="text-white">״{deleteTarget?.name || 'ללא שם'}״</span> יימחק לצמיתות. אי אפשר לשחזר אותו.</>}
-        confirmLabel={en ? 'Delete' : 'מחק'}
-        cancelLabel={en ? 'Cancel' : 'ביטול'}
-        dir={en ? 'ltr' : 'rtl'}
-        onConfirm={() => { if (deleteTarget) deleteSetup(deleteTarget.id); setDeleteTarget(null); }}
-        onCancel={() => setDeleteTarget(null)}
-      />
     </div>
   );
 }

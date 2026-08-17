@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { SESS, getActiveSessionIdx } from '../../lib/sessions';
@@ -31,14 +32,19 @@ const usd = (n: number) => {
 };
 const pnlColor = (n: number) => (n > 0 ? '#4a7c59' : n < 0 ? '#8b3a3a' : 'rgba(255,255,255,0.4)');
 
-export default function JournalPage() {
+/** useSearchParams() opts the tree into client-side rendering, which Next
+ *  requires to sit behind a Suspense boundary — see the default export below. */
+function JournalPageInner() {
   const { canAccess } = usePlan();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<TradeEntry | null>(null);
   const [editingTrade, setEditingTrade] = useState<TradeEntry | null>(null);
+  const [presetModel, setPresetModel] = useState<string | null>(null);
   // Ref-based scroll target for the form panel. window.scrollTo() is a no-op
   // here because the actual scroll container is a nested overflow-y-auto
   // element, not the window itself — so clicking Edit on a trade far down
@@ -91,7 +97,26 @@ export default function JournalPage() {
   function closeForm() {
     setShowForm(false);
     setEditingTrade(null);
+    setPresetModel(null);
   }
+
+  // "שימוש בסטאפ" on the setups page lands here with ?setup=<name>. Open the
+  // form already pointed at that setup, so the trip from "this is my rule" to
+  // "here is a trade that followed it" is one click and no re-picking.
+  //
+  // Read once, on mount: the parameter describes how the page was ENTERED. Left
+  // in the URL it would re-arm on every later open of the form, quietly
+  // stamping a setup onto trades the trader never associated with it.
+  useEffect(() => {
+    const name = searchParams.get('setup');
+    if (!name) return;
+    setPresetModel(name);
+    setEditingTrade(null);
+    setShowForm(true);
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    router.replace('/dashboard/journal');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const today = todayISO();
   const activeSessionIdx = getActiveSessionIdx();
@@ -199,10 +224,18 @@ export default function JournalPage() {
                 <span>▸</span> עריכת עסקה קיימת · {editingTrade.symbol} · {editingTrade.dateISO}
               </div>
             )}
+            {/* A field filled in by a link, not by the trader, has to say so —
+                otherwise the setup chip looks like something they picked. */}
+            {!editingTrade && presetModel && (
+              <div className="mb-4 -mt-1 flex items-center gap-2 text-[12px] font-mono uppercase tracking-[0.16em] text-[#d4af37]">
+                <span>◈</span> נפתח עם הסטאפ <span className="text-white">{presetModel}</span>
+              </div>
+            )}
             <TradeForm
-              key={editingTrade?.id ?? 'new'}
+              key={editingTrade?.id ?? (presetModel ? `new:${presetModel}` : 'new')}
               trades={trades}
               initial={editingTrade ?? undefined}
+              presetModel={presetModel ?? undefined}
               onSave={handleSave}
               onCancel={closeForm}
               onDone={closeForm}
@@ -338,5 +371,13 @@ function AIInsightLocked() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function JournalPage() {
+  return (
+    <Suspense fallback={null}>
+      <JournalPageInner />
+    </Suspense>
   );
 }

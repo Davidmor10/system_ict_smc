@@ -61,7 +61,7 @@ const EMOTIONAL_STATE_OPTIONS: { key: EmotionalState; label: string }[] = [
   { key: 'IMPATIENT', label: 'חסר סבלנות' },
 ];
 
-interface PlaybookSetup { id: string; name: string; deleted?: boolean }
+interface PlaybookSetup { id: string; name: string; deleted?: boolean; status?: string; pinned?: boolean }
 
 function loadPlaybookSetups(): PlaybookSetup[] {
   if (typeof window === 'undefined') return [];
@@ -69,9 +69,18 @@ function loadPlaybookSetups(): PlaybookSetup[] {
     const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    // The playbook store now keeps soft-delete tombstones for cross-device sync —
+    if (!Array.isArray(parsed)) return [];
+    // The playbook store keeps soft-delete tombstones for cross-device sync —
     // never offer a deleted setup in the picker.
-    return Array.isArray(parsed) ? parsed.filter((s): s is PlaybookSetup => !!s?.name && !s?.deleted) : [];
+    //
+    // Paused setups are also withheld. A trader who parks a setup has said it
+    // is not in play; offering it here is how a paused setup keeps collecting
+    // trades and never looks paused in the numbers. `testing` stays on the
+    // list — that status exists precisely to gather a sample.
+    const live = parsed.filter((s): s is PlaybookSetup =>
+      !!s?.name && !s?.deleted && s?.status !== 'paused');
+    // Pinned first, matching the order the setups page shows them in.
+    return [...live.filter(s => s.pinned), ...live.filter(s => !s.pinned)];
   } catch {
     return [];
   }
@@ -310,6 +319,7 @@ export default function TradeForm({
   onDone,
   trades = [],
   initial,
+  presetModel,
 }: {
   onSave: (trade: TradeEntry) => void;
   onCancel?: () => void;
@@ -321,8 +331,17 @@ export default function TradeForm({
       save, keeps the same id so the row is updated in place instead of a
       duplicate being appended. */
   initial?: TradeEntry;
+  /** Preselect this playbook setup on a NEW trade — the "שימוש בסטאפ" path
+      from the setups page. Deliberately not folded into `initial`: that prop
+      means "edit this existing trade", and passing a synthetic trade to carry
+      one field would make the form save an update to a row that never
+      existed. Ignored when `initial` is set, because an edit already has its
+      own model and the trader's own choice outranks a link. */
+  presetModel?: string;
 }) {
-  const [form, setForm] = useState<FormState>(() => (initial ? fromTrade(initial) : empty()));
+  const [form, setForm] = useState<FormState>(
+    () => (initial ? fromTrade(initial) : { ...empty(), model: presetModel ?? '' }),
+  );
   const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
   const [customConfirmations, setCustomConfirmations] = useState<string[]>([]);
   const [newConfirmation, setNewConfirmation] = useState('');
