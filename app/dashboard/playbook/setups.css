@@ -150,11 +150,20 @@
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .su-head {
   display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--su-border);
+  gap: 32px; padding-bottom: 22px; border-bottom: 1px solid var(--su-border);
   flex-wrap: wrap; min-width: 0;
 }
+.su-head-text { flex: 1 1 340px; min-width: 0; }
+/* The buttons keep their size and stay on the title's row; only the prose
+   column gives way. Without this they were the flex item that shrank, so they
+   wrapped underneath and collided with the lead. */
+.su-head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0; }
+
+/* direction pinned, not inherited: the diamond is the first DOM child and has
+   to be the first one READ, which in RTL means the rightmost. Left to inherit,
+   one LTR ancestor silently renders it as "PLAYBOOK ◈". */
 .su-kicker {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; direction: rtl;
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
   letter-spacing: 0.34em; text-transform: uppercase; color: var(--gold);
 }
@@ -165,8 +174,14 @@
 @media (max-width: 880px) { .su-title { font-size: 32px; } }
 .su-lead { margin: 0; max-width: 62ch; font-size: 14px; line-height: 1.7; color: var(--text-muted); text-wrap: pretty; }
 
-/* One-shot laser sweep on load — not a loop. */
-.su-sweep-rail { position: relative; height: 1px; overflow: hidden; }
+/* One-shot laser sweep on load — not a loop.
+   flex-shrink: 0 is load-bearing: this is a 1px child of a flex column, and
+   without it the rail is the first thing the layout collapses to nothing, which
+   is why the sweep looked like it was missing entirely. */
+.su-sweep-rail {
+  position: relative; height: 1px; overflow: hidden;
+  flex-shrink: 0; margin-top: 1px; width: 100%;
+}
 .su-sweep {
   position: absolute; top: 0; left: 0; width: 45%; height: 1px;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.9), rgba(212,175,55,0));
@@ -198,8 +213,9 @@
 
 .su-btn-sm { padding: 7px 12px; font-size: 10px; letter-spacing: 0.16em; }
 
-/* Two-step delete: no border at rest, burgundy once armed. */
-.su-btn-del { border-color: transparent; color: var(--white-30); }
+/* Two-step delete: no border at rest, burgundy once armed. --white-40 rather
+   than --white-30 — at 10px on this ground the dimmer tone was barely there. */
+.su-btn-del { border-color: transparent; color: var(--white-40); }
 .su-btn-del:hover { color: var(--white-70); border-color: var(--su-border); }
 .su-btn-del[data-armed='true'] { border-color: rgba(139,58,58,0.6); color: var(--short); }
 .su-btn-del[data-armed='true']:hover { border-color: var(--short); color: #c98080; }
@@ -252,30 +268,38 @@
   position: relative; height: 1px;
   background: linear-gradient(90deg, rgba(28,28,30,0), rgba(28,28,30,1) 12%, rgba(28,28,30,1) 88%, rgba(28,28,30,0));
 }
+/* All three groups on ONE row, wrapping only when there is genuinely no width.
+   justify-content stays at flex-start: anything else distributes the leftover
+   space BETWEEN the groups, which is the gap that made each label look torn off
+   its own chips. */
 .su-filter-row {
   position: relative;
-  display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: flex-start;
+  gap: 28px; flex-wrap: wrap;
   padding: 16px 22px 18px; min-width: 0;
 }
-/* The label belongs to its chips, so the group is the wrapping unit and the
-   28px only ever falls BETWEEN groups. */
-.su-filter-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+/* A group is a closed unit: label + its framed chips, nothing stretchy inside.
+   No flex:1 anywhere here — that is what let a group span the row and strand
+   its label at the far edge. */
+.su-filter-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .su-filter-label {
   flex-shrink: 0;
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.28em; text-transform: uppercase; color: var(--white-30);
+  white-space: nowrap;
 }
-.su-chip-set { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
-/* The sort chips share one frame. */
+.su-chip-set { display: flex; gap: 6px; min-width: 0; }
+/* Sort and every filter group share the same frame, so each set reads as one
+   control rather than as loose buttons. */
 .su-chip-frame {
-  display: flex; gap: 6px; flex-wrap: wrap; min-width: 0;
+  display: flex; gap: 6px; min-width: 0; flex-wrap: wrap;
   background: var(--su-void); border: 1px solid var(--su-border);
   border-radius: 4px; padding: 4px;
 }
 
 .su-chip {
   position: relative; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase; padding: 8px 15px;
+  letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 13px;
   border-radius: 2px; cursor: pointer; white-space: nowrap;
   background: var(--onyx-900); border: 1px solid var(--su-border); color: var(--white-40);
   transition: color 300ms var(--su-ease), background 300ms var(--su-ease),
@@ -300,9 +324,16 @@
 .su-count-hint { color: var(--white-30); }
 
 /* ── Card grid ──────────────────────────────────────────────────────────── */
+/* auto-FIT, not auto-fill. auto-fill keeps the empty tracks it could not fill,
+   so two cards in a three-track row stay pinned at 360px each with a dead
+   column beside them — exactly the "cards sitting in the corner" symptom.
+   auto-fit collapses the empty tracks and the surviving ones share the width,
+   which is what makes two cards read as half and half.
+   align-items: stretch so cards in a row are the same height; the footer's
+   margin-top:auto then pins to the bottom of whichever card is tallest. */
 .su-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 20px; align-items: start; justify-content: start; min-width: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px; align-items: stretch; min-width: 0;
 }
 @media (max-width: 460px) { .su-grid { grid-template-columns: minmax(0, 1fr); } }
 
@@ -327,8 +358,11 @@
 }
 .su-card[data-trashed='true'] { opacity: 0.82; }
 
+/* z-index above the card's own background layers — the pinned card paints a
+   radial gradient on itself, and the rule was disappearing into it. */
 .su-card-rule {
-  position: absolute; top: 0; left: 0; width: 100%; height: 1px;
+  position: absolute; top: 0; left: 0; width: 100%; height: 1px; z-index: 2;
+  pointer-events: none;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.35), rgba(212,175,55,0));
 }
 .su-card[data-pinned='true'] .su-card-rule {
@@ -392,7 +426,9 @@
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden; overflow-wrap: anywhere;
 }
-.su-how p[data-empty='true'] { color: var(--white-30); }
+/* The placeholder is one line and should occupy one line — no clamp box
+   reserving room for three. */
+.su-how p[data-empty='true'] { color: var(--white-30); display: block; }
 
 .su-metrics {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
@@ -426,21 +462,30 @@
 .su-check-line[data-optional='true']   { color: var(--white-40); }
 .su-check-line[data-optional='true'] i { color: var(--white-30); }
 
+/* One row. flex-wrap stays as the overflow valve for a genuinely narrow card —
+   at the widths auto-fit produces it never fires, but an unwrapped row would
+   push its own buttons out of a clipped card rather than degrade. */
 .su-card-foot {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 10px;
   margin-top: auto; padding-top: 14px; border-top: 1px solid var(--su-border);
 }
+/* Every control in the footer is compact and unshrinkable, so the row fits
+   without any of them collapsing into an unreadable sliver. */
+.su-card-foot .su-btn { flex-shrink: 0; padding: 6px 10px; }
 .su-status {
+  flex-shrink: 0;
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase; padding: 5px 11px;
+  letter-spacing: 0.16em; text-transform: uppercase; padding: 6px 10px;
   border-radius: 2px; cursor: pointer; background: transparent;
   border: 1px solid var(--su-border); color: var(--white-40); white-space: nowrap;
   transition: color 250ms var(--su-ease), border-color 250ms var(--su-ease);
 }
 .su-status[data-status='active'] { border-color: rgba(74,124,89,0.5); color: var(--long); }
 .su-status:hover { border-color: var(--gold-45); color: var(--gold); }
+/* direction pinned for the same reason as the kicker: the diamond is the first
+   DOM child and must be the first one read. */
 .su-pin {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 6px; direction: rtl; flex-shrink: 0;
   background: transparent; border: 1px solid var(--su-border); border-radius: 2px;
   padding: 6px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.16em; cursor: pointer; white-space: nowrap; color: var(--white-40);

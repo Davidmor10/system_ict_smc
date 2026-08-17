@@ -115,7 +115,9 @@ function ChipRow<T extends string>({ label, options, value, onSelect, labelOf, l
   return (
     <div className="su-filter-group">
       <span className="su-filter-label">{label}</span>
-      <div className="su-chip-set">
+      {/* Same frame the sort chips wear, so each filter reads as one control
+          rather than as buttons loose on the row. */}
+      <div className="su-chip-frame">
         {options.map(o => (
           <button key={o} type="button" className="su-chip" aria-pressed={value === o} onClick={() => onSelect(o)}>
             {ltrOptions && o !== 'all' ? <span className="su-ltr">{labelOf(o)}</span> : labelOf(o)}
@@ -170,11 +172,14 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         </span>
       </div>
 
-      {/* Chips are always present: the direction is set on every setup, so the
-          row never renders empty even on a record written before the other
-          fields existed. */}
+      {/* The asset chip leads, always. A setup saved before the field existed
+          has no instrument on it — that is not "unknown", it is "not narrowed
+          to one", so it says so rather than leaving the row to start on the
+          direction. */}
       <div className="su-tags">
-        {setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)}
+        {setup.assets.length > 0
+          ? setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)
+          : <span className="su-tag" data-kind="asset">כל הנכסים</span>}
         <span className="su-tag" data-dir={setup.direction}>{DIRECTION_HE[setup.direction]}</span>
         {setup.sessions.map(s => <span key={s} className="su-tag">{sessionHe(s)}</span>)}
         {setup.tags.map(t => <span key={t} className="su-tag su-ltr" data-kind="tag">{t}</span>)}
@@ -272,7 +277,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
               {STATUS_HE[setup.status]}
             </button>
             <button type="button" className="su-pin" aria-pressed={setup.pinned} onClick={onPin}>
-              <span style={{ fontSize: 9 }}>{D}</span>
+              <span style={{ fontSize: 9 }} aria-hidden>{D}</span>
               <span>{setup.pinned ? 'ביטול הצמדה' : 'הצמדה'}</span>
             </button>
           </>
@@ -514,8 +519,14 @@ export default function PlaybookPage() {
 
         <div className="su-wrap">
           <header className="su-head">
-            <div style={{ minWidth: 0 }}>
-              <div className="su-kicker"><span>{D}</span><span className="su-ltr">{inTrash ? 'RECYCLE BIN' : 'PLAYBOOK'}</span></div>
+            <div className="su-head-text">
+              {/* The diamond is a sibling, not part of the Latin run: inside the
+                  isolated span it would be swept along with it and land after
+                  the word. */}
+              <div className="su-kicker">
+                <span aria-hidden>{D}</span>
+                <span className="su-ltr">{inTrash ? 'RECYCLE BIN' : 'PLAYBOOK'}</span>
+              </div>
               <h1 className="su-title">{inTrash ? 'סל המחזור' : 'הסטאפים שלי'}</h1>
               <p className="su-lead">
                 {inTrash
@@ -523,7 +534,7 @@ export default function PlaybookPage() {
                   : 'כל סטאפ הוא כלל שאתה כותב לעצמך — שם, תנאים, וצ׳קליסט כניסה. הביצועים מתעדכנים מתיעוד העסקאות.'}
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="su-head-actions">
               <button type="button" className={`su-btn${inTrash ? ' su-btn-ghost' : ''}`} onClick={toggleView}>
                 {inTrash ? '← חזרה לפלייבוק' : `סל מחזור · ${trashSetups.length}`}
               </button>
