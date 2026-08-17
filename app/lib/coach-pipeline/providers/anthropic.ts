@@ -34,13 +34,23 @@ export const CLAUDE_MODEL      = 'claude-sonnet-5';
 // than a boundary case. The trim below covers what is left.
 export const CLAUDE_MAX_TOKENS = 800;
 
-// 15s was too tight. The first live call took 28.8s wall-clock for a 384-token
-// Hebrew answer — one attempt timed out and the SDK silently retried, so we
-// paid double the latency to get the same result. Budget for the real thing:
-// a full-length response takes ~25s, and one retry beyond that is all the
-// nightly drain window can absorb.
-export const CLAUDE_TIMEOUT_MS = 30_000;
-export const CLAUDE_MAX_RETRIES = 1;
+// One attempt, generously timed — not two attempts racing a function ceiling.
+//
+// 15s was too tight: the first live call took 28.8s wall-clock for a 384-token
+// Hebrew answer. Raising the timeout to 30s fixed that call and left a budget
+// that could not actually be spent. With a retry, one slow call costs 30s +
+// 30s, and the nightly cron runs five jobs in parallel inside a 60s Vercel
+// ceiling with a 45s drain window — so the retry the timeout was sized around
+// is the thing that kills the whole batch, taking four healthy insights down
+// with the slow one.
+//
+// The retry is also redundant. Everything it covers — 429, 5xx, a dropped
+// connection — already falls through to the Gemini rescue, which is free and
+// answers in seconds. So: no SDK retry, and the single attempt gets the
+// headroom instead. Worst case is now one bounded 40s attempt plus a rescue,
+// where it used to be an unbounded-feeling 60s that fit nowhere.
+export const CLAUDE_TIMEOUT_MS = 40_000;
+export const CLAUDE_MAX_RETRIES = 0;
 
 // Sonnet 5 pricing — USD per token. (Intro rate is lower through 2026-08-31;
 // we bill the standard rate so the ledger never under-reports.)

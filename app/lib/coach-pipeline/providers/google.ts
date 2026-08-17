@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Generative AI provider wrapper for the coach pipeline.
-// Two surfaces: embeddings (text-embedding-004) and Gemini text generation
+// Two surfaces: embeddings (gemini-embedding-001) and Gemini text generation
 // (gemini-2.5-flash) used as the fallback path for daily-insight generation.
 //
 // Uses the shared `genAI` client from app/lib/ai/client.ts (already carries the

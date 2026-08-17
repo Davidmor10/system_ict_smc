@@ -42,6 +42,50 @@ export async function logUsage(input: UsageInsert): Promise<void> {
   }
 }
 
+/** One row per distinct (model, purpose, error_kind) among recent failures. */
+export interface FailureGroup {
+  model:     string;
+  purpose:   string;
+  errorKind: string;
+  calls:     number;
+  lastAt:    string;
+}
+
+/** Why the failed calls failed.
+ *
+ *  The rollup answers "how many failed" and stops there, which is exactly one
+ *  question short of useful: a fallback chain that slides down to the weakest
+ *  model every night looks identical to a healthy one until you know whether
+ *  the failures are timeouts, an exhausted quota, or a retired model still
+ *  being called. Three failures a month is a footnote; three timeouts a month
+ *  means the timeout is mis-sized, and those are not the same finding.
+ *
+ *  A plain SELECT is safe here where it is not for the cost sums: this reads
+ *  only `ok = false` rows and caps at `limit`, so it cannot silently truncate
+ *  the way an un-capped page would. Grouping happens here because the set is
+ *  tiny by construction — if it ever isn't, that is itself the alarm. */
+export async function recentFailures(since: string, limit = 200): Promise<FailureGroup[]> {
+  const { data, error } = await getClient()
+    .from(T.aiUsageLog)
+    .select('model, purpose, error_kind, created_at')
+    .eq('ok', false)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+
+  const groups = new Map<string, FailureGroup>();
+  for (const r of data as Array<{ model: string; purpose: string; error_kind: string | null; created_at: string }>) {
+    const errorKind = r.error_kind ?? 'unknown';
+    const key = `${r.model}|${r.purpose}|${errorKind}`;
+    const seen = groups.get(key);
+    // Rows arrive newest-first, so the first one seen for a key is the latest.
+    if (seen) seen.calls += 1;
+    else groups.set(key, { model: r.model, purpose: r.purpose, errorKind, calls: 1, lastAt: r.created_at });
+  }
+  return [...groups.values()].sort((a, b) => b.calls - a.calls);
+}
+
 // ── Cost reads ──────────────────────────────────────────────────────────────
 //
 // Both sums go through Postgres RPCs (see supabase-migration-intelligence-

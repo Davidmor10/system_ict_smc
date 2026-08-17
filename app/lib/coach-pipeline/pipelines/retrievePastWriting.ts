@@ -6,7 +6,7 @@
 // embedder in the pipeline stack — those store; this reads.
 //
 // Cost model: exactly one embedding call per invocation (the query itself).
-// text-embedding-004 is free tier; still logged to ai_usage_log under
+// The embedding model is free tier; still logged to ai_usage_log under
 // purpose='retrieval_query' so admin dashboards see query volume separately
 // from ingest volume.
 // ─────────────────────────────────────────────────────────────────────────────

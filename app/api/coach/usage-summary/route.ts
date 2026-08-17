@@ -17,6 +17,7 @@
 import { NextResponse } from 'next/server';
 import { assertOwner } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
+import { recentFailures } from '../../../lib/coach-pipeline/db/usage';
 import { logger } from '../../../lib/logger';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
 
@@ -77,10 +78,13 @@ export async function GET() {
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
     const dayStart   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 
-    const { data, error } = await getClient().rpc('ai_usage_rollup', {
-      p_since:     monthStart,
-      p_day_start: dayStart,
-    });
+    // The rollup counts failures; this says what they were. Read alongside it
+    // because "3 failed" and "3 timed out on the same model" are different
+    // findings, and only the second one tells you what to change.
+    const [{ data, error }, failures] = await Promise.all([
+      getClient().rpc('ai_usage_rollup', { p_since: monthStart, p_day_start: dayStart }),
+      recentFailures(monthStart),
+    ]);
     if (error) throw error;
 
     const rows  = (data ?? []) as RollupRow[];
@@ -110,6 +114,7 @@ export async function GET() {
       },
       byPurpose: bucketMap(rows, 'purpose'),
       byModel:   bucketMap(rows, 'model'),
+      failures,
       topUsers:  bucketMap(rows, 'user', 10),
     });
   } catch (err) {

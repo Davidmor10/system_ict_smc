@@ -149,7 +149,7 @@ export async function embedEntry(
     return { status: 'failed', entryId, error: msg };
   }
 
-  // 7. Log success. text-embedding-004 is free on Google's public tier so
+  // 7. Log success. The embedding model is free on Google's public tier so
   //    costUsdEst = 0; if we ever move to a paid model, wire the estimate
   //    in one place here.
   await logUsage({
