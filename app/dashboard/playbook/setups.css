@@ -7,12 +7,32 @@
    every other page in the app to match one screen's design file.
 
    So the whole set is scoped to .setups. Inside this page the design's names
-   resolve to the design's values; everywhere else nothing changed. The names are
-   kept verbatim from the export so the two can still be diffed against each
-   other later.
+   resolve to the design's values; everywhere else nothing changed.
    ──────────────────────────────────────────────────────────────────────────── */
 
 .setups {
+  /* ── Fonts ────────────────────────────────────────────────────────────────
+     Bound to the next/font variables directly, and NOT to --font-serif /
+     --font-sans / --font-mono.
+
+     Those three live in globals.css inside `@theme inline`. Tailwind v4
+     substitutes an inline theme at BUILD time and never emits the custom
+     property, so `var(--font-serif)` resolves to nothing at runtime and the
+     element silently inherits whatever its ancestor had. That is why every
+     setup name rendered in the default sans instead of Playfair.
+
+     The app's runtime aliases (--serif/--sans/--mono) are no good here either:
+     under html[lang="he"] they are remapped to Frank Ruhl and Heebo, and this
+     design asks for Playfair, Geist and Geist Mono by name.
+
+     Each stack keeps a Hebrew face behind the named one. Playfair and Geist
+     carry no Hebrew glyphs, so a Hebrew setup name falls through to Frank Ruhl
+     and Hebrew body text to Heebo — per-glyph, which is how a font stack is
+     supposed to work. Latin and digits get exactly the faces the design names. */
+  --font-serif: var(--font-playfair), var(--font-frank), Georgia, 'Times New Roman', serif;
+  --font-sans:  var(--font-geist-sans), var(--font-heebo), system-ui, sans-serif;
+  --font-mono:  var(--font-geist-mono), var(--font-heebo), ui-monospace, monospace;
+
   /* Obsidian neutrals */
   --onyx-black:   #000000;
   --onyx-950:     #050505;
@@ -46,39 +66,61 @@
   --white-40: rgba(255, 255, 255, 0.40);
   --white-30: rgba(255, 255, 255, 0.30);
 
-  /* Semantic aliases — author against these */
-  --su-background:    var(--onyx-950);
-  --su-surface:       var(--onyx-850);
-  --su-surface-raised:var(--onyx-800);
-  --su-void:          var(--onyx-black);
-  --su-border:        var(--onyx-800);
-  --su-border-strong: var(--onyx-700);
+  /* Semantic aliases — author against these. Prefixed so they cannot collide
+     with the globals of the same bare name. */
+  --su-background:     var(--onyx-950);
+  --su-surface:        var(--onyx-850);
+  --su-surface-raised: var(--onyx-800);
+  --su-void:           var(--onyx-black);
+  --su-border:         var(--onyx-800);
+  --su-border-strong:  var(--onyx-700);
 
   --text-primary: var(--onyx-white);
   --text-body:    var(--onyx-silver);
   --text-muted:   var(--white-55);
-  --text-faint:   var(--white-40);
 
   --long:  var(--bullish);
   --short: var(--bearish);
 
+  --su-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Page frame ─────────────────────────────────────────────────────────
+     width:100% + overflow-x:hidden, and the content column capped inside it.
+     The page sits in the area left over after the sidebar, so a viewport-width
+     assumption anywhere here is what pushed the trash button and the sort row
+     off the right edge. */
+  position: relative;
   direction: rtl;
   text-align: right;
+  width: 100%;
+  max-width: 100%;
   min-height: 100%;
+  overflow-x: hidden;
+  padding: 40px 48px 120px;
   background: var(--su-background);
   color: var(--text-body);
   font-family: var(--font-sans);
-  position: relative;
-  overflow-x: hidden;
-  padding: 40px 48px 120px;
 }
 
 @media (max-width: 880px) {
   .setups { padding: 24px 16px 96px; }
 }
 
+/* The content column. Everything real lives in here; the glows do not. */
+.su-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* ── Ambient gold wash ──────────────────────────────────────────────────────
-   Decorative only, and it must never sit above content or eat a click. */
+   Decorative only: never above content, never clickable, and never able to
+   widen the page — the parent clips them. */
 .su-glow { position: absolute; pointer-events: none; z-index: 0; }
 .su-glow-a {
   top: -220px; inset-inline-start: 12%; width: 720px; height: 480px; filter: blur(8px);
@@ -88,7 +130,6 @@
   bottom: -180px; inset-inline-end: -120px; width: 620px; height: 420px;
   background: radial-gradient(ellipse at center, rgba(212,175,55,0.05), rgba(212,175,55,0) 70%);
 }
-.setups > *:not(.su-glow) { position: relative; z-index: 1; }
 
 /* ── Type helpers ───────────────────────────────────────────────────────── */
 .su-mono {
@@ -96,9 +137,10 @@
   font-weight: 700;
   text-transform: uppercase;
 }
-/* Every Latin token and every number sits inside an RTL paragraph here — a
-   grade like "A+", a ticker, "+1.42R". Without isolation the sign, the letter
-   and the surrounding Hebrew reorder around each other. */
+/* Every Latin token and every signed number here sits inside an RTL paragraph:
+   "A+", "AVG R", "ES", "+1.42R", "$4,820". Unisolated, the trailing sign is a
+   neutral character that takes the paragraph direction — which is how "A+"
+   renders as "+A". Isolation is not decoration on this page. */
 .su-ltr {
   direction: ltr;
   unicode-bidi: isolate;
@@ -108,8 +150,8 @@
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .su-head {
   display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 32px; padding-bottom: 22px; border-bottom: 1px solid var(--su-border);
-  flex-wrap: wrap;
+  gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--su-border);
+  flex-wrap: wrap; min-width: 0;
 }
 .su-kicker {
   display: flex; align-items: center; gap: 10px;
@@ -120,14 +162,15 @@
   margin: 10px 0 8px; font-family: var(--font-serif); font-size: 46px;
   line-height: 1; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em;
 }
-@media (max-width: 880px) { .su-title { font-size: 34px; } }
+@media (max-width: 880px) { .su-title { font-size: 32px; } }
 .su-lead { margin: 0; max-width: 62ch; font-size: 14px; line-height: 1.7; color: var(--text-muted); text-wrap: pretty; }
 
+/* One-shot laser sweep on load — not a loop. */
 .su-sweep-rail { position: relative; height: 1px; overflow: hidden; }
 .su-sweep {
-  position: absolute; top: 0; inset-inline-start: 0; width: 45%; height: 1px;
+  position: absolute; top: 0; left: 0; width: 45%; height: 1px;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.9), rgba(212,175,55,0));
-  animation: suSweep 2600ms cubic-bezier(0.16,1,0.3,1) 300ms both;
+  animation: suSweep 2600ms var(--su-ease) 300ms both;
 }
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
@@ -137,8 +180,8 @@
   letter-spacing: 0.18em; text-transform: uppercase;
   border-radius: 2px; padding: 9px 14px; cursor: pointer; white-space: nowrap;
   background: transparent; border: 1px solid var(--su-border); color: var(--white-40);
-  transition: color 250ms var(--ease-expo-out), border-color 250ms var(--ease-expo-out),
-              background-color 250ms var(--ease-expo-out), box-shadow 250ms var(--ease-expo-out);
+  transition: color 250ms var(--su-ease), border-color 250ms var(--su-ease),
+              background-color 250ms var(--su-ease), box-shadow 250ms var(--su-ease);
 }
 .su-btn:hover { color: var(--white-70); border-color: var(--su-border-strong); }
 .su-btn:focus-visible { outline: 2px solid var(--gold-60); outline-offset: 2px; }
@@ -150,39 +193,55 @@
 }
 .su-btn-primary:hover { color: #000; border-color: var(--gold-soft); box-shadow: 0 0 34px -8px rgba(212,175,55,1); }
 
-.su-btn-gold { color: var(--gold); border-color: var(--gold-45); }
-.su-btn-gold:hover { color: var(--gold-soft); border-color: var(--gold); background: var(--gold-04); }
+.su-btn-ghost { color: var(--gold); border-color: var(--gold-45); }
+.su-btn-ghost:hover { color: var(--gold-soft); border-color: var(--gold); background: var(--gold-04); }
 
-.su-btn-sm { padding: 7px 12px; font-size: 10px; }
-.su-btn-danger { border-color: rgba(139,58,58,0.6); color: var(--short); }
-.su-btn-danger:hover { color: #c98080; border-color: var(--short); background: rgba(139,58,58,0.08); }
+.su-btn-sm { padding: 7px 12px; font-size: 10px; letter-spacing: 0.16em; }
+
+/* Two-step delete: no border at rest, burgundy once armed. */
+.su-btn-del { border-color: transparent; color: var(--white-30); }
+.su-btn-del:hover { color: var(--white-70); border-color: var(--su-border); }
+.su-btn-del[data-armed='true'] { border-color: rgba(139,58,58,0.6); color: var(--short); }
+.su-btn-del[data-armed='true']:hover { border-color: var(--short); color: #c98080; }
 
 .su-icon-btn {
+  flex-shrink: 0;
   background: transparent; border: 1px solid var(--su-border); border-radius: 2px;
   width: 32px; height: 32px; color: var(--white-40); font-size: 15px; cursor: pointer;
-  transition: color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth);
+  transition: color 200ms var(--su-ease), border-color 200ms var(--su-ease);
 }
 .su-icon-btn:hover { color: var(--gold); border-color: var(--gold-45); }
 
-/* ── Filter bar ─────────────────────────────────────────────────────────── */
+/* ── Filter console ─────────────────────────────────────────────────────── */
 .su-filters {
+  position: relative;
   margin-top: 26px;
+  min-width: 0;
   background: linear-gradient(180deg, #0e0e11 0%, #0a0a0b 100%);
   border: 1px solid var(--su-border); border-radius: 12px; overflow: hidden;
   box-shadow: 0 30px 80px -50px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.02);
 }
-.su-filters-top-rule {
-  position: absolute; top: 0; inset-inline-start: 0; width: 100%; height: 1px;
+.su-filters-rule {
+  position: absolute; top: 0; left: 0; width: 100%; height: 1px;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.45), rgba(212,175,55,0));
 }
-.su-search-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 18px 22px; }
+.su-filters-wash {
+  position: absolute; top: -90px; inset-inline-start: 8%; width: 380px; height: 200px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(212,175,55,0.07), rgba(212,175,55,0) 70%);
+}
+.su-search-row {
+  position: relative;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  padding: 18px 22px; min-width: 0;
+}
 .su-search {
-  flex: 1; min-width: 260px; display: flex; align-items: center; gap: 10px;
+  flex: 1 1 300px; min-width: 0; display: flex; align-items: center; gap: 10px;
   background: var(--su-void); border: 1px solid var(--su-border-strong);
   border-radius: 2px; padding: 0 14px; height: 46px;
-  transition: border-color 300ms var(--ease-smooth), box-shadow 300ms var(--ease-smooth);
+  transition: border-color 300ms var(--su-ease), box-shadow 300ms var(--su-ease);
 }
-.su-search:focus-within { border-color: var(--gold-45); box-shadow: 0 0 24px -14px rgba(212,175,55,0.9); }
+.su-search:focus-within { border-color: var(--gold-45); box-shadow: 0 0 26px -12px rgba(212,175,55,0.85); }
 .su-search input {
   flex: 1; min-width: 0; background: transparent; border: none; outline: none;
   color: var(--text-primary); font-family: var(--font-sans); font-size: 14px;
@@ -190,14 +249,28 @@
 .su-search input::placeholder { color: var(--onyx-muted); }
 
 .su-divider {
-  height: 1px;
+  position: relative; height: 1px;
   background: linear-gradient(90deg, rgba(28,28,30,0), rgba(28,28,30,1) 12%, rgba(28,28,30,1) 88%, rgba(28,28,30,0));
 }
-.su-filter-row { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; padding: 16px 22px 18px; }
-.su-filter-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.su-filter-row {
+  position: relative;
+  display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+  padding: 16px 22px 18px; min-width: 0;
+}
+/* The label belongs to its chips, so the group is the wrapping unit and the
+   28px only ever falls BETWEEN groups. */
+.su-filter-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .su-filter-label {
+  flex-shrink: 0;
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.28em; text-transform: uppercase; color: var(--white-30);
+}
+.su-chip-set { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* The sort chips share one frame. */
+.su-chip-frame {
+  display: flex; gap: 6px; flex-wrap: wrap; min-width: 0;
+  background: var(--su-void); border: 1px solid var(--su-border);
+  border-radius: 4px; padding: 4px;
 }
 
 .su-chip {
@@ -205,9 +278,9 @@
   letter-spacing: 0.16em; text-transform: uppercase; padding: 8px 15px;
   border-radius: 2px; cursor: pointer; white-space: nowrap;
   background: var(--onyx-900); border: 1px solid var(--su-border); color: var(--white-40);
-  transition: color 300ms var(--ease-expo-out), background 300ms var(--ease-expo-out),
-              border-color 300ms var(--ease-expo-out), box-shadow 300ms var(--ease-expo-out),
-              transform 300ms var(--ease-expo-out);
+  transition: color 300ms var(--su-ease), background 300ms var(--su-ease),
+              border-color 300ms var(--su-ease), box-shadow 300ms var(--su-ease),
+              transform 300ms var(--su-ease);
 }
 .su-chip:hover { color: var(--gold); border-color: var(--gold-45); }
 .su-chip:focus-visible { outline: 2px solid var(--gold-60); outline-offset: 2px; }
@@ -220,7 +293,7 @@
 
 .su-count {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  flex-wrap: wrap; padding: 14px 0 20px;
+  flex-wrap: wrap; padding: 14px 0 20px; min-width: 0;
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
   letter-spacing: 0.22em; text-transform: uppercase; color: var(--white-40);
 }
@@ -229,18 +302,19 @@
 /* ── Card grid ──────────────────────────────────────────────────────────── */
 .su-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 20px; align-items: start;
+  gap: 20px; align-items: start; justify-content: start; min-width: 0;
 }
-@media (max-width: 460px) { .su-grid { grid-template-columns: 1fr; } }
+@media (max-width: 460px) { .su-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .su-card {
   position: relative; display: flex; flex-direction: column; gap: 14px;
+  min-height: 100%; min-width: 0;
   background: var(--su-surface); border: 1px solid var(--su-border);
   border-radius: 12px; padding: 22px; overflow: hidden;
   box-shadow: 0 20px 60px -40px rgba(0,0,0,0.9);
-  animation: suRise 560ms cubic-bezier(0.16,1,0.3,1) both;
-  transition: transform 380ms var(--ease-expo-out), border-color 380ms var(--ease-expo-out),
-              box-shadow 380ms var(--ease-expo-out), opacity 300ms var(--ease-expo-out);
+  animation: suRise 560ms var(--su-ease) both;
+  transition: transform 380ms var(--su-ease), border-color 380ms var(--su-ease),
+              box-shadow 380ms var(--su-ease), opacity 300ms var(--su-ease);
 }
 .su-card:hover {
   transform: translateY(-3px); border-color: var(--gold-30);
@@ -254,14 +328,15 @@
 .su-card[data-trashed='true'] { opacity: 0.82; }
 
 .su-card-rule {
-  position: absolute; top: 0; inset-inline-start: 0; width: 100%; height: 1px;
+  position: absolute; top: 0; left: 0; width: 100%; height: 1px;
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.35), rgba(212,175,55,0));
 }
 .su-card[data-pinned='true'] .su-card-rule {
   background: linear-gradient(90deg, rgba(212,175,55,0), rgba(212,175,55,0.75), rgba(212,175,55,0));
 }
 
-.su-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.su-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; min-width: 0; }
+.su-card-head > div { min-width: 0; }
 .su-pinned-tag {
   display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
@@ -272,9 +347,10 @@
   line-height: 1.2; font-weight: 500; color: var(--text-primary);
   overflow-wrap: anywhere;
 }
-.su-card-summary { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.su-card-summary { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-muted); overflow-wrap: anywhere; }
 
 .su-grade {
+  flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 32px; height: 30px; padding: 0 8px; border-radius: 2px;
   font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
@@ -290,21 +366,22 @@
 }
 .su-grade[data-grade='C'] { border-color: rgba(139,58,58,0.5); color: var(--short); }
 
-.su-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.su-tags { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .su-tag {
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase; padding: 5px 11px;
   border-radius: 2px; border: 1px solid var(--su-border); color: var(--white-40);
-  background: transparent; white-space: nowrap;
+  background: transparent; white-space: nowrap; cursor: default;
 }
-.su-tag[data-kind='asset']  { background: var(--su-surface-raised); border-color: var(--su-border-strong); color: var(--white-70); }
-.su-tag[data-kind='tag']    { background: var(--gold-04); border-color: var(--gold-20); color: var(--gold); }
-.su-tag[data-dir='LONG']    { color: var(--long); }
-.su-tag[data-dir='SHORT']   { color: var(--short); }
+.su-tag[data-kind='asset'] { background: var(--su-surface-raised); border-color: var(--su-border-strong); color: var(--white-70); }
+.su-tag[data-kind='tag']   { background: var(--gold-04); border-color: var(--gold-20); color: var(--gold); }
+.su-tag[data-dir='LONG']   { color: var(--long); }
+.su-tag[data-dir='SHORT']  { color: var(--short); }
+.su-tag[data-dir='BOTH']   { color: var(--white-40); }
 
 .su-how {
   background: var(--su-void); border: 1px solid var(--su-border);
-  border-radius: 2px; padding: 12px 14px;
+  border-radius: 2px; padding: 12px 14px; min-width: 0;
 }
 .su-section-label {
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
@@ -312,15 +389,17 @@
 }
 .su-how p {
   margin: 7px 0 0; font-size: 13px; line-height: 1.75; color: var(--text-body);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
 }
+.su-how p[data-empty='true'] { color: var(--white-30); }
 
 .su-metrics {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
   background: var(--su-border); border: 1px solid var(--su-border);
   border-radius: 2px; overflow: hidden;
 }
-.su-metric { background: var(--su-surface); padding: 10px 8px; text-align: center; }
+.su-metric { background: var(--su-surface); padding: 10px 8px; text-align: center; min-width: 0; }
 .su-metric-label {
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   letter-spacing: 0.2em; text-transform: uppercase; color: var(--white-30);
@@ -332,19 +411,20 @@
 }
 .su-metric-value[data-tone='gold']  { color: var(--gold); }
 .su-metric-value[data-tone='short'] { color: var(--short); }
+.su-metric-value[data-tone='soft']  { color: var(--white-55); }
 .su-metric-value[data-tone='dim']   { color: var(--white-40); }
 
+.su-check-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .su-checklist { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
 .su-check-line {
   display: flex; align-items: baseline; gap: 8px;
-  font-size: 12.5px; line-height: 1.5; color: var(--text-body);
+  font-size: 12.5px; line-height: 1.5; color: var(--text-body); overflow-wrap: anywhere;
 }
-.su-check-line i { color: var(--gold-45); font-size: 9px; font-style: normal; }
+.su-check-line i { flex-shrink: 0; color: var(--gold-45); font-size: 9px; font-style: normal; }
 /* An optional condition is still a condition — dimmed, not hidden, so the
    required ones read as the ones that gate the entry. */
-.su-check-line[data-optional='true']      { color: var(--white-40); }
-.su-check-line[data-optional='true'] i    { color: var(--white-30); }
-.su-check-head { display: flex; align-items: center; justify-content: space-between; }
+.su-check-line[data-optional='true']   { color: var(--white-40); }
+.su-check-line[data-optional='true'] i { color: var(--white-30); }
 
 .su-card-foot {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 10px;
@@ -354,24 +434,25 @@
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.16em; text-transform: uppercase; padding: 5px 11px;
   border-radius: 2px; cursor: pointer; background: transparent;
-  border: 1px solid var(--su-border); color: var(--white-40);
-  transition: color 250ms var(--ease-expo-out), border-color 250ms var(--ease-expo-out);
+  border: 1px solid var(--su-border); color: var(--white-40); white-space: nowrap;
+  transition: color 250ms var(--su-ease), border-color 250ms var(--su-ease);
 }
 .su-status[data-status='active'] { border-color: rgba(74,124,89,0.5); color: var(--long); }
+.su-status:hover { border-color: var(--gold-45); color: var(--gold); }
 .su-pin {
   display: inline-flex; align-items: center; gap: 6px;
   background: transparent; border: 1px solid var(--su-border); border-radius: 2px;
   padding: 6px 10px; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   letter-spacing: 0.16em; cursor: pointer; white-space: nowrap; color: var(--white-40);
-  transition: color 250ms var(--ease-expo-out), border-color 250ms var(--ease-expo-out),
-              background-color 250ms var(--ease-expo-out);
+  transition: color 250ms var(--su-ease), border-color 250ms var(--su-ease),
+              background-color 250ms var(--su-ease);
 }
 .su-pin:hover { color: var(--gold); border-color: var(--gold-45); }
 .su-pin[aria-pressed='true'] { background: var(--gold-10); border-color: var(--gold-45); color: var(--gold); }
 .su-updated {
   margin-inline-start: auto; font-family: var(--font-mono); font-size: 10px;
   font-weight: 700; letter-spacing: 0.18em; color: var(--white-30);
-  direction: ltr; unicode-bidi: isolate;
+  direction: ltr; unicode-bidi: isolate; white-space: nowrap;
 }
 
 /* ── Empty state ────────────────────────────────────────────────────────── */
@@ -382,41 +463,43 @@
   border-radius: 12px; overflow: hidden;
 }
 .su-empty-glow {
-  position: absolute; top: -140px; inset-inline-start: 50%; width: 460px; height: 300px;
+  position: absolute; top: -140px; left: 50%; width: 460px; height: 300px;
   transform: translateX(-50%); pointer-events: none;
   background: radial-gradient(ellipse at center, rgba(212,175,55,0.10), rgba(212,175,55,0) 70%);
 }
 .su-empty h2 { margin: 0; font-family: var(--font-serif); font-size: 30px; font-weight: 500; color: var(--text-primary); }
 .su-empty p  { margin: 0; max-width: 46ch; font-size: 14px; line-height: 1.7; color: var(--text-muted); }
-.su-empty > * { position: relative; }
+.su-empty > *:not(.su-empty-glow) { position: relative; }
 
 /* ── Drawer ─────────────────────────────────────────────────────────────── */
 .su-scrim {
   position: fixed; inset: 0; background: rgba(0,0,0,0.74); z-index: 40;
-  animation: suFade 260ms var(--ease-expo-out) both; border: none; padding: 0;
+  animation: suFade 260ms var(--su-ease) both; border: none; padding: 0;
 }
 .su-drawer {
-  position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 480px; max-width: 92vw;
+  position: fixed; top: 0; bottom: 0; right: 0; width: 480px; max-width: 92vw;
   z-index: 41; background: var(--su-surface);
-  /* The seam faces the content, i.e. the inline-END edge. The export put the
-     border on inline-start, which in RTL is the screen edge the drawer is
-     flush against — a hairline nobody can see. */
-  border-inline-end: 1px solid var(--su-border);
+  border-inline-start: 1px solid var(--su-border);
   box-shadow: -40px 0 120px -20px rgba(0,0,0,0.9);
   display: flex; flex-direction: column;
-  animation: suDrawerIn 460ms cubic-bezier(0.16,1,0.3,1) both;
+  direction: rtl;
+  animation: suDrawerIn 460ms var(--su-ease) both;
 }
 .su-drawer-head { position: relative; padding: 24px 28px 18px; border-bottom: 1px solid var(--su-border); overflow: hidden; }
 .su-drawer-head-glow {
-  position: absolute; top: -120px; inset-inline-start: 0; width: 100%; height: 220px;
+  position: absolute; top: -120px; left: 0; width: 100%; height: 220px;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 100%, rgba(212,175,55,0.10), rgba(212,175,55,0) 70%);
+  background: radial-gradient(ellipse at 50% 100%, rgba(212,175,55,0.12), rgba(212,175,55,0) 70%);
 }
 .su-drawer-title { margin: 8px 0 0; font-family: var(--font-serif); font-size: 28px; font-weight: 500; color: var(--text-primary); }
 .su-drawer-body { flex: 1; overflow-y: auto; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 22px; }
 .su-drawer-foot {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 16px 28px; border-top: 1px solid var(--su-border); background: var(--onyx-900);
+}
+.su-drawer-hint {
+  margin-inline-start: auto; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.18em; color: var(--white-30);
 }
 
 .su-field-label {
@@ -427,69 +510,95 @@
   width: 100%; background: var(--su-surface-raised); border: 1px solid var(--su-border-strong);
   border-radius: 2px; padding: 11px 12px; font-family: var(--font-sans); font-size: 14px;
   color: var(--text-primary); outline: none;
-  transition: border-color 300ms var(--ease-smooth);
+  transition: border-color 300ms var(--su-ease);
 }
 .su-textarea { line-height: 1.7; resize: vertical; }
 .su-input:focus, .su-textarea:focus { border-color: var(--gold-60); }
 .su-input::placeholder, .su-textarea::placeholder { color: var(--onyx-muted); }
+.su-input[aria-invalid='true'] { border-color: var(--short); }
 
-.su-seg { display: flex; gap: 4px; background: var(--su-void); border: 1px solid var(--su-border); border-radius: 4px; padding: 4px; }
+.su-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 560px) { .su-pair { grid-template-columns: 1fr; } }
+
+/* direction is pinned rather than inherited: the first DOM child has to be the
+   first one READ, and in RTL that is the rightmost. Left to inherit, a stray
+   LTR ancestor silently reverses A+ / A / B / C. */
+.su-seg {
+  display: flex; gap: 4px; direction: rtl;
+  background: var(--su-void); border: 1px solid var(--su-border);
+  border-radius: 4px; padding: 4px; min-width: 0;
+}
 .su-seg button {
-  flex: 1; padding: 8px 6px; border-radius: 2px; cursor: pointer;
+  flex: 1 1 0; min-width: 0; padding: 8px 6px; border-radius: 2px; cursor: pointer;
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.12em; text-transform: uppercase;
+  letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
   background: transparent; border: 1px solid transparent; color: var(--white-40);
-  transition: color 250ms var(--ease-expo-out), background 250ms var(--ease-expo-out),
-              border-color 250ms var(--ease-expo-out);
+  transition: color 250ms var(--su-ease), background 250ms var(--su-ease),
+              border-color 250ms var(--su-ease);
 }
 .su-seg button:hover { color: var(--white-70); }
 .su-seg button[aria-pressed='true'] {
   background: linear-gradient(180deg, rgba(212,175,55,0.20), rgba(212,175,55,0.06));
   border-color: var(--gold-45); color: var(--gold);
 }
-.su-draft-check { display: flex; align-items: center; gap: 8px; }
-.su-draft-check .su-input { flex: 1; padding: 9px 11px; font-size: 13px; }
+
+.su-draft-check { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.su-draft-check .su-input { flex: 1; min-width: 0; padding: 9px 11px; font-size: 13px; }
 .su-req {
   flex-shrink: 0; font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   letter-spacing: 0.1em; padding: 6px 8px; border-radius: 2px; cursor: pointer;
   background: transparent; border: 1px solid var(--su-border); color: var(--white-30);
-  transition: color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth);
+  transition: color 200ms var(--su-ease), border-color 200ms var(--su-ease);
 }
 .su-req[aria-pressed='true'] { border-color: rgba(139,58,58,0.5); color: #c98080; }
 .su-x {
+  flex-shrink: 0;
   background: transparent; border: none; color: var(--white-30); font-size: 15px;
-  cursor: pointer; padding: 4px 6px; transition: color 200ms var(--ease-smooth);
+  cursor: pointer; padding: 4px 6px; transition: color 200ms var(--su-ease);
 }
 .su-x:hover { color: var(--short); }
 
-/* ── Toast ──────────────────────────────────────────────────────────────── */
+/* ── Toast ──────────────────────────────────────────────────────────────────
+   `left`, never `inset-inline-start`. In RTL the logical property resolves to
+   `right: 50%`, and translateX(-50%) then pushes it further left instead of
+   centring it — which is how it ended up stuck and clipped against the left
+   edge of the screen. Physical centring is the same in every language. */
 .su-toast {
-  position: fixed; bottom: 32px; inset-inline-start: 50%; z-index: 50;
-  display: flex; align-items: center; gap: 10px;
+  position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
   background: var(--su-surface); border: 1px solid var(--gold-30); border-radius: 2px;
   padding: 12px 20px; box-shadow: 0 0 60px -18px rgba(212,175,55,0.6);
-  animation: suToast 380ms var(--ease-expo-out) both;
+  animation: suToast 380ms var(--su-ease) both;
 }
-.su-toast span:last-child {
+.su-toast-text {
   font-family: var(--font-mono); font-size: 12px; font-weight: 700;
   letter-spacing: 0.1em; color: var(--white-90);
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────────────── */
-@keyframes suRise  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes suRise  {
+  from { opacity: 0; transform: translateY(10px); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
 @keyframes suFade  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes suSweep { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
-@keyframes suToast { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
-/* The drawer is anchored to the inline-start edge, which in RTL is the right
-   of the screen, so it enters from the right: a POSITIVE translate. The export
-   used -100%, which starts the panel over the middle of the page and slides it
-   outward — backwards, and only on the language the page is written in. */
+@keyframes suToast {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* The panel is pinned to `right: 0`, so it has to enter from beyond the RIGHT
+   edge — a POSITIVE translate. The export's -100% starts it a full width to the
+   LEFT of its resting place, i.e. floating over the middle of the page, and
+   then slides it outward to the edge. Transforms are physical and do not mirror
+   under RTL, so that reads backwards on exactly the language this page is
+   written in. Everything else about the drawer follows the export. */
 @keyframes suDrawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
 @media (prefers-reduced-motion: reduce) {
   .setups *, .setups *::before, .setups *::after,
   .su-scrim, .su-drawer, .su-toast {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

@@ -24,9 +24,6 @@ import './setups.css';
 // and its performance is whatever the journal says it was. Storing a win rate
 // on the setup would let the two disagree, and the stored one would win by
 // virtue of being the one on screen.
-//
-// The design this implements ships a `trades/winRate/avgR/pnl` field per setup
-// because a mockup has no journal behind it. Those are derived here instead.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const D = '◈';
@@ -36,16 +33,16 @@ const D = '◈';
 const CONFIRM_MS = 3500;
 const TOAST_MS = 2600;
 
-const SORTS: { key: SortKey; label: string }[] = [
+const SORTS: { key: SortKey; label: string; ltr?: boolean }[] = [
   { key: 'grade',  label: 'דירוג' },
-  { key: 'win',    label: 'WIN %' },
-  { key: 'r',      label: 'AVG R' },
+  { key: 'win',    label: 'WIN %', ltr: true },
+  { key: 'r',      label: 'AVG R', ltr: true },
   { key: 'trades', label: 'עסקאות' },
 ];
 
 const sessionHe = (k: SessionKey) => SESS.find(s => s.key === k)?.he ?? k;
 
-/** dd.MM — the card's "last touched" stamp. */
+/** dd.MM — the card's "last trade" stamp. */
 function shortDate(iso: string | null): string {
   if (!iso) return '—';
   const [, m, d] = iso.split('-');
@@ -92,45 +89,36 @@ function Segmented<T extends string>({ options, value, onChange, labelOf, ltr }:
   value: T;
   onChange: (v: T) => void;
   labelOf?: (v: T) => string;
+  /** Isolate each label. `A+` unisolated renders as `+A`: the plus is a neutral
+   *  character at the end of the run, so it takes the paragraph's RTL direction. */
   ltr?: boolean;
 }) {
   return (
     <div className="su-seg">
       {options.map(o => (
-        <button
-          key={o}
-          type="button"
-          aria-pressed={value === o}
-          onClick={() => onChange(o)}
-          className={ltr ? 'su-ltr' : undefined}
-        >
-          {labelOf ? labelOf(o) : o}
+        <button key={o} type="button" aria-pressed={value === o} onClick={() => onChange(o)}>
+          {ltr ? <span className="su-ltr">{labelOf ? labelOf(o) : o}</span> : (labelOf ? labelOf(o) : o)}
         </button>
       ))}
     </div>
   );
 }
 
-function ChipRow<T extends string>({ label, options, value, onSelect, labelOf }: {
+function ChipRow<T extends string>({ label, options, value, onSelect, labelOf, ltrOptions }: {
   label: string;
   options: readonly (T | 'all')[];
   value: T | 'all';
   onSelect: (v: T | 'all') => void;
   labelOf: (v: T | 'all') => string;
+  ltrOptions?: boolean;
 }) {
   return (
     <div className="su-filter-group">
       <span className="su-filter-label">{label}</span>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div className="su-chip-set">
         {options.map(o => (
-          <button
-            key={o}
-            type="button"
-            className="su-chip"
-            aria-pressed={value === o}
-            onClick={() => onSelect(o)}
-          >
-            {labelOf(o)}
+          <button key={o} type="button" className="su-chip" aria-pressed={value === o} onClick={() => onSelect(o)}>
+            {ltrOptions && o !== 'all' ? <span className="su-ltr">{labelOf(o)}</span> : labelOf(o)}
           </button>
         ))}
       </div>
@@ -139,13 +127,6 @@ function ChipRow<T extends string>({ label, options, value, onSelect, labelOf }:
 }
 
 // ── Card ─────────────────────────────────────────────────────────────────────
-
-function metricTone(kind: 'r' | 'pnl' | 'win', v: number | null): 'gold' | 'short' | 'dim' | undefined {
-  if (v === null) return 'dim';
-  if (kind === 'r')   return v >= 1 ? 'gold' : undefined;
-  if (kind === 'pnl') return v > 0 ? 'gold' : v < 0 ? 'short' : 'dim';
-  return v >= 50 ? undefined : 'dim';
-}
 
 const money = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
@@ -170,13 +151,15 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
   ].slice(0, 3);
   const requiredCount = setup.checklist.filter(c => c.required).length;
 
+  const pinned = setup.pinned && !trashed;
+
   return (
-    <article className="su-card" data-pinned={setup.pinned && !trashed} data-trashed={trashed}>
+    <article className="su-card" data-pinned={pinned} data-trashed={trashed}>
       <div className="su-card-rule" />
 
       <div className="su-card-head">
-        <div style={{ minWidth: 0 }}>
-          {setup.pinned && !trashed && (
+        <div>
+          {pinned && (
             <div className="su-pinned-tag"><span style={{ fontSize: 8 }}>{D}</span><span>מוצמד</span></div>
           )}
           <h2 className="su-card-name">{setup.name || 'ללא שם'}</h2>
@@ -187,21 +170,22 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         </span>
       </div>
 
-      {(setup.assets.length > 0 || setup.sessions.length > 0 || setup.tags.length > 0) && (
-        <div className="su-tags">
-          {setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)}
-          <span className="su-tag" data-dir={setup.direction}>{DIRECTION_HE[setup.direction]}</span>
-          {setup.sessions.map(s => <span key={s} className="su-tag">{sessionHe(s)}</span>)}
-          {setup.tags.map(t => <span key={t} className="su-tag su-ltr" data-kind="tag">{t}</span>)}
-        </div>
-      )}
+      {/* Chips are always present: the direction is set on every setup, so the
+          row never renders empty even on a record written before the other
+          fields existed. */}
+      <div className="su-tags">
+        {setup.assets.map(a => <span key={a} className="su-tag su-ltr" data-kind="asset">{a}</span>)}
+        <span className="su-tag" data-dir={setup.direction}>{DIRECTION_HE[setup.direction]}</span>
+        {setup.sessions.map(s => <span key={s} className="su-tag">{sessionHe(s)}</span>)}
+        {setup.tags.map(t => <span key={t} className="su-tag su-ltr" data-kind="tag">{t}</span>)}
+      </div>
 
-      {setup.howItWorks && (
-        <div className="su-how">
-          <div className="su-section-label">איך הסטאפ עובד</div>
-          <p>{setup.howItWorks}</p>
-        </div>
-      )}
+      <div className="su-how">
+        <div className="su-section-label">איך הסטאפ עובד</div>
+        <p data-empty={!setup.howItWorks}>
+          {setup.howItWorks || 'עוד לא נכתב הסבר לסטאפ הזה.'}
+        </p>
+      </div>
 
       {/* Four numbers, all of them from the journal. An em-dash where there is
           nothing to show — a setup with no trades yet has no win rate, and
@@ -213,19 +197,28 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         </div>
         <div className="su-metric">
           <div className="su-metric-label">WIN</div>
-          <div className="su-metric-value" data-tone={metricTone('win', stats.winRate)}>
+          <div
+            className="su-metric-value"
+            data-tone={stats.winRate === null ? 'dim' : stats.winRate < 50 ? 'soft' : undefined}
+          >
             {stats.winRate === null ? '—' : `${stats.winRate.toFixed(0)}%`}
           </div>
         </div>
         <div className="su-metric">
           <div className="su-metric-label">AVG R</div>
-          <div className="su-metric-value" data-tone={metricTone('r', stats.avgR)}>
+          <div
+            className="su-metric-value"
+            data-tone={stats.avgR === null ? 'dim' : stats.avgR >= 1 ? 'gold' : undefined}
+          >
             {stats.avgR === null ? '—' : `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
           </div>
         </div>
         <div className="su-metric">
           <div className="su-metric-label">PNL</div>
-          <div className="su-metric-value" data-tone={metricTone('pnl', stats.trades ? stats.pnl : null)}>
+          <div
+            className="su-metric-value"
+            data-tone={stats.trades === 0 ? 'dim' : stats.pnl > 0 ? 'gold' : stats.pnl < 0 ? 'short' : 'dim'}
+          >
             {stats.trades === 0 ? '—' : money(stats.pnl)}
           </div>
         </div>
@@ -235,48 +228,44 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
         <div className="su-check-head">
           <span className="su-section-label">צ׳קליסט כניסה</span>
           <span className="su-section-label">
-            {setup.checklist.length
-              ? `${setup.checklist.length} סעיפים · ${requiredCount} חובה`
-              : 'ריק'}
+            {setup.checklist.length ? `${setup.checklist.length} סעיפים · ${requiredCount} חובה` : 'ריק'}
           </span>
         </div>
-        {preview.length > 0 ? (
-          <div className="su-checklist">
-            {preview.map((c, i) => (
-              <div className="su-check-line" key={i} data-optional={!c.required}>
-                <i title={c.required ? 'תנאי חובה' : 'תנאי רשות'}>{D}</i>
-                <span>{c.text}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="su-checklist">
-            <div className="su-check-line" style={{ color: 'var(--white-30)' }}>
+        <div className="su-checklist">
+          {preview.length > 0 ? preview.map((c, i) => (
+            <div className="su-check-line" key={i} data-optional={!c.required}>
+              <i title={c.required ? 'תנאי חובה' : 'תנאי רשות'}>{D}</i>
+              <span>{c.text}</span>
+            </div>
+          )) : (
+            <div className="su-check-line" data-optional="true">
               <i>{D}</i><span>עוד לא הוגדרו תנאי כניסה</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="su-card-foot">
-        {!trashed && (
+        {!trashed ? (
           <>
-            <button type="button" className="su-btn su-btn-sm su-btn-gold" onClick={onUse}>שימוש בסטאפ ←</button>
+            <button type="button" className="su-btn su-btn-sm su-btn-ghost" onClick={onUse}>שימוש בסטאפ ←</button>
             <button type="button" className="su-btn su-btn-sm" onClick={onEdit}>עריכה</button>
           </>
+        ) : (
+          <button type="button" className="su-btn su-btn-sm su-btn-ghost" onClick={onRestore}>שחזור ↺</button>
         )}
-        {trashed && (
-          <button type="button" className="su-btn su-btn-sm su-btn-gold" onClick={onRestore}>שחזור ↺</button>
-        )}
+
         <button
           type="button"
-          className={`su-btn su-btn-sm${confirming ? ' su-btn-danger' : ''}`}
+          className="su-btn su-btn-sm su-btn-del"
+          data-armed={confirming}
           onClick={onDelete}
         >
           {trashed
             ? (confirming ? 'מחיקה לצמיתות' : 'מחיקה סופית')
             : (confirming ? 'לאשר מחיקה' : 'מחיקה')}
         </button>
+
         {!trashed && (
           <>
             <button type="button" className="su-status" data-status={setup.status} onClick={onStatus} title="החלפת סטטוס">
@@ -288,7 +277,8 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
             </button>
           </>
         )}
-        <span className="su-updated">{shortDate(stats.lastTradeISO)}</span>
+
+        <span className="su-updated" title="העסקה האחרונה שנרשמה על הסטאפ">{shortDate(stats.lastTradeISO)}</span>
       </div>
     </article>
   );
@@ -298,6 +288,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
 
 export default function PlaybookPage() {
   const router = useRouter();
+
   /** The FULL store, tombstones included. The recycle bin is exactly the
    *  tombstones, so the page cannot work off the active-only list the rest of
    *  the app uses. */
@@ -337,15 +328,24 @@ export default function PlaybookPage() {
       .catch(() => { /* keep the local copy */ });
   }, []);
 
+  // Both timers are cleared on unmount. A pending setToast firing after the
+  // page is gone is a React warning; a pending one firing after a NAVIGATION is
+  // how a toast outlives the action that raised it.
   useEffect(() => () => {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
 
   const flash = useCallback((msg: string) => {
-    setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
     toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+
+  const clearToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
+    setToast(null);
   }, []);
 
   /** Persist the whole store — the active list AND the tombstones.
@@ -374,6 +374,16 @@ export default function PlaybookPage() {
 
   const pinnedCount = activeSetups.filter(s => s.pinned).length;
   const sourceEmpty = source.length === 0;
+
+  /** Switching views resets everything transient: a half-armed delete must not
+   *  survive into the other list, and a toast about the playbook must not still
+   *  be sitting over the recycle bin. */
+  function toggleView() {
+    setView(v => (v === 'trash' ? 'active' : 'trash'));
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirmId(null);
+    clearToast();
+  }
 
   // ── Drawer ────────────────────────────────────────────────────────────────
 
@@ -408,7 +418,7 @@ export default function PlaybookPage() {
     if (!name) {
       setNameError(true);
       flash('חסר שם לסטאפ');
-      return;
+      return;                       // the panel stays open
     }
     const checklist = draft.checklist
       .map(c => ({ text: c.text.trim(), required: c.required }))
@@ -423,6 +433,8 @@ export default function PlaybookPage() {
 
     if (editingId) {
       const before = store.find(s => s.id === editingId);
+      // Spread onto the existing row, so `pinned` and every sync field survive
+      // the edit — the drawer never carried them.
       persist(store.map(s => (s.id === editingId ? { ...s, ...fields, updatedAt: Date.now() } : s)));
       // Attribution is by name, so a rename detaches the history. Say the
       // number rather than letting them find the empty card afterwards.
@@ -500,133 +512,138 @@ export default function PlaybookPage() {
         <div className="su-glow su-glow-a" aria-hidden />
         <div className="su-glow su-glow-b" aria-hidden />
 
-        <header className="su-head">
-          <div>
-            <div className="su-kicker"><span>{D}</span><span>{inTrash ? 'RECYCLE BIN' : 'PLAYBOOK'}</span></div>
-            <h1 className="su-title">{inTrash ? 'סל המחזור' : 'הסטאפים שלי'}</h1>
-            <p className="su-lead">
-              {inTrash
-                ? 'סטאפים שנמחקו נשמרים כאן. אפשר לשחזר אותם לפלייבוק או למחוק לצמיתות.'
-                : 'כל סטאפ הוא כלל שאתה כותב לעצמך — שם, תנאים, וצ׳קליסט כניסה. הביצועים מתעדכנים מתיעוד העסקאות.'}
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className={`su-btn${inTrash ? ' su-btn-gold' : ''}`}
-              onClick={() => { setView(v => (v === 'trash' ? 'active' : 'trash')); setConfirmId(null); }}
-            >
-              {inTrash ? '← חזרה לפלייבוק' : `סל מחזור · ${trashSetups.length}`}
-            </button>
-            {!inTrash && (
-              <button type="button" className="su-btn su-btn-primary" onClick={openNew}>סטאפ חדש +</button>
-            )}
-          </div>
-        </header>
-
-        <div className="su-sweep-rail"><div className="su-sweep" /></div>
-
-        <section className="su-filters" style={{ position: 'relative' }}>
-          <div className="su-filters-top-rule" />
-
-          <div className="su-search-row">
-            <div className="su-search">
-              <span style={{ fontSize: 12, color: 'var(--gold-45)' }}>{D}</span>
-              <input
-                value={filter.query}
-                onChange={e => setFilter(f => ({ ...f, query: e.target.value }))}
-                placeholder="חיפוש לפי שם, תגית או תנאי"
-                aria-label="חיפוש סטאפים"
-              />
-              <span className="su-mono su-ltr" style={{ fontSize: 10, letterSpacing: '0.22em', color: 'var(--white-30)' }}>SEARCH</span>
+        <div className="su-wrap">
+          <header className="su-head">
+            <div style={{ minWidth: 0 }}>
+              <div className="su-kicker"><span>{D}</span><span className="su-ltr">{inTrash ? 'RECYCLE BIN' : 'PLAYBOOK'}</span></div>
+              <h1 className="su-title">{inTrash ? 'סל המחזור' : 'הסטאפים שלי'}</h1>
+              <p className="su-lead">
+                {inTrash
+                  ? 'סטאפים שנמחקו נשמרים כאן. אפשר לשחזר אותם לפלייבוק או למחוק לצמיתות.'
+                  : 'כל סטאפ הוא כלל שאתה כותב לעצמך — שם, תנאים, וצ׳קליסט כניסה. הביצועים מתעדכנים מתיעוד העסקאות.'}
+              </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span className="su-filter-label" style={{ color: 'var(--gold-60)' }}>מיון</span>
-              <div style={{ display: 'flex', gap: 6, background: 'var(--su-void)', border: '1px solid var(--su-border)', borderRadius: 4, padding: 4, flexWrap: 'wrap' }}>
-                {SORTS.map(s => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    className="su-chip"
-                    aria-pressed={filter.sort === s.key}
-                    onClick={() => setFilter(f => ({ ...f, sort: s.key }))}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+              <button type="button" className={`su-btn${inTrash ? ' su-btn-ghost' : ''}`} onClick={toggleView}>
+                {inTrash ? '← חזרה לפלייבוק' : `סל מחזור · ${trashSetups.length}`}
+              </button>
+              {/* No "new setup" inside the bin. */}
+              {!inTrash && (
+                <button type="button" className="su-btn su-btn-primary" onClick={openNew}>סטאפ חדש +</button>
+              )}
+            </div>
+          </header>
+
+          <div className="su-sweep-rail"><div className="su-sweep" /></div>
+
+          <section className="su-filters">
+            <div className="su-filters-rule" />
+            <div className="su-filters-wash" aria-hidden />
+
+            <div className="su-search-row">
+              <div className="su-search">
+                <span style={{ fontSize: 12, color: 'var(--gold-45)' }}>{D}</span>
+                <input
+                  value={filter.query}
+                  onChange={e => setFilter(f => ({ ...f, query: e.target.value }))}
+                  placeholder="חיפוש לפי שם, תגית או תנאי"
+                  aria-label="חיפוש סטאפים"
+                />
+                <span className="su-mono su-ltr" style={{ fontSize: 10, letterSpacing: '0.22em', color: 'var(--white-30)' }}>SEARCH</span>
+              </div>
+
+              <div className="su-filter-group">
+                <span className="su-filter-label" style={{ color: 'var(--gold-60)' }}>מיון</span>
+                <div className="su-chip-frame">
+                  {SORTS.map(s => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      className="su-chip"
+                      aria-pressed={filter.sort === s.key}
+                      onClick={() => setFilter(f => ({ ...f, sort: s.key }))}
+                    >
+                      {s.ltr ? <span className="su-ltr">{s.label}</span> : s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="su-divider" />
+            <div className="su-divider" />
 
-          <div className="su-filter-row">
-            <ChipRow<InstrumentKey>
-              label="נכס"
-              options={['all', ...INSTRUMENT_KEYS]}
-              value={filter.asset}
-              onSelect={v => setFilter(f => ({ ...f, asset: v }))}
-              labelOf={v => (v === 'all' ? 'הכל' : v)}
-            />
-            <ChipRow<SessionKey>
-              label="סשן"
-              options={['all', ...SESS.map(s => s.key)]}
-              value={filter.session}
-              onSelect={v => setFilter(f => ({ ...f, session: v }))}
-              labelOf={v => (v === 'all' ? 'הכל' : sessionHe(v))}
-            />
-            <ChipRow<SetupStatus>
-              label="סטטוס"
-              options={['all', ...STATUSES]}
-              value={filter.status}
-              onSelect={v => setFilter(f => ({ ...f, status: v }))}
-              labelOf={v => (v === 'all' ? 'הכל' : STATUS_HE[v])}
-            />
-          </div>
-        </section>
-
-        <div className="su-count">
-          <span>
-            {inTrash
-              ? `${list.length} סטאפים בסל המחזור`
-              : `${list.length} סטאפים · ${pinnedCount} מוצמדים`}
-          </span>
-          <span className="su-count-hint">
-            {inTrash ? 'שחזור מחזיר את הסטאפ עם כל ההיסטוריה' : 'הביצועים מחושבים מהעסקאות המשויכות'}
-          </span>
-        </div>
-
-        {list.length > 0 ? (
-          <section className="su-grid">
-            {list.map(s => (
-              <SetupCard
-                key={s.id}
-                setup={s}
-                stats={stats.get(s.name.trim()) ?? EMPTY_STATS}
-                trashed={inTrash}
-                confirming={confirmId === s.id}
-                onUse={() => router.push(`/dashboard/journal?setup=${encodeURIComponent(s.name)}`)}
-                onEdit={() => openEdit(s)}
-                onPin={() => patch(s.id, x => ({ ...x, pinned: !x.pinned }))}
-                onStatus={() => cycleStatus(s)}
-                onDelete={() => handleDelete(s)}
-                onRestore={() => handleRestore(s)}
+            <div className="su-filter-row">
+              <ChipRow<InstrumentKey>
+                label="נכס"
+                options={['all', ...INSTRUMENT_KEYS]}
+                value={filter.asset}
+                onSelect={v => setFilter(f => ({ ...f, asset: v }))}
+                labelOf={v => (v === 'all' ? 'הכל' : v)}
+                ltrOptions
               />
-            ))}
+              <ChipRow<SessionKey>
+                label="סשן"
+                options={['all', ...SESS.map(s => s.key)]}
+                value={filter.session}
+                onSelect={v => setFilter(f => ({ ...f, session: v }))}
+                labelOf={v => (v === 'all' ? 'הכל' : sessionHe(v))}
+              />
+              <ChipRow<SetupStatus>
+                label="סטטוס"
+                options={['all', ...STATUSES]}
+                value={filter.status}
+                onSelect={v => setFilter(f => ({ ...f, status: v }))}
+                labelOf={v => (v === 'all' ? 'הכל' : STATUS_HE[v])}
+              />
+            </div>
           </section>
-        ) : (
-          <section className="su-empty">
-            <div className="su-empty-glow" aria-hidden />
-            <span style={{ fontSize: 26, color: 'var(--gold)', textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{D}</span>
-            <h2>{emptyTitle}</h2>
-            <p>{emptyBody}</p>
-            {!inTrash && sourceEmpty && (
-              <div style={{ marginTop: 10 }}>
-                <button type="button" className="su-btn su-btn-primary" onClick={openNew}>הגדרת סטאפ ראשון</button>
-              </div>
-            )}
-          </section>
-        )}
+
+          <div className="su-count">
+            <span>
+              {inTrash
+                ? `${list.length} סטאפים בסל המחזור`
+                : `${list.length} סטאפים · ${pinnedCount} מוצמדים`}
+            </span>
+            <span className="su-count-hint">
+              {inTrash ? 'שחזור מחזיר את הסטאפ עם כל ההיסטוריה' : 'הביצועים מחושבים מהעסקאות המשויכות'}
+            </span>
+          </div>
+
+          {list.length > 0 ? (
+            <section className="su-grid">
+              {list.map(s => (
+                <SetupCard
+                  key={s.id}
+                  setup={s}
+                  stats={stats.get(s.name.trim()) ?? EMPTY_STATS}
+                  trashed={inTrash}
+                  confirming={confirmId === s.id}
+                  onUse={() => router.push(`/dashboard/journal?setup=${encodeURIComponent(s.name)}`)}
+                  onEdit={() => openEdit(s)}
+                  onPin={() => patch(s.id, x => ({ ...x, pinned: !x.pinned }))}
+                  onStatus={() => cycleStatus(s)}
+                  onDelete={() => handleDelete(s)}
+                  onRestore={() => handleRestore(s)}
+                />
+              ))}
+            </section>
+          ) : (
+            <section className="su-empty">
+              <div className="su-empty-glow" aria-hidden />
+              <span style={{ fontSize: 26, color: 'var(--gold)', textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{D}</span>
+              <h2>{emptyTitle}</h2>
+              <p>{emptyBody}</p>
+              {/* Only when the playbook itself is empty — never under "no
+                  results for this filter", where the answer is to widen the
+                  filter, not to write a setup. */}
+              {!inTrash && sourceEmpty && (
+                <div style={{ marginTop: 10 }}>
+                  <button type="button" className="su-btn su-btn-primary" onClick={openNew}>הגדרת סטאפ ראשון</button>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
 
         {drawer && (
           <>
@@ -660,11 +677,10 @@ export default function PlaybookPage() {
                     value={draft.name}
                     onChange={e => { setD('name', e.target.value); if (nameError) setNameError(false); }}
                     placeholder="לדוגמה: סוויפ אסיה + CHoCH"
-                    style={nameError ? { borderColor: 'var(--short)' } : undefined}
                     aria-invalid={nameError}
                   />
-                  {/* The name is the join key to the journal — worth saying once,
-                      in the one place where it is about to be chosen. */}
+                  {/* The name is the join key to the journal — worth saying
+                      once, in the one place where it is about to be chosen. */}
                   <span style={{ display: 'block', marginTop: 6, fontSize: 11, color: 'var(--white-30)' }}>
                     השם הוא מה שמקשר את הסטאפ לעסקאות ביומן.
                   </span>
@@ -691,36 +707,41 @@ export default function PlaybookPage() {
                   />
                 </label>
 
-                <div>
-                  <span className="su-field-label">נכס</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {INSTRUMENT_KEYS.map(k => (
-                      <button
-                        key={k}
-                        type="button"
-                        className="su-chip su-ltr"
-                        aria-pressed={draft.assets.includes(k)}
-                        onClick={() => setD('assets', toggleIn(draft.assets, k))}
-                      >
-                        {k}
-                      </button>
-                    ))}
+                {/* Asset and direction sit side by side. Asset stays
+                    multi-select — a setup traded on both ES and NQ is one
+                    setup, and the value has to match a trade's `symbol` to be
+                    filterable — so it is a chip set wearing the segmented
+                    control's frame rather than a single-choice control. */}
+                <div className="su-pair">
+                  <div>
+                    <span className="su-field-label">נכס</span>
+                    <div className="su-seg">
+                      {INSTRUMENT_KEYS.map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          aria-pressed={draft.assets.includes(k)}
+                          onClick={() => setD('assets', toggleIn(draft.assets, k))}
+                        >
+                          <span className="su-ltr">{k}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="su-field-label">כיוון</span>
+                    <Segmented
+                      options={DIRECTIONS}
+                      value={draft.direction}
+                      onChange={v => setD('direction', v)}
+                      labelOf={v => DIRECTION_HE[v]}
+                    />
                   </div>
                 </div>
 
                 <div>
-                  <span className="su-field-label">כיוון</span>
-                  <Segmented
-                    options={DIRECTIONS}
-                    value={draft.direction}
-                    onChange={v => setD('direction', v)}
-                    labelOf={v => DIRECTION_HE[v]}
-                  />
-                </div>
-
-                <div>
                   <span className="su-field-label">סשנים</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <div className="su-chip-set">
                     {SESS.map(s => (
                       <button
                         key={s.key}
@@ -746,11 +767,11 @@ export default function PlaybookPage() {
                 </label>
 
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
                     <span className="su-field-label" style={{ marginBottom: 0 }}>צ׳קליסט כניסה</span>
                     <button
                       type="button"
-                      className="su-btn su-btn-sm su-btn-gold"
+                      className="su-btn su-btn-sm su-btn-ghost"
                       onClick={() => setD('checklist', [...draft.checklist, { text: '', required: true }])}
                     >
                       סעיף +
@@ -810,7 +831,7 @@ export default function PlaybookPage() {
               <div className="su-drawer-foot">
                 <button type="button" className="su-btn su-btn-primary" onClick={saveDraft}>שמירת סטאפ</button>
                 <button type="button" className="su-btn" onClick={closeDrawer}>ביטול</button>
-                <span className="su-updated" style={{ letterSpacing: '0.18em' }}>
+                <span className="su-drawer-hint">
                   {editingId ? 'שינויים נשמרים לסטאפ הקיים' : 'אפשר לערוך הכל אחר כך'}
                 </span>
               </div>
@@ -821,7 +842,7 @@ export default function PlaybookPage() {
         {toast && (
           <div className="su-toast" role="status" aria-live="polite">
             <span style={{ color: 'var(--gold)', fontSize: 11 }}>{D}</span>
-            <span>{toast}</span>
+            <span className="su-toast-text">{toast}</span>
           </div>
         )}
       </div>
