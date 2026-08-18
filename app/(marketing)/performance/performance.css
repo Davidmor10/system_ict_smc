@@ -434,19 +434,30 @@
 .pf-cta-h2 { position: relative; margin: 0; font-family: var(--pf-serif); font-size: clamp(1.9rem, 4vw, 3rem); font-weight: 700; color: #fff; }
 .pf-cta-p { position: relative; margin: 16px auto 0; max-width: 580px; font-size: 15px; line-height: 1.7; color: var(--text-body); }
 .pf-cta-row { position: relative; margin-top: 30px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+/* The two closing CTAs are the design system's own <Button> — primary and
+   ghost — not a lookalike. Values transcribed from the DS source (the same
+   component the setups page uses): uppercase mono at 0.18em, 2px radius, the
+   24px→40px gold glow, and the 0.97 press. The prototype asks for 44px tall
+   here, so the height is fixed and the padding carries only the sides. */
 .pf .pf-btn {
-  display: inline-flex; align-items: center; justify-content: center; height: 44px;
-  padding: 0 26px; border-radius: 2px; font-family: var(--pf-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
-  transition: color .2s ease, background-color .2s ease, border-color .2s ease,
-              box-shadow .25s ease, transform .15s var(--pf-ease);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 44px; padding: 0 22px; border-radius: 2px; white-space: nowrap;
+  font-family: var(--pf-mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer;
+  border: 1px solid transparent;
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease,
+              box-shadow 250ms ease, transform 150ms var(--pf-ease);
 }
-.pf .pf-btn-primary { background: var(--pf-gold); color: #000; border: 1px solid var(--pf-gold); box-shadow: 0 0 24px rgba(212,175,55,0.4); }
+.pf .pf-btn-primary {
+  background: var(--pf-gold); color: #000; border-color: var(--pf-gold);
+  box-shadow: 0 0 24px rgba(212,175,55,0.40);
+}
 .pf .pf-btn-primary:hover { color: #000; box-shadow: 0 0 40px rgba(212,175,55,0.65); }
-.pf .pf-btn-ghost { background: transparent; color: var(--text-body); border: 1px solid var(--onyx-700); }
-.pf .pf-btn-ghost:hover { color: var(--pf-gold); border-color: var(--pf-gold); background: var(--gold-08); }
+/* Ghost in this design system is gold on a gold hairline — not a grey outline. */
+.pf .pf-btn-ghost { background: transparent; color: var(--pf-gold); border-color: var(--gold-45); }
+.pf .pf-btn-ghost:hover { background: var(--gold-10); border-color: var(--pf-gold); color: var(--pf-gold); }
 .pf .pf-btn:active { transform: scale(0.97); }
-.pf .pf-btn:focus-visible { outline: 2px solid var(--gold-45); outline-offset: 3px; }
+.pf .pf-btn:focus-visible { outline: 2px solid var(--gold-60); outline-offset: 2px; }
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .pf-foot { border-top: 1px solid var(--onyx-800); background: var(--onyx-foot); padding: 40px var(--pf-pad) 56px; }

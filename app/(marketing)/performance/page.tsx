@@ -348,10 +348,14 @@ export default function PerformancePage() {
   const geo = useMemo(() => geometry(points), [points]);
   const stats = useMemo(() => curveStats(points), [points]);
 
-  // The tooltip stays mounted at its last point so it can slide to the next one
-  // instead of blinking out of existence between hovers.
+  // The tooltip is always mounted so it can travel between points rather than
+  // blink in and out. With nothing hovered it fades out and drifts back to the
+  // middle of the well — the resting position the prototype parks it at.
   const [lastHover, setLastHover] = useState(0);
   const tipDot = geo.dots[Math.min(lastHover, geo.dots.length - 1)];
+  const tipAt = hover !== null
+    ? { left: `${(tipDot.x / 1000) * 100}%`, top: `${(tipDot.y / 340) * 100}%` }
+    : { left: '50%', top: '40%' };
 
   const active = TABS[tab];
   const maxR = Math.max(...active.rows.map(r => r.cumR));
@@ -407,7 +411,7 @@ export default function PerformancePage() {
               </div>
 
               <div className="pf-ticker-left">
-                <span className="pf-ticker-clock" dir="ltr">{clock}</span>
+                <span className="pf-ticker-clock" dir="ltr">{clock || '—'}</span>
                 <span className="pf-ticker-ago">{agoText}</span>
               </div>
             </div>
@@ -558,7 +562,7 @@ export default function PerformancePage() {
             <div
               className="pf-tip"
               data-on={hover !== null}
-              style={{ left: `${(tipDot.x / 1000) * 100}%`, top: `${(tipDot.y / 340) * 100}%` }}
+              style={tipAt}
               aria-hidden
             >
               <div className="pf-tip-v" dir="ltr">{fmtR(tipDot.v)}</div>
@@ -569,7 +573,7 @@ export default function PerformancePage() {
           <div className="pf-curve-stats">
             {stats.map(s => (
               <div className="pf-curve-cell" key={s.l}>
-                <div className="pf-curve-l" dir={s.l === 'חודשים חיוביים' ? 'rtl' : 'ltr'}>{s.l}</div>
+                <div className="pf-curve-l">{s.l}</div>
                 <div className="pf-curve-v" dir="ltr" style={{ color: s.c }}>{s.v}</div>
               </div>
             ))}
@@ -611,7 +615,7 @@ export default function PerformancePage() {
             {active.rows.map((r, i) => {
               const lead = i === 0;
               return (
-                <div className="pf-brow pf-brow-body" key={r.label} data-lead={lead}>
+                <div className="pf-brow pf-brow-body" key={i} data-lead={lead}>
                   <div className="pf-bcol1">
                     <span className="pf-bdia" aria-hidden>{D}</span>
                     <span className="pf-blabel" dir={active.key === 'day' ? 'rtl' : 'ltr'}>{r.label}</span>
@@ -627,7 +631,7 @@ export default function PerformancePage() {
                   <span className="pf-bnum" dir="ltr">{r.n.toLocaleString('en-US')}</span>
                   <span className="pf-bnum" dir="ltr">{r.winRate.toFixed(1)}%</span>
                   <span className="pf-bnum pf-bcol-hide" dir="ltr" data-gold="true">
-                    {`+${(r.cumR / r.n).toFixed(2)}`}
+                    {`+${(r.cumR / r.n).toFixed(2)}R`}
                   </span>
                 </div>
               );
@@ -700,7 +704,7 @@ export default function PerformancePage() {
                         <div className="pf-specs">
                           {t.specs.map(([k, v]) => (
                             <div className="pf-spec" key={k}>
-                              <div className="pf-spec-k" dir="ltr">{k}</div>
+                              <div className="pf-spec-k">{k}</div>
                               <div className="pf-spec-v" dir="ltr">{v}</div>
                             </div>
                           ))}
