@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useMarketingLang } from './LangProvider';
 
 const FOOTER_LINKS = [
@@ -12,7 +13,14 @@ const FOOTER_LINKS = [
 
 export default function MarketingFooter() {
   const { lang } = useMarketingLang();
+  const pathname = usePathname();
   const rtl = lang === 'he';
+
+  // /performance ends in a full footer of its own — risk disclaimer, measurement
+  // methodology, bottom bar. Stacking this bar under it gives the page two
+  // copyright lines in a row, so the shared one stands down and the four legal
+  // links live inside that footer instead.
+  if (pathname === '/performance') return null;
 
   const copyright = lang === 'he'
     ? '© 2026 Onyx Trading · למטרות לימוד בלבד. אין באמור ייעוץ או המלצה פיננסית.'
