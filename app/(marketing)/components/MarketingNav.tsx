@@ -52,6 +52,12 @@ export default function MarketingNav() {
   useMarketingLang();
   const pathname = usePathname();
 
+  // /pricing carries its own header — same wordmark, same gold CTA, plus the
+  // three in-page anchors that only make sense there. Rendering both stacks two
+  // wordmarks and two "כניסה למערכת" buttons on top of each other, so the
+  // shared bar stands down on that one route.
+  if (pathname === '/pricing') return null;
+
   return (
     <nav
       dir="rtl"

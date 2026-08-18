@@ -1,559 +1,317 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { useMarketingLang } from '../components/LangProvider';
+import { useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
+import './pricing.css';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// /pricing — three paid plans. There is no free tier: not a card, not a table
+// column, not an FAQ entry, not a "start free" CTA anywhere on the page.
+//
+// Hebrew only, like the rest of the marketing layer — LangProvider is typed
+// `Lang = 'he'` and offers no toggle, so the English half of the old copy was
+// unreachable text nobody could ever read.
+// ─────────────────────────────────────────────────────────────────────────────
 
-type Lang   = 'he' | 'en';
-type BiStr  = { he: string; en: string };
-type CellV  = 'check' | 'cross' | 'dash' | string; // string = literal display value
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-// ─── Plan data ────────────────────────────────────────────────────────────────
+/** The shekel sign has no glyph in Geist Mono and renders as a tofu box. Every
+ *  ₪ on this page — cards, table headers, FAQ answers — goes through this, so
+ *  the digits stay mono and tabular while the currency mark borrows Geist. */
+function Nis() {
+  return <span className="pr-nis">₪</span>;
+}
 
-// Four plans laid out left-to-right: Free / Starter / Pro (featured) / Deluxe.
-// Pro sits in the middle so it reads as "the smart center", not "the top
-// price". Starter is deliberately narrow in feature-copy: it's the smallest
-// paid step so it's easy to say yes to. The value-per-shekel step FROM
-// Starter TO Pro (49→99 for a whole new tier of AI Analytics) is what does
-// the actual selling — the copy on the Pro card leans into that.
-const PLANS = [
+// ── Plans ────────────────────────────────────────────────────────────────────
+
+interface Feature { text: string; on: boolean }
+interface Plan {
+  key: string;
+  tag: string;
+  name: string;
+  amount: string;
+  featured: boolean;
+  features: Feature[];
+  cta: string;
+  href: string;
+}
+
+/** RTL order: STARTER · PRO · DELUXE, so PRO lands in the middle and reads as
+ *  the considered centre rather than the top price. */
+const PLANS: Plan[] = [
   {
-    key: 'free', featured: false,
-    tag:      { he: 'היכרות',           en: 'Introduction'          } as BiStr,
-    name:     { he: 'FREE',             en: 'FREE'                  } as BiStr,
-    amt:      { he: 'חינם',             en: 'Free'                  } as BiStr,
-    amtColor: 'var(--bull-t)',
-    unit:     null as BiStr | null,
+    key: 'starter', tag: 'הצעד הראשון', name: 'STARTER', amount: '49', featured: false,
     features: [
-      { text: { he: 'חשבון חינמי להיכרות עם המערכת',          en: 'Free account to explore the system'            } as BiStr, on: true  },
-      { text: { he: 'דאשבורד, יומן מסחר, סטאפים וחוקים — גישה מלאה', en: 'Dashboard, trade journal, setups & rules — full access' } as BiStr, on: true  },
-      { text: { he: 'ללא ניתוח AI, אנליטיקס או מאמן AI',       en: 'No AI insights, analytics or coach'            } as BiStr, on: false },
+      { text: 'דאשבורד, יומן מסחר, מחברת, סטאפים וחוקים — גישה מלאה', on: true },
+      { text: 'פאנל AI Insight נפתח ביומן — תובנה לכל עסקה', on: true },
+      { text: 'ללא עמוד ה-AI Analytics', on: false },
+      { text: 'ללא המאמן האישי', on: false },
     ],
-    cta:      { he: 'התחל בחינם',               en: 'Get Started Free'       } as BiStr,
-    href:     '/sign-up',
-    ctaGold:  false,
-    fine:     { he: 'ללא כרטיס אשראי',          en: 'No credit card required' } as BiStr,
+    cta: 'הצטרף ל-STARTER', href: '/checkout?plan=starter',
   },
   {
-    key: 'starter', featured: false,
-    tag:      { he: 'הצעד הראשון',       en: 'First Step'            } as BiStr,
-    name:     { he: 'STARTER',          en: 'STARTER'               } as BiStr,
-    amt:      { he: '49',               en: '49'                    } as BiStr,
-    amtColor: '#fff',
-    unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
+    key: 'pro', tag: 'שכבת הבינה המלאה', name: 'PRO', amount: '99', featured: true,
     features: [
-      { text: { he: 'כל מה שיש ב-FREE',                             en: 'Everything in FREE'                           } as BiStr, on: true  },
-      { text: { he: 'פאנל AI Insight נפתח ביומן — תובנה לכל עסקה', en: 'AI Insight panel unlocked — one takeaway per trade' } as BiStr, on: true  },
-      { text: { he: 'ללא עמוד ה-AI Analytics',                     en: 'No AI Analytics page'                         } as BiStr, on: false },
-      { text: { he: 'ללא המאמן האישי',                              en: 'No AI Coach'                                  } as BiStr, on: false },
+      { text: 'תובנת AI על כל עסקה שתיעדת — פסקה אישית שהמערכת מוציאה מיד אחרי שסגרת את הטרייד', on: true },
+      { text: 'עמוד ה-AI Analytics המלא נפרס מולך: אחוזי הצלחה חתוכים לפי סשן, סטאפ, בייאס ויום בשבוע — יודעים מה עובד לך ומה שורף', on: true },
+      { text: 'זיכרון דפוסים אישי — המערכת לומדת דפוסים אמיתיים על המסחר שלך שבוע אחר שבוע (לא סטטיסטיקות של "סוחרים באופן כללי")', on: true },
+      { text: 'סימולטור תרחישים + דוח שבועי אישי + ארכיון היסטורי מלא — "מה היה קורה אם רק סחרתי בסשן NY?" נענה על עסקאות אמת', on: true },
     ],
-    cta:      { he: 'הצטרף ל-STARTER',          en: 'Join STARTER'          } as BiStr,
-    href:     '/checkout?plan=starter',
-    ctaGold:  false,
-    fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
+    cta: 'הצטרף ל-PRO', href: '/checkout?plan=pro',
   },
-  // Pro's bullets are deliberately written as four standalone value
-  // statements — no "Everything in STARTER" leader that would read as an
-  // afterthought to a cheaper plan. Each bullet is a real capability the
-  // trader can point at, so the card reads full on its own. The value story
-  // (₪50 more for a whole intelligence layer) lives in the FAQ so it doesn't
-  // undercut the copy here.
   {
-    key: 'pro', featured: true,
-    tag:      { he: 'שכבת הבינה המלאה של המערכת', en: 'The Full Intelligence Layer' } as BiStr,
-    name:     { he: 'PRO',              en: 'PRO'                   } as BiStr,
-    amt:      { he: '99',               en: '99'                    } as BiStr,
-    amtColor: 'var(--gold)',
-    unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
+    key: 'deluxe', tag: 'ללא תקרות', name: 'DELUXE', amount: '199', featured: false,
     features: [
-      { text: { he: 'תובנת AI על כל עסקה שתיעדת — פסקה אישית שהמערכת מוציאה מיד אחרי שסגרת את הטרייד',
-                en: 'AI Insight on every trade you log — a personal one-paragraph read the system generates the moment you close the trade' } as BiStr, on: true  },
-      { text: { he: 'עמוד ה-AI Analytics המלא נפרס מולך: אחוזי הצלחה חתוכים לפי סשן, סטאפ, בייאס ויום בשבוע — יודעים מה עובד לך ומה שורף',
-                en: 'The full AI Analytics page opens: win rates broken by session, setup, bias and day-of-week — you see exactly what works and what burns' } as BiStr, on: true  },
-      { text: { he: 'זיכרון דפוסים אישי — המערכת לומדת דפוסים אמיתיים על המסחר שלך שבוע אחר שבוע (לא סטטיסטיקות של "סוחרים באופן כללי")',
-                en: 'Personal pattern memory — the system learns your real patterns week after week (not "generic trader" stats)' } as BiStr, on: true  },
-      { text: { he: 'סימולטור תרחישים + דוח שבועי אישי + ארכיון היסטורי מלא — "מה היה קורה אם רק סחרתי בסשן NY?" נענה על עסקאות אמת',
-                en: 'What-if simulator + personal weekly report + full historical archive — "what if I only traded the NY session?" answered on real trades' } as BiStr, on: true  },
+      { text: 'כל שכבת ה-AI של PRO — במלואה', on: true },
+      { text: 'המאמן האישי נפתח — שיחה שקוראת את היומן שלך', on: true },
+      { text: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר', on: true },
+      { text: 'עדיפות בעדכונים ובפיצ׳רים חדשים', on: true },
     ],
-    cta:      { he: 'הצטרף ל-PRO',              en: 'Join PRO'              } as BiStr,
-    href:     '/checkout?plan=pro',
-    ctaGold:  true,
-    fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
+    cta: 'הצטרף ל-DELUXE', href: '/checkout?plan=deluxe',
   },
-  // Deluxe deliberately leads with "כל שכבת ה-AI של PRO" — this reinforces
-  // that Pro carries the substance, and Deluxe is the coach *on top* of it.
-  {
-    key: 'deluxe', featured: false,
-    tag:      { he: 'ללא תקרות',        en: 'No Limits'             } as BiStr,
-    name:     { he: 'DELUXE',           en: 'DELUXE'                } as BiStr,
-    amt:      { he: '199',              en: '199'                   } as BiStr,
-    amtColor: '#fff',
-    unit:     { he: '₪ / חודש',         en: '₪ / mo'               } as BiStr,
-    features: [
-      { text: { he: 'כל שכבת ה-AI של PRO — במלואה',                 en: 'The full PRO intelligence layer'              } as BiStr, on: true  },
-      { text: { he: 'המאמן האישי נפתח — שיחה שקוראת את היומן שלך', en: 'Personal AI Coach unlocked — chat that reads your journal' } as BiStr, on: true  },
-      { text: { he: 'היסטוריית שיחות עם המאמן, נשמרת פר סוחר',     en: 'Coach chat history saved per trader'          } as BiStr, on: true  },
-      { text: { he: 'עדיפות בעדכונים ובפיצ׳רים חדשים',             en: 'Priority on updates & new features'           } as BiStr, on: true  },
-    ],
-    cta:      { he: 'הצטרף ל-DELUXE',           en: 'Join DELUXE'           } as BiStr,
-    href:     '/checkout?plan=deluxe',
-    ctaGold:  false,
-    fine:     { he: 'חיוב חודשי · ביטול בכל עת', en: 'Monthly billing · Cancel anytime' } as BiStr,
-  },
-] as const;
-
-// ─── Comparison table rows ────────────────────────────────────────────────────
-
-// f=Free, s=Starter, p=Pro, d=Deluxe (single-letter column keys keep the
-// table rendering loop compact).
-type TableRow = { feat: BiStr; f: CellV; s: CellV; p: CellV; d: CellV };
-
-const TABLE_ROWS: TableRow[] = [
-  { feat: { he: 'דאשבורד, יומן מסחר, סטאפים וחוקים', en: 'Dashboard, journal, setups & rules' }, f: 'check', s: 'check', p: 'check', d: 'check' },
-  { feat: { he: 'מחברת סוחר וסנכרון מכשירים',        en: 'Trader notebook & device sync'  }, f: 'check', s: 'check', p: 'check', d: 'check' },
-  { feat: { he: 'AI Insight ביומן (תובנה לכל עסקה)', en: 'AI Insight in journal (per-trade takeaway)' }, f: 'cross', s: 'check', p: 'check', d: 'check' },
-  { feat: { he: 'עמוד AI Analytics המלא',            en: 'Full AI Analytics page'         }, f: 'cross', s: 'cross', p: 'check', d: 'check' },
-  { feat: { he: 'זיהוי דפוסים + סימולטור + דוח שבועי + ארכיון', en: 'Patterns + simulator + weekly report & archive' }, f: 'cross', s: 'cross', p: 'check', d: 'check' },
-  { feat: { he: 'המאמן האישי (שיחה שקוראת את היומן)', en: 'Personal AI Coach (chat reads your journal)' }, f: 'cross', s: 'cross', p: 'cross', d: 'check' },
-  { feat: { he: 'תמיכה',                             en: 'Support'                        }, f: '—',     s: '—',     p: '—',     d: '—'     }, // overridden per lang below
 ];
 
-// ─── I18N ─────────────────────────────────────────────────────────────────────
+const FINE = 'ללא ניסיון חינם · ביטול בכל עת · חיוב חודשי';
 
-const I18N = {
-  badge:    { he: 'מסלולי מנוי',   en: 'Membership Plans' },
-  h1_html:  {
-    he: 'בחר את הרמה<br>שמתאימה <span style="color:var(--gold)">לקצב שלך.</span>',
-    en: 'Choose the level<br>that fits <span style="color:var(--gold)">your pace.</span>',
-  },
-  hero_sub: {
-    he: 'כל המסלולים בנויים על אותו לב מערכת. ההבדל הוא רק כמה רחוק אתה לוקח את זה — מהיכרות ראשונית, דרך יומן וניתוח מלא, ועד כל הסטטיסטיקות והבינה של המערכת. תמיד אפשר לשדרג, ואין התחייבות.',
-    en: "Every plan is built on the same core. The difference is only how far you take it — from a first look, through the full journal and analysis, to every statistic and the AI intelligence. Always upgradeable, no commitment.",
-  },
-  pop:      { he: 'הכי פופולרי',   en: 'Most Popular' },
+// ── Comparison table ─────────────────────────────────────────────────────────
 
-  // TABLE
-  tbl_kicker: { he: 'השוואה מלאה',   en: 'Full Comparison' },
-  tbl_h2:     { he: 'השוואה מלאה',   en: 'Full Comparison' },
-  tbl_sub:    { he: 'בדיוק מה מקבלים בכל מסלול', en: 'Exactly what you get in each plan' },
-  tbl_col0:   { he: 'פיצ׳ר',          en: 'Feature'          },
-  // Support row per-lang labels — four tiers, four levels of support.
-  r7_f: { he: 'קהילתית',         en: 'Community'      },
-  r7_s: { he: 'בסיסית',         en: 'Basic'          },
-  r7_p: { he: 'מהירה',           en: 'Fast'           },
-  r7_d: { he: 'מועדפת · VIP',   en: 'Priority · VIP' },
+type Cell = 'yes' | 'no' | string;
+interface Row { feat: string; s: Cell; p: Cell; d: Cell }
 
-  // FAQ — the central question is now Starter vs Pro (the value-jump
-  // between them is what actually drives revenue).
-  faq_kicker: { he: 'שאלות נפוצות',   en: 'FAQ' },
-  faq_h2:     { he: 'שאלות נפוצות',   en: 'Frequently Asked Questions' },
-  faq_sub:    { he: 'מה שכדאי לדעת לפני שמצטרפים', en: 'What you should know before joining' },
-  faq_q1: { he: 'מה ההבדל בין STARTER ל-PRO?', en: 'What\'s the difference between STARTER and PRO?' },
-  faq_a1: {
-    he: 'STARTER (49 ₪) פותח את פאנל ה-AI Insight ביומן — פסקה קצרה על כל עסקה שתיעדת. PRO (99 ₪) פותח את **כל שכבת הבינה** של המערכת: את התובנה על כל עסקה, ובנוסף את עמוד ה-AI Analytics המלא — זיכרון דפוסים אישי שהמערכת בונה עליך שבוע אחר שבוע, סימולטור תרחישים ("מה היה קורה אם רק סחרתי בסשן NY?" — נענה על עסקאות אמת), ודוח שבועי אישי עם ארכיון היסטורי מלא. ההפרש בין המסלולים הוא 50 ₪ בחודש. מה שנפתח בהפרש הזה הוא לא עוד פיצ׳ר בודד אלא שכבה שלמה של יכולות — ורוב הסוחרים מוצאים שהיא זו שמייצרת את היתרון.',
-    en: 'STARTER (₪49) opens the AI Insight panel in the journal — a short paragraph on every trade you log. PRO (₪99) opens **the entire intelligence layer** of the system: that per-trade insight PLUS the full AI Analytics page — personal pattern memory the system builds on you week after week, a what-if simulator ("what if I only traded the NY session?" — answered on your real trades), and a personal weekly report with a full historical archive. The gap between the plans is ₪50/month. What opens in that gap isn\'t a single extra feature — it\'s a whole layer of capabilities. Most traders find that\'s the layer that actually produces the edge.',
-  },
-  faq_q2: { he: 'ואז מתי בכלל לעבור ל-DELUXE?', en: 'So when does DELUXE make sense?' },
-  faq_a2: {
-    he: 'DELUXE (199 ₪) מוסיף מעל ה-PRO את המאמן האישי — שיחה שקוראת את היומן שלך בזמן אמת ועונה על שאלות מסחר בהתבסס על הנתונים והמושגים האמיתיים שלך. אם אתה מרגיש שאתה צריך שותף לחשיבה שיודע את היומן שלך על בוריו — DELUXE הוא הבחירה. אחרת PRO מספיק בהחלט.',
-    en: 'DELUXE (₪199) adds the personal AI Coach on top of everything PRO has — a chat that reads your journal live and answers trading questions grounded in your actual data and concepts. If you feel you need a thinking partner that knows your journal inside out — DELUXE is the pick. Otherwise PRO is more than enough.',
-  },
-  faq_q3: { he: 'יש התחייבות? אפשר לשדרג/לבטל?', en: 'Any commitment? Can I upgrade or cancel?' },
-  faq_a3: {
-    he: 'אין התחייבות. כל המסלולים בתשלום חודשי, ניתנים לביטול בכל רגע, ומשדרגים בין המסלולים באמצע חודש בפרו־רייטה. אם ביטלת — תישאר עם הגישה עד סוף החודש ששולם.',
-    en: 'No commitment. All plans are monthly, cancellable anytime, and upgrades between tiers mid-cycle are prorated. If you cancel — you keep access until the end of the paid month.',
-  },
-  faq_q4: { he: 'מה כולל החשבון החינמי?', en: 'What does the free account include?' },
-  faq_a4: {
-    he: 'FREE נותן לך גישה מלאה וחינמית לדאשבורד, ליומן המסחר, למחברת, לסטאפים ולחוקים. מה שנשאר לתשלום זו שכבת ה-AI: תובנה אישית ליומן ב-STARTER, אנליטיקס מלא ב-PRO, ומאמן אישי ב-DELUXE.',
-    en: 'FREE gives you full, free access to the dashboard, the trade journal, the notebook, setups and rules. What stays paid is the AI layer: per-trade insights on STARTER, full analytics on PRO, and the personal coach on DELUXE.',
-  },
+const ROWS: Row[] = [
+  { feat: 'דאשבורד, יומן מסחר, סטאפים וחוקים',              s: 'yes', p: 'yes', d: 'yes' },
+  { feat: 'מחברת סוחר וסנכרון מכשירים',                      s: 'yes', p: 'yes', d: 'yes' },
+  { feat: 'AI Insight ביומן (תובנה לכל עסקה)',               s: 'yes', p: 'yes', d: 'yes' },
+  { feat: 'עמוד AI Analytics המלא',                          s: 'no',  p: 'yes', d: 'yes' },
+  { feat: 'זיהוי דפוסים + סימולטור + דוח שבועי + ארכיון',    s: 'no',  p: 'yes', d: 'yes' },
+  { feat: 'המאמן האישי (שיחה שקוראת את היומן)',              s: 'no',  p: 'no',  d: 'yes' },
+  { feat: 'תמיכה',                                            s: 'בסיסית', p: 'מהירה', d: 'מועדפת · VIP' },
+];
 
-  // CTA
-  cta_kicker:  { he: 'מוכן להתחיל?', en: 'Ready to Start?' },
-  cta_h2_html: {
-    he: 'תפסיק לנחש.<br>תתחיל לסחור לפי ה<span style="color:var(--gold)">מודל.</span>',
-    en: 'Stop guessing.<br>Start trading the <span style="color:var(--gold)">model.</span>',
+function Mark({ v }: { v: Cell }) {
+  if (v === 'yes') return <span className="pr-yes">✓</span>;
+  if (v === 'no') return <span className="pr-no">✕</span>;
+  return <span className="pr-txt">{v}</span>;
+}
+
+// ── FAQ ──────────────────────────────────────────────────────────────────────
+
+const FAQ: { q: string; a: React.ReactNode }[] = [
+  {
+    q: 'מה ההבדל בין STARTER ל-PRO?',
+    a: <>STARTER (49 <Nis />) פותח את פאנל ה-AI Insight ביומן — פסקה קצרה על כל עסקה שתיעדת. PRO (99 <Nis />) פותח את כל שכבת הבינה של המערכת: את התובנה על כל עסקה, ובנוסף את עמוד ה-AI Analytics המלא — זיכרון דפוסים אישי שהמערכת בונה עליך שבוע אחר שבוע, סימולטור תרחישים (&quot;מה היה קורה אם רק סחרתי בסשן NY?&quot; — נענה על עסקאות אמת), ודוח שבועי אישי עם ארכיון היסטורי מלא. ההפרש בין המסלולים הוא 50 <Nis /> בחודש. מה שנפתח בהפרש הזה הוא לא עוד פיצ׳ר בודד אלא שכבה שלמה של יכולות — ורוב הסוחרים מוצאים שהיא זו שמייצרת את היתרון.</>,
   },
-  cta_body: {
-    he: 'הצטרף עכשיו, והמסוף נפתח לך מיד. הרוב מתחיל ב-PRO — היחס ערך/מחיר הכי טוב בסולם. תמיד אפשר לשדרג ל-DELUXE (או להתחיל קטן עם STARTER) בהמשך.',
-    en: 'Join now and the terminal opens immediately. Most people start on PRO — the best value on the ladder. You can always upgrade to DELUXE later (or start small with STARTER).',
+  {
+    q: 'ואז מתי בכלל לעבור ל-DELUXE?',
+    a: <>DELUXE (199 <Nis />) מוסיף מעל ה-PRO את המאמן האישי — שיחה שקוראת את היומן שלך בזמן אמת ועונה על שאלות מסחר בהתבסס על הנתונים והמושגים האמיתיים שלך. אם אתה מרגיש שאתה צריך שותף לחשיבה שיודע את היומן שלך על בוריו — DELUXE הוא הבחירה. אחרת PRO מספיק בהחלט.</>,
   },
-  cta_pro:    { he: 'הצטרף ל-PRO →',   en: 'Join PRO →'        },
-  cta_deluxe: { he: 'שדרג ל-DELUXE',    en: 'Upgrade to DELUXE' },
-  cta_lock:   { he: 'הגישה נפתחת מיד עם סיום התשלום · אפשר לבטל בכל רגע', en: 'Access opens immediately after payment · Cancel anytime' },
-} as const;
+  {
+    q: 'יש התחייבות? אפשר לשדרג או לבטל?',
+    a: <>אין התחייבות. כל המסלולים בתשלום חודשי, ניתנים לביטול בכל רגע, ומשדרגים בין המסלולים באמצע חודש בפרו־רייטה. אם ביטלת — תישאר עם הגישה עד סוף החודש ששולם.</>,
+  },
+  {
+    q: 'מה כלול בכל המסלולים?',
+    a: <>כל מסלול פותח את הדאשבורד, יומן המסחר, המחברת, הסטאפים והחוקים במלואם. ההבדל בין המסלולים הוא שכבת ה-AI: תובנה אישית ליומן ב-STARTER, אנליטיקס מלא ב-PRO, ומאמן אישי ב-DELUXE. אין מסלול חינמי — הגישה נפתחת עם המנוי.</>,
+  },
+];
 
-type K = keyof typeof I18N;
+// ── Header CTA ───────────────────────────────────────────────────────────────
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function Reveal({ children, className = '', delay = 0 }: {
-  children: React.ReactNode; className?: string; delay?: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const io = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } },
-      { threshold: 0.08 }
-    );
-    io.observe(el); return () => io.disconnect();
-  }, []);
+/** The design's header CTA is static. The site nav it replaces on this route
+ *  was auth-aware, so this keeps that: a signed-in visitor lands in the app,
+ *  everyone else at sign-in. Mounted conditionally because useAuth() throws
+ *  outside a ClerkProvider, and the provider only mounts when the key is set. */
+function HeaderCta() {
+  const { isSignedIn } = useAuth();
   return (
-    <div ref={ref} style={{ transitionDelay: shown ? `${delay}ms` : '0ms' }}
-      className={`transition-all duration-700 ease-out ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} ${className}`}>
-      {children}
-    </div>
+    <Link href={isSignedIn ? '/dashboard' : '/sign-in'} className="pr-nav-cta">
+      כניסה למערכת
+    </Link>
   );
 }
 
-function TableCell({ v, rtl }: { v: CellV; rtl: boolean }) {
-  if (v === 'check') return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: 'rgba(74,124,89,.18)', color: 'var(--bull-t)', fontSize: 11, fontWeight: 800 }}>✓</span>
-  );
-  if (v === 'cross') return (
-    <span style={{ color: 'rgba(255,255,255,.22)', fontSize: 14, fontWeight: 600 }}>✕</span>
-  );
-  if (v === 'dash') return (
-    <span style={{ color: 'rgba(255,255,255,.22)', fontSize: 14 }}>—</span>
-  );
-  return (
-    <span dir={rtl ? 'rtl' : 'ltr'} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.75)' }}>
-      {v}
-    </span>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
-function FAQItem({ q, a, rtl }: { q: string; a: string; rtl: boolean }) {
-  const [open, setOpen] = useState(false);
+export default function PricingPage() {
+  // Exclusive accordion, first item open on load; clicking an open item closes it.
+  const [open, setOpen] = useState(0);
+
   return (
-    <div className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border2)', background: 'rgba(13,13,15,.4)' }}>
-      <button className="w-full flex items-center justify-between gap-5 p-6"
-        dir={rtl ? 'rtl' : 'ltr'}
-        onClick={() => setOpen(o => !o)}>
-        <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 700, color: '#fff', lineHeight: 1.35, textAlign: 'start' }}>
-          {q}
-        </span>
-        <span style={{
-          flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: open ? 'rgba(212,175,55,.15)' : 'rgba(255,255,255,.06)',
-          border: `1px solid ${open ? 'rgba(212,175,55,.3)' : 'rgba(255,255,255,.1)'}`,
-          color: open ? 'var(--gold)' : 'rgba(255,255,255,.5)',
-          fontSize: 16, fontWeight: 700, lineHeight: 1,
-          transition: 'transform 220ms ease, background 220ms, border-color 220ms',
-          transform: open ? 'rotate(45deg)' : 'none',
-        }}>+</span>
-      </button>
-      {open && (
-        <div className="px-6 pb-6 border-t" dir={rtl ? 'rtl' : 'ltr'} style={{ borderColor: 'var(--border2)' }}>
-          <p style={{ fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.9, color: 'rgba(255,255,255,.5)', paddingTop: 18 }}>
-            {a}
-          </p>
+    <div className="pr">
+
+      <header className="pr-head">
+        <div className="pr-mark">
+          <span className="pr-mark-a">Onyx</span>
+          <span className="pr-mark-b">TRADING</span>
         </div>
-      )}
-    </div>
-  );
-}
+        <nav className="pr-nav">
+          <a href="#plans" className="pr-nav-a">מסלולים</a>
+          <a href="#compare" className="pr-nav-a">השוואה</a>
+          <a href="#faq" className="pr-nav-a">שאלות</a>
+          {CLERK_ENABLED
+            ? <HeaderCta />
+            : <Link href="/sign-in" className="pr-nav-cta">כניסה למערכת</Link>}
+        </nav>
+      </header>
 
-// ─── HERO ─────────────────────────────────────────────────────────────────────
+      <section className="pr-hero">
+        <div className="pr-hero-wash" aria-hidden />
+        <div className="pr-hero-grid" aria-hidden />
+        <div className="pr-hero-in">
+          <span className="pr-hero-kicker">◈ מסלולי מנוי</span>
+          <h1 className="pr-h1">
+            בחר את הרמה<br />שמתאימה <span>לקצב שלך.</span>
+          </h1>
+          <p className="pr-lead">
+            כל המסלולים בנויים על אותו לב מערכת, וכולם פותחים את הדאשבורד, היומן, המחברת, הסטאפים
+            והחוקים במלואם. ההבדל הוא שכבת הבינה — כמה רחוק אתה לוקח את הניתוח. תמיד אפשר לשדרג,
+            ואין התחייבות.
+          </p>
+          <span className="pr-fine-hero">כל המסלולים בתשלום · ללא ניסיון חינם · ביטול בכל עת</span>
+        </div>
+      </section>
 
-function Hero({ t, rtl }: { t: (k: K) => string; rtl: boolean }) {
-  return (
-    <section className="relative overflow-hidden text-center" style={{ paddingTop: 118, paddingBottom: 104 }}>
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10"
-        style={{ background: 'radial-gradient(circle at 50% 0%, rgba(212,175,55,.1), transparent 60%)' }} />
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10" style={{
-        backgroundImage: 'linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px)',
-        backgroundSize: '62px 62px',
-        WebkitMaskImage: 'radial-gradient(ellipse 80% 55% at 50% 0%,black,transparent)',
-        maskImage: 'radial-gradient(ellipse 80% 55% at 50% 0%,black,transparent)',
-      }} />
-      <div className="wrap">
-        <span className="kicker mb-8" style={{ display: 'inline-flex' }}>{t('badge')}</span>
-        <h1 dir={rtl ? 'rtl' : 'ltr'} className="text-white mx-auto"
-          style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(2.8rem,4.8vw,4.8rem)', fontWeight: 800, lineHeight: 1.08, maxWidth: '16ch' }}
-          dangerouslySetInnerHTML={{ __html: t('h1_html') }} />
-        <p dir={rtl ? 'rtl' : 'ltr'} className="mx-auto mt-8"
-          style={{ fontFamily: 'var(--sans)', fontSize: 'clamp(1rem,1.8vw,1.12rem)', lineHeight: 1.8, color: 'rgba(255,255,255,.52)', maxWidth: 680 }}>
-          {t('hero_sub')}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ─── PLAN CARDS ───────────────────────────────────────────────────────────────
-
-function PlanCards({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; lang: Lang }) {
-  const tl = (b: BiStr) => b[lang];
-  return (
-    <section className="border-t border-[var(--border)]">
-      <div className="wrap" style={{ paddingTop: 80, paddingBottom: 96 }}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ gap: 18, alignItems: 'stretch' }}>
+      <section id="plans" className="pr-plans">
+        <div className="pr-grid">
           {PLANS.map(plan => (
-            <div key={plan.key} className="relative" style={{ paddingTop: plan.featured ? 22 : 0 }}>
-              {/* Popular badge - floats above card */}
+            <div className="pr-card-wrap" key={plan.key}>
               {plan.featured && (
-                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 10, whiteSpace: 'nowrap' }}>
-                  <span className="rounded-full px-4 py-1" style={{
-                    fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
-                    textTransform: 'uppercase', letterSpacing: '.16em',
-                    color: '#000', background: 'var(--gold)',
-                    boxShadow: '0 0 18px rgba(212,175,55,.5)',
-                  }}>{t('pop')}</span>
-                </div>
+                <div className="pr-pop"><span>הכי פופולרי</span></div>
               )}
+              <div className="pr-card" data-featured={plan.featured}>
+                <span className="pr-tag">{plan.tag}</span>
+                <p className="pr-name" dir="ltr">{plan.name}</p>
 
-              {/* Card */}
-              <div className="flex flex-col h-full hover:-translate-y-1 transition-transform duration-300 rounded-[14px] border"
-                style={{
-                  background: plan.featured ? 'rgba(212,175,55,.04)' : 'rgba(13,13,15,.55)',
-                  borderColor: plan.featured ? 'rgba(212,175,55,.45)' : 'var(--border2)',
-                  padding: '34px 30px',
-                  boxShadow: plan.featured ? '0 0 60px rgba(212,175,55,.15), inset 0 0 0 1px rgba(212,175,55,.08)' : 'none',
-                }}>
-
-                {/* Tag */}
-                <span className="self-start rounded px-2.5 py-1 mb-5" style={{
-                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
-                  textTransform: 'uppercase', letterSpacing: '.18em',
-                  color: 'var(--gold)', background: 'rgba(212,175,55,.1)',
-                  border: '1px solid rgba(212,175,55,.2)',
-                }}>{tl(plan.tag)}</span>
-
-                {/* Plan name */}
-                <p dir="ltr" style={{
-                  fontFamily: 'var(--serif)', fontSize: 30, fontWeight: 800, lineHeight: 1,
-                  color: plan.featured ? 'var(--gold)' : '#fff', marginBottom: 20,
-                }}>{tl(plan.name)}</p>
-
-                {/* Price */}
-                <div dir="ltr" className="flex items-baseline gap-2 pb-6 mb-6 border-b" style={{ borderColor: 'var(--border2)' }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 44, fontWeight: 800, lineHeight: 1, color: plan.amtColor }}>
-                    {tl(plan.amt)}
-                  </span>
-                  {plan.unit && (
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.38)' }}>
-                      {tl(plan.unit)}
-                    </span>
-                  )}
+                {/* dir=ltr with the unit first: in an RTL page that puts the
+                    number on the right, so it is read first — "49 ₪ / חודש". */}
+                <div className="pr-price" dir="ltr">
+                  <span className="pr-price-unit"><Nis /> / חודש</span>
+                  <span className="pr-price-amt">{plan.amount}</span>
                 </div>
 
-                {/* Features */}
-                <ul className="space-y-4 flex-1 mb-8">
+                <div className="pr-feats">
                   {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-3" dir={rtl ? 'rtl' : 'ltr'}>
-                      <span style={{
-                        flexShrink: 0, marginTop: 2,
-                        width: 18, height: 18, borderRadius: '50%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: f.on ? 'rgba(74,124,89,.18)' : 'rgba(255,255,255,.05)',
-                        fontSize: 9, fontWeight: 800,
-                        color: f.on ? 'var(--bull-t)' : 'rgba(255,255,255,.22)',
-                      }}>
-                        {f.on ? '✓' : '✕'}
-                      </span>
-                      <span style={{
-                        fontFamily: 'var(--sans)', fontSize: '0.88rem', lineHeight: 1.6,
-                        color: f.on ? 'rgba(255,255,255,.78)' : 'rgba(255,255,255,.28)',
-                      }}>
-                        {tl(f.text)}
-                      </span>
-                    </li>
+                    <div className="pr-feat" data-on={f.on} key={i}>
+                      <span className="pr-feat-i">{f.on ? '✓' : '✕'}</span>
+                      <span className="pr-feat-t">{f.text}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
 
-                {/* CTA */}
-                <Link href={plan.href}
-                  className={plan.ctaGold ? 'btn-gold' : 'btn-ghost'}
-                  style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: 10 }}>
-                  {tl(plan.cta)}
-                </Link>
-
-                {/* Fine print */}
-                <p className="text-center" style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'rgba(255,255,255,.3)', letterSpacing: '.06em' }}>
-                  {tl(plan.fine)}
-                </p>
+                <Link href={plan.href} className="pr-cta" data-gold={plan.featured}>{plan.cta}</Link>
+                <p className="pr-fine">{FINE}</p>
               </div>
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
+      </section>
 
-// ─── COMPARISON TABLE ─────────────────────────────────────────────────────────
+      <section id="compare" className="pr-compare">
+        <div className="pr-wrap">
+          <div className="pr-sec-head">
+            <span className="pr-kicker">◈ השוואה מלאה</span>
+            <h2 className="pr-h2">השוואה מלאה</h2>
+            <p className="pr-sub">בדיוק מה מקבלים בכל מסלול</p>
+          </div>
 
-function ComparisonTable({ t, rtl, lang }: { t: (k: K) => string; rtl: boolean; lang: Lang }) {
-  const tl = (b: BiStr) => b[lang];
-
-  // Override text-only cells per lang. Support-row labels are the only
-  // per-lang overrides that don't fit as a raw check/cross/dash.
-  const resolveCell = (row: TableRow, col: 'f' | 's' | 'p' | 'd'): CellV => {
-    const v = row[col];
-    if (row.feat.en === 'Support') {
-      if (col === 'f') return t('r7_f');
-      if (col === 's') return t('r7_s');
-      if (col === 'p') return t('r7_p');
-      if (col === 'd') return t('r7_d');
-    }
-    return v;
-  };
-
-  const thStyle: React.CSSProperties = {
-    fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '.14em', color: 'rgba(255,255,255,.55)', padding: '18px 16px',
-    textAlign: 'center', whiteSpace: 'pre-line',
-  };
-
-  return (
-    <section className="border-t border-[var(--border)]" style={{ paddingTop: 80, paddingBottom: 96 }}>
-      <div className="wrap">
-        <Reveal>
-          <span className="kicker mb-4" style={{ display: 'inline-flex' }}>{t('tbl_kicker')}</span>
-          <h2 dir={rtl ? 'rtl' : 'ltr'} className="sec-title text-white mb-2">{t('tbl_h2')}</h2>
-          <p dir={rtl ? 'rtl' : 'ltr'} className="sec-sub mb-10">{t('tbl_sub')}</p>
-        </Reveal>
-
-        <Reveal delay={80}>
-          {/* horizontal scroll on mobile — 4 columns need real width */}
-          <div className="overflow-x-auto rounded-[14px] border" style={{ borderColor: 'var(--border2)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+          <div className="pr-table-frame">
+            <table className="pr-table">
               <thead>
-                <tr style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border2)' }}>
-                  <th style={{ ...thStyle, textAlign: rtl ? 'right' : 'left', paddingInlineStart: 28 }}>
-                    {t('tbl_col0')}
+                <tr>
+                  <th>פיצ׳ר</th>
+                  <th>
+                    STARTER<br />
+                    <span className="pr-th-price">49 <Nis /></span>
                   </th>
-                  <th style={thStyle}>FREE<br /><span style={{ color: 'var(--bull-t)', fontSize: 10 }}>{lang === 'he' ? 'חינם' : 'Free'}</span></th>
-                  <th style={thStyle}>STARTER<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '49 ₪' : '₪49'}</span></th>
-                  {/* PRO — visually anchored: gold price + a small
-                       positioning line ("שכבת הבינה המלאה") so the column
-                       reads as its own thing, not just "middle option". */}
-                  <th style={{ ...thStyle, background: 'rgba(212,175,55,.06)', borderInline: '1px solid rgba(212,175,55,.18)' }}>
+                  <th data-featured="true">
                     PRO<br />
-                    <span style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700 }}>{lang === 'he' ? '99 ₪' : '₪99'}</span>
-                    <br />
-                    <span style={{ color: 'rgba(230,198,101,.55)', fontSize: 9, fontWeight: 500, letterSpacing: '.04em', textTransform: 'none' }}>
-                      {lang === 'he' ? 'שכבת הבינה המלאה' : 'The intelligence layer'}
-                    </span>
+                    <span className="pr-th-price" data-gold="true">99 <Nis /></span><br />
+                    <span className="pr-th-note">שכבת הבינה המלאה</span>
                   </th>
-                  <th style={thStyle}>DELUXE<br /><span style={{ color: 'rgba(255,255,255,.45)', fontSize: 10 }}>{lang === 'he' ? '199 ₪' : '₪199'}</span></th>
+                  <th>
+                    DELUXE<br />
+                    <span className="pr-th-price">199 <Nis /></span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {TABLE_ROWS.map((row, i) => (
-                  <tr key={i} style={{ borderBottom: i < TABLE_ROWS.length - 1 ? '1px solid var(--border2)' : undefined }}>
-                    <td dir={rtl ? 'rtl' : 'ltr'} style={{
-                      padding: '16px 20px', paddingInlineStart: 28,
-                      fontFamily: 'var(--sans)', fontSize: '0.88rem', fontWeight: 500,
-                      color: 'rgba(255,255,255,.72)',
-                    }}>
-                      {tl(row.feat)}
-                    </td>
-                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
-                      <TableCell v={resolveCell(row, 'f')} rtl={rtl} />
-                    </td>
-                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
-                      <TableCell v={resolveCell(row, 's')} rtl={rtl} />
-                    </td>
-                    <td style={{ padding: '16px 16px', textAlign: 'center', background: 'rgba(212,175,55,.04)', borderInline: '1px solid rgba(212,175,55,.12)' }}>
-                      <TableCell v={resolveCell(row, 'p')} rtl={rtl} />
-                    </td>
-                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
-                      <TableCell v={resolveCell(row, 'd')} rtl={rtl} />
-                    </td>
+                {ROWS.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.feat}</td>
+                    <td><Mark v={r.s} /></td>
+                    <td data-featured="true"><Mark v={r.p} /></td>
+                    <td><Mark v={r.d} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+        </div>
+      </section>
 
-// ─── FAQ ──────────────────────────────────────────────────────────────────────
-
-function FAQ({ t, rtl }: { t: (k: K) => string; rtl: boolean }) {
-  const items = [
-    { q: t('faq_q1'), a: t('faq_a1') },
-    { q: t('faq_q2'), a: t('faq_a2') },
-    { q: t('faq_q3'), a: t('faq_a3') },
-    { q: t('faq_q4'), a: t('faq_a4') },
-  ];
-  return (
-    <section className="border-t border-[var(--border)]" style={{ paddingTop: 80, paddingBottom: 96 }}>
-      <div className="wrap">
-        <Reveal>
-          <span className="kicker mb-4" style={{ display: 'inline-flex' }}>{t('faq_kicker')}</span>
-          <h2 dir={rtl ? 'rtl' : 'ltr'} className="sec-title text-white mb-2">{t('faq_h2')}</h2>
-          <p dir={rtl ? 'rtl' : 'ltr'} className="sec-sub mb-10">{t('faq_sub')}</p>
-        </Reveal>
-
-        <Reveal delay={80}>
-          <div className="space-y-3 mx-auto" style={{ maxWidth: 780 }}>
-            {items.map((item, i) => (
-              <FAQItem key={i} q={item.q} a={item.a} rtl={rtl} />
-            ))}
+      <section id="faq" className="pr-faq">
+        <div className="pr-wrap">
+          <div className="pr-sec-head">
+            <span className="pr-kicker">◈ שאלות נפוצות</span>
+            <h2 className="pr-h2">שאלות נפוצות</h2>
+            <p className="pr-sub">מה שכדאי לדעת לפני שמצטרפים</p>
           </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
 
-// ─── FINAL CTA ────────────────────────────────────────────────────────────────
-
-function FinalCta({ t, rtl }: { t: (k: K) => string; rtl: boolean }) {
-  return (
-    <section className="border-t border-[var(--border)] relative overflow-hidden text-center" style={{ padding: '96px 0' }}>
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10"
-        style={{ background: 'radial-gradient(circle at 50% 40%, rgba(212,175,55,.1), transparent 65%)' }} />
-      <div className="wrap">
-        <Reveal>
-          <span className="kicker mb-5" style={{ display: 'inline-flex' }}>{t('cta_kicker')}</span>
-          <h2 dir={rtl ? 'rtl' : 'ltr'} className="text-white mx-auto mt-4"
-            style={{ fontFamily: 'var(--serif)', fontSize: 'clamp(2.4rem,5vw,4rem)', fontWeight: 800, lineHeight: 1.12, maxWidth: '18ch' }}
-            dangerouslySetInnerHTML={{ __html: t('cta_h2_html') }} />
-          <p dir={rtl ? 'rtl' : 'ltr'} className="mt-6 mx-auto"
-            style={{ fontFamily: 'var(--sans)', fontSize: '1.1rem', lineHeight: 1.75, color: 'rgba(255,255,255,.52)', maxWidth: 560 }}>
-            {t('cta_body')}
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-10">
-            <Link href="/checkout?plan=pro"    className="btn-lg-gold">{t('cta_pro')}</Link>
-            <Link href="/checkout?plan=deluxe" className="btn-lg-ghost">{t('cta_deluxe')}</Link>
+          <div className="pr-faq-list">
+            {FAQ.map((item, i) => {
+              const isOpen = open === i;
+              return (
+                <div className="pr-faq-item" data-open={isOpen} key={i}>
+                  <button
+                    type="button"
+                    className="pr-faq-q"
+                    aria-expanded={isOpen}
+                    aria-controls={`pr-faq-a-${i}`}
+                    onClick={() => setOpen(isOpen ? -1 : i)}
+                  >
+                    <span className="pr-faq-q-t">{item.q}</span>
+                    <span className="pr-faq-sign" aria-hidden>+</span>
+                  </button>
+                  {isOpen && (
+                    <div className="pr-faq-a" id={`pr-faq-a-${i}`}>
+                      <p>{item.a}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <p className="mt-8"
-            style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.28)', letterSpacing: '.08em' }}>
-            {t('cta_lock')}
+        </div>
+      </section>
+
+      {/* One quiet invitation, not two buttons. The decision belongs to the
+          cards above; this only points back at them. */}
+      <section className="pr-close">
+        <div className="pr-close-wash" aria-hidden />
+        <div className="pr-close-in">
+          <span className="pr-close-glyph">◈</span>
+          <h2 className="pr-close-h2">
+            תפסיק לנחש.<br />תתחיל לסחור לפי ה<span>מודל.</span>
+          </h2>
+          <p className="pr-close-p">
+            הצטרף עכשיו, והמסוף נפתח לך מיד. הרוב מתחיל ב-PRO — היחס ערך/מחיר הכי טוב בסולם.
+            תמיד אפשר לשדרג ל-DELUXE (או להתחיל קטן עם STARTER) בהמשך.
           </p>
-        </Reveal>
+          <div className="pr-close-block">
+            <a href="#plans" className="pr-close-a">
+              <span className="pr-close-a-t">לבחור מסלול ולהיכנס</span>
+              <span className="pr-close-a-arrow" aria-hidden>←</span>
+            </a>
+            <span className="pr-close-fine">הגישה נפתחת מיד עם סיום התשלום · אפשר לבטל בכל רגע</span>
+          </div>
+        </div>
+      </section>
+
+      <div className="pr-disclaimer">
+        <span>מסחר בחוזים עתידיים כולל סיכון מהותי · הכלים לשימוש לימודי ומחקרי בלבד · האחריות על השימוש היא על המשתמש</span>
       </div>
-    </section>
-  );
-}
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function PricingPage() {
-  const { lang } = useMarketingLang();
-  const rtl = lang === 'he';
-  const t = (key: K): string => (I18N[key] as Record<Lang, string>)[lang];
-
-  return (
-    <>
-      <Hero             t={t} rtl={rtl} />
-      <PlanCards        t={t} rtl={rtl} lang={lang} />
-      <ComparisonTable  t={t} rtl={rtl} lang={lang} />
-      <FAQ              t={t} rtl={rtl} />
-      <FinalCta         t={t} rtl={rtl} />
-    </>
+    </div>
   );
 }
