@@ -34,9 +34,12 @@ function NotConfigured({ he }: { he: boolean }) {
   );
 }
 
+/* Three things the product does. There is no bias engine and no live session
+   axis — the bias is a direction the trader declares on the trade itself, and
+   the journal stamps the session it was taken in. */
 const FEATURES = {
-  he: ['מנוע ביאס · ICT / SMC', 'ציר סשנים חי', 'יומן וניתוח קצה'],
-  en: ['Bias Engine · ICT / SMC', 'Live Session Timeline', 'Journal & Edge Analytics'],
+  he: ['יומן מסחר · ES / NQ', 'ניתוח לפי סשן, סטאפ וכיוון', 'AI שקורא את היומן שלך'],
+  en: ['Trading journal · ES / NQ', 'Cut by session, setup and direction', 'AI that reads your journal'],
 };
 
 export default function AuthScreen({ mode }: { mode: 'sign-in' | 'sign-up' }) {
@@ -95,8 +98,8 @@ export default function AuthScreen({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           </h1>
           <p className="mt-6 max-w-[380px] font-mono text-[13.5px] font-medium leading-[1.8] tracking-[0.02em] text-white/[0.46]">
             {he
-              ? 'מסוף מסחר מוסדי לחוזי ES ו-NQ — ביאס יומי המנוקד מול מודל הכניסה שלך, ציר סשנים חי, ויומן שמראה מה באמת עובד.'
-              : 'An institutional trading terminal for ES & NQ futures — a daily bias scored against your own entry model, a live session timeline, and a journal that tells you what actually works.'}
+              ? 'יומן מסחר חכם לחוזי ES ו-NQ — אתה מתעד את העסקה, המערכת חותמת עליה את הסשן והכיוון שהגדרת, ומראה לך במספרים שלך מה באמת עובד.'
+              : 'A smart trading journal for ES & NQ futures — you log the trade, the system stamps the session and the direction you declared, and shows you in your own numbers what actually works.'}
           </p>
 
           {/* feature rows */}

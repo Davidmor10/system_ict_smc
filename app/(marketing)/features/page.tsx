@@ -7,6 +7,23 @@ import { useMarketingLang } from '../components/LangProvider';
 // ─── I18N ─────────────────────────────────────────────────────────────────────
 
 const I18N = {
+  // ───────────────────────────────────────────────────────────────────────────
+  // Every claim on this page describes something the product actually does
+  // today. The four rows used to describe a market-reading "fractal engine"
+  // that produced a scored daily bias, a live session axis with a countdown,
+  // and a risk lock that stopped you trading. None of those exist:
+  //
+  //   · the bias is a direction the TRADER declares on the trade itself, and
+  //     all the system does is record whether the trade agreed with it;
+  //   · sessions are windows the journal stamps a trade with, plus the
+  //     "active now" indicator and Israel clock on the dashboard;
+  //   · rules are MEASURED, not enforced — the system reports how often you
+  //     kept them and what it cost when you did not. It never blocks a trade.
+  //
+  // The landing page and /performance already tell the true story. This page
+  // was the last one still telling the old one.
+  // ───────────────────────────────────────────────────────────────────────────
+
   // HERO
   badge:    { he: 'כל הכלים',   en: 'Every Tool' },
   h1_html:  {
@@ -14,82 +31,82 @@ const I18N = {
     en: 'Four tools.<br><span style="color:var(--gold)">One complete system.</span>',
   },
   hero_sub: {
-    he: 'מ-Onyx אתה לא מקבל עוד אינדיקטור — אלא תהליך עבודה שלם. מהבוקר שבו המנוע קובע ביאס, דרך הסשן החי שבו אתה מבצע, ועד היומן שמספר לך בסוף מה באמת עבד. הכל מחובר, הכל בשפה אחת.',
-    en: 'From Onyx you don\'t get another indicator — you get a complete workflow. From the morning the engine sets the bias, through the live session where you execute, to the journal that tells you what actually worked. Everything connected, everything in one language.',
+    he: 'Onyx הוא לא אינדיקטור ולא שירות איתותים — הוא יומן שמנתח אותך. אתה מתעד את העסקה בשתי דקות, המערכת חותמת עליה את הסשן, השעה והכיוון שהגדרת, ובסוף מראה לך במספרים שלך מה עובד ומה עולה לך כסף.',
+    en: 'Onyx is not an indicator and not a signal service — it is a journal that analyses you. You log the trade in two minutes, the system stamps it with the session, the time and the direction you declared, and then shows you, in your own numbers, what works and what costs you money.',
   },
 
-  // ROW 1 — Bias Analysis
-  r1_tag:  { he: 'ניתוח וביאס',  en: 'Analysis & Bias' },
-  r1_h3:   { he: 'ניתוח שוק וקביעת ביאס', en: 'Market Analysis & Bias' },
+  // ROW 1 — the journal
+  r1_tag:  { he: 'תיעוד',  en: 'Logging' },
+  r1_h3:   { he: 'יומן שזוכר מה שאתה שוכח', en: 'A Journal That Remembers What You Forget' },
   r1_lead: {
-    he: 'לב המערכת. מנוע הפרקטל עובר אתך צ׳קליסט קונפלואנס חי — מגמה, אישור IFVG, סוג סטאפ — וקובע ביאס יומי מדורג עם רמת ביטחון. הכל מיושר למודל הריברסל או ההמשכיות שאתה כבר סוחר.',
-    en: 'The heart of the system. The Fractal Engine runs you through a live confluence checklist — trend, IFVG confirmation, setup type — and sets a graded daily bias with a confidence level. All aligned to the reversal or continuation model you already trade.',
+    he: 'כל עסקה נכנסת בשתי דקות: כיוון, סטאפ, כניסה ויציאה, מצב רגשי ותגיות אישור. המערכת חותמת עליה לבד את הסשן ואת השעה, מחשבת R מול הסטופ ההתחלתי — ומסמנת אם העסקה הלכה עם הכיוון שהגדרת לאותו יום או נגדו.',
+    en: 'Every trade takes two minutes: direction, setup, entry and exit, emotional state and confirmation tags. The system stamps the session and the time itself, computes R against the initial stop — and marks whether the trade went with the direction you declared for that day or against it.',
   },
-  r1_b1: { he: 'ביאס יומי עם מד ביטחון שקוף',              en: 'Daily bias with a transparent confidence meter' },
-  r1_b2: { he: 'צ׳קליסט קונפלואנס שמתעדכן בזמן אמת',       en: 'Live confluence checklist updating in real time' },
-  r1_b3: { he: 'מיושר למודל הכניסה האישי שלך',              en: 'Aligned to your personal entry model' },
-  // Panel 1 labels
-  p1_bias:  { he: 'ביאס יומי',   en: 'Daily Bias' },
-  p1_val:   { he: 'עולה',        en: 'BULLISH' },
-  p1_conf:  { he: 'ביטחון 75%', en: '75% Confidence' },
-  p1_tl: { he: 'מגמה',    en: 'Trend' }, p1_tv: { he: 'עולה',      en: 'Bullish' },
-  p1_cl: { he: 'אישור',   en: 'Confirm' }, p1_cv: { he: 'IFVG 2M',  en: 'IFVG 2M' },
-  p1_sl: { he: 'סטאפ',    en: 'Setup' }, p1_sv: { he: 'המשכיות', en: 'Continuation' },
-  p1_el: { he: 'סשן',     en: 'Session' }, p1_ev: { he: 'NY AM',    en: 'NY AM' },
+  r1_b1: { he: 'חיתום אוטומטי: סשן, שעה, R מול הסטופ',    en: 'Auto-stamped: session, time, R against the stop' },
+  r1_b2: { he: 'הכיוון שהגדרת — מול מה שבאמת עשית',        en: 'The direction you declared — against what you did' },
+  r1_b3: { he: 'מצב רגשי ותגיות אישור בכל עסקה',            en: 'Emotional state and confirmation tags on every trade' },
 
-  // ROW 2 — Session Axis
-  r2_tag:  { he: 'עיתוי',    en: 'Timing' },
-  r2_h3:   { he: 'ציר סשנים חי', en: 'Live Session Axis' },
+  p1_bias:  { he: 'הכיוון שהגדרת להיום', en: 'The Direction You Declared' },
+  p1_val:   { he: 'עולה',                en: 'BULLISH' },
+  p1_conf:  { he: '3 מיושרות · 1 נגד',   en: '3 aligned · 1 counter' },
+  p1_tl: { he: 'רגש',    en: 'State' },   p1_tv: { he: 'רגוע',     en: 'Calm' },
+  p1_cl: { he: 'אישור',  en: 'Confirm' }, p1_cv: { he: 'IFVG 2M',  en: 'IFVG 2M' },
+  p1_sl: { he: 'סטאפ',   en: 'Setup' },   p1_sv: { he: 'המשכיות',  en: 'Continuation' },
+  p1_el: { he: 'סשן',    en: 'Session' }, p1_ev: { he: 'NY AM',    en: 'NY AM' },
+
+  // ROW 2 — the daily dashboard
+  r2_tag:  { he: 'יום העבודה', en: 'The Working Day' },
+  r2_h3:   { he: 'הדשבורד של הבוקר', en: 'The Morning Dashboard' },
   r2_lead: {
-    he: 'השוק נושם לפי הסשנים. הציר החי מראה לך בכל רגע איפה אתה עומד — אסיה, לונדון, ניו יורק AM ו-PM — עם קו "עכשיו" שזז בזמן אמת לפי שעון ישראל.',
-    en: 'The market breathes by sessions. The live axis shows you at every moment where you stand — Asia, London, New York AM and PM — with a "now" line that moves in real time by Israel time.',
+    he: 'התובנה של היום בכניסה, הסשן שפעיל עכשיו לפי שעון ישראל, לוח חודשי עם התוצאה של כל יום, ודוחות המאקרו של השבוע. הלוח מסודר לפי מה שנוח לך — הווידג׳טים זזים.',
+    en: 'Today\u2019s insight when you walk in, the session that is active right now on Israel time, a monthly board with each day\u2019s result, and the week\u2019s macro releases. The board is arranged the way you want it — the widgets move.',
   },
-  r2_b1: { he: '4 סשנים מסומנים בזמן אמת',             en: '4 sessions marked in real time' },
-  r2_b2: { he: 'קו "עכשיו" וספירה לפתיחה/סגירה',        en: '"Now" line and countdown to open/close' },
-  r2_b3: { he: 'שעות מותאמות לאזור הזמן שלך',           en: 'Hours adapted to your time zone' },
-  // Panel 2 labels
-  p2_title:     { he: 'ציר סשנים · ES',   en: 'Session Axis · ES' },
-  p2_now_l:     { he: 'פעיל כעת',         en: 'Active Now' },
-  p2_now_v:     { he: 'NY AM',            en: 'NY AM' },
-  p2_close_l:   { he: 'סוגר בעוד',        en: 'Closes In' },
-  p2_close_v:   { he: '01:18',            en: '01:18' },
+  r2_b1: { he: 'התובנה של היום, עם המדגם שמאחוריה',  en: 'Today\u2019s insight, with the sample behind it' },
+  r2_b2: { he: 'הסשן הפעיל עכשיו ושעון ישראל',       en: 'The session active now, on Israel time' },
+  r2_b3: { he: 'לוח חודשי ודוחות מאקרו של USD',       en: 'Monthly board and high-impact USD releases' },
 
-  // ROW 3 — Journal & Risk Lock
+  p2_title:     { he: 'סשנים · שעון ישראל', en: 'Sessions · Israel Time' },
+  p2_now_l:     { he: 'פעיל כעת',           en: 'Active Now' },
+  p2_now_v:     { he: 'NY AM',              en: 'NY AM' },
+  p2_close_l:   { he: 'שעון ישראל',         en: 'Israel Time' },
+  p2_close_v:   { he: '17:42',              en: '17:42' },
+
+  // ROW 3 — setups and rules
   r3_tag:  { he: 'משמעת',   en: 'Discipline' },
-  r3_h3:   { he: 'יומן מסחר ונעילת הגנה', en: 'Trade Journal & Risk Lock' },
+  r3_h3:   { he: 'ספר הסטאפים והחוקים שלך', en: 'Your Playbook and Your Rules' },
   r3_lead: {
-    he: 'כל עסקה נחתמת אוטומטית עם הסשן, השעה, הביאס וסוג הסטאפ. עוקבים אחרי R ו-P&L בדולרים — ונעילת ההגנה פשוט עוצרת אותך מלסחור ברגע שעברת את גבול ההפסד היומי שהגדרת.',
-    en: 'Every trade is automatically stamped with session, time, bias, and setup type. Track R and P&L in dollars — and the risk lock simply stops you from trading the moment you cross the daily loss limit you set.',
+    he: 'כל סטאפ שאתה סוחר יושב במקום אחד, ומתחתיו הביצועים האמיתיים שלו: כמה עסקאות, איזה אחוז הצלחה, כמה R. החוקים שקבעת לעצמך נמדדים מול היומן — כמה פעמים עמדת בהם, ומה זה עשה לתוצאה.',
+    en: 'Every setup you trade lives in one place, with its real performance underneath: how many trades, what win rate, how much R. The rules you set for yourself are measured against the journal — how often you kept them, and what it did to the result.',
   },
-  r3_b1: { he: 'חיתום אוטומטי: סשן, שעה, ביאס, סטאפ',  en: 'Auto-stamp: session, time, bias, setup' },
-  r3_b2: { he: 'מעקב R ו-P&L בדולרים',                  en: 'R and P&L tracking in dollars' },
-  r3_b3: { he: 'נעילת הגנה אחרי גבול הפסד יומי',        en: 'Risk lock after daily loss limit' },
-  // Panel 3 labels
-  p3_title:   { he: 'יומן · היום',             en: 'Journal · Today' },
-  p3_limit:   { he: '2/3 הפסדים',              en: '2/3 Losses' },
-  p3_wr_l:    { he: 'ווין רייט',               en: 'Win Rate' },
-  p3_pnl_l:   { he: 'P&L היום',               en: 'P&L Today' },
-  p3_t1_sym:  { he: 'ES · LONG · NY AM',       en: 'ES · LONG · NY AM' },
-  p3_t1_r:    { he: '+2.4R',                   en: '+2.4R' },
-  p3_t2_sym:  { he: 'NQ · SHORT · LDN',        en: 'NQ · SHORT · LDN' },
-  p3_t2_r:    { he: '−1.0R',                   en: '−1.0R' },
+  r3_b1: { he: 'כל סטאפ מחובר לביצועים האמיתיים שלו', en: 'Every setup tied to its own real numbers' },
+  r3_b2: { he: 'חוקים אישיים עם מעקב עמידה',           en: 'Personal rules with compliance tracking' },
+  r3_b3: { he: 'מגבלות שאתה קובע: עסקאות, סיכון, הפסד יומי', en: 'Limits you set: trades, risk, daily loss' },
 
-  // ROW 4 — Analytics (DELUXE)
-  r4_tag:  { he: 'תובנות · PRO',    en: 'Insights · PRO'    },
-  r4_h3:   { he: 'סטטיסטיקות ואנליטיקס', en: 'Statistics & Analytics' },
+  p3_title:   { he: 'סטאפים · 30 יום',  en: 'Setups · 30 Days' },
+  p3_limit:   { he: 'עמידה 82%',        en: '82% compliance' },
+  p3_wr_l:    { he: 'ווין רייט',        en: 'Win Rate' },
+  p3_pnl_l:   { he: 'R מצטבר',          en: 'Cumulative R' },
+  p3_t1_sym:  { he: 'SWEEP + FVG · 42', en: 'SWEEP + FVG · 42' },
+  p3_t1_r:    { he: '+12.4R',           en: '+12.4R' },
+  p3_t2_sym:  { he: 'ORDER BLOCK · 18', en: 'ORDER BLOCK · 18' },
+  p3_t2_r:    { he: '\u22123.1R',           en: '\u22123.1R' },
+
+  // ROW 4 — the AI
+  r4_tag:  { he: 'AI · PRO ומעלה',  en: 'AI · PRO and up' },
+  r4_h3:   { he: 'ה-AI שקרא את היומן שלך', en: 'The AI That Read Your Journal' },
   r4_lead: {
-    he: 'כאן הדאטה שלך הופך לקצה. המערכת חותכת את אחוזי ההצלחה לפי סשן, סוג סטאפ, יישור מול הביאס ויום בשבוע — ומראה שחור על גבי לבן אילו מודלים מרוויחים לך כסף ואילו רק שורפים. (זמין במסלול PRO ומעלה.)',
-    en: 'This is where your data becomes an edge. The system breaks down win rates by session, setup type, bias alignment, and day of week — showing you in black and white which models actually make money and which only burn it. (Available on PRO and above.)',
+    he: 'האנליטיקס חותך את העסקאות לפי סשן, סטאפ, כיוון, שעה ויום ומראה מה עובד ומה שורף. המאמן האישי הוא צ׳אט שקרא את היומן שלך ועונה מהמספרים שלך. וכלל אחד עומד מעל הכל: המערכת לא אומרת דבר שהיא לא יכולה להוכיח.',
+    en: 'Analytics cuts your trades by session, setup, direction, hour and day, and shows what works and what burns. The personal coach is a chat that has read your journal and answers from your own numbers. And one rule stands above all: the system does not say anything it cannot prove.',
   },
-  r4_b1: { he: 'ווין רייט לפי סשן · סטאפ · יום', en: 'Win rate by session · setup · day' },
-  r4_b2: { he: 'אילו מודלים הכי עובדים לך',       en: 'Which models perform best for you' },
-  r4_b3: { he: 'התפלגות R ומגמת ביצועים',          en: 'R distribution and performance trend' },
-  // Panel 4 labels
+  r4_b1: { he: 'חיתוך לפי סשן · סטאפ · כיוון · יום', en: 'Broken down by session · setup · direction · day' },
+  r4_b2: { he: 'צ׳אט שיודע את היומן שלך (DELUXE)',   en: 'A chat that knows your journal (DELUXE)' },
+  r4_b3: { he: 'כל טענה מגיעה עם המדגם שמאחוריה',    en: 'Every claim arrives with the sample behind it' },
+
   p4_title:  { he: 'אנליטיקס · 30 יום', en: 'Analytics · 30 Days' },
   p4_sess_l: { he: 'הסשן הכי רווחי',    en: 'Top Session' },
   p4_sess_v: { he: 'NY AM · 74%',        en: 'NY AM · 74%' },
-  p4_mod_l:  { he: 'המודל המוביל',      en: 'Top Model' },
-  p4_mod_v:  { he: 'ריברסל',            en: 'Reversal' },
+  p4_mod_l:  { he: 'הסטאפ המוביל',      en: 'Top Setup' },
+  p4_mod_v:  { he: 'SWEEP + FVG',        en: 'SWEEP + FVG' },
   p4_pf_l:   { he: 'פרופיט פקטור',      en: 'Profit Factor' },
   p4_net_l:  { he: 'נטו 30 יום',        en: 'Net 30 Days' },
 
@@ -100,12 +117,12 @@ const I18N = {
     en: 'Four tools that work<br>like <span style="color:var(--gold)">one system.</span>',
   },
   cta_body:    {
-    he: 'ביאס, עיתוי, יומן, אנליטיקס — כולם מדברים ביניהם. פתח גישה מיום ראשון.',
-    en: 'Bias, timing, journal, analytics — all speaking to each other. Get access from day one.',
+    he: 'תיעוד, יום עבודה, סטאפים וחוקים, ו-AI שקורא את כולם. פתח גישה מיום ראשון.',
+    en: 'Logging, the working day, setups and rules, and an AI that reads all of them. Get access from day one.',
   },
   cta_gold:    { he: 'לרכישת מנוי ←',          en: 'Subscribe →' },
-  cta_ghost:   { he: 'הכר את המנוע',            en: 'Explore the Engine' },
-  cta_lock:    { he: 'AI Analytics נפתח ב-PRO · המאמן האישי ב-DELUXE · ביטול בכל עת', en: 'AI Analytics unlocks on PRO · Personal Coach on DELUXE · Cancel anytime' },
+  cta_ghost:   { he: 'לראות את המספרים',        en: 'See the Numbers' },
+  cta_lock:    { he: 'AI Analytics נפתח ב-PRO · המאמן האישי והסטטיסטיקה ב-DELUXE · ביטול בכל עת', en: 'AI Analytics unlocks on PRO · Personal Coach and Statistics on DELUXE · Cancel anytime' },
 } as const;
 
 type K = keyof typeof I18N;
@@ -222,14 +239,15 @@ function BiasPanel({ t }: { t: (k: K) => string }) {
           <p style={{ fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.22em', color: 'rgba(255,255,255,.36)' }}>
             {t('p1_bias')}
           </p>
-          <p dir="ltr" className="mt-2" style={{ fontFamily: 'var(--serif)', fontSize: 52, fontWeight: 800, lineHeight: 1, color: 'var(--bull-t)' }}>
+          <p className="mt-2" style={{ fontFamily: 'var(--serif)', fontSize: 52, fontWeight: 800, lineHeight: 1, color: 'var(--bull-t)' }}>
             {t('p1_val')}
           </p>
-          <p dir="ltr" className="mt-1.5" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.36)', letterSpacing: '.08em' }}>
+          <p className="mt-1.5" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.36)', letterSpacing: '.08em' }}>
             {t('p1_conf')}
           </p>
           {/* bars 3/4 */}
           <div className="flex gap-1.5 mt-4" dir="ltr">
+            {/* three aligned, one counter — the same four trades as the caption */}
             {[true, true, true, false].map((on, i) => (
               <div key={i} className="h-1.5 flex-1 rounded-full" style={{ background: on ? 'var(--gold)' : 'rgba(255,255,255,.12)' }} />
             ))}
@@ -240,7 +258,7 @@ function BiasPanel({ t }: { t: (k: K) => string }) {
           {cells.map((c, i) => (
             <div key={i} className="p-3.5" style={{ background: '#000' }}>
               <p style={{ fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.18em', color: 'rgba(255,255,255,.28)' }}>{c.l}</p>
-              <p dir="ltr" className="mt-1" style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: c.gold ? 'var(--gold)' : 'rgba(255,255,255,.8)' }}>{c.v}</p>
+              <p className="mt-1" style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: c.gold ? 'var(--gold)' : 'rgba(255,255,255,.8)' }}>{c.v}</p>
             </div>
           ))}
         </div>
@@ -321,13 +339,13 @@ function SessionPanel({ t }: { t: (k: K) => string }) {
 // ─── PANEL 3 — Journal ────────────────────────────────────────────────────────
 
 function JournalPanel({ t }: { t: (k: K) => string }) {
-  const trades = [
+  const setups = [
     { sym: t('p3_t1_sym'), r: t('p3_t1_r'), win: true },
     { sym: t('p3_t2_sym'), r: t('p3_t2_r'), win: false },
   ];
   return (
     <Panel>
-      <PanelHeader title={t('p3_title')} badge={t('p3_limit')} badgeRed />
+      <PanelHeader title={t('p3_title')} badge={t('p3_limit')} />
       <div className="p-5">
         {/* Stats row */}
         <div className="grid grid-cols-2 gap-px mb-3" style={{ background: 'var(--border2)' }}>
@@ -337,13 +355,13 @@ function JournalPanel({ t }: { t: (k: K) => string }) {
           </div>
           <div className="p-4" style={{ background: '#000' }}>
             <p style={{ fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.18em', color: 'rgba(255,255,255,.28)' }}>{t('p3_pnl_l')}</p>
-            <p dir="ltr" className="mt-1" style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 800, lineHeight: 1, color: 'var(--bull-t)' }}>+$840</p>
+            <p dir="ltr" className="mt-1" style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 800, lineHeight: 1, color: 'var(--bull-t)' }}>+9.3R</p>
           </div>
         </div>
 
         {/* Trade rows */}
         <div className="space-y-1.5">
-          {trades.map((tr, i) => (
+          {setups.map((tr, i) => (
             <div key={i} className="flex items-center justify-between rounded-md px-4 py-3"
               style={{ background: '#000', border: `1px solid ${tr.win ? 'rgba(74,124,89,.25)' : 'rgba(139,58,58,.25)'}` }}>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.72)', letterSpacing: '.04em' }}
@@ -446,7 +464,7 @@ function FinalCta({ t, rtl }: { t: (k: K) => string; rtl: boolean }) {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 mt-10">
             <Link href="/pricing"        className="btn-lg-gold">{t('cta_gold')}</Link>
-            <Link href="/fractal-engine" className="btn-lg-ghost">{t('cta_ghost')}</Link>
+            <Link href="/performance" className="btn-lg-ghost">{t('cta_ghost')}</Link>
           </div>
           <p className="mt-8"
             style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'rgba(255,255,255,.28)', letterSpacing: '.08em' }}>

@@ -29,6 +29,14 @@ const csp = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  // /fractal-engine described a market-reading engine that produced a scored
+  // daily bias. No such thing exists in the product — the bias is a direction
+  // the trader declares — so the page is gone. Anything still linking to it
+  // lands on the feature tour instead of a 404.
+  async redirects() {
+    return [{ source: '/fractal-engine', destination: '/features', permanent: true }];
+  },
+
   async headers() {
     return [
       {
