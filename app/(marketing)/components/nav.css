@@ -1,0 +1,148 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   The marketing bar. Scoped to .mn.
+
+   One bar for every public page, so /pricing and /performance read as the same
+   site rather than two products that happen to share a palette.
+
+   Bound to the next/font variables directly, NOT to --font-serif / --font-mono:
+   those are declared in globals.css inside `@theme inline`, which Tailwind v4
+   substitutes at build time and never emits as a custom property, so
+   var(--font-serif) resolves to nothing at runtime and the element silently
+   inherits.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.mn {
+  --mn-serif: var(--font-playfair), var(--font-frank), Georgia, serif;
+  --mn-mono:  var(--font-geist-mono), var(--font-heebo), ui-monospace, monospace;
+  --mn-gold:  #d4af37;
+  --mn-line:  #1c1c1e;
+  --mn-ease:  cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(5, 5, 5, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  transition: background .5s ease, backdrop-filter .5s ease;
+}
+
+/* At rest the bar floats on the hero with no hard edge. It only acquires a
+   border — and a barely-there gold thread along it — once the page is scrolled
+   and the bar is actually sitting on top of content. */
+.mn::after {
+  content: ''; position: absolute; inset: auto 0 0 0; height: 1px;
+  background:
+    linear-gradient(90deg, transparent, rgba(212,175,55,0.28) 35%, rgba(212,175,55,0.28) 65%, transparent),
+    var(--mn-line);
+  opacity: 0; transition: opacity .5s ease;
+}
+.mn[data-lifted='true']::after { opacity: 1; }
+.mn[data-lifted='true'] { background: rgba(5, 5, 5, 0.92); }
+
+.mn-in {
+  position: relative; max-width: 1180px; margin: 0 auto;
+  height: 78px; padding: 0 clamp(20px, 4vw, 40px);
+  display: flex; align-items: center; justify-content: space-between;
+  transition: height .45s var(--mn-ease);
+}
+.mn[data-lifted='true'] .mn-in { height: 62px; }
+
+/* ── Wordmark ───────────────────────────────────────────────────────────── */
+/* Baseline-aligned rather than stacked: the serif and the tracked mono sit on
+   one line, which is the lockup the designed pages use. */
+.mn-mark { display: flex; align-items: baseline; gap: 9px; flex-shrink: 0; }
+.mn-mark-a {
+  font-family: var(--mn-serif); font-size: 23px; font-weight: 700;
+  letter-spacing: 0.05em; color: #fff; line-height: 1;
+  transition: color .3s ease;
+}
+.mn-mark-b {
+  font-family: var(--mn-mono); font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.36em; color: var(--mn-gold); line-height: 1;
+  transition: opacity .3s ease;
+}
+.mn-mark:hover .mn-mark-a { color: #fff; }
+.mn-mark:hover .mn-mark-b { opacity: .75; }
+
+/* ── Links ──────────────────────────────────────────────────────────────── */
+/* Absolutely centred so the group stays on the page's axis whatever the two
+   flanking groups weigh. `left`/`translateX` are physical and do not mirror,
+   which is what we want — the centre is the centre in both directions. */
+.mn-links {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: clamp(22px, 3vw, 38px);
+}
+.mn-link {
+  position: relative; padding: 6px 2px;
+  font-family: var(--mn-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.22em; color: rgba(255,255,255,0.48);
+  transition: color .3s ease;
+}
+.mn-link:hover { color: #fff; }
+.mn-link[data-active='true'] { color: var(--mn-gold); }
+
+/* A hairline that draws itself out from the centre. 1px, gold, no glow — the
+   whole gesture is meant to be noticed only on the second look. */
+.mn-link::after {
+  content: ''; position: absolute; inset: auto 0 0 0; height: 1px;
+  background: var(--mn-gold); transform: scaleX(0); transform-origin: 50% 50%;
+  transition: transform .45s var(--mn-ease), opacity .3s ease;
+  opacity: .55;
+}
+.mn-link:hover::after { transform: scaleX(1); }
+.mn-link[data-active='true']::after { transform: scaleX(1); opacity: 1; }
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+.mn-right { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
+
+/* The quiet half of the pair: a text link, no chrome. */
+.mn-quiet {
+  font-family: var(--mn-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.2em; color: rgba(255,255,255,0.5);
+  transition: color .3s ease; white-space: nowrap;
+}
+.mn-quiet:hover { color: var(--mn-gold); }
+
+/* A hairline between the quiet link and the gold one. Couture detail: it does
+   nothing except say the two are different kinds of thing. */
+.mn-sep { width: 1px; height: 14px; background: var(--mn-line); flex-shrink: 0; }
+
+.mn-cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 36px; padding: 0 20px; border-radius: 2px;
+  background: var(--mn-gold); color: #000; border: 1px solid var(--mn-gold);
+  font-family: var(--mn-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.18em; white-space: nowrap;
+  box-shadow: 0 0 0 rgba(212,175,55,0);
+  transition: box-shadow .3s ease, transform .15s var(--mn-ease);
+}
+.mn-cta:hover { color: #000; box-shadow: 0 0 26px rgba(212,175,55,0.45); }
+.mn-cta:active { transform: scale(0.97); }
+
+.mn a:focus-visible, .mn button:focus-visible {
+  outline: 1px solid rgba(212,175,55,0.6); outline-offset: 4px; border-radius: 2px;
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────────── */
+/* Two links fit a phone at this size, so nothing collapses into a menu — the
+   bar just tightens. Below 520px the quiet link and its rule stand down and the
+   gold CTA carries the whole right side. */
+@media (max-width: 760px) {
+  .mn-in { height: 64px; }
+  .mn[data-lifted='true'] .mn-in { height: 56px; }
+  .mn-links { gap: 18px; }
+  .mn-link { font-size: 9.5px; letter-spacing: 0.16em; }
+  .mn-mark-a { font-size: 20px; }
+  .mn-mark-b { font-size: 8px; letter-spacing: 0.3em; }
+  .mn-right { gap: 12px; }
+}
+@media (max-width: 520px) {
+  .mn-quiet, .mn-sep { display: none; }
+  .mn-cta { height: 32px; padding: 0 14px; font-size: 9.5px; letter-spacing: 0.14em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn, .mn-in, .mn-link, .mn-link::after, .mn-cta, .mn::after {
+    transition-duration: 0.01ms !important;
+  }
+  .mn-cta:active { transform: none; }
+}

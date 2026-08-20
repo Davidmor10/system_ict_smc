@@ -41,7 +41,12 @@
 
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`. overflow-x:hidden makes the element a scroll
+     container — which silently kills `position: sticky` for everything inside
+     it, and that is why the marketing bar scrolled away with the page on every
+     route. `clip` cuts the same horizontal overflow without creating a
+     scrollport, so the bar sticks and nothing else changes. */
+  overflow-x: clip;
 }
 
 html {

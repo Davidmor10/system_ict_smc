@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useAuth } from '@clerk/nextjs';
 import './pricing.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,8 +12,6 @@ import './pricing.css';
 // `Lang = 'he'` and offers no toggle, so the English half of the old copy was
 // unreachable text nobody could ever read.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 /** The shekel sign has no glyph in Geist Mono and renders as a tofu box. Every
  *  ₪ on this page — cards, table headers, FAQ answers — goes through this, so
@@ -116,21 +113,6 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   },
 ];
 
-// ── Header CTA ───────────────────────────────────────────────────────────────
-
-/** The design's header CTA is static. The site nav it replaces on this route
- *  was auth-aware, so this keeps that: a signed-in visitor lands in the app,
- *  everyone else at sign-in. Mounted conditionally because useAuth() throws
- *  outside a ClerkProvider, and the provider only mounts when the key is set. */
-function HeaderCta() {
-  const { isSignedIn } = useAuth();
-  return (
-    <Link href={isSignedIn ? '/dashboard' : '/sign-in'} className="pr-nav-cta">
-      כניסה למערכת
-    </Link>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PricingPage() {
@@ -139,21 +121,6 @@ export default function PricingPage() {
 
   return (
     <div className="pr">
-
-      <header className="pr-head">
-        <div className="pr-mark">
-          <span className="pr-mark-a">Onyx</span>
-          <span className="pr-mark-b">TRADING</span>
-        </div>
-        <nav className="pr-nav">
-          <a href="#plans" className="pr-nav-a">מסלולים</a>
-          <a href="#compare" className="pr-nav-a">השוואה</a>
-          <a href="#faq" className="pr-nav-a">שאלות</a>
-          {CLERK_ENABLED
-            ? <HeaderCta />
-            : <Link href="/sign-in" className="pr-nav-cta">כניסה למערכת</Link>}
-        </nav>
-      </header>
 
       <section className="pr-hero">
         <div className="pr-hero-wash" aria-hidden />

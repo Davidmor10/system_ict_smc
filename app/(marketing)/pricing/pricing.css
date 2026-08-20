@@ -53,62 +53,6 @@
 .pr a { text-decoration: none; }
 .pr section { border-top: 1px solid var(--onyx-800); }
 
-/* ── Header ─────────────────────────────────────────────────────────────── */
-.pr-head {
-  display: flex; align-items: center; justify-content: space-between;
-  height: 64px; padding: 0 clamp(20px, 4vw, 56px);
-  border-bottom: 1px solid var(--onyx-800); background: rgba(5, 5, 5, 0.9);
-  position: sticky; top: 0; z-index: 40;
-  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-}
-.pr-mark { display: flex; flex-direction: column; align-items: flex-start; }
-.pr-mark-a {
-  font-family: var(--pr-serif); font-size: 20px; font-weight: 800;
-  letter-spacing: 0.04em; color: #fff; line-height: 1.1;
-}
-.pr-mark-b {
-  font-family: var(--pr-mono); font-size: 9px; font-weight: 700;
-  letter-spacing: 0.34em; color: var(--pr-gold); line-height: 1.4;
-}
-.pr-nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 30px); }
-.pr-nav-a {
-  font-family: var(--pr-mono); font-size: 12px; font-weight: 700;
-  letter-spacing: 0.16em; color: var(--white-55);
-  transition: color 200ms var(--pr-ease);
-}
-.pr-nav-a:hover { color: var(--pr-gold); }
-.pr-nav-cta {
-  font-family: var(--pr-mono); font-size: 12px; font-weight: 700;
-  letter-spacing: 0.08em; color: #000; background: var(--pr-gold);
-  border-radius: 2px; padding: 10px 20px; white-space: nowrap;
-  box-shadow: 0 0 24px rgba(212,175,55,0.35);
-  transition: box-shadow 250ms var(--pr-ease);
-}
-.pr-nav-cta:hover { color: #000; box-shadow: 0 0 40px rgba(212,175,55,0.65); }
-.pr-nav-cta:active { transform: scale(0.97); }
-/* The handoff's phone rule: drop the three anchors, keep the CTA. No burger. */
-@media (max-width: 560px) { .pr-nav-a { display: none; } }
-
-/* ── Shared section furniture ───────────────────────────────────────────── */
-.pr-wrap { max-width: 1120px; margin: 0 auto; }
-.pr-sec-head {
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: 10px; margin-bottom: 36px;
-}
-.pr-kicker {
-  font-family: var(--pr-mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.3em; color: var(--pr-gold);
-}
-.pr-h2 {
-  margin: 0; font-family: var(--pr-serif);
-  font-size: clamp(1.8rem, 3.4vw, 2.6rem); font-weight: 700; color: #fff;
-}
-.pr-sub { margin: 0; font-family: var(--pr-sans); font-size: 0.98rem; color: var(--white-40); }
-
-/* The shekel sign has no glyph in Geist Mono and renders as tofu. Every ₪ on
-   this page — cards, table headers, FAQ answers — goes through this. */
-.pr-nis { font-family: var(--pr-sans); }
-
 /* ── Hero ───────────────────────────────────────────────────────────────── */
 .pr-hero {
   position: relative; overflow: hidden; text-align: center;
@@ -239,7 +183,7 @@
 }
 .pr-cta[data-gold='true']:hover { color: #000; background: var(--pr-gold); box-shadow: 0 0 40px rgba(212,175,55,0.65); }
 .pr-cta:active { transform: scale(0.97); }
-.pr-cta:focus-visible, .pr-nav-cta:focus-visible { outline: 2px solid var(--gold-45); outline-offset: 3px; }
+.pr-cta:focus-visible { outline: 2px solid var(--gold-45); outline-offset: 3px; }
 
 .pr-fine {
   margin: 0; text-align: center; font-family: var(--pr-mono);
@@ -383,5 +327,5 @@
     animation-duration: 0.01ms !important;
   }
   .pr-card:hover, .pr-card[data-featured='true']:hover { transform: none; }
-  .pr-cta:active, .pr-nav-cta:active { transform: none; }
+  .pr-cta:active { transform: none; }
 }
