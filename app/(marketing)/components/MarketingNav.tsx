@@ -7,8 +7,11 @@ import { useMarketingLang } from './LangProvider';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+/* Two items, not three. The landing page already carries the feature tour —
+   surface by surface, with a line each — so a "פיצ'רים" tab repeated it a third
+   time after /performance had already told the same story. The page itself
+   stays reachable at /features; it is only out of the bar. */
 const NAV_LINKS = [
-  { he: "פיצ'רים",     href: '/features' },
   { he: 'ביצועים',     href: '/performance' },
   { he: 'מנוי',        href: '/pricing' },
 ] as const;
