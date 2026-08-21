@@ -7,6 +7,12 @@ const STRIPE_SCRIPT = 'https://js.stripe.com';
 const STRIPE_FRAME = 'https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com';
 const STRIPE_CONNECT = 'https://api.stripe.com';
 const SUPABASE_CONNECT = 'https://*.supabase.co wss://*.supabase.co';
+// The workspace music panel frames a YouTube player. Frame-src only — the
+// player's own scripts run inside that frame under YouTube's CSP, not ours, and
+// the search call goes to our own route, so nothing is added to script-src or
+// connect-src. youtube-nocookie is what the panel actually builds; www.youtube
+// is here because some embeds redirect to it.
+const YOUTUBE_FRAME = 'https://www.youtube-nocookie.com https://www.youtube.com';
 
 const csp = [
   `default-src 'self'`,
@@ -21,7 +27,7 @@ const csp = [
   `img-src 'self' data: blob: https:`,
   `font-src 'self' data:`,
   `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT}`,
-  `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS}`,
+  `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS} ${YOUTUBE_FRAME}`,
   `frame-ancestors 'self'`,
   `object-src 'none'`,
   `base-uri 'self'`,
