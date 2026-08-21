@@ -11,10 +11,13 @@ const FOOTER_LINKS = [
   { he: 'יצירת קשר',  en: 'Contact',     href: '/contact' },
 ] as const;
 
-export default function MarketingFooter() {
+export default function MarketingFooter({ signedIn = false }: { signedIn?: boolean }) {
   const { lang } = useMarketingLang();
   const pathname = usePathname();
   const rtl = lang === 'he';
+
+  // The entry gate ends in its own footer — risk line, account links, sign out.
+  if (signedIn && pathname === '/') return null;
 
   // /performance ends in a full footer of its own — risk disclaimer, measurement
   // methodology, bottom bar. Stacking this bar under it gives the page two

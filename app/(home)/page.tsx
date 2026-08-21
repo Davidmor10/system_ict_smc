@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
-import Landing from './components/Landing';
-import MemberHome from './components/MemberHome';
+import Landing from '../(marketing)/components/Landing';
+import MemberHome from '../(marketing)/components/MemberHome';
 import { getSessionId, getUserRole } from '../lib/getUserRole';
 
 // "/" is two pages behind one address.

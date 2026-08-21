@@ -56,7 +56,7 @@ function AuthControls() {
   );
 }
 
-export default function MarketingNav() {
+export default function MarketingNav({ signedIn = false }: { signedIn?: boolean }) {
   useMarketingLang();
   const pathname = usePathname();
 
@@ -71,6 +71,13 @@ export default function MarketingNav() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Below every hook, never above one: an early return before useState changes
+  // the hook order between renders.
+  //
+  // A signed-in member on "/" gets the entry gate, which has a header of its
+  // own — wordmark, session clock, plan, avatar. This bar stands down there.
+  if (signedIn && pathname === '/') return null;
 
   return (
     <nav dir="rtl" className="mn" data-lifted={lifted}>

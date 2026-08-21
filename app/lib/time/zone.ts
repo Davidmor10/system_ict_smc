@@ -166,6 +166,26 @@ export function zoneAbbreviation(zone: string = activeZone(), now: Date = new Da
   }
 }
 
+/**
+ * The short name to print next to a clock — "IDT", "EST", "GMT+3".
+ *
+ * `Intl … timeZoneName: 'short'` returns "GMT+3" for Asia/Jerusalem in every
+ * engine this app runs on, and "21:55 GMT+3" is not what an Israeli trader
+ * reads on a clock. The offset is what actually decides which abbreviation is
+ * true, so for Israel it is read from the offset: +3 is daylight time (IDT),
+ * +2 is standard (IST). Every other zone keeps whatever Intl gives, which for
+ * most of them is already the real abbreviation.
+ */
+export function zoneShortName(zone: string = activeZone(), now: Date = new Date()): string {
+  if (zone === 'Asia/Jerusalem') {
+    const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const local = new Date(now.toLocaleString('en-US', { timeZone: zone }));
+    const offsetHours = Math.round((local.getTime() - utc.getTime()) / 3_600_000);
+    return offsetHours >= 3 ? 'IDT' : 'IST';
+  }
+  return zoneAbbreviation(zone, now);
+}
+
 export function zoneLabel(zone: string): string {
   return ZONES.find(z => z.id === zone)?.label ?? zone;
 }

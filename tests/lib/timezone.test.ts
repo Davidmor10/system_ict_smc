@@ -18,7 +18,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIMEZONE, ZONES, hourFloatInZone, isValidZone, resolveZone,
-  todayISOInZone, zoneAbbreviation,
+  todayISOInZone, zoneAbbreviation, zoneShortName,
 } from '../../app/lib/time/zone';
 import { DEFAULT_SETTINGS, withDefaults } from '../../app/lib/settings/types';
 
@@ -94,6 +94,19 @@ describe('the clock actually differs by zone', () => {
 
   it('reports the zone abbreviation so the picker can prove the change took', () => {
     expect(zoneAbbreviation('UTC', at)).toBeTruthy();
+  });
+
+  it('prints IDT/IST for Israel rather than the GMT+3 that Intl returns', () => {
+    // Every engine this app runs on answers "GMT+3" for Asia/Jerusalem, and a
+    // clock reading "21:55 GMT+3" is not what the page is written around.
+    const august = new Date('2026-08-17T12:00:00Z');   // +3, daylight
+    const january = new Date('2026-01-17T12:00:00Z');  // +2, standard
+    expect(zoneShortName('Asia/Jerusalem', august)).toBe('IDT');
+    expect(zoneShortName('Asia/Jerusalem', january)).toBe('IST');
+  });
+
+  it('leaves every other zone to Intl', () => {
+    expect(zoneShortName('UTC', at)).toBe(zoneAbbreviation('UTC', at));
   });
 });
 

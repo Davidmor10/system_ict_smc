@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_TIMEZONE, clockInZone } from '../../lib/time/zone';
+import { DEFAULT_TIMEZONE, clockInZone, zoneShortName } from '../../lib/time/zone';
 import './performance.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,19 +36,6 @@ import './performance.css';
 
 const D = '◈';
 const TZ = DEFAULT_TIMEZONE;
-
-/** IDT in summer, IST in winter.
- *
- *  Not `Intl … timeZoneName:'short'`: for Asia/Jerusalem that returns "GMT+3"
- *  in every engine this app runs on, and "21:55 GMT+3" is not the label the
- *  page is written around. The offset is the thing that actually decides which
- *  abbreviation is true, so it is what we read. */
-function israelAbbrev(now: Date): string {
-  const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const local = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
-  const offsetHours = Math.round((local.getTime() - utc.getTime()) / 3_600_000);
-  return offsetHours >= 3 ? 'IDT' : 'IST';
-}
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -319,7 +306,7 @@ export default function PerformancePage() {
   useEffect(() => {
     const stamp = () => {
       const now = new Date();
-      setClock(`${clockInZone(TZ, now)} ${israelAbbrev(now)}`);
+      setClock(`${clockInZone(TZ, now)} ${zoneShortName(TZ, now)}`);
     };
     stamp();
 
