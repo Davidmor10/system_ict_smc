@@ -17,7 +17,7 @@ import { todayISO, type TradeEntry } from '../journal';
 import { SESS } from '../sessions';
 import { logger } from '../logger';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
-import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing, generateWorkingStrengthsPhrasing } from '../ai/insightPhrasing';
+import { generateHypothesisPhrasing, generateInsightsPhrasing, generatePatternPhrasing, generateWorkingStrengthsPhrasing, metricsEvidence } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
   summarizeAnalysis, summarizeComparison, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
@@ -414,7 +414,12 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
     const sampleSize = Object.values(hypothesis.supportingMetrics)[0]?.confidence.sampleSize ?? 0;
     return {
       title: description,
-      evidence: evidence ?? '',
+      // Rebuilt from the metrics rather than read back from the row. The
+      // stored string was written by a model — older rows carry an English
+      // sentence, and a hypothesis keeps its phrasing until its identity
+      // changes, so trusting the column would keep printing English for weeks.
+      // The numbers are the same either way; only who typed them changed.
+      evidence: metricsEvidence(hypothesis.supportingMetrics, lang === 'he') || (evidence ?? ''),
       action: lang === 'he'
         ? 'המשך לעקוב אחרי התנאים האלה ובדוק אם הם ממשיכים לחזור.'
         : 'Keep watching these conditions and see if they keep repeating.',

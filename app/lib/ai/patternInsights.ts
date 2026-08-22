@@ -3,7 +3,7 @@ import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '..
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
-import { HEBREW_MENTOR_STYLE, evidenceSpec } from './styleGuide';
+import { HEBREW_MENTOR_STYLE } from './styleGuide';
 import { logger } from '../logger';
 
 function tryParse(json: string | undefined): unknown {
@@ -52,10 +52,29 @@ export function isMostlyLatin(text: string): boolean {
   return latin > hebrew;
 }
 
-/** The evidence sentence, in Hebrew, from the candidate's own computed stats. */
-function hebrewEvidence(c: PatternCandidate): string {
+/**
+ * The evidence line — computed, never generated.
+ *
+ * This used to be the model's job, and it was the source of the English
+ * sentences that kept appearing under Hebrew titles. It never needed a model:
+ * it is a restatement of numbers the analytics engine already produced, and
+ * asking a language model to retype them bought nothing while risking the
+ * language, the rounding, and the occasional invented figure. Written here it
+ * is always Hebrew, always exactly the computed values, and cannot drift.
+ */
+function evidenceLine(c: PatternCandidate, he: boolean): string {
   const g = c.metric;
-  return `מבוסס על ${g.trades} עסקאות, עם ${g.winRate.toFixed(0)}% הצלחה מול ${c.baseline.toFixed(0)}% בממוצע הכללי.`;
+  if (!he) {
+    return `Based on ${g.trades} trades: ${g.winRate.toFixed(0)}% win rate vs ${c.baseline.toFixed(0)}% overall, ` +
+      `avg R/R ${g.avgRR.toFixed(2)}, profit factor ${fmtPF(g.profitFactor)}.`;
+  }
+  const parts = [
+    `מבוסס על ${g.trades} עסקאות`,
+    `${g.winRate.toFixed(0)}% הצלחה מול ${c.baseline.toFixed(0)}% בממוצע הכללי`,
+    `יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)}`,
+    `פרופיט פקטור ${fmtPF(g.profitFactor)}`,
+  ];
+  return `${parts.join(' · ')}.`;
 }
 
 function describeCandidate(c: PatternCandidate): string {
@@ -92,8 +111,7 @@ Return exactly one JSON object with a single field "items", holding ${candidates
 {"items": [
   {
     "i": <the number of the pattern above this object describes>,
-    "title": "<one sentence naming the pattern, citing its specific numbers>",
-    "evidence": ${evidenceSpec(isHe, 'גודל המדגם והמספרים המדויקים')}
+    "title": "<one sentence naming the pattern, citing its specific numbers>"
   }
 ]}
 
@@ -120,7 +138,7 @@ Rules:
     Array.isArray((wrapped as { items?: unknown })?.items)
       ? (wrapped as { items: unknown[] }).items
       : tryParse(raw.match(/\[[\s\S]*\]/)?.[0]);
-  const parsed = (Array.isArray(items) ? items : []) as Array<{ i?: unknown; title?: string; evidence?: string }>;
+  const parsed = (Array.isArray(items) ? items : []) as Array<{ i?: unknown; title?: string }>;
 
   // Match on the echoed "i", not on array position.
   //
@@ -132,7 +150,7 @@ Rules:
   // downstream could detect it. An echoed index is cheap and makes the pairing
   // the model's own claim rather than our assumption; anything that doesn't
   // match a pattern we actually sent is dropped.
-  const byIndex = new Map<number, { title?: string; evidence?: string }>();
+  const byIndex = new Map<number, { title?: string }>();
   for (const item of parsed) {
     const n = typeof item?.i === 'number' ? item.i : Number(item?.i);
     if (Number.isInteger(n) && n >= 1 && n <= candidates.length && !byIndex.has(n)) {
@@ -141,19 +159,16 @@ Rules:
   }
 
   return candidates
-    .map((c, i) => {
-      const phrased = byIndex.get(i + 1);
-      const evidence = phrased?.evidence ?? '';
-      return {
-        subject: subjectLabel(c),
-        title: phrased?.title ?? '',
-        // A Hebrew page must not print an English sentence. When the model
-        // answers in Latin anyway, the fallback restates the same computed
-        // numbers it was given — nothing new is claimed, only re-said.
-        evidence: isHe && isMostlyLatin(evidence) ? hebrewEvidence(c) : evidence,
-        confidenceLevel: c.confidence.level,
-        sampleSize: c.confidence.sampleSize,
-      };
-    })
-    .filter(p => p.title && p.evidence);
+    .map((c, i) => ({
+      subject: subjectLabel(c),
+      title: byIndex.get(i + 1)?.title ?? '',
+      evidence: evidenceLine(c, isHe),
+      confidenceLevel: c.confidence.level,
+      sampleSize: c.confidence.sampleSize,
+    }))
+    // A title that came back in Latin is dropped rather than printed. One card
+    // fewer is a smaller failure than an English card on a Hebrew page, and
+    // unlike the evidence line there is nothing to rebuild it from — the title
+    // is the interpretation, which is the part only the model can write.
+    .filter(p => p.title && !(isHe && isMostlyLatin(p.title)));
 }

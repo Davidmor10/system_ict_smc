@@ -300,7 +300,10 @@ export default function AiAnalyticsPage() {
   // ── Pattern insights (AI-phrased, cached per day) ──
   useEffect(() => {
     if (!hasEnoughData) { setPatternInsights([]); return; }
-    const cacheKey = 'onyx_ai_patterns_' + todayISO();
+    // v2: the evidence line stopped being model prose and became computed
+    // text. Rows cached under the old key hold the English sentences that
+    // change replaced, so they are left behind rather than shown until midnight.
+    const cacheKey = 'onyx_ai_patterns_v2_' + todayISO();
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { setPatternInsights(JSON.parse(cached)); return; } catch {} }
     setPatternsLoading(true);
@@ -327,7 +330,7 @@ export default function AiAnalyticsPage() {
   // ── Working strengths — "מה באמת עובד לך" (AI-phrased, cached per day) ──
   useEffect(() => {
     if (!hasEnoughData) { setWorkingStrengths([]); return; }
-    const cacheKey = 'onyx_ai_strengths_' + todayISO();
+    const cacheKey = 'onyx_ai_strengths_v2_' + todayISO();
     const cached = localStorage.getItem(cacheKey);
     if (cached) { try { setWorkingStrengths(JSON.parse(cached)); return; } catch {} }
     setStrengthsLoading(true);

@@ -36,7 +36,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const closedCount = trades.filter(t => t.result !== 'OPEN').length;
-  const cacheKey = 'onyx_ai_insights_' + todayISO();
+  const cacheKey = 'onyx_ai_insights_v2_' + todayISO();
 
   async function fetchInsights() {
     if (trades.length < 3) return;

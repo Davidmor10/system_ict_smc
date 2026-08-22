@@ -10,7 +10,7 @@ import type { GroupPerformance } from '../analytics';
 import type { HypothesisStatus, PatternMemoryRow } from '../intelligence/types';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
-import { HEBREW_MENTOR_STYLE, evidenceSpec } from './styleGuide';
+import { HEBREW_MENTOR_STYLE } from './styleGuide';
 import { logger } from '../logger';
 import type { AiCallMeta } from './client';
 
@@ -100,6 +100,47 @@ function parseIndexedTexts(raw: string, count: number): string[] | null {
   return matched > 0 ? out : null;
 }
 
+/**
+ * The evidence line — computed, never generated.
+ *
+ * The model used to write this, and that is where the English sentences under
+ * Hebrew titles came from: a schema that said «start with 'Based on'» was read
+ * as an instruction about language. But the line never needed a model. It
+ * restates numbers the analytics engine already produced, so writing it here
+ * makes it always Hebrew, always exactly the computed values, and immune to
+ * drift — while the model keeps the part that actually needs judgement.
+ */
+export function groupEvidence(g: GroupPerformance, baselineWinRate: number | null, he: boolean): string {
+  const vs = baselineWinRate === null
+    ? ''
+    : he ? ` מול ${baselineWinRate.toFixed(0)}% בממוצע הכללי` : ` vs ${baselineWinRate.toFixed(0)}% overall`;
+
+  return he
+    ? `מבוסס על ${g.trades} עסקאות · ${g.winRate.toFixed(0)}% הצלחה${vs} · יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)} · פרופיט פקטור ${fmtPF(g.profitFactor)}.`
+    : `Based on ${g.trades} trades: ${g.winRate.toFixed(0)}% win rate${vs}, avg R/R ${g.avgRR.toFixed(2)}, profit factor ${fmtPF(g.profitFactor)}.`;
+}
+
+/**
+ * The same line for a hypothesis, which rests on a cluster of slices.
+ *
+ * Built from the anchor — the first metric, the same one the sample size is
+ * taken from — plus a count of the slices that corroborate it. The cluster is
+ * keyed by pattern id (`session:nyam`), so listing the keys would print
+ * internals at the trader; the count says the same thing in words they use.
+ */
+export function metricsEvidence(metrics: Record<string, GroupPerformance>, he: boolean): string {
+  const all = Object.values(metrics);
+  const anchor = all[0];
+  if (!anchor) return '';
+
+  const others = all.length - 1;
+  const also = others <= 0 ? ''
+    : he ? ` · ועוד ${others} ${others === 1 ? 'חתך תומך' : 'חתכים תומכים'}`
+         : ` · plus ${others} corroborating slice${others === 1 ? '' : 's'}`;
+
+  return groupEvidence(anchor, null, he).replace(/\.$/, '') + also + '.';
+}
+
 function fmtMetric(label: string, g: GroupPerformance): string {
   return `${label}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}%, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, PnL $${g.totalPnl.toFixed(0)}`;
 }
@@ -139,8 +180,7 @@ CONFIDENCE SCORE: ${input.confidenceScore}/100
 
 Produce exactly one JSON object:
 {
-  "description": "<one or two sentences naming the hypothesis, in the style of: 'Your current edge appears to come from Long trades on MNQ during NY AM when IFVG confirmation is present.' Must cite the specific instrument/session/direction/confirmation from the metrics above>",
-  "evidence": ${evidenceSpec(isHe, 'גודל המדגם ואחוזי ההצלחה המדויקים')}
+  "description": "<one or two sentences naming the hypothesis, in the style of: 'Your current edge appears to come from Long trades on MNQ during NY AM when IFVG confirmation is present.' Must cite the specific instrument/session/direction/confirmation from the metrics above>"
 }
 
 Rules:
@@ -152,18 +192,18 @@ Rules:
   const raw = await tryGenerate('generateHypothesisPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
-  let parsed: { description?: string; evidence?: string } = {};
+  let parsed: { description?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     parsed = match ? JSON.parse(match[0]) : {};
   } catch {
     parsed = {};
   }
-  if (!parsed.description || !parsed.evidence) {
+  if (!parsed.description) {
     logger.warn('generateHypothesisPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
     return null;
   }
-  return { description: parsed.description, evidence: parsed.evidence };
+  return { description: parsed.description, evidence: metricsEvidence(input.supportingMetrics, isHe) };
 }
 
 export interface InsightPhrasingItem {
@@ -295,7 +335,6 @@ ${JSON.stringify(row.subject)}: ${g.trades} trades, winRate ${g.winRate.toFixed(
 Produce exactly one JSON object, using ONLY the numbers given above:
 {
   "title": "<one sentence naming the discovery, must include the specific number(s) it's based on>",
-  "evidence": ${evidenceSpec(isHe, 'גודל המדגם המדויק')},
   "action": "<one sentence telling the trader what to pay attention to — never a buy/sell signal, never a market prediction>"
 }
 
@@ -308,16 +347,20 @@ Rules:
   const raw = await tryGenerate('generatePatternPhrasing', prompt, clerkId);
   if (raw === null) return null;
 
-  let parsed: { title?: string; evidence?: string; action?: string } = {};
+  let parsed: { title?: string; action?: string } = {};
   try {
     const match = raw.match(/\{[\s\S]*\}/);
     parsed = match ? JSON.parse(match[0]) : {};
   } catch {
     parsed = {};
   }
-  if (!parsed.title || !parsed.evidence || !parsed.action) {
+  if (!parsed.title || !parsed.action) {
     logger.warn('generatePatternPhrasing: unparseable model output', { raw: raw.slice(0, 300) });
     return null;
   }
-  return { title: parsed.title, evidence: parsed.evidence, action: parsed.action };
+  return {
+    title: parsed.title,
+    evidence: groupEvidence(g, row.baselineWinRate, isHe),
+    action: parsed.action,
+  };
 }

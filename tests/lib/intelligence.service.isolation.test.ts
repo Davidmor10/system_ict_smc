@@ -20,6 +20,12 @@ vi.mock('../../app/lib/ai/insightPhrasing', () => ({
     evidence: `evidence for ${row.patternId}`,
     action: 'watch it',
   })),
+  // Not a phrasing call — the evidence line is computed from the metrics the
+  // service already holds, so it is the real function even here. Mocking it
+  // would hide the thing this file exists to check: that the numbers in an
+  // answer came from the right account.
+  metricsEvidence: (metrics: Record<string, { trades?: number }>) =>
+    `מבוסס על ${Object.values(metrics)[0]?.trades ?? 0} עסקאות.`,
 }));
 
 const service = await import('../../app/lib/intelligence/service');

@@ -11,7 +11,15 @@
 
 import { describe, expect, it } from 'vitest';
 import { isMostlyLatin } from '../../app/lib/ai/patternInsights';
+import { groupEvidence, metricsEvidence } from '../../app/lib/ai/insightPhrasing';
 import { evidenceSpec, HEBREW_MENTOR_STYLE } from '../../app/lib/ai/styleGuide';
+import type { GroupPerformance } from '../../app/lib/analytics/types';
+
+const G = (over: Partial<GroupPerformance> = {}): GroupPerformance => ({
+  key: 'k', label: 'l', trades: 11, wins: 9, losses: 2, winRate: 82,
+  totalPnl: 1516, avgRR: 0.65, avgWinner: 200, avgLoser: -100,
+  profitFactor: 3.02, expectancy: 0, ...over,
+} as GroupPerformance);
 
 describe('isMostlyLatin', () => {
   it('catches the sentence this was written for', () => {
@@ -57,5 +65,45 @@ describe('the Hebrew style guide', () => {
     // English field description as an instruction about language.
     expect(HEBREW_MENTOR_STYLE).toContain('EVERY string you output is Hebrew');
     expect(HEBREW_MENTOR_STYLE).toContain('מבוסס על');
+  });
+});
+
+describe('the evidence line is computed, not generated', () => {
+  it('writes the sentence that used to come back in English', () => {
+    // The exact card from the bug report: 11 trades, 82%, R/R 0.65, PF 3.02.
+    const line = groupEvidence(G(), 61, true);
+    expect(line).toContain('מבוסס על 11 עסקאות');
+    expect(line).toContain('82% הצלחה');
+    expect(line).toContain('61% בממוצע הכללי');
+    expect(line).toContain('0.65');
+    expect(line).toContain('3.02');
+    expect(isMostlyLatin(line)).toBe(false);
+  });
+
+  it('leaves out the comparison when there is no baseline to compare to', () => {
+    expect(groupEvidence(G(), null, true)).not.toContain('בממוצע');
+  });
+
+  it('still writes English for an English answer', () => {
+    expect(groupEvidence(G(), 61, false)).toContain('Based on 11 trades');
+  });
+
+  it('cannot drift from the numbers — it prints them, it does not describe them', () => {
+    const line = groupEvidence(G({ trades: 3, winRate: 100, avgRR: 1.31 }), null, true);
+    expect(line).toContain('3 עסקאות');
+    expect(line).toContain('100% הצלחה');
+  });
+
+  it('sums a hypothesis cluster without printing its internal ids', () => {
+    // Keyed by pattern id ("session:nyam"); those are internals, not words a
+    // trader uses.
+    const line = metricsEvidence({ 'session:nyam': G(), 'instrument:MNQ': G({ trades: 6 }) }, true);
+    expect(line).toContain('מבוסס על 11 עסקאות');
+    expect(line).toContain('ועוד 1 חתך תומך');
+    expect(line).not.toContain('session:');
+  });
+
+  it('says nothing at all when there are no metrics', () => {
+    expect(metricsEvidence({}, true)).toBe('');
   });
 });
