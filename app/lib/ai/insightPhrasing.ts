@@ -10,7 +10,7 @@ import type { GroupPerformance } from '../analytics';
 import type { HypothesisStatus, PatternMemoryRow } from '../intelligence/types';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
-import { HEBREW_MENTOR_STYLE } from './styleGuide';
+import { HEBREW_MENTOR_STYLE, evidenceSpec } from './styleGuide';
 import { logger } from '../logger';
 import type { AiCallMeta } from './client';
 
@@ -121,7 +121,8 @@ export interface HypothesisPhrasing {
     called when the hypothesis's identity actually changed (a fresh anchor
     pattern) — a continuing hypothesis reuses its cached phrasing instead. */
 export async function generateHypothesisPhrasing(input: HypothesisPhrasingInput, lang: 'he' | 'en', clerkId?: string | null): Promise<HypothesisPhrasing | null> {
-  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const isHe = lang === 'he';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const metricsList = Object.entries(input.supportingMetrics)
     .map(([id, g]) => `${id} — ${fmtMetric(id, g)}`)
     .join('\n');
@@ -139,7 +140,7 @@ CONFIDENCE SCORE: ${input.confidenceScore}/100
 Produce exactly one JSON object:
 {
   "description": "<one or two sentences naming the hypothesis, in the style of: 'Your current edge appears to come from Long trades on MNQ during NY AM when IFVG confirmation is present.' Must cite the specific instrument/session/direction/confirmation from the metrics above>",
-  "evidence": "<one sentence starting with 'Based on' citing the exact sample size(s) and win rate(s) used>"
+  "evidence": ${evidenceSpec(isHe, 'גודל המדגם ואחוזי ההצלחה המדויקים')}
 }
 
 Rules:
@@ -178,7 +179,8 @@ export interface InsightPhrasingItem {
     text, grounded only in the numbers given, in the same order as `items`. */
 export async function generateInsightsPhrasing(items: InsightPhrasingItem[], lang: 'he' | 'en', clerkId?: string | null): Promise<string[] | null> {
   if (items.length === 0) return [];
-  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const isHe = lang === 'he';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const list = items
     .map((it, i) => `${i + 1}. ${it.subject} — ${fmtMetric(it.subject, it.metric)}${it.extra ? ` (${it.extra})` : ''}`)
     .join('\n');
@@ -227,7 +229,8 @@ export interface StrengthPhrasingItem {
     fresh discovery framing. */
 export async function generateWorkingStrengthsPhrasing(items: StrengthPhrasingItem[], lang: 'he' | 'en', clerkId?: string | null): Promise<string[] | null> {
   if (items.length === 0) return [];
-  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const isHe = lang === 'he';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const trendWord = (t: StrengthPhrasingItem['trend']) =>
     t === 'up' ? 'strengthening — recent performance is improving'
     : t === 'down' ? 'weakening — recent performance has declined'
@@ -278,7 +281,8 @@ export interface PatternPhrasing {
     already-selected pattern_memory row instead of re-running analysis over
     raw trades. */
 export async function generatePatternPhrasing(row: PatternMemoryRow, lang: 'he' | 'en', clerkId?: string | null): Promise<PatternPhrasing | null> {
-  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+  const isHe = lang === 'he';
+  const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
   const g = row.currentMetric;
 
   const prompt = `You are Onyx, an experienced trading mentor reviewing a futures day-trader's journal — talking straight, like one trader to another. You do NOT predict markets, you do NOT give buy/sell signals, and you NEVER tell the trader what to trade next. You only explain a pattern already found in the trader's own historical data.
@@ -291,7 +295,7 @@ ${JSON.stringify(row.subject)}: ${g.trades} trades, winRate ${g.winRate.toFixed(
 Produce exactly one JSON object, using ONLY the numbers given above:
 {
   "title": "<one sentence naming the discovery, must include the specific number(s) it's based on>",
-  "evidence": "<one sentence starting with 'Based on' citing the exact sample size(s) used>",
+  "evidence": ${evidenceSpec(isHe, 'גודל המדגם המדויק')},
   "action": "<one sentence telling the trader what to pay attention to — never a buy/sell signal, never a market prediction>"
 }
 

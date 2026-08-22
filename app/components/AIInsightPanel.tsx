@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { TradeEntry } from '../lib/journal';
+import { clockInZone } from '../lib/time/zone';
 import { todayISO } from '../lib/journal';
 import { useLanguage } from '../hooks/useLanguage';
 import TypingDots from './TypingDots';
@@ -50,7 +51,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       if (!res.ok) throw new Error(`Insights request failed: ${res.status}`);
       const data = await res.json();
       const fetched = Array.isArray(data.insights) ? data.insights : [];
-      const stamp = new Date().toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+      const stamp = clockInZone();
       setInsights(fetched);
       setUpdatedAt(stamp);
       try {

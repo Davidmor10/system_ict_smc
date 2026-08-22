@@ -4,7 +4,7 @@ import type { TradeEntry } from '../lib/journal';
 import { tradePnL } from '../lib/journal';
 import { calcRR } from '../lib/calc/trade';
 import { pointValue } from '../lib/instruments';
-import { SESS } from '../lib/sessions';
+import { sessionLabel, sessionTable } from '../lib/sessions';
 import { UNSPECIFIED_MODEL } from '../lib/journal';
 
 const BULLISH = '#4a7c59';
@@ -25,12 +25,11 @@ const pnlColor = (n: number) => (n > 0 ? BULLISH : n < 0 ? BEARISH : 'rgba(255,2
     session 'NONE' (or empty). That's a real state, not a bug — render it as
     such instead of leaking the raw "NONE" token to the trader. */
 function isTrackedSession(sessionKey: string): boolean {
-  return !!sessionKey && sessionKey !== 'NONE' && SESS.some(s => s.key === sessionKey);
+  // The trader's own table, disabled rows included: a trade filed under a
+  // session they have since switched off is still that session, and rendering
+  // it as "outside the windows" would rewrite its history.
+  return !!sessionKey && sessionKey !== 'NONE' && sessionTable().some(s => s.key === sessionKey);
 }
-function sessionLabel(sessionKey: string): string {
-  return SESS.find(s => s.key === sessionKey)?.he ?? sessionKey;
-}
-
 export default function JournalTradeCard({
   trade: t, onDelete, onEdit,
 }: {

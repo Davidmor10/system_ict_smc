@@ -8,16 +8,12 @@
 // instead of re-deriving the same observation from scratch every time.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { SESS } from '../sessions';
+import { sessionLabel } from '../sessions';
 import type { KnownFact, TraderProfile } from './types';
 
 const MIN_CONFIRMATION_WIN_RATE = 55;
 const EXIT_EARLY_RATIO_THRESHOLD = 0.7;
 const MIN_EXIT_WINNERS = 3;
-
-function sessionLabel(key: string): string {
-  return SESS.find(s => s.key === key)?.he ?? key;
-}
 
 interface FactCandidate {
   fact: string;

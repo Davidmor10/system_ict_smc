@@ -93,7 +93,7 @@ function StrengthHistoryChart({ history }: { history: WorkingStrength['history']
         return (
           <div
             key={h.at + i}
-            title={`${h.winRate.toFixed(0)}% · n=${h.sampleSize}`}
+            title={`${h.winRate.toFixed(0)}% · ${h.sampleSize} עסקאות`}
             style={{
               flex: 1, height: visible ? `${pct}%` : '0%', borderRadius: '2px 2px 0 0',
               background: isLast ? '#d4af37' : 'rgba(255,255,255,.16)',
@@ -212,14 +212,14 @@ function VBar({ pct, tone, label, labelSize = 11.5 }: { pct: number; tone: 'best
   );
 }
 
-function ConfidenceBadge({ level, sampleSize }: { level: ConfidenceLevel; sampleSize: number }) {
+function ConfidenceBadge({ level }: { level: ConfidenceLevel }) {
   const m = CONF_META[level];
   return (
     <span
       className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-sm shrink-0"
       style={{ color: m.fg, background: m.bg, border: `1px solid ${m.bd}` }}
     >
-      ביטחון {CONF_LABEL[level]} · n={sampleSize}
+      ביטחון {CONF_LABEL[level]}
     </span>
   );
 }
@@ -903,7 +903,7 @@ export default function AiAnalyticsPage() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {!s.isLowData && <TrendBadge trend={s.trend} />}
-                      <ConfidenceBadge level={s.confidenceLevel} sampleSize={s.sampleSize} />
+                      <ConfidenceBadge level={s.confidenceLevel} />
                     </div>
                   </div>
 
@@ -945,7 +945,7 @@ export default function AiAnalyticsPage() {
               {patternInsights.map((ins, i) => (
                 <Reveal key={i} className="bg-[#0a0a0b] p-6">
                   <div className="flex items-center justify-between gap-4 flex-wrap mb-3.5">
-                    <ConfidenceBadge level={ins.confidenceLevel} sampleSize={ins.sampleSize} />
+                    <ConfidenceBadge level={ins.confidenceLevel} />
                     <div className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-white">{ins.subject}</span><span style={{ color: '#d4af37', fontSize: 12 }}>◈</span></div>
                   </div>
                   <InsightText text={ins.title + ' ' + ins.evidence} className="text-[15px] font-medium text-[#c0c0c0] leading-relaxed" />

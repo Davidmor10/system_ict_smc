@@ -3,6 +3,19 @@
     ("סדר זרימת ליקווידיות", "קורלציה", "אינדיקציה") instead of talking like
     a mentor. Every prompt that asks Gemini to write Hebrew must include this
     block — it is the single place that voice is defined. */
+/** The evidence field, in the language the answer is being written in.
+ *
+ *  This exists because the English literal «one sentence starting with 'Based
+ *  on'» was doing exactly what it said: the model opened the sentence in
+ *  English and carried on in English, under a Hebrew title, on a Hebrew page.
+ *  The instruction has to name the Hebrew opening explicitly — a general
+ *  "write in Hebrew" further up the prompt loses to a concrete example. */
+export function evidenceSpec(he: boolean, what = 'גודל המדגם והמספרים המדויקים'): string {
+  return he
+    ? `"<משפט אחד בעברית בלבד, שמתחיל במילים \"מבוסס על\" ומצטט את ${what} מהנתונים שלמעלה>"`
+    : `"<one sentence starting with 'Based on' citing the exact sample size(s) used>"`;
+}
+
 export const HEBREW_MENTOR_STYLE = `LANGUAGE & TONE — this overrides any instinct to sound formal, academic, or "AI-like":
 - Write exactly like an experienced trading mentor talking directly to another trader. Not a research report. Not a chatbot.
 - Use plain, modern, everyday Hebrew. Short sentences. No complex financial or academic jargon unless it's the trader's own literal data (an instrument ticker like MNQ, or a confirmation tag exactly as they typed it, like "FVG").
@@ -18,7 +31,8 @@ export const HEBREW_MENTOR_STYLE = `LANGUAGE & TONE — this overrides any insti
 - Do not randomly mix English words into a Hebrew sentence. Use the standard Hebrew trading words: לונג, שורט, סשן, רווח, הפסד, הצלחה. The only exceptions are the trader's own instrument tickers and confirmation/setup tags, exactly as they appear in the data.
 - Perfect Hebrew grammar and spelling. No broken or awkward translations.
 - Tone: professional, friendly, confident, direct. Never dramatic, never robotic, never overly enthusiastic.
-- Before writing each sentence, ask yourself: would an experienced trader actually say this out loud to another trader? If not, simplify it until the answer is yes.`;
+- Before writing each sentence, ask yourself: would an experienced trader actually say this out loud to another trader? If not, simplify it until the answer is yes.
+- EVERY string you output is Hebrew — every field of the JSON, without exception, including fields named "evidence", "action" or "description". The field descriptions in the schema below are written in English because they describe WHAT to write; they never describe which language to write it in. A field whose description says «starting with 'Based on'» is asking for the Hebrew equivalent, "מבוסס על". The only Latin that may appear inside a Hebrew sentence is the trader's own tickers and tags (MNQ, FVG, NY AM) and the numbers themselves.`;
 
 /** How the coach should WRITE — the single most important instruction for the
     chat experience. It exists because early answers read like ChatGPT: dense,

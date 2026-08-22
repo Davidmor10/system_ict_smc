@@ -4,7 +4,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { SESS, getActiveSessionIdx } from '../../lib/sessions';
+import { activeSessions, getActiveSessionIdx } from '../../lib/sessions';
+import { clockInZone } from '../../lib/time/zone';
 import { usePlan } from '../../components/PlanProvider';
 import TradeForm from '../../components/TradeForm';
 import AIInsightPanel from '../../components/AIInsightPanel';
@@ -61,7 +62,7 @@ function JournalPageInner() {
 
   // Live-session pill: recompute the clock every 30s so it never goes stale on a long visit.
   useEffect(() => {
-    const tick = () => setNowLabel(new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }));
+    const tick = () => setNowLabel(clockInZone());
     tick();
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
@@ -119,8 +120,11 @@ function JournalPageInner() {
   }, []);
 
   const today = todayISO();
+  // Indexed against the enabled windows — the same table getActiveSessionIdx
+  // matched on.
+  const sessions = useMemo(() => activeSessions(), []);
   const activeSessionIdx = getActiveSessionIdx();
-  const activeSession = activeSessionIdx >= 0 ? SESS[activeSessionIdx] : null;
+  const activeSession = activeSessionIdx >= 0 ? sessions[activeSessionIdx] : null;
 
   const dates = useMemo(() => [...new Set(trades.map(t => t.dateISO))].sort((a, b) => b.localeCompare(a)), [trades]);
   const shownDates = selectedDate ? dates.filter(d => d === selectedDate) : dates;

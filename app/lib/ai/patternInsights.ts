@@ -3,7 +3,7 @@ import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '..
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
-import { HEBREW_MENTOR_STYLE } from './styleGuide';
+import { HEBREW_MENTOR_STYLE, evidenceSpec } from './styleGuide';
 import { logger } from '../logger';
 
 function tryParse(json: string | undefined): unknown {
@@ -37,6 +37,25 @@ function subjectLabel(c: PatternCandidate): string {
   if (s.direction) parts.push(DIRECTION_HE[String(s.direction)] ?? String(s.direction));
   if (s.hour !== undefined) parts.push(`${String(s.hour).padStart(2, '0')}:00`);
   return parts.join(' · ');
+}
+
+/** True when a sentence is written in Latin script rather than Hebrew. Counts
+ *  letters only: tickers, tags and digits are expected inside Hebrew prose and
+ *  must not tip the verdict on their own. */
+export function isMostlyLatin(text: string): boolean {
+  const hebrew = (text.match(/[\u0590-\u05FF]/g) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  // Below a dozen Latin letters there is no English sentence — only tickers,
+  // tags and units ("MNQ", "NY AM", "+1.31R"), all of which belong in Hebrew
+  // prose and must not be mistaken for it.
+  if (latin < 12) return false;
+  return latin > hebrew;
+}
+
+/** The evidence sentence, in Hebrew, from the candidate's own computed stats. */
+function hebrewEvidence(c: PatternCandidate): string {
+  const g = c.metric;
+  return `מבוסס על ${g.trades} עסקאות, עם ${g.winRate.toFixed(0)}% הצלחה מול ${c.baseline.toFixed(0)}% בממוצע הכללי.`;
 }
 
 function describeCandidate(c: PatternCandidate): string {
@@ -74,7 +93,7 @@ Return exactly one JSON object with a single field "items", holding ${candidates
   {
     "i": <the number of the pattern above this object describes>,
     "title": "<one sentence naming the pattern, citing its specific numbers>",
-    "evidence": "<one sentence starting with 'Based on' citing the exact sample size and stats used>"
+    "evidence": ${evidenceSpec(isHe, 'גודל המדגם והמספרים המדויקים')}
   }
 ]}
 
@@ -124,10 +143,14 @@ Rules:
   return candidates
     .map((c, i) => {
       const phrased = byIndex.get(i + 1);
+      const evidence = phrased?.evidence ?? '';
       return {
         subject: subjectLabel(c),
         title: phrased?.title ?? '',
-        evidence: phrased?.evidence ?? '',
+        // A Hebrew page must not print an English sentence. When the model
+        // answers in Latin anyway, the fallback restates the same computed
+        // numbers it was given — nothing new is claimed, only re-said.
+        evidence: isHe && isMostlyLatin(evidence) ? hebrewEvidence(c) : evidence,
         confidenceLevel: c.confidence.level,
         sampleSize: c.confidence.sampleSize,
       };

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { loadTrades } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { INSTRUMENT_KEYS, type InstrumentKey } from '../../lib/instruments';
-import { SESS, type SessionKey } from '../../lib/sessions';
+import { type SessionKey, sessionLabel, activeSessions } from '../../lib/sessions';
 import { hydrateList, saveList } from '../../lib/sync/collections';
 import {
   DEFAULT_FILTER, DIRECTIONS, DIRECTION_HE, EMPTY_STATS, GRADES,
@@ -40,7 +40,7 @@ const SORTS: { key: SortKey; label: string; ltr?: boolean }[] = [
   { key: 'trades', label: 'עסקאות' },
 ];
 
-const sessionHe = (k: SessionKey) => SESS.find(s => s.key === k)?.he ?? k;
+const sessionHe = (k: SessionKey) => sessionLabel(k);
 
 /** dd.MM — the card's "last trade" stamp. */
 function shortDate(iso: string | null): string {
@@ -601,7 +601,7 @@ export default function PlaybookPage() {
               />
               <ChipRow<SessionKey>
                 label="סשן"
-                options={['all', ...SESS.map(s => s.key)]}
+                options={['all', ...activeSessions().map(s => s.key)]}
                 value={filter.session}
                 onSelect={v => setFilter(f => ({ ...f, session: v }))}
                 labelOf={v => (v === 'all' ? 'הכל' : sessionHe(v))}
@@ -760,7 +760,7 @@ export default function PlaybookPage() {
                 <div>
                   <span className="su-field-label">סשנים</span>
                   <div className="su-chip-set">
-                    {SESS.map(s => (
+                    {activeSessions().map(s => (
                       <button
                         key={s.key}
                         type="button"

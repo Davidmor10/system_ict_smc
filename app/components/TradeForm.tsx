@@ -7,7 +7,8 @@ import { analyzeStopMoves, type ManagementEvent } from '../lib/trade/management'
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import { SESS, sessionForHour, getActiveSessionKey, type SessionKey } from '../lib/sessions';
+import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } from '../lib/sessions';
+import { clockInZone } from '../lib/time/zone';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { confidenceLevelFor } from '../lib/analytics/confidence';
 import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
@@ -144,13 +145,15 @@ interface FormState {
 }
 
 function empty(): FormState {
-  const now = new Date();
   return {
     symbol: 'ES',
     contracts: '1',
     direction: 'LONG',
     date: todayISO(),
-    time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+    // The clock in settings, not the browser's. A trader in one place trading
+    // another market's hours would otherwise get an entry time that disagrees
+    // with the session the same form is about to stamp on it.
+    time: clockInZone(),
     entry: '',
     stop: '',
     target: '',
@@ -214,7 +217,7 @@ function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string
     if (decided.length > 0) {
       const wins = sessionThisWeek.filter(t => t.result === 'WIN').length;
       const winRate = Math.round((wins / decided.length) * 100);
-      const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
+      const label = sessionLabel(trade.session);
       // A win rate never stands naked: always carry the sample it's built on,
       // and flag a small sample as an early sign — same honesty as the
       // dashboard's confidence badge, so we never sell an n=3 "67%" as fact.
@@ -240,7 +243,7 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
   const allTrades = [trade, ...priorTrades];
 
   if (trade.session && trade.session !== 'NONE') {
-    const label = SESS.find(s => s.key === trade.session)?.he ?? trade.session;
+    const label = sessionLabel(trade.session);
     facts.push(`זוהה אוטומטית כמושב ${label}.`);
   } else {
     // Not a detection failure — the entry time genuinely falls between the
@@ -966,7 +969,7 @@ export default function TradeForm({
                 {form.management.map((m, i) => (
                   <div key={i} className="flex items-center gap-2 font-mono text-[11px] text-white/50">
                     <span className="text-white/30" dir="ltr">
-                      {new Date(m.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                      {clockInZone(undefined, new Date(m.at))}
                     </span>
                     <span>סטופ → {m.to}</span>
                     <button
@@ -1079,7 +1082,7 @@ export default function TradeForm({
         {/* ── Auto-detected context — informational only, nothing to choose ── */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-white/30">
           <span>
-            מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? (SESS.find(s => s.key === autoSession)?.he ?? autoSession) : 'מחוץ לשעות מסחר'}</b>
+            מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? sessionLabel(autoSession) : 'מחוץ לשעות מסחר'}</b>
           </span>
           {/* Only when a direction was actually declared. The readout used to
               render for every trade and always said "aligned", because the

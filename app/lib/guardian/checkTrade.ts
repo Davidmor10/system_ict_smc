@@ -7,7 +7,7 @@
 
 import type { TradeEntry, Direction, BiasAlignment } from '../journal';
 import { computeGroupPerformance, normSession } from '../analytics';
-import { SESS } from '../sessions';
+import { sessionLabel } from '../sessions';
 
 /** A slice needs at least this many DECIDED trades before it can be called a
     weak spot — below it, it's noise, so the guardian stays silent (precision
@@ -21,7 +21,7 @@ const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שו
 const EMOTION_HE: Record<string, string> = {
   CALM: 'רגוע', CONFIDENT: 'בטוח', STRESSED: 'לחוץ', FOMO: 'FOMO', TIRED: 'עייף', ANGRY: 'כועס', IMPATIENT: 'חסר סבלנות',
 };
-const sessionHe = (key: string) => SESS.find(s => s.key === key)?.he ?? key;
+const sessionHe = (key: string) => sessionLabel(key);
 
 export interface PendingTrade {
   symbol: string;

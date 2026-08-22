@@ -29,7 +29,7 @@ import type { TradeEntry } from '../journal';
 import { tradePnL, rMultiple, plannedRR } from '../journal';
 import { chronological, expectancy, streaks, planVsExecution, completeness } from './journalStats';
 import type { Expectancy, Streaks, PlanVsExecution, Completeness } from './journalStats';
-import { SESS } from '../sessions';
+import { SESS, sessionTable, type SessionDef } from '../sessions';
 import { MIN_DECIDED_FOR_CLAIM, MIN_DECIDED_FOR_CONFIRMED } from '../stats/evidence';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -170,18 +170,18 @@ function groupBy(
   });
 }
 
-export function bySession(trades: readonly TradeEntry[]): GroupStat[] {
+export function bySession(trades: readonly TradeEntry[], table: SessionDef[] = sessionTable()): GroupStat[] {
   // Anything that is not one of the four tracked windows collapses into a
   // single bucket. A trade logged at 03:00 and one whose session the form
   // never recognised are the same fact to a trader — "outside the sessions I
   // track" — and splitting them into one-trade rows would fill the panel with
   // noise shaped like data.
-  const known = new Set<string>(SESS.map(s => s.key));
+  const known = new Set<string>(table.map(s => s.key));
   return groupBy(
     trades,
     t => (t.session && known.has(t.session) ? t.session : 'other'),
-    SESS.map(s => s.key),
-    key => SESSION_LABEL[key] ?? 'מחוץ לסשן',
+    table.map(s => s.key),
+    key => table.find(s => s.key === key)?.he ?? SESSION_LABEL[key] ?? 'מחוץ לסשן',
   ).filter(g => g.key !== 'other' || g.n > 0);
 }
 

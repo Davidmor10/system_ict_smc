@@ -8,6 +8,7 @@
 
 import type { InstrumentKey } from '../instruments';
 import { resolveZone } from '../time/zone';
+import { DEFAULT_SESSIONS, normalizeSessions, type SessionDef } from '../sessions';
 
 export const SETTINGS_KIND = 'user_settings_v1';
 export const SETTINGS_KEY  = 'onyx_user_settings_v1';
@@ -48,6 +49,13 @@ export interface UserSettings {
   /** @deprecated The old free-text field. Kept so an existing doc can be
    *  migrated on read — never written again. */
   timezoneLabel?: string;
+  /** The trader's own session windows.
+   *
+   *  Read wherever the app asks "which session is this" — see lib/sessions.ts.
+   *  A trader who does not trade New York PM switches it off; a trader whose
+   *  London starts at 08:00 moves it. Absent on an older doc, which is why
+   *  every reader normalizes rather than trusting the shape. */
+  sessions: SessionDef[];
 
   /** Bookkeeping — used by the sync layer to pick a winner across
       devices (newest updatedAt wins). */
@@ -67,6 +75,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   accountStartUsd: 25_000,
   displayUnit: 'dollar',
   timezone: 'Asia/Jerusalem',
+  sessions: DEFAULT_SESSIONS,
 };
 
 /** Coalesce a partial (possibly cloud-hydrated) settings doc into a full
@@ -80,5 +89,8 @@ export function withDefaults(partial: Partial<UserSettings> | null | undefined):
   // typed into it — and no `timezone` at all. Reading an id out of it is what
   // keeps an existing account from being silently reset to the default.
   if (!partial?.timezone) merged.timezone = resolveZone(partial?.timezoneLabel);
+  // Never trust the stored shape: this doc is user-editable, syncs across
+  // devices, and predates the sessions field entirely.
+  merged.sessions = normalizeSessions(partial?.sessions);
   return merged;
 }

@@ -8,9 +8,10 @@ import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
+import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
 import { initSyncListeners } from '../lib/sync/collections';
-import { SESS, getActiveSessionIdx } from '../lib/sessions';
+import { activeSessions, getActiveSessionIdx } from '../lib/sessions';
 import { INSTRUMENTS, pointValue } from '../lib/instruments';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -243,7 +244,10 @@ export default function DashboardView() {
 
   /* ── State ────────────────────────────────────────────────────── */
   const [trades, setTrades]     = useState<TradeEntry[]>([]);
+  // The trader's enabled windows — what getActiveSessionIdx indexes into.
+  const sessions = useMemo(() => activeSessions(), []);
   const [clockStr, setClockStr] = useState('00:00:00');
+  const [clockLabel, setClockLabel] = useState<string>(s.clockLabel);
   const [unit, setUnit]         = useState<Unit>('dollar');
   const [widgets, setWidgets]   = useState<WidgetKey[]>(DEFAULT_WIDGETS);
   const [editMode, setEditMode] = useState(false);
@@ -253,9 +257,13 @@ export default function DashboardView() {
   const [confirmRemove, setConfirmRemove] = useState<WidgetKey | null>(null);
 
   /* ── Clock ───────────────────────────────────────────────────── */
+  // The zone from settings, not a hardcoded Israel. This is the clock the
+  // trader chose; showing them a different one while filing their trades
+  // against theirs was the loudest way the setting looked like a no-op.
   useEffect(() => {
-    const update = () => setClockStr(new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jerusalem', hour12: false }));
+    const update = () => setClockStr(clockWithSecondsInZone());
     update();
+    setClockLabel(clockCaption());
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
   }, []);
@@ -368,7 +376,7 @@ export default function DashboardView() {
     : idtHour < 18 ? s.greetAfternoon
     : s.greetEvening;
   const greeting = firstName ? `${greetWord}, ${firstName}` : greetWord;
-  const activeSess = activeSessionIdx >= 0 ? SESS[activeSessionIdx] : null;
+  const activeSess = activeSessionIdx >= 0 ? sessions[activeSessionIdx] : null;
   const dateStr = new Date().toLocaleDateString(L === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
   /* ── Macro derived ───────────────────────────────────────────── */
@@ -585,13 +593,13 @@ export default function DashboardView() {
             <span className="dp-greet-sub">{trades.length} {s.tradesLabel}</span>
           </div>
         </div>
-        <div className="dp-clock"><span className="dp-clock-k">{s.clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
+        <div className="dp-clock"><span className="dp-clock-k">{clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
       </div>
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">
         <div className="dp-sessions">
-          {SESS.map((sess, i) => (
+          {sessions.map((sess, i) => (
             <div key={sess.key} className={`dp-session-chip${i === activeSessionIdx ? ' active' : ''}`}>
               <span className="dp-session-dot" />
               <span className="dp-session-name">{L === 'he' ? sess.he : sess.en}</span>

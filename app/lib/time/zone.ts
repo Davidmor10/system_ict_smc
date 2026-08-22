@@ -166,6 +166,29 @@ export function zoneAbbreviation(zone: string = activeZone(), now: Date = new Da
   }
 }
 
+/** `HH:mm:ss` — the ticking form, for the surfaces that show seconds. */
+export function clockWithSecondsInZone(zone: string = activeZone(), now: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(now);
+    const get = (t: string) => parts.find(p => p.type === t)?.value ?? '00';
+    const h = get('hour') === '24' ? '00' : get('hour');
+    return `${h}:${get('minute')}:${get('second')}`;
+  } catch {
+    return clockInZone(zone, now);
+  }
+}
+
+/** What to call the clock on screen. Israel keeps the name the app grew up
+ *  with; every other zone is named after the city the trader picked, so a
+ *  caption can never claim a clock the numbers do not belong to. */
+export function clockCaption(zone: string = activeZone()): string {
+  if (zone === DEFAULT_TIMEZONE) return 'שעון ישראל';
+  const label = ZONES.find(z => z.id === zone)?.label;
+  return label ? `שעון ${label.split(' · ')[0]}` : 'השעון שלך';
+}
+
 /**
  * The short name to print next to a clock — "IDT", "EST", "GMT+3".
  *

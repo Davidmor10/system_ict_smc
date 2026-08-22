@@ -6,7 +6,7 @@ import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { hydrateList, commitList } from '../../lib/sync/collections';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { SESS } from '../../lib/sessions';
+import { sessionLabel, activeSessions } from '../../lib/sessions';
 import { INSTRUMENT_KEYS } from '../../lib/instruments';
 import { AUTO_SUPPORTED } from '../../lib/rules/engine';
 import { computeRulePerformance, type RulePerformance } from '../../lib/rules/performance';
@@ -98,7 +98,7 @@ const shortDate = (iso: string | null) => { if (!iso) return '—'; const p = is
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
-const sessionHe = (key: string) => SESS.find(s => s.key === key)?.he ?? key;
+const sessionHe = (key: string) => sessionLabel(key);
 const fmtR = (r: number) => `${r >= 0 ? '+' : '-'}${Math.abs(r).toFixed(1)}R`;
 
 function conditionValueComplete(ct: ConditionType, cv: ConditionValue = {}): boolean {
@@ -648,7 +648,7 @@ export default function RulesPage() {
                                     <input type="time" step={60} className="rounded-sm px-2 py-1.5 font-mono text-xs text-white [color-scheme:dark] outline-none border focus:border-[#d4af37]/60" style={numInputStyle} value={cv.endMin != null ? fmtMin(cv.endMin) : ''} onChange={e => { const v = e.target.value; if (!v) return setCV({ endMin: undefined }); const [h, mi] = v.split(':').map(Number); setCV({ endMin: h * 60 + mi }); }} />
                                   </div>
                                 )}
-                                {draft.conditionType === 'allowed_sessions' && SESS.map(s => <Pill key={s.key} active={(cv.sessions ?? []).includes(s.key)} onClick={() => toggleArr('sessions', s.key)}>{s.he}</Pill>)}
+                                {draft.conditionType === 'allowed_sessions' && activeSessions().map(s => <Pill key={s.key} active={(cv.sessions ?? []).includes(s.key)} onClick={() => toggleArr('sessions', s.key)}>{s.he}</Pill>)}
                                 {draft.conditionType === 'allowed_symbols' && INSTRUMENT_KEYS.map(sym => <Pill key={sym} active={(cv.symbols ?? []).includes(sym)} onClick={() => toggleArr('symbols', sym)}>{sym}</Pill>)}
                                 {draft.conditionType === 'required_confirmations' && CONFIRMATION_TAGS.map(t => <Pill key={t} active={(cv.tags ?? []).includes(t)} onClick={() => toggleArr('tags', t)}>{t}</Pill>)}
                                 {draft.conditionType === 'no_trade_around_news' && (

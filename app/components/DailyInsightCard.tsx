@@ -4,6 +4,7 @@ import './DailyInsightCard.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import type { DailyInsightRow, UserReaction } from '../lib/coach-pipeline/types';
+import { activeZone } from '../lib/time/zone';
 import { renderInsightMarkdown } from './dailyInsightMarkdown';
 import CoachReadiness from './CoachReadiness';
 import EvidenceList from './EvidenceList';
@@ -80,7 +81,7 @@ interface OpenQuestion {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function todayIsoIsrael(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: activeZone(), year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(now);
 }
 

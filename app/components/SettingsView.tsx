@@ -19,7 +19,10 @@ import {
   type UserSettings, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import { ZONES, clockInZone, zoneAbbreviation } from '../lib/time/zone';
+import { ZONES, clockInZone, zoneShortName } from '../lib/time/zone';
+import {
+  DEFAULT_SESSIONS, hourLabel, overlappingSessions, parseHourLabel, type SessionDef,
+} from '../lib/sessions';
 
 type SectionKey = 'profile' | 'trading' | 'account';
 
@@ -223,8 +226,18 @@ export default function SettingsView() {
                       ]}
                     />
                   </Field>
-                  <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, ולאיזה יום עסקה חדשה נרשמת.">
+                  <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, לאיזה יום עסקה חדשה נרשמת, ובאיזו שעה היא מתועדת.">
                     <ZonePicker value={settings.timezone} onChange={v => patch('timezone', v)} />
+                  </Field>
+                  <Field
+                    label="סשנים"
+                    hint="החלונות שלפיהם המערכת מסווגת כל עסקה. אפשר לכבות סשן שאתה לא סוחר, לשנות שעות, ולהוסיף חלון משלך. השעות הן לפי אזור הזמן שלמעלה."
+                  >
+                    <SessionEditor
+                      value={settings.sessions}
+                      zone={settings.timezone}
+                      onChange={v => patch('sessions', v)}
+                    />
                   </Field>
                 </div>
               )}
@@ -446,6 +459,194 @@ function PillGroup<T extends string>({
  *  one thing while the app ran on another. The live clock underneath is the
  *  proof the choice took: it is rendered through the same helper the session
  *  detector uses, so if it shows the wrong hour, the sessions are wrong too. */
+// ─────────────────────────────────────────────────────────────────────────────
+// The session editor.
+//
+// Sessions used to be four constants. They are the trader's now: a scalper who
+// never touches New York PM switches it off, and a trader whose London starts
+// at 08:00 moves it. Everything downstream — which session a trade is filed
+// under, every per-session breakdown, "what is open right now" — reads what is
+// set here.
+//
+// Two decisions worth keeping:
+//
+//   · Switching a session OFF does not delete it. Trades already filed under it
+//     keep their name; only new trades stop being matched to it.
+//   · An overlap is warned about, never blocked. A trade lands in the first
+//     window that matches, so an overlap is legible rather than broken — and a
+//     trader mid-edit should not be stopped by a state they are passing through.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SessionEditor({
+  value, zone, onChange,
+}: { value: SessionDef[]; zone: string; onChange: (v: SessionDef[]) => void }) {
+  const rows = value.length > 0 ? value : DEFAULT_SESSIONS;
+  const clashes = overlappingSessions(rows);
+  const clashing = new Set(clashes.flat());
+
+  const edit = (key: string, patch: Partial<SessionDef>) =>
+    onChange(rows.map(r => (r.key === key ? { ...r, ...patch } : r)));
+
+  const remove = (key: string) => onChange(rows.filter(r => r.key !== key));
+
+  const add = () => {
+    const key = `custom_${Date.now().toString(36)}`;
+    onChange([...rows, { key, he: 'סשן חדש', en: 'CUSTOM', start: 8, end: 10, enabled: true }]);
+  };
+
+  const isDefault =
+    rows.length === DEFAULT_SESSIONS.length &&
+    rows.every((r, i) => {
+      const d = DEFAULT_SESSIONS[i];
+      return d && r.key === d.key && r.he === d.he && r.start === d.start && r.end === d.end && r.enabled;
+    });
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="rounded-[12px] border border-[#1c1c1e] overflow-hidden">
+        {/* Header — mono labels over the columns the rows fill. */}
+        <div
+          className="hidden sm:grid items-center gap-3 px-4 py-2.5 bg-[#0a0a0b] border-b border-[#1c1c1e] font-mono text-[9.5px] font-bold tracking-[0.18em] text-white/30"
+          style={{ gridTemplateColumns: '38px minmax(0,1fr) 92px 92px 34px' }}
+        >
+          <span>פעיל</span><span>שם</span><span>משעה</span><span>עד שעה</span><span />
+        </div>
+
+        {rows.map(row => (
+          <div
+            key={row.key}
+            className="grid items-center gap-3 px-4 py-3 border-b border-[#1c1c1e] last:border-0 transition-colors"
+            style={{ gridTemplateColumns: '38px minmax(0,1fr) 92px 92px 34px' }}
+            data-off={!row.enabled}
+          >
+            <Switch on={row.enabled} onToggle={() => edit(row.key, { enabled: !row.enabled })} label={row.he} />
+
+            <input
+              type="text"
+              value={row.he}
+              onChange={e => edit(row.key, { he: e.target.value })}
+              maxLength={28}
+              className="min-w-0 bg-transparent border border-transparent hover:border-[#2a2a2d] focus:border-[#d4af37]/45 rounded-[6px] py-1.5 px-2 text-[14px] font-bold text-white focus:outline-none focus:bg-[#d4af37]/[0.04] transition-colors"
+              style={{ opacity: row.enabled ? 1 : 0.45 }}
+              dir="rtl"
+            />
+
+            <HourInput value={row.start} onChange={v => edit(row.key, { start: v })} dim={!row.enabled} />
+            <HourInput value={row.end} onChange={v => edit(row.key, { end: v })} dim={!row.enabled} />
+
+            <button
+              type="button"
+              onClick={() => remove(row.key)}
+              disabled={rows.length <= 1}
+              title="מחיקת הסשן"
+              aria-label={`מחיקת הסשן ${row.he}`}
+              className="w-[34px] h-[30px] grid place-items-center rounded-[6px] border border-transparent text-white/25 hover:text-[#8b3a3a] hover:border-[#8b3a3a]/40 disabled:opacity-25 disabled:hover:text-white/25 disabled:hover:border-transparent transition-colors font-mono text-[13px]"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* A wrapped window is legitimate and easy to mistake for a typo, so it
+          is named rather than left to be discovered. */}
+      {rows.some(r => r.enabled && r.end <= r.start) && (
+        <p className="font-mono text-[10px] tracking-[0.1em] text-white/35">
+          ◈ חלון שנגמר לפני שהוא מתחיל ממשיך אל תוך היום הבא — למשל 22:00 עד 02:00.
+        </p>
+      )}
+
+      {clashes.length > 0 && (
+        <p className="font-mono text-[10px] tracking-[0.1em] text-[#d4af37]/80">
+          ◈ יש חפיפה בין {clashes.map(([a, b]) =>
+            `${rows.find(r => r.key === a)?.he ?? a}–${rows.find(r => r.key === b)?.he ?? b}`).join(' · ')}
+          {' '}· עסקה תשויך לסשן הראשון שמתאים לה ברשימה.
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 mt-1">
+        <button
+          type="button"
+          onClick={add}
+          className="py-2 px-3.5 rounded-[8px] border border-[#2a2a2d] hover:border-[#d4af37]/45 hover:text-white text-white/60 font-mono text-[11px] font-bold tracking-[0.1em] transition-colors"
+        >
+          + הוספת סשן
+        </button>
+        {!isDefault && (
+          <button
+            type="button"
+            onClick={() => onChange(DEFAULT_SESSIONS.map(d => ({ ...d })))}
+            className="py-2 px-3.5 rounded-[8px] border border-transparent hover:border-[#2a2a2d] text-white/35 hover:text-white/70 font-mono text-[11px] font-bold tracking-[0.1em] transition-colors"
+          >
+            חזרה לברירת המחדל
+          </button>
+        )}
+        <span className="ms-auto font-mono text-[10px] tracking-[0.14em] text-white/25">
+          {clockInZone(zone)} · {zoneShortName(zone)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** A time field that stays a time field. It holds the trader's raw keystrokes
+ *  while they type — "0", "08", "08:" are all states on the way to "08:00" —
+ *  and only commits when the text parses, so the value never jumps under the
+ *  cursor mid-edit. */
+function HourInput({ value, onChange, dim }: { value: number; onChange: (v: number) => void; dim?: boolean }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? hourLabel(value);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={text}
+      onChange={e => {
+        const next = e.target.value;
+        setDraft(next);
+        const parsed = parseHourLabel(next);
+        if (parsed !== null) onChange(parsed);
+      }}
+      onBlur={() => setDraft(null)}
+      placeholder="00:00"
+      aria-label="שעה"
+      className="w-full bg-white/[0.03] border border-[#2a2a2d] rounded-[6px] py-1.5 px-2 text-[13px] font-mono tabular-nums text-white text-center focus:outline-none focus:border-[#d4af37]/45 focus:bg-[#d4af37]/[0.04] transition-colors"
+      style={{ opacity: dim ? 0.45 : 1 }}
+      dir="ltr"
+    />
+  );
+}
+
+/** The on/off control. A real button with aria-pressed rather than a styled
+ *  checkbox, so it reads correctly to a screen reader and takes focus. */
+function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`${label} — ${on ? 'פעיל' : 'כבוי'}`}
+      onClick={onToggle}
+      className="relative w-[34px] h-[19px] rounded-full transition-colors shrink-0"
+      style={{
+        background: on ? 'rgba(212,175,55,0.28)' : 'rgba(255,255,255,0.07)',
+        border: `1px solid ${on ? 'rgba(212,175,55,0.5)' : '#2a2a2d'}`,
+      }}
+    >
+      <span
+        className="absolute top-1/2 w-[13px] h-[13px] rounded-full transition-all duration-200"
+        style={{
+          background: on ? '#d4af37' : 'rgba(255,255,255,0.3)',
+          boxShadow: on ? '0 0 10px rgba(212,175,55,0.6)' : 'none',
+          insetInlineStart: on ? '17px' : '2px',
+          transform: 'translateY(-50%)',
+        }}
+      />
+    </button>
+  );
+}
+
 function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [now, setNow] = useState(() => clockInZone(value));
 
@@ -490,7 +691,7 @@ function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) 
           {now}
         </span>
         <span className="font-mono" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
-          {zoneAbbreviation(value)}
+          {zoneShortName(value)}
         </span>
       </div>
     </div>

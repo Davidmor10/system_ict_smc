@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useClerk, useUser } from '@clerk/nextjs';
 import SplashIntro from '../../components/SplashIntro';
-import { SESS, sessionIdxForHour } from '../../lib/sessions';
-import { activeZone, clockInZone, hourFloatInZone, todayISOInZone, zoneShortName, DEFAULT_TIMEZONE } from '../../lib/time/zone';
+import { activeSessions, sessionIdxForHour } from '../../lib/sessions';
+import { activeZone, clockCaption, clockInZone, clockWithSecondsInZone, hourFloatInZone, todayISOInZone, zoneShortName, DEFAULT_TIMEZONE } from '../../lib/time/zone';
 import { computeStats, loadTrades, hydrateTradesFromCloud, tradePnL, type TradeEntry } from '../../lib/journal';
 import { hydrateList } from '../../lib/sync/collections';
 import { computeRuleStats } from '../../lib/rules/stats';
@@ -206,12 +206,16 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
 
   // ── Derived: clock, session, countdowns ──────────────────────────────────
   const zone = typeof window === 'undefined' ? DEFAULT_TIMEZONE : activeZone();
-  const clock = now ? clockInZoneSeconds(zone, now) : '--:--:--';
+  const clock = now ? clockWithSecondsInZone(zone, now) : '--:--:--';
   const hourFloat = now ? hourFloatInZone(zone, now) : 0;
-  const sessIdx = now ? sessionIdxForHour(hourFloat) : -1;
-  const sessName = now ? (sessIdx >= 0 ? SESS[sessIdx].he : 'מחוץ לסשן') : '—';
+  // Indexed against the trader's own enabled windows, which is what
+  // sessionIdxForHour matches on — reading SESS here would name the wrong one
+  // the moment a session is switched off.
+  const sessions = useMemo(() => activeSessions(), []);
+  const sessIdx = now ? sessionIdxForHour(hourFloat, sessions) : -1;
+  const sessName = now ? (sessIdx >= 0 ? sessions[sessIdx].he : 'מחוץ לסשן') : '—';
   const nyOpen = isNewYorkOpen(hourFloat);
-  const tzLabel = zone === DEFAULT_TIMEZONE ? 'שעון ישראל' : 'השעון שלך';
+  const tzLabel = clockCaption(zone);
 
   const nextEvent = useMemo(() => {
     if (!now) return null;
@@ -266,7 +270,7 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
 
   const declaredAt = declared?.at ? new Date(declared.at) : null;
   const biasValue = declared
-    ? `${BIAS_META[declared.bias].he}${declaredAt ? ` · ${pad2(declaredAt.getHours())}:${pad2(declaredAt.getMinutes())}` : ''}`
+    ? `${BIAS_META[declared.bias].he}${declaredAt ? ` · ${clockInZone(zone, declaredAt)}` : ''}`
     : 'לא הוצהר';
   const biasCta = pickerOpen ? 'סגור ✕' : declared ? 'לשנות ←' : 'להצהיר עכשיו ←';
   const biasWindow = nyOpen
@@ -620,19 +624,3 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
   );
 }
 
-function pad2(n: number) { return String(n).padStart(2, '0'); }
-
-/** `HH:MM:SS` in the trader's zone. clockInZone gives HH:mm; the gate's clock
- *  ticks, so it needs the seconds too. */
-function clockInZoneSeconds(zone: string, at: Date): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    }).formatToParts(at);
-    const get = (t: string) => parts.find(p => p.type === t)?.value ?? '00';
-    const h = get('hour') === '24' ? '00' : get('hour');
-    return `${h}:${get('minute')}:${get('second')}`;
-  } catch {
-    return clockInZone(zone, at);
-  }
-}
