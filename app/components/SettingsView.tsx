@@ -19,7 +19,6 @@ import {
   type UserSettings, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import CloudSyncCard from './CloudSyncCard';
 import { ZONES, clockInZone, zoneShortName } from '../lib/time/zone';
 import {
   DEFAULT_SESSIONS, hourLabel, overlappingSessions, parseHourLabel, type SessionDef,
@@ -259,8 +258,6 @@ export default function SettingsView() {
                       </a>
                     )}
                   </div>
-
-                  <CloudSyncCard />
 
                   <div className="rounded-[12px] border border-[#1c1c1e] bg-white/[0.02] p-5">
                     <div className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/60 mb-2">חשבון</div>
