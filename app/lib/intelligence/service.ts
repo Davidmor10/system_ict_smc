@@ -106,6 +106,14 @@ function isObservedNow(row: PatternMemoryRow): boolean {
   return row.consecutiveMisses === 0 && row.status !== 'disappeared';
 }
 
+/** How many trades a metric is actually speaking for. `confidence.sampleSize`
+ *  is the decided-trade count the statistics were computed over; `trades`
+ *  counts the slice including still-open ones. The larger is what the claim
+ *  implicitly asserts, so that is what gets checked against reality. */
+function sampleOf(metric: GroupPerformance): number {
+  return Math.max(metric.confidence?.sampleSize ?? 0, metric.trades ?? 0);
+}
+
 async function refreshIntelligence(supabase: SupabaseClient, userId: string, lang: 'he' | 'en'): Promise<RefreshResult> {
   const nowISO = new Date().toISOString();
   const trades = await repo.getRecentTrades(supabase, userId);
@@ -184,43 +192,33 @@ interface FreshIntelligence {
   builtFromTradeCount: number;
 }
 
-/** Shared by generateDashboardPrimaryInsight and generatePersonalizedInsights:
-    a stored trader_profiles row existing is NOT the same as it being
-    current. If the profile was built (e.g. bootstrapped) before real trades
-    had synced — or trades were added/edited/removed since — its
-    built_from_trade_count no longer matches the actual closed-trade count,
-    and reading the stale stored pattern_memory/hypothesis forever would
-    silently freeze the whole insight pipeline. Re-runs the full refresh
-    whenever that mismatch is detected, not just on a true cold start. */
+/** Shared by generateDashboardPrimaryInsight and generatePersonalizedInsights.
+ *
+ *  This used to skip the refresh whenever the stored closed-trade count still
+ *  matched the current one, and read the persisted pattern_memory / hypothesis
+ *  rows instead. The count is not a freshness test. It agrees again the moment
+ *  a refresh runs, which froze the stored rows exactly as that run left them —
+ *  including mid-grace-period rows still carrying the sample size and win rate
+ *  of trades that had since been deleted. Nothing would ever recompute them,
+ *  because the only trigger was the number changing again, and it never did.
+ *  A trader with three trades kept being told about nineteen.
+ *
+ *  So: always rebuild. It is cheap — a handful of queries plus pure
+ *  computation over trades this function already had to load. The expensive
+ *  part, the model call that phrases a hypothesis, is gated separately inside
+ *  refreshIntelligence on the hypothesis IDENTITY changing, and the panels
+ *  themselves only reach this route when their own cache misses. */
 async function getFreshIntelligence(
   supabase: SupabaseClient,
   userId: string,
   lang: 'he' | 'en',
-  profileRecord: Awaited<ReturnType<typeof repo.getTraderProfile>>,
+  _profileRecord: Awaited<ReturnType<typeof repo.getTraderProfile>>,
 ): Promise<FreshIntelligence> {
-  if (!profileRecord) {
-    const result = await refreshIntelligence(supabase, userId, lang);
-    return {
-      patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
-      builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
-    };
-  }
-
-  const trades = await repo.getRecentTrades(supabase, userId);
-  const closedCount = trades.filter(t => t.result !== 'OPEN').length;
-  if (closedCount !== profileRecord.builtFromTradeCount) {
-    const result = await refreshIntelligence(supabase, userId, lang);
-    return {
-      patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
-      builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
-    };
-  }
-
-  const [patternRows, hypothesis] = await Promise.all([
-    repo.getPatternMemory(supabase, userId),
-    repo.getHypothesis(supabase, userId),
-  ]);
-  return { patternRows, hypothesis, profile: profileRecord.profile, builtFromTradeCount: profileRecord.builtFromTradeCount };
+  const result = await refreshIntelligence(supabase, userId, lang);
+  return {
+    patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
+    builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
+  };
 }
 
 // ── buildTraderProfile / updateTraderProfile ────────────────────────────────
@@ -399,12 +397,27 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
   const supabase = getClient();
 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
-  const { patternRows, hypothesis } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
+  const { patternRows, hypothesis, builtFromTradeCount } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
 
+  // Same arithmetic floor the journal panel applies: a claim resting on more
+  // trades than exist is not a weak reading, it is a stale row. Checked here
+  // too because this screen has its OWN phrasing cache — a title written when
+  // the numbers were real outlives them otherwise.
+  const grounded = patternRows.filter(p => sampleOf(p.currentMetric) <= builtFromTradeCount);
+
+  const hypothesisSample = Object.values(hypothesis?.supportingMetrics ?? {})
+    .reduce((max, m) => Math.max(max, sampleOf(m)), 0);
   const hypothesisIsUsable = hypothesis
     && hypothesis.status !== 'insufficient_data'
     && hypothesis.status !== 'invalidated'
-    && hypothesis.confidenceScore >= HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE;
+    && hypothesis.confidenceScore >= HYPOTHESIS_DASHBOARD_MIN_CONFIDENCE
+    && hypothesisSample <= builtFromTradeCount;
+
+  if (hypothesis && hypothesisSample > builtFromTradeCount) {
+    logger.warn('dropped dashboard hypothesis claiming more trades than exist', {
+      userId, builtFromTradeCount, claimed: hypothesisSample,
+    });
+  }
 
   if (hypothesisIsUsable && hypothesis) {
     let description = hypothesis.description;
@@ -440,7 +453,7 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
     };
   }
 
-  const anchor = selectPrimaryPattern(patternRows);
+  const anchor = selectPrimaryPattern(grounded);
   if (!anchor) return null;
 
   const cacheIsFresh = anchor.aiTitle
@@ -598,6 +611,24 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
     candidates.push({ subject: subjectLabelFor(riskiestPattern.subject, lang), tone: 'caution', metric: riskiestPattern.currentMetric });
   }
 
+  // Last line of defence, and the only one that cannot be reasoned around: no
+  // claim may rest on more trades than the trader has. A slice is a subset of
+  // the journal, so a sample above the total is not a debatable reading — it
+  // is arithmetic that cannot be true, and it means the number came from a
+  // stored row describing trades that no longer exist. Whatever lets one
+  // through upstream, it stops here rather than being read out to a trader
+  // who can count their own journal.
+  const overstated = candidates.filter(c => sampleOf(c.metric) > builtFromTradeCount);
+  if (overstated.length > 0) {
+    logger.warn('dropped insight candidates claiming more trades than exist', {
+      userId, builtFromTradeCount,
+      claimed: overstated.map(c => ({ subject: c.subject, sample: sampleOf(c.metric) })),
+    });
+  }
+  const grounded = candidates.filter(c => sampleOf(c.metric) <= builtFromTradeCount);
+  candidates.length = 0;
+  candidates.push(...grounded);
+
   // Early in a trader's history, every fresh pattern legitimately sits at
   // 'insufficient_data' (below the medium-confidence sample-size floor) —
   // that's correct, not a bug, but it must not mean the panel shows nothing.
@@ -605,7 +636,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
   // tentative, and tell the phrasing prompt to treat it as early feedback.
   if (candidates.length === 0) {
     const earliest = patternRows
-      .filter(isObservedNow)
+      .filter(p => isObservedNow(p) && sampleOf(p.currentMetric) <= builtFromTradeCount)
       .sort((a, b) => b.currentSampleSize - a.currentSampleSize)[0];
     if (earliest) {
       candidates.push({
@@ -719,7 +750,7 @@ export async function generateWorkingStrengths(userId: string, lang: 'he' | 'en'
   const supabase = getClient();
 
   const profileRecord = await repo.getTraderProfile(supabase, userId);
-  const { patternRows } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
+  const { patternRows, builtFromTradeCount } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
 
   // A "strength" is a pattern that's both still live and genuinely above the
   // trader's own baseline — never a weak or negative slice, no matter how
@@ -731,7 +762,7 @@ export async function generateWorkingStrengths(userId: string, lang: 'he' | 'en'
   // trader never sees the same 10 trades presented as 3 "different" strengths.
   const seenFingerprints = new Set<string>();
   const strengths = patternRows
-    .filter(p => isObservedNow(p) && p.delta >= MIN_STRENGTH_DELTA)
+    .filter(p => isObservedNow(p) && p.delta >= MIN_STRENGTH_DELTA && sampleOf(p.currentMetric) <= builtFromTradeCount)
     .filter(p => {
       const fp = `${p.currentSampleSize}:${p.currentMetric.winRate.toFixed(2)}:${p.currentMetric.totalPnl.toFixed(2)}`;
       if (seenFingerprints.has(fp)) return false;
