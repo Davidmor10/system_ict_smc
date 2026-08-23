@@ -17,8 +17,11 @@ const MAX_SCREENSHOT_LEN = 2_000_000; // generous bound for a base64 data-URL im
 
 // Screenshots are only ever produced by FileReader.readAsDataURL on an image
 // file, so anything that isn't a data:image/* URL is a forged request — reject
-// it before it can be stored and echoed back into an <img src>.
-const screenshotSchema = z.string().max(MAX_SCREENSHOT_LEN).regex(/^data:image\//);
+// it before it can be stored and echoed back into an <img src>. Raster types
+// only: `data:image/` alone also matched image/svg+xml, and an SVG can carry
+// its own <script>/event-handler payload — nothing a browser executes from a
+// plain <img src> today, but not a type this field has any reason to accept.
+export const screenshotSchema = z.string().max(MAX_SCREENSHOT_LEN).regex(/^data:image\/(png|jpeg|webp|gif);base64,/);
 
 export const tradeEntrySchema = z.object({
   // Trade ids are Date.now() values — always integers; the DB column is a
