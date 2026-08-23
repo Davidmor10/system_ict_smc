@@ -94,6 +94,18 @@ interface RefreshResult {
   knownFacts: KnownFact[];
 }
 
+/** True when this row was found in the most recent discovery run.
+ *
+ *  `currentMetric` and `currentSampleSize` are only current for a pattern the
+ *  last run actually saw. For a missed one they are the last observation,
+ *  preserved so the row keeps its identity across a noisy run — reading them
+ *  as today's numbers is how a claim outlives its trades. Status alone is not
+ *  enough to tell the two apart here: these two call sites deliberately reach
+ *  past the active/strengthening gate to say something rather than nothing. */
+function isObservedNow(row: PatternMemoryRow): boolean {
+  return row.consecutiveMisses === 0 && row.status !== 'disappeared';
+}
+
 async function refreshIntelligence(supabase: SupabaseClient, userId: string, lang: 'he' | 'en'): Promise<RefreshResult> {
   const nowISO = new Date().toISOString();
   const trades = await repo.getRecentTrades(supabase, userId);
@@ -593,7 +605,7 @@ export async function generatePersonalizedInsights(userId: string, lang: 'he' | 
   // tentative, and tell the phrasing prompt to treat it as early feedback.
   if (candidates.length === 0) {
     const earliest = patternRows
-      .filter(p => p.status !== 'disappeared')
+      .filter(isObservedNow)
       .sort((a, b) => b.currentSampleSize - a.currentSampleSize)[0];
     if (earliest) {
       candidates.push({
@@ -719,7 +731,7 @@ export async function generateWorkingStrengths(userId: string, lang: 'he' | 'en'
   // trader never sees the same 10 trades presented as 3 "different" strengths.
   const seenFingerprints = new Set<string>();
   const strengths = patternRows
-    .filter(p => p.status !== 'disappeared' && p.delta >= MIN_STRENGTH_DELTA)
+    .filter(p => isObservedNow(p) && p.delta >= MIN_STRENGTH_DELTA)
     .filter(p => {
       const fp = `${p.currentSampleSize}:${p.currentMetric.winRate.toFixed(2)}:${p.currentMetric.totalPnl.toFixed(2)}`;
       if (seenFingerprints.has(fp)) return false;

@@ -100,19 +100,38 @@ describe('diffPatternMemory', () => {
     expect(statusOf(result, 'ES_edge')).toBe('active');
   });
 
-  it('does not mark a pattern disappeared after a single missed run', () => {
+  it('keeps a pattern missed once, but stops calling it current evidence', () => {
+    // The grace period protects the row's IDENTITY from one noisy run — its
+    // history, its first_detected_at, its place in the table. It must not keep
+    // the pattern in the active/strengthening set that every consumer reads as
+    // "this is true of the trader right now": a slice whose trades have since
+    // been deleted would go on being quoted, at the sample size it had on the
+    // day it was last seen.
     const stored = [storedRow({ consecutiveMisses: 0 })];
     const result = diffPatternMemory(CLERK_ID, [], stored, NOW);
-    expect(statusOf(result, 'ES_edge')).toBe('active');
+
     const row = result.toUpsert[0];
+    expect(row.status).toBe('insufficient_data');
+    expect(row.status).not.toBe('disappeared');
     expect(row.consecutiveMisses).toBe(1);
+    expect(row.firstDetectedAt).toBe(stored[0].firstDetectedAt);
+    expect(result.statusChanges).toEqual([
+      { patternId: 'ES_edge', previousStatus: 'active', newStatus: 'insufficient_data' },
+    ]);
+  });
+
+  it('lets a pattern missed once come back as active when it is found again', () => {
+    const missedOnce = diffPatternMemory(CLERK_ID, [], [storedRow({ consecutiveMisses: 0 })], NOW).toUpsert;
+    const backAgain = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 11, 'medium')], missedOnce, NOW);
+    expect(statusOf(backAgain, 'ES_edge')).toBe('active');
+    expect(backAgain.toUpsert[0].consecutiveMisses).toBe(0);
   });
 
   it('marks a pattern disappeared after two consecutive missed runs', () => {
-    const stored = [storedRow({ consecutiveMisses: 1 })];
+    const stored = [storedRow({ consecutiveMisses: 1, status: 'insufficient_data' })];
     const result = diffPatternMemory(CLERK_ID, [], stored, NOW);
     expect(statusOf(result, 'ES_edge')).toBe('disappeared');
-    expect(result.statusChanges).toEqual([{ patternId: 'ES_edge', previousStatus: 'active', newStatus: 'disappeared' }]);
+    expect(result.statusChanges).toEqual([{ patternId: 'ES_edge', previousStatus: 'insufficient_data', newStatus: 'disappeared' }]);
   });
 
   it('treats a reappearance after disappeared like a new detection, but keeps original identity', () => {

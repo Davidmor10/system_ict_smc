@@ -107,3 +107,52 @@ describe('stopMoveTag + stopNote survive the full save path', () => {
     expect(row.stop_note).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tombstone repair: a delete the cloud never heard about is buried on the next
+// bulk push, instead of living on where every server-side reader counts it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PUT /api/journal — deletedIds', () => {
+  beforeEach(() => { fakeDb.tables = {}; });
+
+  async function put(body: unknown) {
+    return journalRoute.PUT(new Request('http://localhost/api/journal', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }));
+  }
+
+  it('buries the named ids and leaves the rest alone', async () => {
+    await put({ trades: [{ ...savedTrade, id: 1 }, { ...savedTrade, id: 2 }] });
+    const res = await put({ trades: [{ ...savedTrade, id: 2 }], deletedIds: [1] });
+    expect(res.status).toBe(200);
+
+    const rows = fakeDb.getAll('journal_trades');
+    expect(rows.find(r => r.id === 1)?.deleted_at).toBeTruthy();
+    expect(rows.find(r => r.id === 2)?.deleted_at).toBeNull();
+  });
+
+  it('does not let the same request resurrect what it just buried', async () => {
+    await put({ trades: [{ ...savedTrade, id: 1 }] });
+    // A stale client sends the trade as live AND names it as deleted.
+    await put({ trades: [{ ...savedTrade, id: 1 }], deletedIds: [1] });
+
+    expect(fakeDb.getAll('journal_trades').find(r => r.id === 1)?.deleted_at).toBeTruthy();
+  });
+
+  it('accepts a repair-only push with no trades at all', async () => {
+    await put({ trades: [{ ...savedTrade, id: 1 }] });
+    const res = await put({ trades: [], deletedIds: [1] });
+
+    expect(res.status).toBe(200);
+    expect(fakeDb.getAll('journal_trades').find(r => r.id === 1)?.deleted_at).toBeTruthy();
+  });
+
+  it('rejects a malformed id list rather than acting on part of it', async () => {
+    await put({ trades: [{ ...savedTrade, id: 1 }] });
+    const res = await put({ trades: [], deletedIds: ['1; drop table journal_trades'] });
+
+    expect(res.status).toBe(400);
+    expect(fakeDb.getAll('journal_trades').find(r => r.id === 1)?.deleted_at).toBeNull();
+  });
+});

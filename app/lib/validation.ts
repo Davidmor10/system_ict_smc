@@ -83,6 +83,13 @@ export const tradeEntrySchema = z.object({
 
 export const tradesArraySchema = z.array(tradeEntrySchema).max(5000);
 
+/** Ids the client knows are deleted, sent alongside a bulk push so a delete
+ *  that never reached the server (a dropped request, an offline tab, another
+ *  device) is repaired on the next sync instead of living on in the cloud —
+ *  where the analysis layer reads it and reports trades the journal no longer
+ *  shows. Same bound as the array above. */
+export const deletedIdsSchema = z.array(z.number().int().safe()).max(5000);
+
 export const userPrefsPatchSchema = z.object({
   chart_tf_es: z.string().max(20).optional(),
   chart_tf_nq: z.string().max(20).optional(),

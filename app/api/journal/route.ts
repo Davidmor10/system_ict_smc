@@ -1,11 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
-import { tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
+import { deletedIdsSchema, tradeEntrySchema, tradesArraySchema } from '../../lib/validation';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logger } from '../../lib/logger';
-import { mirrorTrades } from '../../lib/coach-pipeline/mirror/journalToIntelligence';
+import { mirrorTradeDeleted, mirrorTrades } from '../../lib/coach-pipeline/mirror/journalToIntelligence';
 import { requirePlanApi } from '../../lib/withRoleCheck';
 
 // Returns null (and never throws) on a malformed body — lets callers turn it
@@ -175,6 +175,40 @@ export async function upsertTrades(
   return supabase.from('journal_trades').upsert(trimmed, { onConflict: 'clerk_id,id' });
 }
 
+/** Marks ids deleted for this user, and mirrors each into intelligence_trades
+ *  so the analysis layer stops counting them.
+ *
+ *  This is a repair path, not the primary one: DELETE /api/journal/[id] runs
+ *  when the trader empties a trade into the trash. That call is best-effort
+ *  from the browser — one request, no retry — so a dropped connection, a tab
+ *  closed mid-flight or a delete performed while signed out left the row live
+ *  in the cloud forever. The journal itself looked right, because it reads
+ *  localStorage; every server-side reader did not, and the AI panels went on
+ *  describing trades the trader had deleted.
+ *
+ *  Scoped by clerk_id like every other write here, so the ids are a claim
+ *  about the caller's own journal and nothing else. Idempotent. */
+async function tombstoneTrades(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  clerkId: string,
+  ids: number[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('journal_trades')
+    .update({ deleted_at: now, updated_at: now })
+    .eq('clerk_id', clerkId)
+    .in('id', ids)
+    .is('deleted_at', null);
+
+  if (error) {
+    logger.error('journal tombstone repair failed', { clerkId, count: ids.length, error: error.message });
+    return;
+  }
+  await Promise.all(ids.map(id => mirrorTradeDeleted(clerkId, id, true)));
+}
+
 /** GET /api/journal — returns all trades (active + trash) for the current user. */
 export async function GET() {
   // Every plan is paid. A signed-in account without a subscription is
@@ -292,7 +326,8 @@ export async function PUT(req: Request) {
   }
 
   const rawTrades = Array.isArray((body as { trades?: unknown })?.trades) ? (body as { trades: unknown[] }).trades : [];
-  if (rawTrades.length === 0) return NextResponse.json({ ok: true });
+  const rawDeleted = Array.isArray((body as { deletedIds?: unknown })?.deletedIds) ? (body as { deletedIds: unknown[] }).deletedIds : [];
+  if (rawTrades.length === 0 && rawDeleted.length === 0) return NextResponse.json({ ok: true });
 
   const parsed = tradesArraySchema.safeParse(rawTrades);
   if (!parsed.success) {
@@ -302,7 +337,23 @@ export async function PUT(req: Request) {
   const trades: TradeEntry[] = parsed.data;
 
   const supabase = createServerSupabaseClient();
-  const { error } = await upsertTrades(supabase, trades.map(t => tradeToRow(userId, t)));
+
+  // Tombstones first. A trade the client deleted must not be re-upserted as
+  // live by the same request, and repairing the delete before the push means
+  // an id that appears in both lists ends up deleted, not resurrected.
+  if (rawDeleted.length > 0) {
+    const parsedDeleted = deletedIdsSchema.safeParse(rawDeleted);
+    if (!parsedDeleted.success) {
+      logSecurityEvent('validation_failed', { route: '/api/journal PUT', userId, reason: 'deleted_ids' });
+      return NextResponse.json({ error: 'Invalid deletedIds payload' }, { status: 400 });
+    }
+    await tombstoneTrades(supabase, userId, parsedDeleted.data);
+  }
+
+  const live = trades.filter(t => !rawDeleted.includes(t.id));
+  const { error } = live.length > 0
+    ? await upsertTrades(supabase, live.map(t => tradeToRow(userId, t)))
+    : { error: null };
 
   if (error) {
     logger.error('journal PUT failed', { userId, error: error.message });
@@ -311,7 +362,7 @@ export async function PUT(req: Request) {
 
   // Bulk-mirror. Awaited for the same serverless reason as the POST path.
   // A user with 200 stored trades ships ~200 rows in one upsert = ~100ms.
-  await mirrorTrades(userId, trades);
+  await mirrorTrades(userId, live);
 
   return NextResponse.json({ ok: true });
 }

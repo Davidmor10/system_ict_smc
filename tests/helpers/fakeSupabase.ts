@@ -30,6 +30,7 @@ type ResultShape = { data: Row[] | null; error: null };
 class FakeQuery implements PromiseLike<ResultShape> {
   private filters: Array<[string, unknown]> = [];
   private mode: 'select' | 'update' | 'upsert' | 'insert' = 'select';
+  private inFilters: [string, unknown[]][] = [];
   private updatePatch: Row | null = null;
   private upsertRows: Row[] | null = null;
   private upsertConflictCols: string[] = [];
@@ -45,6 +46,10 @@ class FakeQuery implements PromiseLike<ResultShape> {
   /** Only `is(col, null)` is exercised anywhere in this app — treated the
       same as an equality filter against `null`. */
   is(col: string, val: unknown) { this.filters.push([col, val]); return this; }
+
+  /** `in(col, values)` — membership, the filter the tombstone-repair path uses
+      to bury a batch of ids in one statement. */
+  in(col: string, values: unknown[]) { this.inFilters.push([col, values]); return this; }
 
   order(_col: string, _opts?: unknown) { return this; }
 
@@ -69,7 +74,8 @@ class FakeQuery implements PromiseLike<ResultShape> {
     // A `null` filter value (from `.is(col, null)`) matches both an explicit
     // null and a column the seed simply never set — mirrors real Postgres,
     // where an absent column reads back as NULL.
-    return this.filters.every(([col, val]) => (val === null ? (row[col] ?? null) === null : row[col] === val));
+    const eqOk = this.filters.every(([col, val]) => (val === null ? (row[col] ?? null) === null : row[col] === val));
+    return eqOk && this.inFilters.every(([col, vals]) => vals.includes(row[col]));
   }
 
   private runSelect(): ResultShape {

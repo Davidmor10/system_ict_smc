@@ -150,7 +150,17 @@ export function diffPatternMemory(
   for (const existing of stored) {
     if (currentIds.has(existing.patternId) || existing.status === 'disappeared') continue;
     const consecutiveMisses = existing.consecutiveMisses + 1;
-    const status: PatternStatus = consecutiveMisses >= MISSES_BEFORE_DISAPPEARED ? 'disappeared' : existing.status;
+    // A pattern that this run did not find is not a pattern the trader
+    // currently has. The grace period before 'disappeared' exists to protect
+    // the row's IDENTITY — its history, its first_detected_at — from a single
+    // noisy run, not to keep asserting its last claim. Leaving the status at
+    // 'active' did exactly that: every consumer filters on active /
+    // strengthening, so a slice whose trades had since been deleted went on
+    // being quoted as live evidence, with the sample size it had on the day it
+    // was last seen.
+    const status: PatternStatus = consecutiveMisses >= MISSES_BEFORE_DISAPPEARED
+      ? 'disappeared'
+      : 'insufficient_data';
     toUpsert.push({ ...existing, consecutiveMisses, status, lastUpdatedAt: status !== existing.status ? nowISO : existing.lastUpdatedAt });
     if (status !== existing.status) statusChanges.push({ patternId: existing.patternId, previousStatus: existing.status, newStatus: status });
   }

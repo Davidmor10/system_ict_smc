@@ -165,6 +165,55 @@ export function saveTrash(items: DeletedTradeEntry[]): void {
   } catch { /* non-fatal */ }
 }
 
+/** Ids this browser knows are deleted — the durable record behind the trash.
+ *
+ *  The trash is a UI: the trader empties it, and with it went the only local
+ *  memory that those trades were ever deleted. That mattered because the
+ *  delete reaches the cloud through one best-effort request; if it failed, the
+ *  row stayed live up there, and the next hydration read it back as "a trade
+ *  the cloud has and this device is missing" and restored it. Worse, nothing
+ *  ever told the server otherwise, so every server-side reader — the profile,
+ *  the pattern memory, every AI panel — kept counting trades the journal no
+ *  longer showed.
+ *
+ *  This ledger outlives the trash. It is ids and timestamps only. */
+const DELETED_IDS_KEY = 'onyx_journal_deleted_ids';
+/** Bounded so a long-lived browser cannot grow this without limit; the oldest
+ *  entries fall off first, and by then the cloud has long since been repaired. */
+const MAX_DELETED_IDS = 2000;
+
+export interface DeletedIdRecord { id: number; at: string }
+
+export function loadDeletedIds(): DeletedIdRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(DELETED_IDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((r): r is DeletedIdRecord =>
+      !!r && typeof r.id === 'number' && Number.isFinite(r.id) && typeof r.at === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function saveDeletedIds(records: DeletedIdRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(records.slice(0, MAX_DELETED_IDS)));
+  } catch { /* non-fatal */ }
+}
+
+function rememberDeleted(id: number, at: string): void {
+  const existing = loadDeletedIds().filter(r => r.id !== id);
+  saveDeletedIds([{ id, at }, ...existing]);
+}
+
+function forgetDeleted(id: number): void {
+  saveDeletedIds(loadDeletedIds().filter(r => r.id !== id));
+}
+
 /** Best-effort mirror of a soft-delete/restore to the cloud copy — local
     storage stays the source of truth regardless of whether this succeeds. */
 function syncTrashStateToCloud(id: number, method: 'DELETE' | 'PATCH'): void {
@@ -180,6 +229,7 @@ export function softDelete(trades: TradeEntry[], id: number): {
   if (!trade) return { updatedTrades: trades, updatedTrash: loadTrash() };
   const updatedTrades = trades.filter(t => t.id !== id);
   const updatedTrash = [{ trade, deletedAt: new Date().toISOString() }, ...loadTrash()];
+  rememberDeleted(id, updatedTrash[0].deletedAt);
   saveTrades(updatedTrades);
   saveTrash(updatedTrash);
   syncTrashStateToCloud(id, 'DELETE');
@@ -194,6 +244,7 @@ export function restoreTrade(trades: TradeEntry[], trash: DeletedTradeEntry[], i
   if (!item) return { updatedTrades: trades, updatedTrash: trash };
   const updatedTrades = [item.trade, ...trades].sort((a, b) => b.id - a.id);
   const updatedTrash = trash.filter(i => i.trade.id !== id);
+  forgetDeleted(id);
   saveTrades(updatedTrades);
   saveTrash(updatedTrash);
   syncTrashStateToCloud(id, 'PATCH');
@@ -394,8 +445,10 @@ const CLOUD_SYNC_KEY = 'onyx_last_cloud_sync';
 const CLOUD_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000; // throttle only the load-time catch-up, not real writes
 let cloudSyncInFlight = false;
 
-function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean }): void {
-  if (typeof window === 'undefined' || trades.length === 0 || cloudSyncInFlight) return;
+function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean; deletedIds?: number[] }): void {
+  const deletedIds = opts.deletedIds ?? [];
+  if (typeof window === 'undefined' || cloudSyncInFlight) return;
+  if (trades.length === 0 && deletedIds.length === 0) return;
   if (opts.throttle) {
     const last = Number(window.localStorage.getItem(CLOUD_SYNC_KEY) ?? 0);
     if (Date.now() - last < CLOUD_SYNC_MIN_INTERVAL_MS) return;
@@ -404,7 +457,7 @@ function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean }): v
   fetch('/api/journal', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ trades }),
+    body: JSON.stringify(deletedIds.length > 0 ? { trades, deletedIds } : { trades }),
   })
     .then(res => { if (res.ok) window.localStorage.setItem(CLOUD_SYNC_KEY, String(Date.now())); })
     .catch(() => { /* best-effort — local storage remains the source of truth */ })
@@ -489,6 +542,24 @@ export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
   }
 
   type S = Syncable & { trade: TradeEntry };
+  const cloudById = new Map(cloud.map(t => [t.id, t]));
+
+  // Local tombstones. Without these, an id the cloud still lists as live and
+  // this device no longer has reads as "the cloud has a trade I am missing" —
+  // which is exactly true on a new device, and exactly wrong after a delete
+  // whose request never landed. The ledger is what tells the two apart.
+  const tombstones: S[] = [];
+  for (const record of loadDeletedIds()) {
+    const known = cloudById.get(record.id) ?? local.find(t => t.id === record.id);
+    if (!known) continue;
+    tombstones.push({
+      id: record.id,
+      updatedAt: Date.parse(record.at) || 0,
+      deleted: true,
+      trade: known as TradeEntry,
+    });
+  }
+
   const localS: S[] = local.map(t => ({ id: t.id, updatedAt: t.updatedAt ?? 0, deleted: false, trade: t }));
   const cloudS: S[] = cloud.map(t => ({
     id: t.id,
@@ -497,15 +568,29 @@ export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
     trade: t,
   }));
 
-  const merged = mergeById(localS, cloudS);
+  // Tombstones last: mergeById keeps the newest stamp per id, and a delete
+  // recorded after the cloud's last edit must win. An edit made elsewhere
+  // AFTER the delete still wins over it, which is the right way round.
+  const merged = mergeById([...localS, ...tombstones], cloudS);
   const visible = active(merged).map(m => {
     const { deletedAt: _d, ...clean } = m.trade as TradeEntry & { deletedAt?: string | null };
     return clean as TradeEntry;
   });
 
+  // Repair: ids this merge settled as deleted that the cloud still has live.
+  // Sent with the push so one request both seeds what is missing and buries
+  // what should not be there — no repair, and the server-side analysis keeps
+  // reporting trades the journal does not show.
+  const deletedIds = merged
+    .filter(m => {
+      const inCloud = cloudById.get(Number(m.id));
+      return m.deleted && !!inCloud && !inCloud.deletedAt;
+    })
+    .map(m => Number(m.id));
+
   writeTradesLocal(visible);
   // Seed/repair the cloud with anything only local had (best-effort).
-  pushTradesToCloud(visible, { throttle: false });
+  pushTradesToCloud(visible, { throttle: false, deletedIds });
   return visible;
 }
 
