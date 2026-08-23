@@ -54,6 +54,22 @@ function tagClass(t: string): '' | 'gold' | 'green' | 'red' {
 /* ══════════════════════════════════════════════════════════════════
    Component
 ══════════════════════════════════════════════════════════════════ */
+/** Escape everything, then re-introduce `<b>` — the only tag the confirm
+ *  messages use. Written the same way as the daily-insight renderer: escape
+ *  first and allow back a fixed, tiny set, rather than trying to strip what
+ *  looks dangerous. `&lt;b&gt;` is produced by us in the template literals
+ *  around the interpolated name, never by the name itself, so a title
+ *  containing the literal text "<b>" stays visible text. */
+export function boldOnly(msg: string): string {
+  const escaped = msg
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  return escaped.replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>');
+}
+
 export default function NotebookView() {
   /* Data ─────────────────────────────────────────────────────────── */
   const [customFolders, setCustomFolders] = useState<NotebookFolder[]>([]);
@@ -944,7 +960,16 @@ export default function NotebookView() {
               <div className="nb-confirm-title">{confirmDlg.title}</div>
             </div>
             <div className="nb-confirm-body">
-              <div className="nb-confirm-msg" dangerouslySetInnerHTML={{ __html: confirmDlg.msg }} />
+              {/* The message is assembled from names the trader typed — a folder,
+                  a tag, an entry title, a template. Rendered raw, a folder named
+                  `<img src=x onerror=…>` executes the moment its delete dialog
+                  opens, and the notebook syncs across their devices, so it
+                  executes again on each of them. Escaped first, then the one
+                  tag these messages actually use is put back. */}
+              <div
+                className="nb-confirm-msg"
+                dangerouslySetInnerHTML={{ __html: boldOnly(confirmDlg.msg) }}
+              />
               {confirmDlg.note && <div className="nb-confirm-note">{confirmDlg.note}</div>}
             </div>
             <div className="nb-modal-foot">

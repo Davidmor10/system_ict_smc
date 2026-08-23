@@ -94,11 +94,7 @@ function fingerprint(s: string): string {
 type KeyAuth =
   | { ok: true;  userId: string }
   | { ok: false; skip: true }
-  | {
-      ok: false; skip: false; reason: string;
-      lengths?:     { received: number; expected: number };
-      fingerprints?: { received: string; configured: string };
-    };
+  | { ok: false; skip: false; reason: string };
 
 function authorizeByKey(req: NextRequest): KeyAuth {
   const key = req.nextUrl.searchParams.get('key')?.trim();
@@ -109,18 +105,25 @@ function authorizeByKey(req: NextRequest): KeyAuth {
     return { ok: false, skip: false, reason: 'CRON_SECRET is not set on this deployment' };
   }
   if (!safeEqual(key, secret)) {
-    // Lengths, not content. A mismatch is nearly always truncation (a copy
-    // that missed the tail) or mangling (`+` decoded as a space, `%` eaten as
-    // an escape) — both of which show up here instantly, and neither of which
-    // is findable by staring at two long hex strings. Publishing the length
-    // of a high-entropy secret to someone already holding a candidate for it
-    // costs nothing they could use.
-    return {
-      ok: false, skip: false,
-      reason: 'key does not match CRON_SECRET',
+    // The comparison detail goes to the LOG, not to the caller.
+    //
+    // It used to be returned in the 401 body: the expected length and an 8-hex
+    // SHA-256 prefix of the configured secret. The reasoning was that neither
+    // is invertible on a high-entropy value — true, and beside the point. What
+    // they give an attacker is an OFFLINE ORACLE: length plus a hash prefix
+    // lets candidate secrets be tested at whatever rate their own hardware
+    // allows, with no request, no rate limit, and nothing in our logs. Against
+    // a strong random secret that is still infeasible; against a weak one it is
+    // the whole game, and the endpoint has no way to know which it is holding.
+    //
+    // The operator debugging a mismatched key can read the same values in the
+    // function logs, where they are not published to whoever asked.
+    logger.warn('run-now key rejected', {
+      route: ROUTE,
       lengths:      { received: key.length,      expected:   secret.length },
       fingerprints: { received: fingerprint(key), configured: fingerprint(secret) },
-    };
+    });
+    return { ok: false, skip: false, reason: 'key does not match CRON_SECRET' };
   }
 
   // The key proves "you are the operator", not "you are user X" — so the
@@ -156,15 +159,11 @@ export async function GET(req: NextRequest) {
   } else if (!viaKey.skip) {
     // A key was offered and rejected. Say why rather than falling back to the
     // session check, which would report the wrong problem.
+    // Reason only. The comparison detail is in the log, and the deployment
+    // identity is not something an unauthorized caller has earned — it names
+    // the commit and environment to whoever guessed wrong.
     return NextResponse.json(
-      {
-        error:        'Unauthorized',
-        via:          'key',
-        reason:       viaKey.reason,
-        lengths:      viaKey.lengths,
-        fingerprints: viaKey.fingerprints,
-        deployment:   deploymentInfo(),
-      },
+      { error: 'Unauthorized', via: 'key', reason: viaKey.reason },
       { status: 401 },
     );
   } else {
