@@ -119,6 +119,15 @@ export interface TradeEntry {
    *  record; `stopMoved` above is the recollection. Both are kept, and the
    *  system never merges them into one number that hides which it is using. */
   management?: ManagementEvent[];
+  /** WHY the stop was advanced, when it was. One tap on the branch of the
+   *  question that has a branch — "to breakeven", "trailing", "other" —
+   *  because "moved it" and "moved it to lock in the entry" are not the same
+   *  decision, and only the second one is a rule being followed. */
+  stopMoveTag?: 'breakeven' | 'trailing' | 'other';
+  /** The trader's own words on the stop: where it sat and why that level.
+   *  Separate from `notes`, which answers why they ENTERED — two questions
+   *  that get merged into one textarea produce an answer to neither. */
+  stopNote?: string;
   /** Server-side only: whether this trade has screenshots, without carrying
    *  them. Never written by the form, and stripped by validation on the way
    *  back up — it exists so the analysis layer can stop reading the images. */
@@ -356,6 +365,9 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     followedRules: typeof r.followedRules === 'boolean' ? r.followedRules : undefined,
     stopMoved: r.stopMoved === 'none' || r.stopMoved === 'advanced' || r.stopMoved === 'widened'
       ? r.stopMoved : undefined,
+    stopMoveTag: r.stopMoveTag === 'breakeven' || r.stopMoveTag === 'trailing' || r.stopMoveTag === 'other'
+      ? r.stopMoveTag : undefined,
+    stopNote: typeof r.stopNote === 'string' && r.stopNote.trim() ? r.stopNote : undefined,
     management: Array.isArray(r.management)
       ? (r.management as unknown[])
           .map(e => e as ManagementEvent)

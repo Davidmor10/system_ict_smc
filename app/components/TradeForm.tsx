@@ -7,6 +7,8 @@ import { analyzeStopMoves, type ManagementEvent } from '../lib/trade/management'
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
+import { commitList, hydrateList } from '../lib/sync/collections';
+import { ruleTitle, type Rule } from '../lib/rules/types';
 import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } from '../lib/sessions';
 import { clockInZone } from '../lib/time/zone';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
@@ -114,6 +116,50 @@ interface ExitRow { price: string; contracts: string; }
  *  — the thing the behaviour layer exists to find — is invisible by
  *  construction. The multi-leg case is still there, one click away; it is just
  *  no longer the only reason to answer. */
+// ─────────────────────────────────────────────────────────────────────────────
+// Smart defaults.
+//
+// A trader who trades ES off the same setup with the same confirmations most
+// days was re-picking all three on every trade. What they chose last time is
+// the best guess available, it is one tap to change, and it is stored per
+// device rather than synced — this is a keyboard shortcut, not a preference.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LAST_USED_KEY = 'onyx_trade_last_used';
+
+interface LastUsed { symbol: InstrumentKey; model: string; confirmations: string[] }
+
+function loadLastUsed(): LastUsed {
+  const fallback: LastUsed = { symbol: 'ES', model: '', confirmations: [] };
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(LAST_USED_KEY);
+    if (!raw) return fallback;
+    const o = JSON.parse(raw) as Partial<LastUsed>;
+    return {
+      symbol: INSTRUMENT_KEYS.includes(o.symbol as InstrumentKey) ? (o.symbol as InstrumentKey) : fallback.symbol,
+      model: typeof o.model === 'string' ? o.model : '',
+      confirmations: Array.isArray(o.confirmations)
+        ? o.confirmations.filter((c): c is string => typeof c === 'string').slice(0, 12)
+        : [],
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveLastUsed(v: LastUsed): void {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(LAST_USED_KEY, JSON.stringify(v)); } catch { /* quota — non-fatal */ }
+}
+
+/** The quick tags on the "advanced the stop" branch. */
+const STOP_TAGS: { key: 'breakeven' | 'trailing' | 'other'; label: string }[] = [
+  { key: 'breakeven', label: 'לאזור הפריצה' },
+  { key: 'trailing',  label: 'Trailing' },
+  { key: 'other',     label: 'אחר' },
+];
+
 function singleLeg(contracts: string): ExitRow[] {
   return [{ price: '', contracts }];
 }
@@ -133,20 +179,27 @@ interface FormState {
       from a dashboard plan they may never have saved. */
   dayBias: Bias | '';
   stopMoved: '' | 'none' | 'advanced' | 'widened';
+  stopMoveTag: '' | 'breakeven' | 'trailing' | 'other';
+  stopNote: string;
+  /** Ids of the trader's own rules they broke on this trade. Only meaningful
+   *  when followedRules === 'no'. Saved as violation records, not on the
+   *  trade — the rules page already owns that model. */
+  brokenRules: string[];
   management: ManagementEvent[];
   confirmations: string[];
   emotionalState: EmotionalState | '';
   model: string;
   notes: string;
   screenshots: string[];
-  /** Explicit trade result — set via the Stop / BE / Take buttons in the
-      form. Empty string means "not chosen yet" (blocks save). */
-  result: 'WIN' | 'LOSS' | 'BE' | '';
 }
 
 function empty(): FormState {
+  // A trader who trades the same instrument off the same setup most days
+  // should not re-pick both every time. What they chose last is the best
+  // available guess, and it is one tap to change.
+  const last = loadLastUsed();
   return {
-    symbol: 'ES',
+    symbol: last.symbol,
     contracts: '1',
     direction: 'LONG',
     date: todayISO(),
@@ -161,13 +214,15 @@ function empty(): FormState {
     followedRules: '',
     dayBias: getTodaysDeclaredBias() ?? '',
     stopMoved: '',
+    stopMoveTag: '',
+    stopNote: '',
+    brokenRules: [],
     management: [],
-    confirmations: [],
+    confirmations: last.confirmations,
     emotionalState: '',
-    model: '',
+    model: last.model,
     notes: '',
     screenshots: [],
-    result: '',
   };
 }
 
@@ -192,16 +247,62 @@ function fromTrade(t: TradeEntry): FormState {
     followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
     dayBias: t.bias ?? '',
     stopMoved: t.stopMoved ?? '',
+    stopMoveTag: t.stopMoveTag ?? '',
+    stopNote: t.stopNote ?? '',
+    brokenRules: [],
     management: t.management ?? [],
     confirmations: t.confirmations ?? [],
     emotionalState: t.emotionalState ?? '',
     model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
     notes: t.notes ?? '',
     screenshots: t.screenshots ?? [],
-    // OPEN in the DB means "no explicit result chosen" — surface it as an
-    // empty selection so the trader is forced to pick one to save.
-    result: t.result === 'OPEN' ? '' : t.result,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Broken rules → the violations the rules page already owns.
+//
+// Written as violation records rather than as a field on the trade, because
+// the rules page, the compliance streak and the discipline stats all read that
+// collection already. A second home for the same fact would mean two numbers
+// that drift.
+//
+// Ids are deterministic — `v_<tradeId>_<ruleId>` — so re-saving an edited
+// trade REPLACES its violations instead of appending a duplicate set, and
+// un-ticking a rule tombstones the row the same way the rules page does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RuleViolationRow {
+  id: string; ruleId: string; date: string; tradeNote?: string;
+  updatedAt?: number; deleted?: boolean;
+}
+
+const VIOLATIONS_KEY = 'onyx_rule_violations';
+
+async function recordBrokenRules(tradeId: number, dateISO: string, ruleIds: string[]): Promise<void> {
+  const mine = (v: RuleViolationRow) => v.id.startsWith(`v_${tradeId}_`);
+  try {
+    const existing = await hydrateList<RuleViolationRow>('violations', VIOLATIONS_KEY);
+    // Nothing to do, and nothing to clean up.
+    if (ruleIds.length === 0 && !existing.some(mine)) return;
+
+    const now = Date.now();
+    const keep = existing.filter(v => !mine(v));
+    const fresh: RuleViolationRow[] = ruleIds.map(ruleId => ({
+      id: `v_${tradeId}_${ruleId}`,
+      ruleId,
+      date: dateISO,
+      tradeNote: 'סומן בטופס העסקה',
+      updatedAt: now,
+    }));
+    // Tombstone whatever this trade used to claim and no longer does, so the
+    // removal reaches the other devices instead of the row coming back.
+    const removed: RuleViolationRow[] = existing
+      .filter(v => mine(v) && !ruleIds.includes(v.ruleId))
+      .map(v => ({ ...v, deleted: true, updatedAt: now }));
+
+    await commitList<RuleViolationRow>('violations', VIOLATIONS_KEY, [...keep, ...fresh, ...removed]);
+  } catch { /* the trade itself is saved; a failed violation write must not undo it */ }
 }
 
 /** One line straight from the analytics engine — no network call, so it's on screen
@@ -349,6 +450,10 @@ export default function TradeForm({
   const [customConfirmations, setCustomConfirmations] = useState<string[]>([]);
   const [newConfirmation, setNewConfirmation] = useState('');
   const [stopMoveDraft, setStopMoveDraft] = useState('');
+  /** The trader's own active rules — the list shown when they say they broke one. */
+  const [activeRules, setActiveRules] = useState<Rule[]>([]);
+  /** Group 5 is folded by default: a trader in a hurry never opens it. */
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [stage, setStage] = useState<SaveStage>('idle');
   const [summaryFacts, setSummaryFacts] = useState<string[]>([]);
   const [guardWarnings, setGuardWarnings] = useState<GuardianWarning[]>([]);
@@ -356,6 +461,9 @@ export default function TradeForm({
   useEffect(() => {
     setPlaybookSetups(loadPlaybookSetups());
     setCustomConfirmations(loadCustomConfirmations());
+    hydrateList<Rule>('rules', 'onyx_trading_rules')
+      .then(rs => setActiveRules(rs.filter(r => r.isActive && !r.deleted)))
+      .catch(() => { /* no rules yet, or offline — the question just has no list */ });
   }, []);
 
   // Defaults first, then whatever the trader has added — de-duplicated so a
@@ -505,6 +613,24 @@ export default function TradeForm({
   function selectModel(name: string) {
     setForm(prev => ({ ...prev, model: prev.model === name ? '' : name }));
   }
+  function toggleBrokenRule(id: string) {
+    setForm(prev => ({
+      ...prev,
+      brokenRules: prev.brokenRules.includes(id)
+        ? prev.brokenRules.filter(r => r !== id)
+        : [...prev.brokenRules, id],
+    }));
+  }
+  /** Answering "I kept them" clears any rules that were ticked first — the two
+   *  answers cannot both be true, and leaving stale ticks behind would write
+   *  violations for a trade the trader just said was clean. */
+  function setFollowedRules(value: 'yes' | 'no' | '') {
+    setForm(prev => ({
+      ...prev,
+      followedRules: value,
+      brokenRules: value === 'no' ? prev.brokenRules : [],
+    }));
+  }
   function setEmotionalState(state: EmotionalState) {
     setForm(prev => ({ ...prev, emotionalState: prev.emotionalState === state ? '' : state }));
   }
@@ -552,9 +678,15 @@ export default function TradeForm({
       entry,
       stop,
       target,
-      // Explicit result from the Stop/BE/Take buttons wins; the exits-derived
-      // result stays as a fallback for legacy edits that still use partial exits.
-      result: asOpen ? 'OPEN' : (form.result || derivedResult),
+      // Derived from where the trade actually closed — never asked for.
+      //
+      // The label used to be three buttons the trader pressed, and pressing it
+      // BEFORE typing an exit invited the exit to be reconstructed to match:
+      // "it was a win, so I suppose I took the target". Now the exit price is
+      // the only input and the label follows from it, so the two can never
+      // disagree. An edit of a pre-exits trade keeps the result it was saved
+      // with rather than being reset to OPEN.
+      result: asOpen ? 'OPEN' : (derivedResult !== 'OPEN' ? derivedResult : (initial?.result ?? 'OPEN')),
       session: autoSession ?? 'NONE',
       bias: form.dayBias || 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
@@ -565,6 +697,9 @@ export default function TradeForm({
       emotionalState: form.emotionalState || undefined,
       followedRules: form.followedRules === 'yes' ? true : form.followedRules === 'no' ? false : undefined,
       stopMoved: form.stopMoved || undefined,
+      // The tag only means anything on the branch it belongs to.
+      stopMoveTag: form.stopMoved === 'advanced' ? (form.stopMoveTag || undefined) : undefined,
+      stopNote: form.stopNote.trim() || undefined,
       management: form.management.length ? form.management : undefined,
       tradeR: realizedR ?? undefined,
       pnlUsd: realizedPnl ?? undefined,
@@ -573,6 +708,9 @@ export default function TradeForm({
 
     const priorTrades = trades;
     setGuardWarnings([]);
+
+    saveLastUsed({ symbol: form.symbol, model: form.model, confirmations: form.confirmations });
+    void recordBrokenRules(trade.id, trade.dateISO, form.followedRules === 'no' ? form.brokenRules : []);
 
     // A short, active sequence — saving, then a quick read, then proof the system used it —
     // so logging a trade feels like the system did work, not like a form reset.
@@ -585,12 +723,18 @@ export default function TradeForm({
     }, 450);
   }
 
+  /** A closed trade needs somewhere it closed. The result is no longer asked
+   *  for, so the exit price is what decides whether this trade is finished.
+   *  A new trade therefore needs an exit before it can be saved as closed —
+   *  the "save as open" button is the path for one still running. An edit is
+   *  always savable: the trade already exists, and reopening it to fix the
+   *  setup or the discipline notes must not require closing it first. */
+  const canSubmit = derivedResult !== 'OPEN' || initial != null;
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
-    // Explicit result is now required — "no more open trades". If neither the
-    // user picked a result nor the exits imply one, refuse to save.
-    if (!form.result && derivedResult === 'OPEN') return;
+    if (!canSubmit) return;
 
     // Discipline guardian — surface any evidence-backed concern before saving.
     // Never blocks: if warnings exist, show them and let the trader decide.
@@ -645,31 +789,33 @@ export default function TradeForm({
           </p>
         </div>
 
-        {/* ── WHEN — always visible; every trade needs a timestamp ── */}
-        <Group label="מתי" tone="muted">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="תאריך">
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
-            </Field>
-            <Field label="שעת כניסה">
-              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
-            </Field>
-          </div>
-        </Group>
+        {/* ═══════════════════════════════════════════════════════════════
+            The order is the design. It follows the trader's memory, not the
+            database's column order: what just happened is asked first while it
+            is sharp, and the reasoning behind it — which is reconstructed
+            either way — is asked last. A trader in a hurry answers groups 1, 2
+            and 4 in about eight taps and sees their realised R at the end of
+            group 2; a trader who wants depth opens group 5.
 
-        {/* ── TRADE INFO ── */}
-        <Group label="פרטי העסקה">
+            Nothing here asks for a number the app can compute. Planned R:R,
+            realised R, realised P&L and the trade's result are all shown, and
+            none of them is an input.
+            ═══════════════════════════════════════════════════════════════ */}
+
+        {/* ── 1 · THE TRADE — asked first because it is the freshest ── */}
+        <Group label="1 · העסקה">
           <Field label="נכס">
             <div className="grid grid-cols-4 gap-1.5">
-              {INSTRUMENT_KEYS.map(s => (
-                <button type="button" key={s} onClick={() => set('symbol', s)}
-                  title={INSTRUMENTS[s].label}
-                  className={toggleBtn(form.symbol === s, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
-                  {s}
+              {INSTRUMENT_KEYS.map(sym => (
+                <button type="button" key={sym} onClick={() => set('symbol', sym)}
+                  title={INSTRUMENTS[sym].label}
+                  className={toggleBtn(form.symbol === sym, 'border-[#d4af37]/60 bg-[#d4af37]/10 text-[#d4af37]')}>
+                  {sym}
                 </button>
               ))}
             </div>
           </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="כיוון">
               <div className="flex gap-1.5">
@@ -686,10 +832,287 @@ export default function TradeForm({
             </Field>
           </div>
 
-          {/* The day's direction. Asked here because the alternative was
-              reading it from a dashboard plan the trader may never have saved
-              — and when it wasn't there, every trade was recorded as being
-              WITH the day's direction, long and short alike. */}
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="כניסה">
+              <input type="number" step="0.25" value={form.entry} onChange={e => set('entry', e.target.value)} placeholder="0.00" className={inputCls} required />
+            </Field>
+            <Field label="סטופ">
+              <input type="number" step="0.25" value={form.stop} onChange={e => set('stop', e.target.value)} placeholder="0.00" className={inputCls} required />
+            </Field>
+            <Field label="יעד">
+              <input type="number" step="0.25" value={form.target} onChange={e => set('target', e.target.value)} placeholder="0.00" className={inputCls} required />
+            </Field>
+          </div>
+
+          {/* Display only. It is the three fields above, divided. */}
+          {rr !== null && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.02]">
+              <span className="font-mono text-[9px] text-white/30 uppercase tracking-[0.18em]">R:R מתוכנן</span>
+              <span className="font-mono text-lg font-bold" style={{ color: rrColor }}>{rr.toFixed(2)}R</span>
+            </div>
+          )}
+        </Group>
+
+        {/* ── 2 · EXIT & MANAGEMENT — same mental context, asked immediately ── */}
+        <Group label="2 · יציאה וניהול">
+          {/* Three answers, not two. Advancing a stop to protect a position and
+              widening it to avoid being stopped out are opposite acts; a yes/no
+              would count them as one thing and measure nothing. This replaces
+              the separate "what happened to the stop" section, which asked the
+              same question twice. */}
+          <Field label="נגעת בסטופ אחרי הכניסה?">
+            <div className="flex items-center gap-2">
+              <FormResultBtn
+                label="לא נגעתי" glyph="=" active={form.stopMoved === 'none'}
+                activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
+                onClick={() => set('stopMoved', form.stopMoved === 'none' ? '' : 'none')}
+              />
+              <FormResultBtn
+                label="קידמתי" glyph="▲" active={form.stopMoved === 'advanced'}
+                activeColor="#d4af37" activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
+                onClick={() => set('stopMoved', form.stopMoved === 'advanced' ? '' : 'advanced')}
+              />
+              <FormResultBtn
+                label="הרחקתי" glyph="▼" active={form.stopMoved === 'widened'}
+                activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
+                onClick={() => set('stopMoved', form.stopMoved === 'widened' ? '' : 'widened')}
+              />
+            </div>
+
+            {/* The branch that has a branch. "Moved it" and "moved it to lock
+                in the entry" are not the same decision. */}
+            {form.stopMoved === 'advanced' && (
+              <div className="flex flex-wrap gap-1.5 mt-2.5 onyx-pop-in">
+                {STOP_TAGS.map(t => (
+                  <button type="button" key={t.key}
+                    onClick={() => set('stopMoveTag', form.stopMoveTag === t.key ? '' : t.key)}
+                    className={chipBtn(form.stopMoveTag === t.key)}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </Field>
+
+          {/* Where it actually closed. Deliberately never prefilled from
+              anything: "exit == target, exactly" is precisely the reading the
+              early-exit detector is built to trust, and a populated field
+              nobody checked would hand it a fiction. */}
+          <Field label="איפה יצאת בפועל?">
+            <div className="space-y-2">
+              {form.exits.map((exitRow, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="number" step="0.25"
+                    placeholder={form.exits.length === 1 ? 'מחיר היציאה שלך' : `מחיר יציאה ${i + 1}`}
+                    value={exitRow.price} onChange={e => setExit(i, 'price', e.target.value)}
+                    className={inputCls}
+                  />
+                  {/* One leg means the whole position, so its size is not a
+                      question. It becomes one only once the position is split. */}
+                  {form.exits.length > 1 && (
+                    <>
+                      <input
+                        type="number" min={1} step="1" placeholder="חוזים"
+                        value={exitRow.contracts} onChange={e => setExit(i, 'contracts', e.target.value)}
+                        className={inputCls + ' max-w-[92px]'}
+                      />
+                      <button
+                        type="button" onClick={() => removeExit(i)}
+                        aria-label="הסר יציאה"
+                        className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-white/25 hover:text-[#ef4444] transition-colors duration-150"
+                      >✕</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addExit}
+              className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors duration-150 mt-2"
+            >
+              {form.exits.length === 1 ? '➕ הוספת יציאה חלקית' : '➕ הוסף יציאה נוספת'}
+            </button>
+          </Field>
+
+          {/* The immediate feedback that turns logging into a read. Realised R
+              leads, because it is the number the rest of the app is built on. */}
+          {hasExits ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3.5 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/[0.04] onyx-pop-in">
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">R ממומש</span>
+                <span
+                  className="font-mono text-2xl font-bold leading-none"
+                  style={{ color: (realizedR ?? 0) > 0 ? '#22c55e' : (realizedR ?? 0) < 0 ? '#ef4444' : '#d4af37' }}
+                  dir="ltr"
+                >
+                  {realizedR !== null ? `${realizedR >= 0 ? '+' : ''}${realizedR.toFixed(2)}R` : '—'}
+                </span>
+              </div>
+              <div className="h-9 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד</span>
+                <span className="font-mono text-base font-bold" style={{ color: (realizedPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }} dir="ltr">
+                  {realizedPnl !== null ? `${realizedPnl >= 0 ? '+' : ''}$${Math.abs(realizedPnl).toFixed(0)}` : '—'}
+                </span>
+              </div>
+              <div className="h-9 w-px bg-white/[0.08]" />
+              <div>
+                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">תוצאה</span>
+                <span className="font-mono text-sm font-bold" style={{ color: resultColor }}>{RESULT_HE[derivedResult]}</span>
+              </div>
+              {remainingContracts > 0 && (
+                <>
+                  <div className="h-9 w-px bg-white/[0.08]" />
+                  <div>
+                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">חוזים פתוחים</span>
+                    <span className="font-mono text-sm font-bold text-white/60">{remainingContracts}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <p className="font-mono text-[11px] text-white/40 leading-relaxed">
+              מחיר היציאה הוא מה שקובע את ה-R ואת התוצאה — שניהם מחושבים, לא נשאלים.
+              בלי מחיר יציאה אפשר לשמור את העסקה כפתוחה ולהשלים אותה כשתיסגר.
+            </p>
+          )}
+
+          {/* The log. Every entry is stamped with the clock rather than with a
+              field the trader fills in — the value of an event over an answer
+              at the end is that it was recorded while it was true. When events
+              exist they OVERRIDE the buttons above: a record beats a
+              recollection, and the readout says which one is in force. */}
+          <details className="group/log">
+            <summary className="cursor-pointer list-none font-mono text-[11px] text-white/35 hover:text-white/60 transition-colors duration-150 select-none">
+              <span className="inline-block transition-transform duration-200 group-open/log:rotate-90">›</span>{' '}
+              רישום הזזות בזמן אמת {form.management.length > 0 && `(${form.management.length})`}
+            </summary>
+            <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" step="0.25"
+                  placeholder="הזזתי את הסטופ ל…"
+                  value={stopMoveDraft}
+                  onChange={e => setStopMoveDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); logStopMove(stopMoveDraft); } }}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => logStopMove(stopMoveDraft)}
+                  disabled={!stopMoveDraft.trim()}
+                  className="shrink-0 px-4 py-2.5 rounded-lg border border-[#d4af37]/35 text-[#d4af37] font-mono text-xs hover:bg-[#d4af37]/10 transition-colors duration-150 disabled:text-white/20 disabled:border-white/[0.06] disabled:cursor-not-allowed"
+                >
+                  רשום
+                </button>
+              </div>
+
+              {form.management.length > 0 && (
+                <div className="space-y-1.5">
+                  {form.management.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 font-mono text-[11px] text-white/50">
+                      <span className="text-white/30" dir="ltr">
+                        {clockInZone(undefined, new Date(m.at))}
+                      </span>
+                      <span>סטופ → {m.to}</span>
+                      <button
+                        type="button" onClick={() => removeManagement(i)} aria-label="מחק רישום"
+                        className="text-white/20 hover:text-[#ef4444] transition-colors duration-150"
+                      >✕</button>
+                    </div>
+                  ))}
+                  {stopRecord.moves > 0 && (
+                    <p className="font-mono text-[11px] text-[#d4af37]/80 leading-relaxed pt-1">
+                      מהרישום: {stopRecord.advanced > 0 && `${stopRecord.advanced} קידום`}
+                      {stopRecord.advanced > 0 && stopRecord.widened > 0 && ' · '}
+                      {stopRecord.widened > 0 && `${stopRecord.widened} הרחקה`}
+                      {stopRecord.widened === 0 && stopRecord.advanced === 0 && 'ללא שינוי בפועל'}
+                      {' — '}זה מה שייספר, לא הכפתורים למעלה.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </details>
+        </Group>
+
+        {/* ── 3 · THE SETUP — why you entered ── */}
+        <Group label="3 · הסטאפ">
+          <Field label="מודל / סטאפ">
+            {playbookSetups.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {playbookSetups.map(ps => (
+                  <button
+                    type="button" key={ps.id}
+                    onClick={() => selectModel(ps.name)}
+                    className={chipBtn(form.model === ps.name)}
+                  >
+                    {ps.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="font-mono text-[11px] text-white/30 leading-relaxed">
+                עדיין לא בנית מודלים משלך —{' '}
+                <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
+                  בנה מודל בפלייבוק
+                </Link>{' '}
+                עם האישורים שלך, והוא יופיע כאן לבחירה.
+              </p>
+            )}
+          </Field>
+
+          <Field label="אישורי הכניסה">
+            <div className="flex flex-wrap gap-1.5">
+              {availableConfirmations.map(tag => {
+                const isCustom = !DEFAULT_CONFIRMATIONS.includes(tag as typeof DEFAULT_CONFIRMATIONS[number]);
+                return (
+                  <span key={tag} className="relative group/conf">
+                    <button
+                      type="button"
+                      onClick={() => toggleConfirmation(tag)}
+                      className={chipBtn(form.confirmations.includes(tag))}
+                      dir="ltr"
+                    >
+                      {labelForConfirmation(tag)}
+                    </button>
+                    {isCustom && (
+                      <button
+                        type="button"
+                        onClick={() => removeCustomConfirmation(tag)}
+                        aria-label={`מחק את האישור ${tag}`}
+                        className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-black border border-[#333] text-white/50 text-[9px] flex items-center justify-center opacity-0 group-hover/conf:opacity-100 hover:text-[#ef4444] hover:border-[#ef4444]/60 transition-all duration-150"
+                      >✕</button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 max-w-xs mt-2">
+              <input
+                value={newConfirmation}
+                onChange={e => setNewConfirmation(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomConfirmation(); } }}
+                placeholder="הוסף אישור משלך..."
+                className={inputCls}
+                dir="rtl"
+              />
+              <button
+                type="button"
+                onClick={addCustomConfirmation}
+                aria-label="הוסף אישור"
+                className="shrink-0 px-4 rounded-xl border border-[#d4af37]/30 text-[#d4af37]/70 hover:text-[#d4af37] hover:border-[#d4af37]/50 font-mono text-lg leading-none transition-colors duration-150"
+              >＋</button>
+            </div>
+          </Field>
+
+          {/* Pre-filled from the direction declared on the entry gate, so for a
+              trader who declares one this costs zero taps. Left blank it is
+              simply not asked of the trade — which is a real answer and not
+              the same as "aligned". */}
           <Field label="הכיוון שלך להיום (אופציונלי)">
             <div className="flex gap-1.5">
               {([
@@ -716,412 +1139,155 @@ export default function TradeForm({
           </Field>
         </Group>
 
-        {/* ── EXECUTION — entry/stop/target and the planned RR ── */}
-        <Group label="ביצוע">
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="כניסה">
-              <input type="number" step="0.25" value={form.entry} onChange={e => set('entry', e.target.value)} placeholder="0.00" className={inputCls} required />
-            </Field>
-            <Field label="סטופ">
-              <input type="number" step="0.25" value={form.stop} onChange={e => set('stop', e.target.value)} placeholder="0.00" className={inputCls} required />
-            </Field>
-            <Field label="יעד">
-              <input type="number" step="0.25" value={form.target} onChange={e => set('target', e.target.value)} placeholder="0.00" className={inputCls} required />
-            </Field>
-          </div>
-
-          {rr !== null && (
-            <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white/[0.02] transition-all duration-150">
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">RR מתוכנן</span>
-                <span className="font-mono text-xl font-bold" style={{ color: rrColor }}>{rr.toFixed(2)}R</span>
-              </div>
-            </div>
-          )}
-        </Group>
-
-        {/* ── EXIT — where the trade ACTUALLY closed.
-             See singleLeg() for why this stopped being an optional section for
-             partial-exit traders and became a question every trade is asked.
-
-             Deliberately NOT prefilled from the result button. Prefilling the
-             target on a win would put a measured-looking number in a field
-             nobody checked, and "exit == target, exactly" is precisely the
-             reading the early-exit detector is built to trust. An empty field
-             the trader fills in is worth more than a populated one they
-             skimmed past. ── */}
-        <Group label="איפה יצאת בפועל?">
-          <div className="space-y-2">
-            {form.exits.map((exitRow, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  type="number" step="0.25"
-                  placeholder={form.exits.length === 1 ? 'מחיר היציאה שלך' : `מחיר יציאה ${i + 1}`}
-                  value={exitRow.price} onChange={e => setExit(i, 'price', e.target.value)}
-                  className={inputCls}
-                />
-                {/* One leg means the whole position, so its size is not a
-                    question. It becomes one only once the position is split. */}
-                {form.exits.length > 1 && (
-                  <>
-                    <input
-                      type="number" min={1} step="1" placeholder="חוזים"
-                      value={exitRow.contracts} onChange={e => setExit(i, 'contracts', e.target.value)}
-                      className={inputCls + ' max-w-[92px]'}
-                    />
-                    <button
-                      type="button" onClick={() => removeExit(i)}
-                      aria-label="הסר יציאה"
-                      className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-white/25 hover:text-[#ef4444] transition-colors duration-150"
-                    >✕</button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={addExit}
-            className="font-mono text-xs text-[#d4af37]/70 hover:text-[#d4af37] transition-colors duration-150"
-          >
-            {form.exits.length === 1 ? '➕ יצאתי בכמה חלקים' : '➕ הוסף יציאה נוספת'}
-          </button>
-
-          {!hasExits && (
-            <p className="font-mono text-[11px] text-white/40 leading-relaxed">
-              בלי מחיר יציאה, ה-R של העסקה יחושב לפי התוכנית — כאילו טייק נלקח
-              במלואו וסטופ ננגס במלואו. זה כמעט אף פעם לא מה שקרה, והפער בין
-              השניים הוא בדיוק מה שהמערכת מחפשת.
-            </p>
-          )}
-
-          {hasExits && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 rounded-xl bg-white/[0.02]">
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">רווח/הפסד ממומש</span>
-                <span className="font-mono text-lg font-bold" style={{ color: (realizedPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
-                  {realizedPnl !== null ? `${realizedPnl >= 0 ? '+' : ''}$${Math.abs(realizedPnl).toFixed(0)}` : '—'}
-                </span>
-              </div>
-              <div className="h-8 w-px bg-white/[0.08]" />
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">R ממומש</span>
-                <span className="font-mono text-lg font-bold text-white/80">{realizedR !== null ? `${realizedR.toFixed(2)}R` : '—'}</span>
-              </div>
-              <div className="h-8 w-px bg-white/[0.08]" />
-              <div>
-                <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">תוצאה</span>
-                <span className="font-mono text-sm font-bold" style={{ color: resultColor }}>{RESULT_HE[derivedResult]}</span>
-              </div>
-              {remainingContracts > 0 && (
-                <>
-                  <div className="h-8 w-px bg-white/[0.08]" />
-                  <div>
-                    <span className="font-mono text-[9px] text-white/30 block uppercase tracking-[0.18em]">חוזים פתוחים</span>
-                    <span className="font-mono text-sm font-bold text-white/60">{remainingContracts}</span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </Group>
-
-        {/* ── RESULT — required. Stop = LOSS, ברייק איוון = BE, טייק = WIN.
-             Selecting one overrides any exits-derived result on save.
-
-             Sits AFTER the exit price now, and the order is the point: the
-             trader states where they got out, and only then labels it. Asking
-             for the label first invites the exit to be reconstructed to match
-             it — "it was a win, so I suppose I took the target" — which is the
-             same fiction we removed from the code, re-entered by hand. */}
-        <Group label="תוצאת העסקה *">
-          <div className="flex items-center gap-2">
-            <FormResultBtn
-              label="סטופ" glyph="▼" active={form.result === 'LOSS'}
-              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
-              onClick={() => set('result', form.result === 'LOSS' ? '' : 'LOSS')}
-            />
-            <FormResultBtn
-              label="ברייק איוון" glyph="◆" active={form.result === 'BE'}
-              activeColor="#d4af37" activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
-              onClick={() => set('result', form.result === 'BE' ? '' : 'BE')}
-            />
-            <FormResultBtn
-              label="טייק" glyph="▲" active={form.result === 'WIN'}
-              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
-              onClick={() => set('result', form.result === 'WIN' ? '' : 'WIN')}
-            />
-          </div>
-          {!form.result && (
-            <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
-              חייב לבחור תוצאה — סטופ / BE / טייק. אחרת לא ניתן לשמור.
-            </p>
-          )}
-
-          {/* The label and the exit price disagreeing is almost always a typo
-              — a price entered in points, a digit dropped, the wrong button.
-              It is worth catching here because the two are used for different
-              things downstream: the label drives the statistics the trader
-              reads, and the exit drives the behaviour analysis. Silently
-              storing a contradiction puts one number in each and leaves them
-              to disagree forever, in two places nobody compares.
-
-              Shown, not blocked: a trade CAN legitimately be labelled BE and
-              have closed a tick away. The trader is the authority — they just
-              need to see it. */}
-          {form.result && hasExits && derivedResult !== form.result && (
-            <p className="font-mono text-[11px] leading-relaxed mt-2 text-[#d4af37]">
-              סימנת {RESULT_HE[form.result]}, אבל מחיר היציאה שרשמת אומר {RESULT_HE[derivedResult]}
-              {realizedR !== null && ` (${realizedR.toFixed(2)}R)`}. בדוק שהמחירים נכונים — כניסה, סטופ, יעד ויציאה צריכים להיות מחירים מלאים, לא נקודות.
-            </p>
-          )}
-        </Group>
-
-        {/* ── RULE ADHERENCE — the trader's own verdict on their own trade.
-             The most trustworthy signal in the journal, because it is
-             judgement rather than something we inferred from prices.
-
-             Deliberately unanswered by default, and deliberately not a
-             checkbox: a checkbox has an implicit "no" and this question has
-             three answers. Silence must stay distinguishable from "yes",
-             otherwise every rule-adherence number becomes a flattering
-             fiction built from the trades nobody bothered to grade. ── */}
-        <Group label="עמדתי בחוקים שלי? (אופציונלי)">
-          <div className="flex items-center gap-2">
-            <FormResultBtn
-              label="עמדתי" glyph="✓" active={form.followedRules === 'yes'}
-              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
-              onClick={() => set('followedRules', form.followedRules === 'yes' ? '' : 'yes')}
-            />
-            <FormResultBtn
-              label="סטיתי" glyph="✕" active={form.followedRules === 'no'}
-              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
-              onClick={() => set('followedRules', form.followedRules === 'no' ? '' : 'no')}
-            />
-          </div>
-          <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
-            {form.followedRules === ''
-              ? 'אם תדלג — העסקה לא תיספר לשני הכיוונים. עדיף לא לענות מאשר לענות לא נכון.'
-              : 'התשובה שלך על העסקה הזו — לא נגזרת מהתוצאה.'}
-          </p>
-        </Group>
-
-        {/* ── STOP MANAGEMENT — the one management decision the tables cannot
-             reconstruct. Three answers, not two: advancing a stop to protect a
-             position and widening it to avoid being stopped out are opposite
-             acts, and a yes/no would count them as the same thing and measure
-             nothing. Unanswered stays unanswered. ── */}
-        <Group label="מה קרה לסטופ אחרי הכניסה? (אופציונלי)">
-          <div className="flex items-center gap-2">
-            <FormResultBtn
-              label="לא נגעתי" glyph="=" active={form.stopMoved === 'none'}
-              activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
-              onClick={() => set('stopMoved', form.stopMoved === 'none' ? '' : 'none')}
-            />
-            <FormResultBtn
-              label="קידמתי" glyph="▲" active={form.stopMoved === 'advanced'}
-              activeColor="#d4af37" activeBg="rgba(212,175,55,0.12)" activeBd="rgba(212,175,55,0.45)"
-              onClick={() => set('stopMoved', form.stopMoved === 'advanced' ? '' : 'advanced')}
-            />
-            <FormResultBtn
-              label="הרחקתי" glyph="▼" active={form.stopMoved === 'widened'}
-              activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
-              onClick={() => set('stopMoved', form.stopMoved === 'widened' ? '' : 'widened')}
-            />
-          </div>
-          <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
-            {form.stopMoved === ''
-              ? 'קידום הוא משמעת, הרחקה היא סיכון — לכן זו לא שאלת כן/לא. אם תדלג, העסקה לא תיספר לשום כיוון.'
-              : 'זו התשובה מהזיכרון. אם תרשום את ההזזה בזמן אמת למטה, המערכת תחשב את הכיוון בעצמה.'}
-          </p>
-
-          {/* The log. Every entry is stamped with the clock rather than with a
-              field the trader fills in — the entire value of an event over an
-              answer at the end is that it was recorded while it was true, and
-              a hand-typed time gives that away for nothing.
-
-              When events exist they OVERRIDE the buttons above: a record beats
-              a recollection, and the readout says which one is in force so the
-              trader can see it too. */}
-          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+        {/* ── 4 · DISCIPLINE — clicks, not typing ── */}
+        <Group label="4 · משמעת">
+          {/* Deliberately unanswered by default, and deliberately not a
+              checkbox: a checkbox has an implicit "no" and this question has
+              three answers. Silence must stay distinguishable from "yes",
+              otherwise every rule-adherence number becomes a flattering
+              fiction built from the trades nobody bothered to grade. */}
+          <Field label="עמדתי בחוקים שלי?">
             <div className="flex items-center gap-2">
-              <input
-                type="number" step="0.25"
-                placeholder="הזזתי את הסטופ ל…"
-                value={stopMoveDraft}
-                onChange={e => setStopMoveDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); logStopMove(stopMoveDraft); } }}
-                className={inputCls}
+              <FormResultBtn
+                label="עמדתי" glyph="✓" active={form.followedRules === 'yes'}
+                activeColor="#22c55e" activeBg="rgba(34,197,94,0.14)" activeBd="rgba(34,197,94,0.5)"
+                onClick={() => setFollowedRules(form.followedRules === 'yes' ? '' : 'yes')}
               />
-              <button
-                type="button"
-                onClick={() => logStopMove(stopMoveDraft)}
-                disabled={!stopMoveDraft.trim()}
-                className="shrink-0 px-4 py-2.5 rounded-lg border border-[#d4af37]/35 text-[#d4af37] font-mono text-xs hover:bg-[#d4af37]/10 transition-colors duration-150 disabled:text-white/20 disabled:border-white/[0.06] disabled:cursor-not-allowed"
-              >
-                רשום
-              </button>
+              <FormResultBtn
+                label="סטיתי" glyph="✕" active={form.followedRules === 'no'}
+                activeColor="#ef4444" activeBg="rgba(239,68,68,0.14)" activeBd="rgba(239,68,68,0.5)"
+                onClick={() => setFollowedRules(form.followedRules === 'no' ? '' : 'no')}
+              />
             </div>
 
-            {form.management.length > 0 && (
-              <div className="space-y-1.5">
-                {form.management.map((m, i) => (
-                  <div key={i} className="flex items-center gap-2 font-mono text-[11px] text-white/50">
-                    <span className="text-white/30" dir="ltr">
-                      {clockInZone(undefined, new Date(m.at))}
-                    </span>
-                    <span>סטופ → {m.to}</span>
-                    <button
-                      type="button" onClick={() => removeManagement(i)} aria-label="מחק רישום"
-                      className="text-white/20 hover:text-[#ef4444] transition-colors duration-150"
-                    >✕</button>
-                  </div>
-                ))}
-                {stopRecord.moves > 0 && (
-                  <p className="font-mono text-[11px] text-[#d4af37]/80 leading-relaxed pt-1">
-                    מהרישום: {stopRecord.advanced > 0 && `${stopRecord.advanced} קידום`}
-                    {stopRecord.advanced > 0 && stopRecord.widened > 0 && ' · '}
-                    {stopRecord.widened > 0 && `${stopRecord.widened} הרחקה`}
-                    {stopRecord.widened === 0 && stopRecord.advanced === 0 && 'ללא שינוי בפועל'}
-                    {' — '}זה מה שייספר, לא הכפתורים למעלה.
+            {/* Which ones. More than one can be broken in a single trade, so
+                this is a multi-select — and each tick becomes a violation
+                record on the rules page rather than a second copy of the same
+                fact living on the trade. */}
+            {form.followedRules === 'no' && (
+              <div className="mt-3 onyx-pop-in">
+                {activeRules.length > 0 ? (
+                  <>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35 mb-2">אילו חוקים הפרת?</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeRules.map(r => (
+                        <button type="button" key={r.id}
+                          onClick={() => toggleBrokenRule(r.id)}
+                          className={chipBtn(form.brokenRules.includes(r.id))}>
+                          {ruleTitle(r)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="font-mono text-[11px] text-white/30 leading-relaxed">
+                    עדיין לא כתבת חוקים —{' '}
+                    <Link href="/dashboard/rules" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
+                      כתוב את הראשון
+                    </Link>{' '}
+                    וכאן תוכל לסמן בדיוק מה הופר.
                   </p>
                 )}
               </div>
             )}
-          </div>
-        </Group>
 
-        {/* ── MODEL / SETUP — the trader's own playbook models, sitting right beside
-            the generic confirmations so they can tag which of their built setups
-            this entry belonged to. Single-select. ── */}
-        <Group label="מודל / סטאפ" tone="muted">
-          {playbookSetups.length > 0 ? (
+            <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
+              {form.followedRules === ''
+                ? 'אם תדלג — העסקה לא תיספר לשני הכיוונים. עדיף לא לענות מאשר לענות לא נכון.'
+                : 'התשובה שלך על העסקה הזו — לא נגזרת מהתוצאה.'}
+            </p>
+          </Field>
+
+          <Field label="מצב רגשי לפני הכניסה">
             <div className="flex flex-wrap gap-1.5">
-              {playbookSetups.map(s => (
+              {EMOTIONAL_STATE_OPTIONS.map(opt => (
                 <button
-                  type="button" key={s.id}
-                  onClick={() => selectModel(s.name)}
-                  className={chipBtn(form.model === s.name)}
+                  type="button" key={opt.key}
+                  onClick={() => setEmotionalState(opt.key)}
+                  className={chipBtn(form.emotionalState === opt.key)}
                 >
-                  {s.name}
+                  {opt.label}
                 </button>
               ))}
             </div>
-          ) : (
-            <p className="font-mono text-[11px] text-white/30 leading-relaxed">
-              עדיין לא בנית מודלים משלך —{' '}
-              <Link href="/dashboard/playbook" className="text-[#d4af37]/70 hover:text-[#d4af37] transition-colors">
-                בנה מודל בפלייבוק
-              </Link>{' '}
-              עם האישורים שלך, והוא יופיע כאן לבחירה.
-            </p>
-          )}
+          </Field>
         </Group>
 
-        {/* ── CONFIRMATIONS — built-in defaults + the trader's own tags, multi-select ── */}
-        <Group label="אישורי הכניסה" tone="muted">
-          <div className="flex flex-wrap gap-1.5">
-            {availableConfirmations.map(tag => {
-              const isCustom = !DEFAULT_CONFIRMATIONS.includes(tag as typeof DEFAULT_CONFIRMATIONS[number]);
-              return (
-                <span key={tag} className="relative group/conf">
-                  <button
-                    type="button"
-                    onClick={() => toggleConfirmation(tag)}
-                    className={chipBtn(form.confirmations.includes(tag))}
-                    dir="ltr"
-                  >
-                    {labelForConfirmation(tag)}
-                  </button>
-                  {isCustom && (
-                    <button
-                      type="button"
-                      onClick={() => removeCustomConfirmation(tag)}
-                      aria-label={`מחק את האישור ${tag}`}
-                      className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-black border border-[#333] text-white/50 text-[9px] flex items-center justify-center opacity-0 group-hover/conf:opacity-100 hover:text-[#ef4444] hover:border-[#ef4444]/60 transition-all duration-150"
-                    >✕</button>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-          <div className="flex gap-2 max-w-xs">
-            <input
-              value={newConfirmation}
-              onChange={e => setNewConfirmation(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomConfirmation(); } }}
-              placeholder="הוסף אישור משלך..."
-              className={inputCls}
-              dir="rtl"
-            />
-            <button
-              type="button"
-              onClick={addCustomConfirmation}
-              aria-label="הוסף אישור"
-              className="shrink-0 px-4 rounded-xl border border-[#d4af37]/30 text-[#d4af37]/70 hover:text-[#d4af37] hover:border-[#d4af37]/50 font-mono text-lg leading-none transition-colors duration-150"
-            >＋</button>
-          </div>
-        </Group>
-
-        {/* ── EMOTIONAL STATE — single select ── */}
-        <Group label="מצב רגשי לפני הכניסה" tone="muted">
-          <div className="flex flex-wrap gap-1.5">
-            {EMOTIONAL_STATE_OPTIONS.map(opt => (
-              <button
-                type="button" key={opt.key}
-                onClick={() => setEmotionalState(opt.key)}
-                className={chipBtn(form.emotionalState === opt.key)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </Group>
-
-        {/* ── Auto-detected context — informational only, nothing to choose ── */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-white/30">
-          <span>
-            מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? sessionLabel(autoSession) : 'מחוץ לשעות מסחר'}</b>
-          </span>
-          {/* Only when a direction was actually declared. The readout used to
-              render for every trade and always said "aligned", because the
-              alignment it read defaulted to ALIGNED whenever no bias existed. */}
-          {form.dayBias && form.dayBias !== 'INDECISIVE' && (
-            <span>
-              הכיוון שהגדרת: <b className="text-white/60">{BIAS_HE[form.dayBias] ?? form.dayBias}</b>{' '}
-              {alignment === 'ALIGNED'
-                ? <span className="text-[#22c55e]">✓ מיושר</span>
-                : <span className="text-[#d4af37]">⚠ נגד הכיוון</span>}
+        {/* ── 5 · EVERYTHING ELSE — folded, so it is not in the way ── */}
+        <div className="rounded-xl border border-white/[0.06]">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(o => !o)}
+            aria-expanded={detailsOpen}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-start"
+          >
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-white/25">
+              5 · פרטים נוספים
             </span>
+            <span className="font-mono text-[11px] text-white/30">
+              {detailsOpen ? 'סגור ✕' : 'נימוק · סטופ · צילום · זמן  ›'}
+            </span>
+          </button>
+
+          {detailsOpen && (
+            <div className="px-4 pb-4 space-y-5 onyx-pop-in">
+              <Field label="מה גרם לך להיכנס?">
+                <textarea
+                  value={form.notes}
+                  onChange={e => set('notes', e.target.value)}
+                  placeholder="תאר את ה-setup, מה ראית בשוק, ומה עבר עליך מבחינה מנטלית..."
+                  className={inputCls + ' resize-none'}
+                  rows={3}
+                  dir="rtl"
+                />
+              </Field>
+
+              <Field label="הזדהות עם הסטופ">
+                <textarea
+                  value={form.stopNote}
+                  onChange={e => set('stopNote', e.target.value)}
+                  placeholder="למה דווקא שם? מתחת לפתיל, מעבר לאזור הנזילות, גודל קבוע..."
+                  className={inputCls + ' resize-none'}
+                  rows={2}
+                  dir="rtl"
+                />
+              </Field>
+
+              <Field label="צילום מסך">
+                <ScreenshotUpload images={form.screenshots} onChange={sc => set('screenshots', sc)} />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="תאריך">
+                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
+                </Field>
+                <Field label="שעת כניסה">
+                  <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
+                </Field>
+              </div>
+
+              {/* Auto-detected context — informational only, nothing to choose */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-white/30 pt-1">
+                <span>
+                  מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? sessionLabel(autoSession) : 'מחוץ לשעות מסחר'}</b>
+                </span>
+                {form.dayBias && form.dayBias !== 'INDECISIVE' && (
+                  <span>
+                    הכיוון שהגדרת: <b className="text-white/60">{BIAS_HE[form.dayBias] ?? form.dayBias}</b>{' '}
+                    {alignment === 'ALIGNED'
+                      ? <span className="text-[#22c55e]">✓ מיושר</span>
+                      : <span className="text-[#d4af37]">⚠ נגד הכיוון</span>}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
-
-        {/* ── SCREENSHOT — encouraged, always visible ── */}
-        <Group label="צילום מסך" tone="muted">
-          <ScreenshotUpload images={form.screenshots} onChange={s => set('screenshots', s)} />
-        </Group>
-
-        {/* ── REASONING — feeds the AI's pattern + psychology analysis ── */}
-        <Group label="נימוק" tone="muted">
-          <div>
-            <p className="text-[13px] text-white/55 mb-2 leading-snug" dir="rtl">מה גרם לך להיכנס לעסקה הזו?</p>
-            <textarea
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="תאר את ה-setup, מה ראית בשוק, ומה עבר עליך מבחינה מנטלית..."
-              className={inputCls + ' resize-none'}
-              rows={3}
-              dir="rtl"
-            />
-          </div>
-        </Group>
-
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button
             type="submit"
-            disabled={!form.result && derivedResult === 'OPEN'}
+            disabled={!canSubmit}
             className="flex-1 py-3.5 rounded-xl font-mono text-sm font-bold uppercase tracking-[0.14em] transition-all duration-200 bg-[#d4af37] text-black hover:bg-[#e5c84a] hover:scale-[1.01] [box-shadow:0_0_24px_rgba(212,175,55,0.25)] disabled:bg-[#3a3527] disabled:text-white/30 disabled:cursor-not-allowed disabled:[box-shadow:none] disabled:hover:scale-100"
           >
             {initial ? 'שמור שינויים' : 'שמור עסקה'}

@@ -55,6 +55,8 @@ export type TradeRow = {
   emotional_state: string | null;
   followed_rules: boolean | null;
   stop_moved: string | null;
+  stop_move_tag: string | null;
+  stop_note: string | null;
   management: unknown[] | null;
   deleted_at: string | null;
   updated_at: string | null;
@@ -93,6 +95,8 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     // `?? undefined` and not `|| undefined`: false is a real answer.
     followedRules: row.followed_rules ?? undefined,
     stopMoved: (row.stop_moved as TradeEntry['stopMoved']) ?? undefined,
+    stopMoveTag: (row.stop_move_tag as TradeEntry['stopMoveTag']) ?? undefined,
+    stopNote: row.stop_note ?? undefined,
     management: (row.management as TradeEntry['management']) ?? undefined,
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : undefined,
     deletedAt: row.deleted_at,
@@ -128,6 +132,8 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     emotional_state: trade.emotionalState ?? null,
     followed_rules: typeof trade.followedRules === 'boolean' ? trade.followedRules : null,
     stop_moved: trade.stopMoved ?? null,
+    stop_move_tag: trade.stopMoveTag ?? null,
+    stop_note: trade.stopNote ?? null,
     management: trade.management ?? null,
     deleted_at: null,
     updated_at: trade.updatedAt ? new Date(trade.updatedAt).toISOString() : new Date().toISOString(),
