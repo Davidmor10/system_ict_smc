@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyReportPanel from '../../components/WeeklyReportPanel';
+import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
 import WeeklyBehaviorReview from '../../components/WeeklyBehaviorReview';
 
 /** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
@@ -294,6 +295,9 @@ export default function AiAnalyticsPage() {
   }, []);
 
   const analysis = useMemo(() => runFullAnalysis(trades), [trades]);
+  // Identifies the journal every AI-phrased panel on this page describes, so
+  // their caches expire when the trades change and not merely at midnight.
+  const fingerprint = useMemo(() => tradesFingerprint(trades), [trades]);
   const hasEnoughData = trades.filter(t => t.result !== 'OPEN').length >= 3;
   const activeSession = getActiveSessionKey();
 
@@ -303,9 +307,13 @@ export default function AiAnalyticsPage() {
     // v2: the evidence line stopped being model prose and became computed
     // text. Rows cached under the old key hold the English sentences that
     // change replaced, so they are left behind rather than shown until midnight.
-    const cacheKey = 'onyx_ai_patterns_v2_' + todayISO();
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { setPatternInsights(JSON.parse(cached)); return; } catch {} }
+    // v3: keyed by the trades it describes as well as the day. Under a
+    // date-only key, deleting or editing a trade left the morning's rows on
+    // screen describing a journal that no longer exists.
+    const cachePrefix = 'onyx_ai_patterns_v3_';
+    const cacheKey = cachePrefix + todayISO();
+    const cached = readInsightCache<PatternInsight[]>(cacheKey, fingerprint);
+    if (cached && Array.isArray(cached.value)) { setPatternInsights(cached.value); return; }
     setPatternsLoading(true);
     fetch('/api/ai/pattern-insights', {
       method: 'POST',
@@ -319,20 +327,21 @@ export default function AiAnalyticsPage() {
       .then(({ insights }) => {
         if (Array.isArray(insights)) {
           setPatternInsights(insights);
-          try { localStorage.setItem(cacheKey, JSON.stringify(insights)); } catch {}
+          writeInsightCache(cacheKey, cachePrefix, fingerprint, insights, new Date().toISOString());
         }
       })
       .catch(() => {})
       .finally(() => setPatternsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades.length]);
+  }, [fingerprint]);
 
   // ── Working strengths — "מה באמת עובד לך" (AI-phrased, cached per day) ──
   useEffect(() => {
     if (!hasEnoughData) { setWorkingStrengths([]); return; }
-    const cacheKey = 'onyx_ai_strengths_v2_' + todayISO();
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) { try { setWorkingStrengths(JSON.parse(cached)); return; } catch {} }
+    const cachePrefix = 'onyx_ai_strengths_v3_';
+    const cacheKey = cachePrefix + todayISO();
+    const cached = readInsightCache<WorkingStrength[]>(cacheKey, fingerprint);
+    if (cached && Array.isArray(cached.value)) { setWorkingStrengths(cached.value); return; }
     setStrengthsLoading(true);
     fetch('/api/ai/strengths', {
       method: 'POST',
@@ -343,13 +352,13 @@ export default function AiAnalyticsPage() {
       .then(({ strengths }) => {
         if (Array.isArray(strengths)) {
           setWorkingStrengths(strengths);
-          try { localStorage.setItem(cacheKey, JSON.stringify(strengths)); } catch {}
+          writeInsightCache(cacheKey, cachePrefix, fingerprint, strengths, new Date().toISOString());
         }
       })
       .catch(() => {})
       .finally(() => setStrengthsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trades.length]);
+  }, [fingerprint]);
 
   // Weekly-report fetching + history archive moved into WeeklyReportPanel
   // (self-contained component with its own state + cache + DB-backed history).
@@ -963,7 +972,7 @@ export default function AiAnalyticsPage() {
           index={10} total={11} eyebrow="AI · Weekly Report" title="דוח שבועי"
           description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא. הארכיון שומר את כל הדוחות הקודמים כדי שתוכל לחזור אליהם."
         >
-          <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} />
+          <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
 
           {/* The behaviour half of the week, under the results half.
               Different question, same seven days: the panel above says what

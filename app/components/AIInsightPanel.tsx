@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { readInsightCache, tradesFingerprint, writeInsightCache } from '../lib/ai/insightCache';
 import type { TradeEntry } from '../lib/journal';
 import { clockInZone } from '../lib/time/zone';
 import { todayISO } from '../lib/journal';
@@ -36,7 +37,12 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const closedCount = trades.filter(t => t.result !== 'OPEN').length;
-  const cacheKey = 'onyx_ai_insights_v2_' + todayISO();
+  // Keyed by the trades the text is about, not only by the day — otherwise
+  // deleting or editing a trade leaves this morning's text on screen,
+  // confidently quoting a journal that no longer exists.
+  const fingerprint = tradesFingerprint(trades);
+  const cachePrefix = 'onyx_ai_insights_v3_';
+  const cacheKey = cachePrefix + todayISO();
 
   async function fetchInsights() {
     if (trades.length < 3) return;
@@ -54,9 +60,7 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
       const stamp = clockInZone();
       setInsights(fetched);
       setUpdatedAt(stamp);
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify({ insights: fetched, updatedAt: stamp }));
-      } catch { /* storage unavailable — non-fatal */ }
+      writeInsightCache(cacheKey, cachePrefix, fingerprint, fetched, stamp);
     } catch {
       setError(true);
     } finally {
@@ -69,22 +73,18 @@ export default function AIInsightPanel({ trades }: { trades: TradeEntry[] }) {
   // was burning through the free-tier model quota for nothing.
   useEffect(() => {
     if (closedCount < 3) return;
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached) as { insights: PersonalizedInsight[]; updatedAt: string };
-        // A cache written by the previous fixed-category shape lacks `tone` —
-        // discard it instead of crashing on TONE_META[undefined] at render time.
-        if (Array.isArray(parsed.insights) && parsed.insights.length > 0 && parsed.insights.every(i => i && typeof i.tone === 'string')) {
-          setInsights(parsed.insights);
-          setUpdatedAt(parsed.updatedAt);
-          return;
-        }
-      }
-    } catch { /* corrupt cache entry — fall through to a fresh fetch */ }
+    const cached = readInsightCache<PersonalizedInsight[]>(cacheKey, fingerprint);
+    // A cache written by the previous fixed-category shape lacks `tone` —
+    // discard it instead of crashing on TONE_META[undefined] at render time.
+    if (cached && Array.isArray(cached.value) && cached.value.length > 0
+        && cached.value.every(i => i && typeof i.tone === 'string')) {
+      setInsights(cached.value);
+      setUpdatedAt(cached.updatedAt);
+      return;
+    }
     fetchInsights();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closedCount]);
+  }, [fingerprint]);
 
   return (
     <section className="rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] overflow-hidden [box-shadow:0_0_80px_-40px_rgba(212,175,55,0.35)]">

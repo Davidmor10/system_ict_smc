@@ -15,6 +15,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import InsightText from './InsightText';
 import TypingDots from './TypingDots';
+import { readInsightCache, writeInsightCache } from '../lib/ai/insightCache';
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; }
@@ -61,11 +62,15 @@ function ConfChip({ level, size = 'md' }: { level: string; size?: 'sm' | 'md' })
 /* ── Panel ────────────────────────────────────────────────────────────── */
 
 export default function WeeklyReportPanel({
-  hasEnoughData, isoWeekKey, todayISO,
+  hasEnoughData, isoWeekKey, todayISO, fingerprint,
 }: {
   hasEnoughData: boolean;
   isoWeekKey: (dateISO: string) => string;
   todayISO: () => string;
+  /** Identifies the trades this week's narrative was written about. A report
+   *  cached under a different one describes a journal that has since changed,
+   *  so it is a miss, not content. */
+  fingerprint: string;
 }) {
   const [report, setReport]       = useState<WeeklyReport | null>(null);
   const [loading, setLoading]     = useState(false);
@@ -79,14 +84,10 @@ export default function WeeklyReportPanel({
   // don't re-fire the LLM on every page visit).
   useEffect(() => {
     if (!hasEnoughData) { setReport(null); return; }
-    const cacheKey = 'onyx_ai_weekly_report_' + thisWeek;
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed?.paragraphs)) { setReport(parsed); return; }
-      } catch { /* fall through to re-fetch */ }
-    }
+    const cachePrefix = 'onyx_ai_weekly_report_v2_';
+    const cacheKey = cachePrefix + thisWeek;
+    const cached = readInsightCache<WeeklyReport>(cacheKey, fingerprint);
+    if (cached && Array.isArray(cached.value?.paragraphs)) { setReport(cached.value); return; }
     setLoading(true);
     fetch('/api/ai/weekly-report', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -96,11 +97,11 @@ export default function WeeklyReportPanel({
       .then(({ report }: { report: WeeklyReport | null }) => {
         if (!report || !Array.isArray(report.paragraphs) || report.paragraphs.length === 0) return;
         setReport(report);
-        try { localStorage.setItem(cacheKey, JSON.stringify(report)); } catch {}
+        writeInsightCache(cacheKey, cachePrefix, fingerprint, report, new Date().toISOString());
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [hasEnoughData, thisWeek]);
+  }, [hasEnoughData, thisWeek, fingerprint]);
 
   // Fetch the archive from the DB (persistent, cross-device — replaces the
   // old localStorage-only snippet strip).
