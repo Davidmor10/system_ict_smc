@@ -804,6 +804,24 @@ export default function TradeForm({
 
         {/* ── 1 · THE TRADE — asked first because it is the freshest ── */}
         <Group label="1 · העסקה">
+          {/* When it happened, asked first. Both are prefilled with now, so a
+              trade logged as it closes costs nothing — but a trade logged in
+              the evening is retyped here rather than being silently stamped
+              with the wrong hour. The session below is read from this time,
+              which is why it sits next to it and not at the bottom of the
+              form. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="תאריך">
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
+            </Field>
+            <Field label="שעת כניסה">
+              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
+            </Field>
+          </div>
+          <p className="font-mono text-[10px] text-white/30 -mt-2">
+            מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? sessionLabel(autoSession) : 'מחוץ לשעות מסחר'}</b>
+          </p>
+
           <Field label="נכס">
             <div className="grid grid-cols-4 gap-1.5">
               {INSTRUMENT_KEYS.map(sym => (
@@ -1116,8 +1134,8 @@ export default function TradeForm({
           <Field label="הכיוון שלך להיום (אופציונלי)">
             <div className="flex gap-1.5">
               {([
-                ['BULLISH',    'שורי'],
-                ['BEARISH',    'דובי'],
+                ['BULLISH',    'עולה'],
+                ['BEARISH',    'יורד'],
                 ['INDECISIVE', 'ללא כיוון'],
               ] as [Bias, string][]).map(([b, he]) => (
                 <button type="button" key={b} onClick={() => set('dayBias', form.dayBias === b ? '' : b)}
@@ -1225,7 +1243,7 @@ export default function TradeForm({
               5 · פרטים נוספים
             </span>
             <span className="font-mono text-[11px] text-white/30">
-              {detailsOpen ? 'סגור ✕' : 'נימוק · סטופ · צילום · זמן  ›'}
+              {detailsOpen ? 'סגור ✕' : 'נימוק · סטופ · צילום  ›'}
             </span>
           </button>
 
@@ -1257,20 +1275,10 @@ export default function TradeForm({
                 <ScreenshotUpload images={form.screenshots} onChange={sc => set('screenshots', sc)} />
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="תאריך">
-                  <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
-                </Field>
-                <Field label="שעת כניסה">
-                  <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
-                </Field>
-              </div>
-
-              {/* Auto-detected context — informational only, nothing to choose */}
+              {/* Auto-detected context — informational only, nothing to choose.
+                  The session lives next to the time it is derived from, up in
+                  group 1; what is left here is the bias reading. */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-white/30 pt-1">
-                <span>
-                  מושב מזוהה אוטומטית: <b className="text-white/60">{autoSession ? sessionLabel(autoSession) : 'מחוץ לשעות מסחר'}</b>
-                </span>
                 {form.dayBias && form.dayBias !== 'INDECISIVE' && (
                   <span>
                     הכיוון שהגדרת: <b className="text-white/60">{BIAS_HE[form.dayBias] ?? form.dayBias}</b>{' '}
