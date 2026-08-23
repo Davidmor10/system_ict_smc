@@ -140,6 +140,41 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
   };
 }
 
+/** Columns added by `supabase-migration-stop-note.sql`. PostgREST rejects the
+ *  ENTIRE upsert when one column in the payload is missing from the schema
+ *  cache, so a database that has not run the migration yet would fail every
+ *  trade save — not just these two fields. Same posture as `has_screenshot`
+ *  on the read side: the app works before and after the migration, and the
+ *  only thing a stale database loses is the two new fields. */
+const PATCH_COLUMNS = ['stop_move_tag', 'stop_note'] as const;
+
+function isMissingPatchColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return error.code === 'PGRST204' || PATCH_COLUMNS.some(column => message.includes(column));
+}
+
+/** Upsert that survives a database still missing the patch columns. Tries the
+ *  full row first — the normal path, one round trip — and only on a
+ *  missing-column error retries without them. */
+export async function upsertTrades(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  rows: TradeRow[],
+): Promise<{ error: { message: string } | null }> {
+  const attempt = await supabase.from('journal_trades').upsert(rows, { onConflict: 'clerk_id,id' });
+  if (!isMissingPatchColumn(attempt.error)) return attempt;
+
+  logger.warn('journal upsert retried without the stop-note columns — run supabase-migration-stop-note.sql', {
+    error: attempt.error?.message,
+  });
+  const trimmed = rows.map(row => {
+    const copy: Record<string, unknown> = { ...row };
+    for (const column of PATCH_COLUMNS) delete copy[column];
+    return copy;
+  });
+  return supabase.from('journal_trades').upsert(trimmed, { onConflict: 'clerk_id,id' });
+}
+
 /** GET /api/journal — returns all trades (active + trash) for the current user. */
 export async function GET() {
   // Every plan is paid. A signed-in account without a subscription is
@@ -212,9 +247,7 @@ export async function POST(req: Request) {
   const trade: TradeEntry = parsed.data;
 
   const supabase = createServerSupabaseClient();
-  const { error } = await supabase
-    .from('journal_trades')
-    .upsert(tradeToRow(userId, trade), { onConflict: 'clerk_id,id' });
+  const { error } = await upsertTrades(supabase, [tradeToRow(userId, trade)]);
 
   if (error) {
     logger.error('journal POST failed', { userId, error: error.message });
@@ -269,9 +302,7 @@ export async function PUT(req: Request) {
   const trades: TradeEntry[] = parsed.data;
 
   const supabase = createServerSupabaseClient();
-  const { error } = await supabase
-    .from('journal_trades')
-    .upsert(trades.map(t => tradeToRow(userId, t)), { onConflict: 'clerk_id,id' });
+  const { error } = await upsertTrades(supabase, trades.map(t => tradeToRow(userId, t)));
 
   if (error) {
     logger.error('journal PUT failed', { userId, error: error.message });
