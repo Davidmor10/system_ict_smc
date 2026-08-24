@@ -2,7 +2,6 @@ import Sidebar from '../components/Sidebar';
 import SplashIntro from '../components/SplashIntro';
 import MobileNav from '../components/MobileNav';
 import MobileHeader from '../components/MobileHeader';
-import MusicPanel from '../components/MusicPanel';
 import PageTransition from '../components/PageTransition';
 import ViewportScale from '../components/ViewportScale';
 import { PlanProvider } from '../components/PlanProvider';
@@ -33,10 +32,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         <MobileHeader />
         <MobileNav />
-        {/* Mounted on the LAYOUT, not on a page: a player that unmounts when
-            you walk from the journal to the notebook stops the music mid-bar.
-            Here it survives every route change inside /dashboard. */}
-        <MusicPanel />
       </div>
     </PlanProvider>
   );

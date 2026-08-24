@@ -174,8 +174,6 @@ const PRE_MARKET_QUESTIONS = [
   q(3, `${en('Max loss')} ליום`, `בדולרים / ${en('R')}:`),
   q(4, 'חדשות ואירועים לתשומת לב'),
   q(5, 'איך אני מרגיש?', 'עייף · חרד · בטוח · מוסח'),
-  `<p class="nb-hint">מצב מנטלי ופוקוס — לדוגמה: מפוקס, ישנתי טוב / עייף, לשמור על סיכון נמוך</p>`,
-  LINE,
 ].join('');
 
 const POST_SESSION_QUESTIONS = [
@@ -183,20 +181,13 @@ const POST_SESSION_QUESTIONS = [
   q(2, 'מה עבד טוב בסשן הזה?', 'לדוגמה: סבלנות לכניסה, ניהול סיכונים נכון'),
   q(3, 'היו עסקאות רגשיות / חריגות?', `לדוגמה: כניסת ${en('FOMO')} בעסקה הראשונה`),
   q(4, 'מה הייתי משנה?'),
+  // Asked after the close, not before it. Before the session it is a guess at
+  // how the day will go; after it, it is the one reading the trader can give
+  // that no number in the journal can — how they actually held up.
+  q(5, 'מצב מנטלי ופוקוס', 'לדוגמה: מפוקס, ישנתי טוב / עייף, לשמור על סיכון נמוך'),
 ].join('');
 
 export const BUILTIN_TEMPLATES: NotebookTemplate[] = [
-  {
-    id: 'pre-post',
-    name: 'Pre-Market & Post-Session',
-    builtin: true,
-    html: [
-      `<h2>${en('Pre-Market')} — התכוננות</h2>`,
-      PRE_MARKET_QUESTIONS,
-      `<h2>${en('Post-Session Review')} — סיכום</h2>`,
-      POST_SESSION_QUESTIONS,
-    ].join(''),
-  },
   {
     id: 'pre',
     name: 'תבנית Pre-Market',
@@ -211,20 +202,6 @@ export const BUILTIN_TEMPLATES: NotebookTemplate[] = [
     name: 'תבנית Post-Session',
     builtin: true,
     html: [
-      `<h2>${en('Post-Session Review')} — סיכום</h2>`,
-      POST_SESSION_QUESTIONS,
-    ].join(''),
-  },
-  {
-    id: 'all',
-    name: 'All-in-One יומי',
-    builtin: true,
-    html: [
-      `<h2>${en('Pre-Market')} — התכוננות</h2>`,
-      PRE_MARKET_QUESTIONS,
-      `<h2>${en('Trade Log')} — לכל עסקה</h2>`,
-      `<p class="nb-hint">תאריך · טיקר · כיוון · ${en('Entry')} · ${en('Exit')} · ${en('Size')} · ${en('P&amp;L')} · ${en('Setup tag')} · ${en('Emotion tag')}</p>`,
-      LINE,
       `<h2>${en('Post-Session Review')} — סיכום</h2>`,
       POST_SESSION_QUESTIONS,
     ].join(''),

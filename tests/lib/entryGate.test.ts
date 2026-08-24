@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   BIAS_META, countdownTo, humanizeMinutes, isNewYorkOpen, nextMacro,
-  planStorageKey, readDeclaredBias, ruleOfTheDay, writeDeclaredBias,
+  planStorageKey, readDeclaredBias, ruleOfTheDay, writeBiasNote, writeDeclaredBias,
   type MacroLike,
 } from '../../app/lib/entryGate';
 import type { Rule } from '../../app/lib/rules/types';
@@ -46,8 +46,26 @@ describe('the plan record this screen shares with the dashboard', () => {
   });
 
   it('round-trips a declaration', () => {
-    writeDeclaredBias('bull', AT);
-    expect(readDeclaredBias(AT)).toEqual({ bias: 'bull', at: AT.getTime() });
+    writeDeclaredBias('bull', '', AT);
+    expect(readDeclaredBias(AT)).toEqual({ bias: 'bull', at: AT.getTime(), note: '' });
+  });
+
+  it('carries the reason, and keeps the stamp when only the reason changes', () => {
+    // The timestamp answers "how early did they make the call". Typing a
+    // sentence an hour later is not making the call again.
+    writeDeclaredBias('bear', 'סוויפ של הגבוה של אסיה', AT);
+    expect(readDeclaredBias(AT)).toEqual({ bias: 'bear', at: AT.getTime(), note: 'סוויפ של הגבוה של אסיה' });
+
+    writeBiasNote('שיניתי דעה אחרי הפתיחה', AT);
+    const after = readDeclaredBias(AT);
+    expect(after?.note).toBe('שיניתי דעה אחרי הפתיחה');
+    expect(after?.bias).toBe('bear');
+    expect(after?.at).toBe(AT.getTime());
+  });
+
+  it('will not write a reason onto a day with no declaration', () => {
+    writeBiasNote('אין לי כיוון', AT);
+    expect(readDeclaredBias(AT)).toBeNull();
   });
 
   it('keeps every other field of the plan', () => {
@@ -55,7 +73,7 @@ describe('the plan record this screen shares with the dashboard', () => {
       planStorageKey(AT),
       JSON.stringify({ notes: 'לחכות לסוויפ של אסיה', target: 3, bias: 'bear' }),
     );
-    writeDeclaredBias('bull', AT);
+    writeDeclaredBias('bull', '', AT);
     const doc = JSON.parse(localStorage.getItem(planStorageKey(AT))!);
     expect(doc.notes).toBe('לחכות לסוויפ של אסיה');
     expect(doc.target).toBe(3);
@@ -65,11 +83,11 @@ describe('the plan record this screen shares with the dashboard', () => {
   it('survives a corrupt or non-object record instead of throwing', () => {
     localStorage.setItem(planStorageKey(AT), '}{not json');
     expect(readDeclaredBias(AT)).toBeNull();
-    expect(() => writeDeclaredBias('neutral', AT)).not.toThrow();
+    expect(() => writeDeclaredBias('neutral', '', AT)).not.toThrow();
     expect(readDeclaredBias(AT)?.bias).toBe('neutral');
 
     localStorage.setItem(planStorageKey(AT), '[1,2,3]');
-    expect(() => writeDeclaredBias('bull', AT)).not.toThrow();
+    expect(() => writeDeclaredBias('bull', '', AT)).not.toThrow();
     expect(readDeclaredBias(AT)?.bias).toBe('bull');
   });
 

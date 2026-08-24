@@ -12,9 +12,9 @@ import { hydrateList } from '../../lib/sync/collections';
 import { computeRuleStats } from '../../lib/rules/stats';
 import { ruleSeverity, ruleTitle, ruleVerification, type Rule, type RuleCheck } from '../../lib/rules/types';
 import {
-  BIAS_META, countdownTo, humanizeMinutes, IMPACT_HE, isNewYorkOpen, NY_CLOSE_HOUR,
-  NY_OPEN_HOUR, nextMacro, readDeclaredBias, ruleOfTheDay, writeDeclaredBias,
-  type BiasChoice, type DeclaredBias, type MacroLike,
+  countdownTo, humanizeMinutes, IMPACT_HE, isNewYorkOpen, NY_CLOSE_HOUR,
+  NY_OPEN_HOUR, nextMacro, ruleOfTheDay,
+  type MacroLike,
 } from '../../lib/entryGate';
 import './member.css';
 
@@ -87,9 +87,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
   const [checks, setChecks] = useState<RuleCheck[]>([]);
   const [violations, setViolations] = useState<LegacyViolation[]>([]);
   const [macro, setMacro] = useState<MacroLike[]>([]);
-  const [declared, setDeclared] = useState<DeclaredBias | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [stamped, setStamped] = useState(false);
   const [entering, setEntering] = useState(false);
   const [cu, setCu] = useState(0);
 
@@ -128,7 +125,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
     return () => { alive = false; };
   }, [member]);
 
-  useEffect(() => { setDeclared(readDeclaredBias()); }, []);
 
   // ── Reveal + count-up ────────────────────────────────────────────────────
   useEffect(() => {
@@ -259,23 +255,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
     return [...trades].sort((a, b) =>
       (b.dateISO + b.time).localeCompare(a.dateISO + a.time) || b.id - a.id)[0];
   }, [trades]);
-
-  // ── Bias ─────────────────────────────────────────────────────────────────
-  const pick = useCallback((choice: BiasChoice) => {
-    setDeclared(writeDeclaredBias(choice));
-    setPickerOpen(false);
-    setStamped(true);
-    window.setTimeout(() => setStamped(false), 600);
-  }, []);
-
-  const declaredAt = declared?.at ? new Date(declared.at) : null;
-  const biasValue = declared
-    ? `${BIAS_META[declared.bias].he}${declaredAt ? ` · ${clockInZone(zone, declaredAt)}` : ''}`
-    : 'לא הוצהר';
-  const biasCta = pickerOpen ? 'סגור ✕' : declared ? 'לשנות ←' : 'להצהיר עכשיו ←';
-  const biasWindow = nyOpen
-    ? 'ניו יורק פתוחה — שינוי עכשיו יחול על עסקאות חדשות בלבד'
-    : `עד פתיחת ניו יורק · ${now ? countdownTo(NY_OPEN_HOUR, hourFloat) : '--:--:--'}`;
 
   return (
     <div className="eg" ref={rootRef}>
@@ -472,52 +451,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
 
                 {/* ── Status column ───────────────────────────────────── */}
                 <div className="eg-status" data-reveal data-count>
-                  <button
-                    type="button"
-                    className="eg-bias"
-                    onClick={() => setPickerOpen(o => !o)}
-                    aria-expanded={pickerOpen}
-                  >
-                    <span className="eg-bias-l">
-                      <span className="eg-bias-k">ביאס היום</span>
-                      <span className="eg-bias-v" data-stamp={stamped}>{biasValue}</span>
-                    </span>
-                    <span className="eg-bias-cta">{biasCta}</span>
-                  </button>
-
-                  {pickerOpen && (
-                    <div className="eg-picker">
-                      <div className="eg-picker-grid">
-                        {(Object.keys(BIAS_META) as BiasChoice[]).map(key => {
-                          const meta = BIAS_META[key];
-                          const on = declared?.bias === key;
-                          const arrow = key === 'bull' ? ' ▲' : key === 'bear' ? ' ▼' : '';
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              className="eg-pick"
-                              data-on={on}
-                              onClick={() => pick(key)}
-                              style={on ? { boxShadow: `inset 0 0 0 1px ${meta.color}, 0 0 40px -18px ${meta.color}` } : undefined}
-                            >
-                              <span className="eg-pick-top">
-                                <span className="eg-pick-he" style={{ color: meta.color }}>{meta.he}{arrow}</span>
-                                <span className="eg-pick-ok" style={{ color: meta.color }} aria-hidden>✓</span>
-                              </span>
-                              <span className="eg-pick-en eg-ltr">{meta.en}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <span className="eg-picker-note">
-                        כל עסקה שתתעד היום תסומן אוטומטית עם הביאס או נגדו, וכך אפשר לחתוך את אחוזי
-                        ההצלחה לפי ההצהרה. ״חסר החלטה״ לא מסמן כלום — אין כיוון להשוות אליו.
-                      </span>
-                      <span className="eg-picker-win">{biasWindow} · נשמר לתאריך של היום בלבד</span>
-                    </div>
-                  )}
-
                   <span className="eg-row">
                     <span className="eg-row-l">
                       <span className="eg-row-k">משמעת רצופה</span>

@@ -24,8 +24,8 @@ function unisolatedLatin(html: string): string[] {
 }
 
 describe('built-in notebook templates', () => {
-  it('ships the four the trader works from', () => {
-    expect(BUILTIN_TEMPLATES.map(t => t.id)).toEqual(['pre-post', 'pre', 'post', 'all']);
+  it('ships the two the trader works from — one before the session, one after', () => {
+    expect(BUILTIN_TEMPLATES.map(t => t.id)).toEqual(['pre', 'post']);
     expect(BUILTIN_TEMPLATES.every(t => t.builtin)).toBe(true);
   });
 
@@ -67,6 +67,7 @@ describe('built-in notebook templates', () => {
     // answers "what went wrong", so it has to follow it.
     expect(order[2]).toContain('רגשיות');
     expect(order[3]).toContain('מה הייתי משנה');
+    expect(order[4]).toContain('מצב מנטלי ופוקוס');
   });
 
   it('keeps the pre-market five, with the mental-state prompt', () => {
@@ -74,6 +75,7 @@ describe('built-in notebook templates', () => {
     expect((pre.match(/<h3>/g) ?? []).length).toBe(5);
     expect(pre).toContain('Watchlist');
     expect(pre).toContain('Max loss');
-    expect(pre).toContain('מצב מנטלי ופוקוס');
+    // The mental-state read belongs after the close, not before it.
+    expect(pre).not.toContain('מצב מנטלי ופוקוס');
   });
 });

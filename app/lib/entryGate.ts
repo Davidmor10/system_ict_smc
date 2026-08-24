@@ -38,7 +38,15 @@ export function planStorageKey(now: Date = new Date()): string {
   return `onyx_dash_planobj_${planDayKey(now)}`;
 }
 
-export interface DeclaredBias { bias: BiasChoice; at: number | null }
+export interface DeclaredBias {
+  bias: BiasChoice;
+  at: number | null;
+  /** Why this direction, in the trader's own words. Optional, and short by
+   *  design: the value of writing it is that tomorrow it can be read back
+   *  against what actually happened. A reason nobody can reconstruct is a
+   *  declaration with no way to learn from it. */
+  note: string;
+}
 
 /** What the trader declared today, or null. */
 export function readDeclaredBias(now: Date = new Date()): DeclaredBias | null {
@@ -46,11 +54,15 @@ export function readDeclaredBias(now: Date = new Date()): DeclaredBias | null {
   try {
     const raw = window.localStorage.getItem(planStorageKey(now));
     if (!raw) return null;
-    const o = JSON.parse(raw) as { bias?: string; biasAt?: number };
+    const o = JSON.parse(raw) as { bias?: string; biasAt?: number; biasNote?: string };
     if (!o || typeof o !== 'object') return null;
     const bias = o.bias as BiasChoice;
     if (!bias || !(bias in BIAS_META)) return null;
-    return { bias, at: typeof o.biasAt === 'number' ? o.biasAt : null };
+    return {
+      bias,
+      at: typeof o.biasAt === 'number' ? o.biasAt : null,
+      note: typeof o.biasNote === 'string' ? o.biasNote : '',
+    };
   } catch {
     return null;
   }
@@ -63,7 +75,7 @@ export function readDeclaredBias(now: Date = new Date()): DeclaredBias | null {
  * and carries fields this screen knows nothing about. Clobbering it would erase
  * the trader's plan to save a two-letter string.
  */
-export function writeDeclaredBias(bias: BiasChoice, now: Date = new Date()): DeclaredBias {
+export function writeDeclaredBias(bias: BiasChoice, note = '', now: Date = new Date()): DeclaredBias {
   const at = now.getTime();
   if (typeof window !== 'undefined') {
     try {
@@ -85,10 +97,30 @@ export function writeDeclaredBias(bias: BiasChoice, now: Date = new Date()): Dec
 
       doc.bias = bias;
       doc.biasAt = at;
+      doc.biasNote = note;
       window.localStorage.setItem(key, JSON.stringify(doc));
     } catch { /* private mode, quota — the in-page state still updates */ }
   }
-  return { bias, at };
+  return { bias, at, note };
+}
+
+/** Update only the reason, keeping the direction and the moment it was
+ *  declared. Typing a sentence is not re-declaring a direction, and stamping
+ *  it as if it were would lose the one thing the timestamp is for: how early
+ *  in the day the trader made the call. */
+export function writeBiasNote(note: string, now: Date = new Date()): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = planStorageKey(now);
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    const doc = parsed as Record<string, unknown>;
+    if (!doc.bias) return;
+    doc.biasNote = note;
+    window.localStorage.setItem(key, JSON.stringify(doc));
+  } catch { /* unreadable or unwritable — the in-page state still updates */ }
 }
 
 // ── Clocks ───────────────────────────────────────────────────────────────────
