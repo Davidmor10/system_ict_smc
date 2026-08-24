@@ -490,3 +490,65 @@ describe('SYSTEM_PROMPT — what is going right', () => {
     expect(DAILY_INSIGHT_PROMPT_VERSION).toBeGreaterThanOrEqual(7);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The trader's own material: their words, their rules, their morning plan
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// All three were collected for weeks and read by nothing. The coach reasoned
+// about a trader's numbers while the trader's reasoning sat one table away.
+
+describe('buildUserMessage — the trader\'s own material', () => {
+  const base = {
+    profile: profile(),
+    todayTrades: [] as TradeRow[],
+    signals: computeTodaySignals([]),
+    pastWritingBlock: '[]',
+  };
+
+  it('carries the sentence written on a trade, and the one written on its stop', () => {
+    const t = T({ notes: 'חיכיתי לסוויפ של הגבוה', stop_note: 'מתחת לפתיל' } as Partial<TradeRow>);
+    const msg = buildUserMessage({ ...base, todayTrades: [t], signals: computeTodaySignals([t]) });
+
+    expect(msg).toContain('חיכיתי לסוויפ של הגבוה');
+    expect(msg).toContain('מתחת לפתיל');
+  });
+
+  it('leaves the fields out entirely when nothing was written', () => {
+    const t = T({ notes: '' });
+    const msg = buildUserMessage({ ...base, todayTrades: [t], signals: computeTodaySignals([t]) });
+    // An empty string in the block reads as a prompt to remark on the silence.
+    expect(msg).not.toMatch(/"why":\s*""/);
+    expect(msg).not.toMatch(/"stopWhy":\s*""/);
+  });
+
+  it('names the rules that were broken, with their counts', () => {
+    const msg = buildUserMessage({
+      ...base,
+      rulesBroken: [{ rule: 'לחכות לאישור לפני כניסה', count: 4, lastDate: '2026-08-22' }],
+    });
+    expect(msg).toContain('<rules_broken>');
+    expect(msg).toContain('לחכות לאישור לפני כניסה');
+  });
+
+  it('omits the rules block when nothing was ticked', () => {
+    expect(buildUserMessage({ ...base, rulesBroken: [] })).not.toContain('<rules_broken>');
+  });
+
+  it('carries the morning plan, and drops it when there is neither direction nor reason', () => {
+    const withPlan = buildUserMessage({ ...base, dayPlan: { bias: 'bear', note: 'סוויפ של הגבוה של אסיה' } });
+    expect(withPlan).toContain('<day_plan>');
+    expect(withPlan).toContain('סוויפ של הגבוה של אסיה');
+
+    expect(buildUserMessage({ ...base, dayPlan: null })).not.toContain('<day_plan>');
+    expect(buildUserMessage({ ...base, dayPlan: {} })).not.toContain('<day_plan>');
+  });
+
+  it('tells the model the plan is not scored by the outcome', () => {
+    // A correct read that lost and a wrong read that won are both normal.
+    // Treating the result as the plan's grade is the worst habit this journal
+    // could teach, so the contract forbids it in as many words.
+    expect(SYSTEM_PROMPT).toContain('praise a reason for being right');
+    expect(SYSTEM_PROMPT).toContain('never which');
+  });
+});

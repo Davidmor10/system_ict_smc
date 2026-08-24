@@ -46,6 +46,22 @@ const DIRECTION_HE: Record<string, string> = { LONG: 'לונג', SHORT: 'שור�
     `subject` record (instrument/session/direction/hour/confirmation) rather
     than the engine's pre-baked `metric.label`, which still carries English
     session/direction names from before the app went Hebrew-only. */
+const EMOTION_HE: Record<string, string> = {
+  CALM: 'רגוע', CONFIDENT: 'בטוח', STRESSED: 'לחוץ', FOMO: 'FOMO',
+  TIRED: 'עייף', ANGRY: 'כועס', IMPATIENT: 'חסר סבלנות',
+};
+const WEEKDAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const BIAS_ALIGN_HE: Record<string, string> = { ALIGNED: 'עם הכיוון שהצהרת', COUNTER: 'נגד הכיוון שהצהרת' };
+const SETUP_HE: Record<string, string> = { REVERSAL: 'היפוך', CONTINUATION: 'המשכיות' };
+
+/** The name the trader reads above the sentence.
+ *
+ *  Every dimension discoverPatterns can produce has to appear here. It used to
+ *  cover five of them, so an emotion, setup, weekday, bias or confirmation-tag
+ *  pattern arrived with an EMPTY heading — the sentence was right and nothing
+ *  above it said what it was about. That went unnoticed while only the top few
+ *  candidates were ever shown and they were nearly always instrument or session
+ *  slices; widening the list is what brought the rest to the surface. */
 function subjectLabel(c: PatternCandidate): string {
   const s = c.subject;
   const parts: string[] = [];
@@ -54,7 +70,16 @@ function subjectLabel(c: PatternCandidate): string {
   if (s.session) parts.push(SESSION_HE[String(s.session)] ?? String(s.session));
   if (s.direction) parts.push(DIRECTION_HE[String(s.direction)] ?? String(s.direction));
   if (s.hour !== undefined) parts.push(`${String(s.hour).padStart(2, '0')}:00`);
-  return parts.join(' · ');
+  if (s.emotion) parts.push(EMOTION_HE[String(s.emotion)] ?? String(s.emotion));
+  if (s.confirmationTag) parts.push(String(s.confirmationTag));
+  if (s.confirmationCombo) parts.push(String(s.confirmationCombo).split('+').join(' + '));
+  if (s.biasAlignment) parts.push(BIAS_ALIGN_HE[String(s.biasAlignment)] ?? String(s.biasAlignment));
+  if (s.setup) parts.push(SETUP_HE[String(s.setup)] ?? String(s.setup));
+  if (s.weekday !== undefined) parts.push(`יום ${WEEKDAY_HE[Number(s.weekday)] ?? String(s.weekday)}`);
+  if (s.documented) parts.push(s.documented === 'yes' ? 'עם צילום מסך' : 'בלי צילום מסך');
+  // Nothing matched: better a truthful placeholder than a blank heading over a
+  // real sentence.
+  return parts.length > 0 ? parts.join(' · ') : 'חתך כללי';
 }
 
 /** True when a sentence is written in Latin script rather than Hebrew. Counts

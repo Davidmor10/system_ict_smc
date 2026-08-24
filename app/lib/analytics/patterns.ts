@@ -172,6 +172,25 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
     push('setup', `setup_${s}`, { setup: s }, subset, `Setup: ${s}`);
   }
 
+  // documented vs not — the trades the trader bothered to screenshot.
+  //
+  // Not a claim that a screenshot improves a trade. It is a proxy for care:
+  // the trades someone stops to capture are usually the ones they took
+  // deliberately, and a gap between the two groups is worth showing precisely
+  // because the trader can act on it in a way they cannot act on "be more
+  // disciplined". The subject label says "documented", never "screenshotted
+  // trades perform better".
+  {
+    const documented = trades.filter(t => (t.hasScreenshot ?? ((t.screenshots?.length ?? 0) > 0)));
+    const undocumented = trades.filter(t => !(t.hasScreenshot ?? ((t.screenshots?.length ?? 0) > 0)));
+    // Both sides or neither: a split with nothing on one side is not a
+    // comparison, it is the whole history wearing a label.
+    if (documented.length >= 3 && undocumented.length >= 3) {
+      push('documentation', 'doc_yes', { documented: 'yes' }, documented, 'Documented');
+      push('documentation', 'doc_no', { documented: 'no' }, undocumented, 'Not documented');
+    }
+  }
+
   // weekday — day of week the trade was taken
   const weekdaysSeen = new Set<number>();
   for (const t of trades) weekdaysSeen.add(weekdayOf(t));

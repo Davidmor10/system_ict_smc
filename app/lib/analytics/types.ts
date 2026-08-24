@@ -108,7 +108,10 @@ export type PatternKind =
   | 'confirmation_combo'
   | 'bias_alignment'
   | 'setup'
-  | 'weekday';
+  | 'weekday'
+  /** Trades the trader stopped to screenshot, against the ones they did not.
+   *  A proxy for care, not a claim about screenshots. */
+  | 'documentation';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,

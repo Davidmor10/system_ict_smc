@@ -84,6 +84,10 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     // adherence and the violation detector could not fire even once.
     followed_rules:  typeof trade.followedRules === 'boolean' ? trade.followedRules : null,
     stop_moved:      trade.stopMoved ?? null,
+    // Why the stop sat where it did, in the trader's words. Mirrored because
+    // the daily note reads this table, and a stop level without the reasoning
+    // behind it is a number the coach can only restate.
+    stop_note:       trade.stopNote ?? null,
     management:      trade.management ?? null,
     notes:           trade.notes ?? '',
     tags:            [],

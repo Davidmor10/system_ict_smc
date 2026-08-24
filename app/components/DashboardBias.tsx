@@ -6,6 +6,7 @@ import {
   type BiasChoice, type DeclaredBias,
 } from '../lib/entryGate';
 import { clockInZone } from '../lib/time/zone';
+import { commitList } from '../lib/sync/collections';
 
 /** Today's declared direction, and the reason behind it.
  *
@@ -45,6 +46,21 @@ export default function DashboardBias() {
 
   useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current); }, []);
 
+  /** Mirror the declaration to the account.
+   *
+   *  The plan has always been a localStorage record, which was fine while only
+   *  this screen read it. The nightly note reads from the server, so a reason
+   *  written here was invisible to the one reader with a use for it — it could
+   *  compare what the trader expected against what they then did, and never
+   *  saw the first half. One row per day, keyed by the date. */
+  const syncPlan = useCallback((next: DeclaredBias) => {
+    const today = new Date();
+    const id = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    void commitList('dayplans', 'onyx_dayplans_v1', [
+      { id, bias: next.bias, note: next.note, at: next.at ?? Date.now(), updatedAt: Date.now() },
+    ]).catch(() => { /* best-effort — localStorage stays the source of truth */ });
+  }, []);
+
   const flash = useCallback(() => {
     setSaved(true);
     if (savedTimer.current) window.clearTimeout(savedTimer.current);
@@ -56,18 +72,22 @@ export default function DashboardBias() {
     // only way out of a direction is to pick a different one, which is not the
     // same answer as having no view.
     if (declared?.bias === choice) return;
-    setDeclared(writeDeclaredBias(choice, note));
+    const next = writeDeclaredBias(choice, note);
+    setDeclared(next);
+    syncPlan(next);
     flash();
-  }, [declared, note, flash]);
+  }, [declared, note, flash, syncPlan]);
 
   const commitNote = useCallback(() => {
     if (!declared) return;
     const trimmed = note.trim();
     if (trimmed === (declared.note ?? '')) return;
     writeBiasNote(trimmed);
-    setDeclared({ ...declared, note: trimmed });
+    const next = { ...declared, note: trimmed };
+    setDeclared(next);
+    syncPlan(next);
     flash();
-  }, [declared, note, flash]);
+  }, [declared, note, flash, syncPlan]);
 
   const at = declared?.at ? new Date(declared.at) : null;
   const meta = declared ? BIAS_META[declared.bias] : null;

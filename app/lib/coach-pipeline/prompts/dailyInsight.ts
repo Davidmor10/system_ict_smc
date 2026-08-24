@@ -46,6 +46,13 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       model's remaining job is prose — and the tier rules below are what
  *       stop it from promoting a correlation into a cause on the way.
  *
+ *  v8 — the trader's own words and their own rules. Three inputs that had been
+ *       collected for weeks and read by nothing: WHICH rule they ticked as
+ *       broken (the behaviour block counts that one was, never which), the
+ *       sentence they wrote on each trade and on its stop, and the direction
+ *       plus reason they declared that morning. The coach had been reasoning
+ *       about a trader's numbers while their reasoning sat one table away.
+ *
  *  v7 — what is going right. Every detector in the behaviour layer answers
  *       "how often does this go wrong", so every note was written from the
  *       half of the picture the trader already feels. `holding` reads the same
@@ -63,7 +70,7 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       background with an explicit rule that it can never outrank the data,
  *       because it is the one input here the trader can simply be wrong about.
  */
-export const DAILY_INSIGHT_PROMPT_VERSION = 7;
+export const DAILY_INSIGHT_PROMPT_VERSION = 8;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -263,6 +270,34 @@ writing a single word.
   (what is currently going right — see rules 21-23). Any of them may be empty.
 </behavior>
 
+<rules_broken>
+  The trader's OWN rules, in their own wording, with how many times they ticked
+  each one as broken in the last 60 days and when they last did.
+
+  This is the answer to "which rule", which the behaviour block cannot give —
+  it counts that a rule was broken, never which. Name the rule as they wrote
+  it. Never invent a rule they did not write, never soften one into a general
+  principle, and never rank them by how serious YOU think they are: the count
+  is the ranking, and it is theirs.
+
+  A rule broken once two months ago is not a habit. Use lastDate to tell a
+  standing problem from an old one. OMITTED when they have ticked nothing.
+</rules_broken>
+
+<day_plan>
+  The direction the trader declared that morning and the reason they wrote for
+  it, before the session. MAY BE ABSENT.
+
+  This is the only record of what they expected, and the day's trades are the
+  record of what happened. Where the two disagree, say so plainly and without a
+  verdict — "you wrote you were waiting for a sweep of the high; the two trades
+  were both longs into the open" is an observation the trader can use. Do NOT
+  praise a reason for being right or fault it for being wrong; a correct read
+  that lost and a wrong read that won are both normal, and treating the outcome
+  as the score of the plan is the single most damaging habit this journal can
+  teach.
+</day_plan>
+
 <past_writing>
   Up to 5 excerpts the trader wrote in their notebook, retrieved because they
   are semantically related to today's context. Each: { date, snippet, kind }.
@@ -340,6 +375,10 @@ export interface DailyInsightInputs {
   /** Trades logged since the last note, for days other than the reported one.
    *  Empty is the normal case and omits the block entirely. */
   lateLogged?:      readonly TradeRow[];
+  /** Which of the trader's own rules they ticked as broken, by name. */
+  rulesBroken?:     ReadonlyArray<{ rule: string; count: number; lastDate: string }>;
+  /** The direction they declared that morning, and the reason they gave. */
+  dayPlan?:         { bias?: string; note?: string } | null;
   /** Deterministic stats to use when the rolling profile has none yet.
    *  Computed by analyzers/statistical.ts from the user's real trade history —
    *  never invented, never a placeholder. Ignored when the profile already
@@ -375,7 +414,17 @@ interface CompactTrade {
   session: string | null;
   setup:   string | null;
   emo:     string | null;
+  why?:     string;
+  stopWhy?: string;
 }
+
+/** Trimmed, not summarised. The trader's sentence is the one input here nobody
+ *  computed, and paraphrasing it upstream would leave the model reasoning about
+ *  our reading of their words instead of their words. */
+const words = (v: string | null | undefined): string | undefined => {
+  const text = (v ?? '').trim();
+  return text ? text.slice(0, 240) : undefined;
+};
 
 function compact(t: TradeRow): CompactTrade {
   return {
@@ -387,6 +436,11 @@ function compact(t: TradeRow): CompactTrade {
     session: t.session,
     setup:   t.setup,
     emo:     t.emotional_state,
+    // Why they entered, and why the stop sat where it did. Both have been
+    // collected all along and neither had ever reached the coach — it read the
+    // numbers of a trade and never the reasoning beside them.
+    why:      words(t.notes),
+    stopWhy:  words((t as TradeRow & { stop_note?: string | null }).stop_note),
   };
 }
 
@@ -437,6 +491,12 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
     safeJson(inputs.signals),
     '</today_signals>',
     '',
+    ...(inputs.rulesBroken?.length
+      ? ['', '<rules_broken>', safeJson(inputs.rulesBroken), '</rules_broken>']
+      : []),
+    ...(inputs.dayPlan && (inputs.dayPlan.bias || inputs.dayPlan.note)
+      ? ['', '<day_plan>', safeJson(inputs.dayPlan), '</day_plan>']
+      : []),
     // Omitted when there is nothing late — an empty list here reads as a
     // prompt to comment on the absence, and there is nothing to say about it.
     ...(inputs.lateLogged?.length

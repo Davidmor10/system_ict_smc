@@ -21,6 +21,8 @@ import type { DailyInsightRow, FallbackReason, InsightKind, Provider, Statistica
 import { getUserProfile } from '../db/profile';
 import { listTradesForDate, listRecentTrades, listLateLoggedTrades } from '../db/trades';
 import { getInsightForDate, insertInsight, listRecentInsights } from '../db/insights';
+import { loadDayPlan, loadRuleBreaches } from '../db/collections';
+import { rankRuleBreaches, type RuleBreach } from '../analyzers/rulesBroken';
 import { logUsage, sumUserMonthlyCost, sumSystemCostSince } from '../db/usage';
 import { flags } from '../db/flags';
 import { callClaudeInsight, CLAUDE_MODEL } from '../providers/anthropic';
@@ -179,6 +181,25 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     }
   }
 
+  // The trader's own rules, by name, and the plan they wrote that morning.
+  // Both live in user_collections, which nothing on the server had ever read —
+  // the ticks and the sentence were being stored and never opened. Neither can
+  // fail the run: a missing block is a shorter note.
+  let rulesBroken: RuleBreach[] = [];
+  let dayPlan: Awaited<ReturnType<typeof loadDayPlan>> = null;
+  try {
+    const [{ rules, breaches }, plan] = await Promise.all([
+      loadRuleBreaches(cid),
+      loadDayPlan(cid, inputs.date),
+    ]);
+    rulesBroken = rankRuleBreaches(rules, breaches, inputs.date);
+    dayPlan = plan;
+  } catch (err) {
+    logger.warn('rules/day-plan lookup failed — continuing without them', {
+      clerkId: cid, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Retrieval — never throws, always returns a well-formed empty on failure.
   const retrieval = await retrievePastWriting(cid, todayTrades);
 
@@ -207,6 +228,8 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     signals,
     pastWritingBlock: retrieval.block,
     lateLogged,
+    rulesBroken,
+    dayPlan: dayPlan ? { bias: dayPlan.bias, note: dayPlan.note } : null,
     statisticalFallback,
     behavior: behavior.block,
     traderProfile,
@@ -383,6 +406,8 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     // snapshot because a note that mentions a trade absent from `trade_ids` is
     // otherwise indistinguishable from one that invented it.
     late_logged_ids:      lateLogged.map(t => t.id),
+    rules_broken:         rulesBroken,
+    day_plan_present:     !!(dayPlan?.bias || dayPlan?.note),
     retrieval_query_text: retrieval.queryText,
     retrieval_skipped:    retrieval.skipped,
     retrieval_error:      retrieval.error ?? null,
