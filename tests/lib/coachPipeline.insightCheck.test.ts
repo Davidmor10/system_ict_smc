@@ -23,7 +23,7 @@ import type { BehaviorBlock } from '../../app/lib/coach-pipeline/pipelines/analy
 
 // ── blocks ──────────────────────────────────────────────────────────────────
 
-const EMPTY: BehaviorBlock = { primary: null, insufficientEvidence: true, watching: [] };
+const EMPTY: BehaviorBlock = { primary: null, insufficientEvidence: true, watching: [], holding: [] };
 
 function withPrimary(over: Partial<NonNullable<BehaviorBlock['primary']>> = {}): BehaviorBlock {
   return {
@@ -40,6 +40,7 @@ function withPrimary(over: Partial<NonNullable<BehaviorBlock['primary']>> = {}):
       ...over,
     },
     insufficientEvidence: false,
+    holding: [],
     watching: [],
   };
 }

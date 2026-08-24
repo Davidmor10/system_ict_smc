@@ -27,6 +27,7 @@
 import { listRecentTrades } from '../db/trades';
 import { loadFindings, saveFinding } from '../db/behaviorFindings';
 import { detectBehaviors, type BehaviorKind } from '../behavior/behaviors';
+import { computeHoldingStreaks, type HoldingStreak } from '../behavior/holding';
 import { buildContexts } from '../behavior/context';
 import { buildFinding, pickPrimary, ROLLING_WINDOW, type BehaviorFinding } from '../behavior/finding';
 import { computeGuardrails } from '../behavior/guardrails';
@@ -78,12 +79,19 @@ export interface BehaviorBlock {
   /** Kinds being tracked but deliberately not raised today. Named so the model
    *  knows they exist and knows not to write about them. */
   watching: string[];
+  /** What is currently going RIGHT, in process terms and never in money: runs
+   *  of opportunities where a behaviour did not occur. Independent of
+   *  `primary` and of `insufficientEvidence` — a trader with no finding worth
+   *  raising can still be eight days into keeping their rules, and that is the
+   *  most useful true thing there is to tell them that morning. */
+  holding: HoldingStreak[];
 }
 
 export const EMPTY_BLOCK: BehaviorBlock = {
   primary: null,
   insufficientEvidence: true,
   watching: [],
+  holding: [],
 };
 
 function daysBetween(fromIso: string, toIso: string): number | null {
@@ -119,6 +127,8 @@ export async function analyzeBehavior(
 
     const contexts = buildContexts(trades);
     const tallies  = detectBehaviors(trades);
+    // The other side of the same tallies: what has NOT gone wrong lately.
+    const holding  = computeHoldingStreaks(tallies, trades);
 
     // Memory is optional in the sense that its absence must not break the run:
     // an un-migrated database should produce a first-sighting analysis, not a
@@ -191,7 +201,7 @@ export async function analyzeBehavior(
 
     if (!primary) {
       return {
-        block: { primary: null, insufficientEvidence: true, watching: watching.map(f => f.kind) },
+        block: { primary: null, insufficientEvidence: true, watching: watching.map(f => f.kind), holding },
         snapshot,
         error: memoryError,
       };
@@ -219,6 +229,7 @@ export async function analyzeBehavior(
         },
         insufficientEvidence: false,
         watching: watching.map(f => f.kind),
+        holding,
       },
       snapshot,
       error: memoryError,

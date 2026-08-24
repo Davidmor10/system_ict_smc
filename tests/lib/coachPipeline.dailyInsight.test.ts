@@ -336,6 +336,7 @@ describe('the behaviour block', () => {
       outcome: null,
     },
     insufficientEvidence: false,
+    holding: [],
     watching: ['size_spike'],
   };
 
@@ -460,5 +461,32 @@ describe('buildUserMessage — late-logged trades', () => {
   it('tells the model these are not today, in the contract it reads', () => {
     expect(SYSTEM_PROMPT).toContain('<late_logged>');
     expect(SYSTEM_PROMPT).toContain('They did NOT happen today');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// "What is going right" — the contract that turns `holding` into a sentence
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('SYSTEM_PROMPT — what is going right', () => {
+  it('tells the model the block exists and how to read it', () => {
+    expect(SYSTEM_PROMPT).toContain('WHAT IS GOING RIGHT');
+    expect(SYSTEM_PROMPT).toContain('"holding"');
+    expect(SYSTEM_PROMPT).toContain('recovered');
+  });
+
+  it('forbids building it out of money — the whole point of a process strength', () => {
+    expect(SYSTEM_PROMPT).toContain('NEVER build the "what is working" line out of money');
+  });
+
+  it('carves the run out of the no-evidence rule instead of contradicting it', () => {
+    // Rule 15 says "no pattern, write less". Rule 22 says a run can BE the
+    // note. Left unreconciled those are two instructions pulling opposite
+    // ways on the exact input that produced nothing before.
+    expect(SYSTEM_PROMPT).toContain('The one exception is "holding"');
+  });
+
+  it('bumps the prompt version, so a row can be traced to this text', () => {
+    expect(DAILY_INSIGHT_PROMPT_VERSION).toBeGreaterThanOrEqual(7);
   });
 });
