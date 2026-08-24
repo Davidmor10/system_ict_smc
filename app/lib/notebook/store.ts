@@ -137,17 +137,64 @@ export interface NotebookTemplate {
   html: string;
   builtin?: boolean;
 }
+/* ── Template building blocks ─────────────────────────────────────────────────
+   Two rules govern every line below, and both come from the same place: this
+   HTML is dropped straight into a contenteditable that the trader then types
+   into.
+
+   1. ONE BLOCK PER LINE. Each question is its own <p>/<h3> and every question
+      is followed by an empty line that is already there. Enter inside a block
+      splits it into a sibling, so the trader lands on a writable line by
+      clicking — they never have to make room first, and a stray Enter cannot
+      merge two questions into one paragraph.
+
+   2. LATIN RUNS ARE ISOLATED. "Max loss ליום" in an RTL block is a bidi
+      problem: the browser reorders the run against the surrounding Hebrew and
+      the trader sees "ליום Max loss", or worse once they type around it.
+      dir="ltr" on an INLINE span isolates the ordering without touching
+      alignment — which is exactly the distinction that makes it safe here,
+      where the same attribute on a block would flip the whole line left.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** A Latin word or phrase sitting inside Hebrew text. */
+const en = (text: string) => `<span dir="ltr">${text}</span>`;
+
+/** An empty line, already present, for the answer. */
+const LINE = '<p><br></p>';
+
+/** A numbered question plus its blank answer line. `hint` renders muted under
+ *  the question: the difference between a question a trader answers and one
+ *  they skip is usually an example of what a good answer looks like. */
+const q = (n: number, question: string, hint?: string) =>
+  `<h3>${n}. ${question}</h3>` + (hint ? `<p class="nb-hint">${hint}</p>` : '') + LINE;
+
+const PRE_MARKET_QUESTIONS = [
+  q(1, `אילו ${en('setups')} אני מחפש היום?`),
+  q(2, `${en('Watchlist')} — טיקרים ורמות ספציפיות`),
+  q(3, `${en('Max loss')} ליום`, `בדולרים / ${en('R')}:`),
+  q(4, 'חדשות ואירועים לתשומת לב'),
+  q(5, 'איך אני מרגיש?', 'עייף · חרד · בטוח · מוסח'),
+  `<p class="nb-hint">מצב מנטלי ופוקוס — לדוגמה: מפוקס, ישנתי טוב / עייף, לשמור על סיכון נמוך</p>`,
+  LINE,
+].join('');
+
+const POST_SESSION_QUESTIONS = [
+  q(1, 'האם עקבתי אחרי תוכנית המסחר?', 'כן / לא — ומדוע'),
+  q(2, 'מה עבד טוב בסשן הזה?', 'לדוגמה: סבלנות לכניסה, ניהול סיכונים נכון'),
+  q(3, 'היו עסקאות רגשיות / חריגות?', `לדוגמה: כניסת ${en('FOMO')} בעסקה הראשונה`),
+  q(4, 'מה הייתי משנה?'),
+].join('');
+
 export const BUILTIN_TEMPLATES: NotebookTemplate[] = [
   {
     id: 'pre-post',
     name: 'Pre-Market & Post-Session',
     builtin: true,
     html: [
-      '<h3>Pre-Market — התכוננות</h3>',
-      'Setups לחיפוש · Watchlist · Max loss · חדשות · הרגשה',
-      '<br><br>',
-      '<h3>Post-Session Review — סיכום</h3>',
-      'עקבתי אחרי התוכנית? · מה הלך טוב? · מה הייתי משנה? · עסקאות רגשיות?',
+      `<h2>${en('Pre-Market')} — התכוננות</h2>`,
+      PRE_MARKET_QUESTIONS,
+      `<h2>${en('Post-Session Review')} — סיכום</h2>`,
+      POST_SESSION_QUESTIONS,
     ].join(''),
   },
   {
@@ -155,11 +202,17 @@ export const BUILTIN_TEMPLATES: NotebookTemplate[] = [
     name: 'תבנית Pre-Market',
     builtin: true,
     html: [
-      '<h3>1. אילו setups אני מחפש היום?</h3><br>',
-      '<h3>2. Watchlist — טיקרים ורמות ספציפיות</h3><br>',
-      '<h3>3. Max loss ליום</h3>בדולרים / R:<br><br>',
-      '<h3>4. חדשות ואירועים לתשומת לב</h3><br>',
-      '<h3>5. איך אני מרגיש?</h3>עייף · חרד · בטוח · מוסח:<br>',
+      `<h2>${en('Pre-Market')} — התכוננות</h2>`,
+      PRE_MARKET_QUESTIONS,
+    ].join(''),
+  },
+  {
+    id: 'post',
+    name: 'תבנית Post-Session',
+    builtin: true,
+    html: [
+      `<h2>${en('Post-Session Review')} — סיכום</h2>`,
+      POST_SESSION_QUESTIONS,
     ].join(''),
   },
   {
@@ -167,12 +220,13 @@ export const BUILTIN_TEMPLATES: NotebookTemplate[] = [
     name: 'All-in-One יומי',
     builtin: true,
     html: [
-      '<h3>Pre-Market — 5 שאלות</h3>',
-      '1. Setups?<br>2. Watchlist?<br>3. Max loss?<br>4. חדשות?<br>5. הרגשה?<br><br>',
-      '<h3>Trade Log — לכל עסקה</h3>',
-      'תאריך · טיקר · כיוון · Entry · Exit · Size · P&amp;L · Setup tag · Emotion tag<br><br>',
-      '<h3>Post-Session — 4 שאלות</h3>',
-      '1. עקבתי אחרי התוכנית?<br>2. מה עשיתי טוב?<br>3. מה הייתי משנה?<br>4. עסקאות רגשיות?<br>',
+      `<h2>${en('Pre-Market')} — התכוננות</h2>`,
+      PRE_MARKET_QUESTIONS,
+      `<h2>${en('Trade Log')} — לכל עסקה</h2>`,
+      `<p class="nb-hint">תאריך · טיקר · כיוון · ${en('Entry')} · ${en('Exit')} · ${en('Size')} · ${en('P&amp;L')} · ${en('Setup tag')} · ${en('Emotion tag')}</p>`,
+      LINE,
+      `<h2>${en('Post-Session Review')} — סיכום</h2>`,
+      POST_SESSION_QUESTIONS,
     ].join(''),
   },
 ];

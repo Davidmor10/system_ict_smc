@@ -315,6 +315,14 @@
 .nb-app .nb-ed-body ol,.nb-app .nb-ed-body ul{padding-inline-start:26px;margin:.4em 0;}
 .nb-app .nb-ed-body li{margin:.25em 0;}
 .nb-app .nb-ed-body a{color:var(--nb-gold);text-decoration:underline;text-underline-offset:3px;}
+/* One block per line is what makes a template fillable: the trader clicks a
+   blank line and types, and Enter splits the block they are in rather than
+   merging two questions. Paragraph spacing is therefore the line rhythm of the
+   whole editor, not decoration. */
+.nb-app .nb-ed-body p{margin:.15em 0;}
+/* The example under a question. Muted, so it reads as guidance and not as
+   something the trader wrote — and so deleting it feels natural. */
+.nb-app .nb-ed-body .nb-hint{color:var(--nb-w40);font-size:15px;font-style:italic;font-weight:400;margin:0 0 .2em;}
 
 /* Autosave chip */
 .nb-app .nb-autosave{position:fixed;bottom:16px;inset-inline-end:20px;font-family:var(--nb-ff-mono);font-size:10px;color:var(--nb-bull);display:flex;align-items:center;gap:7px;background:var(--nb-card-b);border:1px solid var(--nb-bull-30);border-radius:20px;padding:6px 12px;opacity:0;pointer-events:none;transition:opacity .3s var(--nb-ease);z-index:30;letter-spacing:.06em;}
