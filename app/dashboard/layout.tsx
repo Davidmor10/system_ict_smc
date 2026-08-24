@@ -4,6 +4,7 @@ import MobileNav from '../components/MobileNav';
 import MobileHeader from '../components/MobileHeader';
 import MusicPanel from '../components/MusicPanel';
 import PageTransition from '../components/PageTransition';
+import ViewportScale from '../components/ViewportScale';
 import { PlanProvider } from '../components/PlanProvider';
 import { getSessionId, getUserRole } from '../lib/getUserRole';
 import { requirePlan } from '../lib/withRoleCheck';
@@ -22,6 +23,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           the dashboard gets the opening; someone who arrived through the
           landing page does not get it twice. */}
       <SplashIntro scope={splashScope} />
+      {/* Renders nothing; keeps the layout at the size it was designed for. */}
+      <ViewportScale />
       <div className="onyx-layout h-screen flex overflow-hidden bg-black text-[#c0c0c0]">
         <Sidebar />
         {/* Spacer pushes content below the fixed mobile header */}

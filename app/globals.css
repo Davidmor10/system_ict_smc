@@ -391,6 +391,24 @@ html[lang="he"] .sec-title { font-weight: 900; }
 .btn-ghost:hover { color: #fff; }
 
 
+/* ── One design, scaled to the screen ─────────────────────────
+   The dashboard was drawn at 1600px wide. On a laptop the auto-fit grids
+   used to reflow into fewer, narrower columns — a different, more crowded
+   layout than the one that was designed. ViewportScale sets --onyx-zoom to
+   viewport/1600, so instead the same layout renders smaller: nothing
+   rewraps and every proportion is the one it was drawn with.
+
+   The height division is what keeps the shell filling the window: `zoom`
+   scales the box, but `vh` still resolves against the real viewport, so a
+   plain 100vh would come out short by exactly the scale factor.
+
+   Default 1 — a full-width desktop, a phone, and the seconds before the
+   script runs all render exactly as they did before. */
+.onyx-layout {
+  zoom: var(--onyx-zoom, 1);
+  height: calc(100vh / var(--onyx-zoom, 1));
+}
+
 /* ── RTL: sidebar moves to the right, layout mirrors ─────────── */
 html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
 
