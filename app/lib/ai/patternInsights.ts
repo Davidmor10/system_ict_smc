@@ -18,9 +18,27 @@ export interface PatternInsight {
   evidence: string;
   confidenceLevel: ConfidenceLevel;
   sampleSize: number;
+  /** Win-rate gap against the trader's own baseline, in points. Positive is a
+   *  slice that outperforms. Carried so the page can show which way a pattern
+   *  points without the reader parsing the sentence for it. */
+  delta: number;
+  /** Cleared the significance test after correction for the number of slices
+   *  compared. A pattern that did not is real raw material and worth showing —
+   *  it is simply not yet an edge, and the page has to say which is which. */
+  significant: boolean;
 }
 
-const MAX_PATTERNS = 5;
+/** How many patterns reach the page.
+ *
+ *  This was 5, which quietly made the section a highlight reel: the sort puts
+ *  significant patterns first, so five slots meant a trader with six real
+ *  findings never saw the sixth, and nobody could tell from the screen that
+ *  anything had been held back.
+ *
+ *  Now every SIGNIFICANT pattern goes through regardless of the cap, and the
+ *  cap only limits how many of the not-yet-significant ones ride along behind
+ *  them. One model call either way — the cost is prompt tokens, not requests. */
+const MAX_PATTERNS = 12;
 const SESSION_HE: Record<string, string> = Object.fromEntries(SESS.map(s => [s.key, s.he]));
 const DIRECTION_HE: Record<string, string> = { LONG: 'לונג', SHORT: 'שורט' };
 
@@ -92,7 +110,11 @@ export async function generatePatternInsights(trades: TradeEntry[], lang: 'he' |
   if (trades.length < 3) return [];
 
   const analysis = runFullAnalysis(trades);
-  const candidates = analysis.patterns.filter(c => c.confidence.sampleSize >= 3).slice(0, MAX_PATTERNS);
+  const eligible = analysis.patterns.filter(c => c.confidence.sampleSize >= 3);
+  const significant = eligible.filter(c => c.significant);
+  const emerging = eligible.filter(c => !c.significant);
+  // Everything that passed the test, then as many of the rest as the cap allows.
+  const candidates = [...significant, ...emerging].slice(0, Math.max(MAX_PATTERNS, significant.length));
   if (candidates.length === 0) return [];
 
   const isHe = lang === 'he';
@@ -165,6 +187,8 @@ Rules:
       evidence: evidenceLine(c, isHe),
       confidenceLevel: c.confidence.level,
       sampleSize: c.confidence.sampleSize,
+      delta: c.delta,
+      significant: c.significant,
     }))
     // A title that came back in Latin is dropped rather than printed. One card
     // fewer is a smaller failure than an English card on a Hebrew page, and

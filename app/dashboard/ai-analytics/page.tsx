@@ -9,33 +9,18 @@ import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
-import WeeklyReportPanel from '../../components/WeeklyReportPanel';
+import WeeklyTabs from '../../components/WeeklyTabs';
 import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
-import WeeklyBehaviorReview from '../../components/WeeklyBehaviorReview';
 
 /** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
     return shapes as local types (not imported) so this client component
     never pulls in server-only AI SDK / Supabase modules. */
-interface PatternInsight { subject: string; title: string; evidence: string; confidenceLevel: ConfidenceLevel; sampleSize: number; }
-interface WeeklyReport {
-  paragraphs: string[];
-  confidenceLevel: ConfidenceLevel;
-  sampleSize: number;
-  weekKey?: string;
-}
-type StrengthTrend = 'up' | 'flat' | 'down';
-interface WorkingStrength {
-  id: string;
-  name: string;
-  metric: GroupPerformance;
-  baseline: number;
-  delta: number;
-  confidenceLevel: ConfidenceLevel;
-  sampleSize: number;
-  trend: StrengthTrend;
-  history: { at: string; winRate: number; sampleSize: number }[];
-  isLowData: boolean;
-  explanation: string;
+// The shape the route returns. Kept in step with lib/ai/patternInsights.ts —
+// a local copy that drifts is how a field silently stops rendering.
+interface PatternInsight {
+  subject: string; title: string; evidence: string;
+  confidenceLevel: ConfidenceLevel; sampleSize: number;
+  delta: number; significant: boolean;
 }
 
 function fmtPF(n: number): string {
@@ -49,7 +34,6 @@ const EMOTION_HE: Record<string, string> = {
 };
 const CONFIRMATION_LABELS: Record<string, string> = { ORDER_BLOCK: 'Order Block' };
 const confLabel = (key: string) => CONFIRMATION_LABELS[key] ?? key;
-const WEEKDAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const MONTH_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
 const CONF_LABEL: Record<ConfidenceLevel, string> = { high: 'גבוהה', medium: 'בינונית', low: 'נמוכה' };
@@ -59,54 +43,10 @@ const CONF_META: Record<ConfidenceLevel, { fg: string; bg: string; bd: string }>
   high:   { fg: '#6fa580', bg: 'rgba(74,124,89,.14)',  bd: 'rgba(74,124,89,.6)'  },
 };
 
-const TREND_LABEL: Record<StrengthTrend, string> = { up: 'מתחזק', flat: 'יציב', down: 'נחלש' };
-const TREND_META: Record<StrengthTrend, { fg: string; bg: string; bd: string; arrow: string }> = {
-  up:   { fg: '#6fa580', bg: 'rgba(74,124,89,.1)',   bd: 'rgba(74,124,89,.45)',  arrow: '▲' },
-  flat: { fg: '#d4af37', bg: 'rgba(212,175,55,.08)', bd: 'rgba(212,175,55,.4)', arrow: '●' },
-  down: { fg: '#c98080', bg: 'rgba(139,58,58,.1)',   bd: 'rgba(139,58,58,.45)', arrow: '▼' },
-};
-
-function TrendBadge({ trend }: { trend: StrengthTrend }) {
-  const m = TREND_META[trend];
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-sm shrink-0"
-      style={{ color: m.fg, background: m.bg, border: `1px solid ${m.bd}` }}
-    >
-      {m.arrow} {TREND_LABEL[trend]}
-    </span>
-  );
-}
-
 /** Small win-rate-over-time trend chart from the pattern's own rolling history
     (already tracked server-side across visits) — a genuine "did this improve
     or fade" chart, never a single-session guess. Skipped entirely when fewer
     than 3 snapshots exist, so it never renders a flat, meaningless line. */
-function StrengthHistoryChart({ history }: { history: WorkingStrength['history'] }) {
-  const [ref, visible] = useInView<HTMLDivElement>();
-  if (history.length < 3) return null;
-  const max = Math.max(1, ...history.map(h => h.winRate));
-  return (
-    <div ref={ref} className="flex gap-1 items-end h-[34px] mt-4" dir="ltr">
-      {history.map((h, i) => {
-        const pct = Math.max(6, (h.winRate / max) * 100);
-        const isLast = i === history.length - 1;
-        return (
-          <div
-            key={h.at + i}
-            title={`${h.winRate.toFixed(0)}% · ${h.sampleSize} עסקאות`}
-            style={{
-              flex: 1, height: visible ? `${pct}%` : '0%', borderRadius: '2px 2px 0 0',
-              background: isLast ? '#d4af37' : 'rgba(255,255,255,.16)',
-              transition: `height .7s var(--ease-expo-out) ${i * 40}ms`,
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
 /* ══════════ Animation primitives — mirrors the reference design's
    scroll-reveal / count-up / bar-fill behavior ══════════ */
 
@@ -280,8 +220,6 @@ export default function AiAnalyticsPage() {
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [patternInsights, setPatternInsights] = useState<PatternInsight[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(false);
-  const [workingStrengths, setWorkingStrengths] = useState<WorkingStrength[]>([]);
-  const [strengthsLoading, setStrengthsLoading] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
   const [hourStartMin, setHourStartMin] = useState<number | null>(null);
   const [rules, setRules] = useState<{ id: string; text: string }[]>([]);
@@ -335,30 +273,7 @@ export default function AiAnalyticsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fingerprint]);
 
-  // ── Working strengths — "מה באמת עובד לך" (AI-phrased, cached per day) ──
-  useEffect(() => {
-    if (!hasEnoughData) { setWorkingStrengths([]); return; }
-    const cachePrefix = 'onyx_ai_strengths_v3_';
-    const cacheKey = cachePrefix + todayISO();
-    const cached = readInsightCache<WorkingStrength[]>(cacheKey, fingerprint);
-    if (cached && Array.isArray(cached.value)) { setWorkingStrengths(cached.value); return; }
-    setStrengthsLoading(true);
-    fetch('/api/ai/strengths', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lang: 'he' }),
-    })
-      .then(r => r.json())
-      .then(({ strengths }) => {
-        if (Array.isArray(strengths)) {
-          setWorkingStrengths(strengths);
-          writeInsightCache(cacheKey, cachePrefix, fingerprint, strengths, new Date().toISOString());
-        }
-      })
-      .catch(() => {})
-      .finally(() => setStrengthsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fingerprint]);
+
 
   // Weekly-report fetching + history archive moved into WeeklyReportPanel
   // (self-contained component with its own state + cache + DB-backed history).
@@ -445,35 +360,6 @@ export default function AiAnalyticsPage() {
   };
   const GROUP_ORDER = ['כיוון', 'נכס', 'סטאפ', 'סשן', 'שעה', 'רגש', 'חוקים', 'אישור', 'ביאס'];
 
-  const topSession = useMemo(() => {
-    if (analysis.sessions.length === 0) return null;
-    return [...analysis.sessions].sort((a, b) => b.totalPnl - a.totalPnl)[0];
-  }, [analysis.sessions]);
-
-  const dirTotal = analysis.direction.long.trades + analysis.direction.short.trades;
-  const longPct = dirTotal > 0 ? (analysis.direction.long.trades / dirTotal) * 100 : 0;
-  const shortPct = dirTotal > 0 ? 100 - longPct : 0;
-
-  const weekdayRows = useMemo(() => {
-    const days = analysis.time.byWeekday;
-    if (days.length === 0) return [];
-    const byKey = new Map(days.map(g => [g.key, g]));
-    const max = Math.max(1, ...days.map(g => g.winRate));
-    // Full Sunday–Saturday spread, not just the days that happen to have trades —
-    // an untraded day still needs to show up as an (empty) bar for the chart to
-    // read as a real weekly distribution.
-    return Array.from({ length: 7 }, (_, w) => {
-      const g = byKey.get(String(w));
-      return {
-        key: String(w),
-        trades: g?.trades ?? 0,
-        heading: WEEKDAY_HE[w],
-        pct: g ? (g.winRate / max) * 100 : 0,
-        tone: (analysis.time.bestWeekday?.key === String(w) ? 'best' : analysis.time.worstWeekday?.key === String(w) ? 'worst' : 'mid') as 'best' | 'worst' | 'mid',
-      };
-    });
-  }, [analysis.time]);
-
   const hourRows = useMemo(() => {
     const hours = analysis.time.byHour;
     if (hours.length === 0) return [];
@@ -531,7 +417,6 @@ export default function AiAnalyticsPage() {
   const worstInst = instrumentRows[instrumentRows.length - 1];
   const bestConf = confirmationRows[0];
   const worstConf = confirmationRows[confirmationRows.length - 1];
-  const maxStrengthWinRate = Math.max(1, ...workingStrengths.map(s => s.metric.winRate));
 
   return (
     <div
@@ -612,7 +497,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={1} total={11} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={9} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -653,88 +538,13 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 02 · SESSION + DIRECTION ══════════ */}
-        <NumberedSection
-          index={2} total={11} eyebrow="Session &amp; Direction" title="סשן וכיוון"
-          description="היכן הקצה חי — ולאיזה כיוון הוא נוטה."
-        >
-          {topSession ? (
-            <div className="flex items-center justify-between gap-7 flex-wrap py-2 pb-8 border-b border-[#1c1c1e]">
-              <div className="text-right">
-                <div className="flex items-center gap-2.5 mb-3"><span className="w-2 h-2 rounded-full bg-[#d4af37]" style={{ animation: 'onyx-dot-pulse 2.4s infinite' }} /><span className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#d4af37]">{analysis.sessions.length === 1 ? 'חלון המנצח היחיד' : 'הסשן החזק ביותר'}</span></div>
-                <h4 className="font-serif font-extrabold text-white leading-none" style={{ fontSize: 'clamp(26px,3vw,40px)' }}>{SESSION_HE[topSession.key] ?? topSession.label}</h4>
-                <p className="max-w-md mt-3 text-sm text-[#c0c0c0] leading-relaxed">
-                  {topSession.trades} מתוך {p.totalTrades} העסקאות שלך נפתחו בסשן זה{analysis.sessions.length === 1 ? ' — הסשן היחיד שבו קיימת כרגע דגימה.' : `, עם ${topSession.winRate.toFixed(0)}% הצלחה.`}
-                </p>
-              </div>
-              <div className="flex items-stretch">
-                <div className="px-[28px] text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">עסקאות</span><span className="num font-mono text-white" style={{ fontSize: 42, fontWeight: 800 }}>{topSession.trades}</span></div>
-                <div className="px-[28px] text-center border-s border-[#1c1c1e]"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">הצלחה</span><span className="num font-mono" style={{ fontSize: 42, fontWeight: 800, color: '#d4af37', textShadow: '0 0 28px rgba(212,175,55,.4)' }}>{topSession.winRate.toFixed(0)}%</span></div>
-                <div className="ps-[28px] text-center"><span className="block font-mono text-sm font-extrabold text-[#9a9aa2] tracking-[0.08em] mb-3.5">נטו</span><span className="num font-mono" style={{ fontSize: 42, fontWeight: 800, color: topSession.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{topSession.totalPnl >= 0 ? '+' : '-'}${Math.abs(topSession.totalPnl).toFixed(0)}</span></div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-white/30 pb-8 border-b border-[#1c1c1e]">אין עדיין עסקאות מתויגות עם סשן.</p>
-          )}
-
-          {dirTotal > 0 && (
-            <div className="pt-8">
-              <div className="flex items-baseline justify-between mb-5">
-                <span className="font-mono text-sm font-extrabold text-white/66 tracking-[0.06em]">{analysis.direction.long.trades} לונג · {analysis.direction.short.trades} שורט</span>
-                <span className="font-serif font-bold text-white" style={{ fontSize: 19 }}>לונג מול שורט</span>
-              </div>
-              <div className="flex h-[70px] border border-[#1c1c1e] rounded-[3px] overflow-hidden">
-                {longPct > 0 && (
-                  <div className="flex flex-col justify-center px-6 border-e border-[#1c1c1e]" style={{ width: `${longPct}%`, background: 'linear-gradient(90deg,rgba(74,124,89,.32),rgba(74,124,89,.16))' }}>
-                    <span className="font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] mb-1.5" style={{ color: '#6fa580' }}>לונג · Long</span>
-                    <div className="flex items-baseline gap-2.5 flex-wrap">
-                      <span className="num font-mono text-2xl font-extrabold" style={{ color: '#6fa580' }}>{analysis.direction.long.winRate.toFixed(0)}%</span>
-                      <span className="num font-mono text-[13px] font-bold text-white/60">{analysis.direction.long.trades} עסקאות · {analysis.direction.long.totalPnl >= 0 ? '+' : '-'}${Math.abs(analysis.direction.long.totalPnl).toFixed(0)} · R:R {analysis.direction.long.avgRR.toFixed(2)}</span>
-                    </div>
-                  </div>
-                )}
-                {shortPct > 0 && (
-                  <div className="flex flex-col justify-center px-6 text-left" style={{ width: `${shortPct}%`, background: 'linear-gradient(90deg,rgba(139,58,58,.14),rgba(139,58,58,.28))' }}>
-                    <span className="font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] mb-1.5" style={{ color: '#c98080' }}>שורט · Short</span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="num font-mono text-2xl font-extrabold" style={{ color: '#c98080' }}>{analysis.direction.short.winRate.toFixed(0)}%</span>
-                      <span className="num font-mono text-xs font-bold text-white/55">{analysis.direction.short.trades} · {analysis.direction.short.totalPnl >= 0 ? '+' : '-'}${Math.abs(analysis.direction.short.totalPnl).toFixed(0)}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <p className="mt-4 text-[13.5px] text-white/55 leading-relaxed text-right">
-                {analysis.direction.long.winRate > analysis.direction.short.winRate
-                  ? 'הקצה שלך נוטה לכיוון הלונג. שווה לבחון האם השורט בכלל שייך למודל.'
-                  : analysis.direction.short.winRate > analysis.direction.long.winRate
-                  ? 'הקצה שלך נוטה לכיוון השורט כרגע. שווה לתת לו יותר משקל.'
-                  : 'לונג ושורט מציגים ביצועים דומים כרגע — עוד מוקדם לקבוע נטייה.'}
-              </p>
-            </div>
-          )}
-        </NumberedSection>
-
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={3} total={11} eyebrow="Time Signature" title="חתימת זמן"
-          description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי יום בשבוע, שעה בסשן, וחודש."
+          index={2} total={9} eyebrow="Time Signature" title="חתימת זמן"
+          description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי שעה בסשן וחודש. הפילוח לפי יום בשבוע נמצא בדף הסטטיסטיקה."
         >
           <div>
-            <div className="grid gap-9" style={{ gridTemplateColumns: (weekdayRows.length > 0 && hourRows.length > 0) ? '1fr 1fr' : '1fr' }}>
-              {weekdayRows.length > 0 && (
-                <div className={hourRows.length > 0 ? 'pe-7 border-e border-[#1c1c1e]' : ''}>
-                  <div className="mb-5 text-right">
-                    <span className="block font-mono text-base font-extrabold text-white/74">
-                      {analysis.time.bestWeekday && <>חזק <b style={{ color: '#d4af37' }}>{WEEKDAY_HE[Number(analysis.time.bestWeekday.key)]}</b></>}
-                      {analysis.time.worstWeekday && analysis.time.worstWeekday.key !== analysis.time.bestWeekday?.key && <> · חלש <b style={{ color: '#c98080' }}>{WEEKDAY_HE[Number(analysis.time.worstWeekday.key)]}</b></>}
-                    </span>
-                    <span className="block font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] text-[#d4af37] mt-2">יום בשבוע</span>
-                  </div>
-                  <div className="grid gap-1.5 items-end h-[130px]" style={{ gridTemplateColumns: `repeat(${weekdayRows.length},1fr)` }}>
-                    {weekdayRows.map(g => <VBar key={g.key} pct={g.pct} tone={g.tone} label={g.heading} />)}
-                  </div>
-                </div>
-              )}
+            <div className="grid gap-9" style={{ gridTemplateColumns: '1fr' }}>
               {hourRows.length > 0 && (
                 <div>
                   <div className="mb-5 text-right">
@@ -749,7 +559,7 @@ export default function AiAnalyticsPage() {
                   </div>
                 </div>
               )}
-              {weekdayRows.length === 0 && hourRows.length === 0 && (
+              {hourRows.length === 0 && (
                 <p className="text-sm text-white/30">אין עדיין מספיק נתונים לניתוח זמן.</p>
               )}
             </div>
@@ -775,7 +585,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={4} total={11} eyebrow="Model / Setup" title="מודל / סטאפ"
+          index={3} total={9} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
             confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
@@ -805,7 +615,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={5} total={11} eyebrow="Confluence Tags" title="אישורי כניסה"
+          index={4} total={9} eyebrow="Confluence Tags" title="אישורי כניסה"
           description={
             confirmationTagRows.length === 0
               ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
@@ -832,7 +642,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
         <NumberedSection
-          index={6} total={11} eyebrow="Psychology" title="מצב רגשי"
+          index={5} total={9} eyebrow="Psychology" title="מצב רגשי"
           description={
             emotionRows.length === 0
               ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
@@ -850,7 +660,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={7} total={11} eyebrow="Exit Management" title="ניהול יציאות"
+          index={6} total={9} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -895,57 +705,9 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
-        {/* ══════════ 08 · WORKING STRENGTHS ══════════ */}
-        <NumberedSection
-          index={8} total={11} eyebrow="AI · הדפוסים שעובדים" title="מה באמת עובד לך"
-          description="המערכת מזהה באופן אוטומטי אילו דפוסים חוזרים על עצמם ומייצרים עבורך את התוצאות הטובות ביותר."
-        >
-          {strengthsLoading ? (
-            <div className="flex items-center gap-2.5 py-6"><TypingDots /><span className="text-sm text-white/30">מאתר את מה שעובד לך...</span></div>
-          ) : workingStrengths.length === 0 ? (
-            <p className="text-sm text-white/30 py-2">עדיין אין מספיק נתונים כדי להסיק מסקנה אמינה.</p>
-          ) : (
-            <div className="flex flex-col gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
-              {workingStrengths.map(s => (
-                <Reveal key={s.id} className="bg-[#0a0a0b] p-6">
-                  <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <span style={{ color: '#d4af37', fontSize: 11 }}>◈</span>
-                      <span className="font-mono text-base font-bold text-white">{s.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {!s.isLowData && <TrendBadge trend={s.trend} />}
-                      <ConfidenceBadge level={s.confidenceLevel} />
-                    </div>
-                  </div>
-
-                  <HBar pct={(s.metric.winRate / maxStrengthWinRate) * 100} />
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] mt-5 rounded-[3px] overflow-hidden">
-                    <ExitTile label="אחוז הצלחה" value={`${s.metric.winRate.toFixed(0)}%`} sub={`${s.sampleSize} עסקאות`} color="#6fa580" />
-                    <ExitTile label="R ממוצע" value={`${s.metric.avgRR >= 0 ? '+' : ''}${s.metric.avgRR.toFixed(2)}`} />
-                    <ExitTile label="Profit Factor" value={fmtPF(s.metric.profitFactor)} color="#d4af37" />
-                    <ExitTile
-                      label="רווח מצטבר"
-                      value={`${s.metric.totalPnl >= 0 ? '+' : '-'}$${Math.abs(s.metric.totalPnl).toFixed(0)}`}
-                      color={s.metric.totalPnl >= 0 ? '#6fa580' : '#c98080'}
-                    />
-                  </div>
-
-                  <StrengthHistoryChart history={s.history} />
-
-                  <div className="mt-5 pt-5 border-t border-[#1c1c1e]">
-                    <InsightText text={s.explanation} className="text-[15px] font-medium text-[#c0c0c0] leading-relaxed" />
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-          )}
-        </NumberedSection>
-
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
         <NumberedSection
-          index={9} total={11} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={7} total={9} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -957,7 +719,25 @@ export default function AiAnalyticsPage() {
               {patternInsights.map((ins, i) => (
                 <Reveal key={i} className="bg-[#0a0a0b] p-6">
                   <div className="flex items-center justify-between gap-4 flex-wrap mb-3.5">
-                    <ConfidenceBadge level={ins.confidenceLevel} />
+                    <div className="flex items-center gap-2">
+                      <ConfidenceBadge level={ins.confidenceLevel} />
+                      {/* Which way the slice points, and whether it survived the
+                          correction. Together these carry what the separate
+                          "what works for you" section used to say — a positive
+                          delta IS the strength, and it no longer needs its own
+                          model call and its own scroll. */}
+                      <span className="font-mono text-[10px] font-bold tracking-[0.1em] px-2 py-1 rounded-sm border"
+                        style={ins.delta >= 0
+                          ? { color: '#6fa580', borderColor: 'rgba(74,124,89,.4)', background: 'rgba(74,124,89,.1)' }
+                          : { color: '#c98080', borderColor: 'rgba(139,58,58,.4)', background: 'rgba(139,58,58,.1)' }}>
+                        {ins.delta >= 0 ? '▲' : '▼'} {Math.abs(ins.delta).toFixed(0)} נק׳ מהבסיס
+                      </span>
+                      {!ins.significant && (
+                        <span className="font-mono text-[10px] font-bold tracking-[0.1em] px-2 py-1 rounded-sm border border-[#2a2a2d] text-white/35">
+                          עדיין לא מובהק
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-white">{ins.subject}</span><span style={{ color: '#d4af37', fontSize: 12 }}>◈</span></div>
                   </div>
                   <InsightText text={ins.title + ' ' + ins.evidence} className="text-[15px] font-medium text-[#c0c0c0] leading-relaxed" />
@@ -969,21 +749,15 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={10} total={11} eyebrow="AI · Weekly Report" title="דוח שבועי"
-          description="תמצית שבעת הימים האחרונים — חוזק, חולשה ומיקוד לשבוע הבא. הארכיון שומר את כל הדוחות הקודמים כדי שתוכל לחזור אליהם."
+          index={8} total={9} eyebrow="AI · Weekly Review" title="סיכום השבוע"
+          description="שבעת הימים האחרונים משתי זוויות — מה עשו התוצאות, ומה זז בהתנהגות. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
         >
-          <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
-
-          {/* The behaviour half of the week, under the results half.
-              Different question, same seven days: the panel above says what
-              the week LOOKED like, this one says whether anything about how
-              you trade actually moved. Renders nothing when it has nothing. */}
-          <WeeklyBehaviorReview />
+          <WeeklyTabs hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
-          index={11} total={11} eyebrow="What-If" title="סימולטור תרחישים"
+          index={9} total={9} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
           {baseScenarios.length === 0 && !hourCapable ? (

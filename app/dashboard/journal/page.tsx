@@ -2,18 +2,15 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { loadTrades, saveTrades, softDelete, todayISO, tradePnL, computeStats, hydrateTradesFromCloud } from '../../lib/journal';
+import { loadTrades, saveTrades, softDelete, todayISO, hydrateTradesFromCloud } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { activeSessions, getActiveSessionIdx } from '../../lib/sessions';
 import { clockInZone } from '../../lib/time/zone';
-import { usePlan } from '../../components/PlanProvider';
 import TradeForm from '../../components/TradeForm';
-import AIInsightPanel from '../../components/AIInsightPanel';
 import JournalCalendar from '../../components/JournalCalendar';
 import TradeDetailsTable from '../../components/journal/TradeDetailsTable';
 import EmptyState from '../../components/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import Link from 'next/link';
 
 const M_HEB = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
@@ -22,16 +19,9 @@ function labelDate(dateISO: string): string {
   return `${d} ב${M_HEB[m - 1]} ${y}`;
 }
 
-const usd = (n: number) => {
-  const a = Math.abs(n).toLocaleString('en-US');
-  return n > 0 ? '+$' + a : n < 0 ? '-$' + a : '$0';
-};
-const pnlColor = (n: number) => (n > 0 ? '#4a7c59' : n < 0 ? '#8b3a3a' : 'rgba(255,255,255,0.4)');
-
 /** useSearchParams() opts the tree into client-side rendering, which Next
  *  requires to sit behind a Suspense boundary — see the default export below. */
 function JournalPageInner() {
-  const { canAccess } = usePlan();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [trades, setTrades] = useState<TradeEntry[]>([]);
@@ -133,15 +123,6 @@ function JournalPageInner() {
     [trades, selectedDate],
   );
 
-  const stats = useMemo(() => computeStats(trades), [trades]);
-  const bestTrade = useMemo(() => {
-    const pnls = trades.map(tradePnL).filter((n): n is number => n !== null);
-    return pnls.length ? Math.max(...pnls) : 0;
-  }, [trades]);
-  const closed = trades.filter(t => t.result !== 'OPEN');
-  const wins = closed.filter(t => t.result === 'WIN').length;
-  const be = closed.filter(t => t.result === 'BE').length;
-
   function selectDay(dateISO: string) {
     setSelectedDate(cur => (cur === dateISO ? null : dateISO));
   }
@@ -192,29 +173,14 @@ function JournalPageInner() {
             </div>
           </div>
 
-          {/* Summary strip */}
-          <div className="flex items-stretch mt-[34px] pt-7 border-t border-[#1c1c1e] flex-wrap gap-6">
-            <div className="flex-none pe-12 border-e border-[#1c1c1e]">
-              <div className="text-xs font-medium text-white/40 mb-2.5">רווח נקי כולל</div>
-              <div className="font-mono text-[44px] max-[880px]:text-[32px] font-black tabular-nums tracking-[-0.02em] leading-none" style={{ color: pnlColor(stats.totalPnL), textShadow: stats.totalPnL >= 0 ? '0 0 30px rgba(74,124,89,0.35)' : 'none' }}>
-                {usd(stats.totalPnL)}
-              </div>
-            </div>
-            <div className="flex-1 flex items-center ps-12 gap-14 flex-wrap">
-              <div>
-                <div className="text-xs font-medium text-white/40 mb-2.5">אחוז הצלחה</div>
-                <div className="font-mono text-[32px] font-black tabular-nums leading-none text-[#d4af37]" style={{ textShadow: '0 0 22px rgba(212,175,55,0.5)' }}>{stats.winRate.toFixed(0)}%</div>
-                <div className="text-[11px] text-white/40 mt-[7px]">{wins} נצחונות · {be} ללא שינוי</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-white/40 mb-2.5">יחס סיכון ממוצע</div>
-                <div className="font-mono text-[32px] font-black tabular-nums leading-none text-white">{stats.avgR.toFixed(2)}R</div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-white/40 mb-2.5">העסקה המובילה</div>
-                <div className="font-mono text-[32px] font-black tabular-nums leading-none" style={{ color: pnlColor(bestTrade) }}>{usd(bestTrade)}</div>
-              </div>
-            </div>
+          {/* How many trades are in view, and nothing else.
+              Net profit, win rate, average R and the best trade all live on
+              the dashboard, which is their home — four numbers repeated on a
+              second screen are four chances for two screens to disagree. */}
+          <div className="mt-[34px] pt-7 border-t border-[#1c1c1e]">
+            <span className="font-mono text-[13px] font-bold tracking-[0.16em] uppercase text-white/40">
+              {trades.length} עסקאות{selectedDate ? ' ביום שנבחר' : ' ביומן'}
+            </span>
           </div>
         </div>
       </div>
@@ -249,13 +215,6 @@ function JournalPageInner() {
               onDone={closeForm}
             />
           </div>
-        )}
-
-        {/* AI Insight — Starter+ tool. Free users see a locked card in the
-            same frame so they know the feature exists and how to unlock it. */}
-        {trades.length > 0 && (canAccess('starter')
-          ? <AIInsightPanel trades={trades} />
-          : <AIInsightLocked />
         )}
 
         {/* Monthly P&L calendar */}
@@ -360,34 +319,6 @@ function JournalPageInner() {
   );
 }
 
-/** Locked-state twin of AIInsightPanel — same visual frame so a Free user
-    sees exactly where the panel lives once unlocked. First paid step in the
-    ladder: Starter (₪49/mo) is the CTA here on purpose. */
-function AIInsightLocked() {
-  return (
-    <div className="rounded-xl border border-[#1c1c1e] bg-[#0d0d0f] p-6 sm:p-7 overflow-hidden relative">
-      <div className="absolute inset-0 opacity-40 pointer-events-none" style={{ background: 'radial-gradient(80% 60% at 100% 0%, rgba(212,175,55,0.10), transparent 60%)' }} />
-      <div className="relative flex items-start gap-4 flex-wrap">
-        <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center border border-[#d4af37]/40 bg-[#d4af37]/[0.08]" style={{ boxShadow: '0 0 24px -8px rgba(212,175,55,0.4)' }}>
-          <span className="text-[#d4af37] text-[18px]">✦</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-mono text-[10.5px] font-bold tracking-[0.24em] uppercase text-[#d4af37] mb-2">AI INSIGHT · נעול</div>
-          <h3 style={{ fontFamily: 'var(--serif)' }} className="text-[20px] font-bold text-white leading-tight m-0">התובנה שהמערכת רואה על היומן שלך</h3>
-          <p className="mt-2 text-[14px] text-white/60 leading-relaxed max-w-[560px]">
-            אחרי כל עסקה שמוסיפים, המערכת מריצה ניתוח קצר על התבנית שמתגלה — מה עובד לך, איפה יש דלף, ומה כדאי לשים לב אליו בעסקה הבאה. פתוח החל ממנוי <span className="text-[#d4af37] font-bold">Starter</span> (₪49/חודש).
-          </p>
-        </div>
-        <Link
-          href="/checkout"
-          className="shrink-0 self-center py-2.5 px-5 rounded-sm font-mono text-[11px] font-bold uppercase tracking-[0.14em] bg-[#d4af37] text-black hover:bg-[#e5c84a] transition-colors [box-shadow:0_0_24px_rgba(212,175,55,0.35)]"
-        >
-          שדרוג ל-Starter ←
-        </Link>
-      </div>
-    </div>
-  );
-}
 
 export default function JournalPage() {
   return (

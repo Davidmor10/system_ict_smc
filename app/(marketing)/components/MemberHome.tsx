@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useClerk, useUser } from '@clerk/nextjs';
 import SplashIntro from '../../components/SplashIntro';
 import { activeSessions, sessionIdxForHour } from '../../lib/sessions';
-import { activeZone, clockCaption, clockInZone, clockWithSecondsInZone, hourFloatInZone, todayISOInZone, zoneShortName, DEFAULT_TIMEZONE } from '../../lib/time/zone';
-import { computeStats, loadTrades, hydrateTradesFromCloud, tradePnL, type TradeEntry } from '../../lib/journal';
+import { activeZone, clockCaption, clockWithSecondsInZone, hourFloatInZone, todayISOInZone, zoneShortName, DEFAULT_TIMEZONE } from '../../lib/time/zone';
+import { loadTrades, hydrateTradesFromCloud, tradePnL, type TradeEntry } from '../../lib/journal';
 import { hydrateList } from '../../lib/sync/collections';
 import { computeRuleStats } from '../../lib/rules/stats';
 import { ruleSeverity, ruleTitle, ruleVerification, type Rule, type RuleCheck } from '../../lib/rules/types';
@@ -220,8 +220,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
   const macroSoon = !!nextEvent && nextEvent.minutes <= 60;
 
   // ── Derived: the trader's numbers ────────────────────────────────────────
-  const stats = useMemo(() => computeStats(trades), [trades]);
-  const decided = stats.wins + stats.losses;
 
   const pnl30 = useMemo(() => {
     if (!now) return null;
@@ -461,20 +459,12 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
                     </span>
                   </span>
 
-                  <span className="eg-metric">
-                    <span className="eg-metric-l eg-ltr">WIN RATE</span>
-                    <span className="eg-metric-v eg-ltr" data-tone={decided ? undefined : 'muted'}>
-                      {decided ? `${Math.round(stats.winRate * cu)}%` : '—'}
-                    </span>
-                  </span>
-
-                  <span className="eg-metric">
-                    <span className="eg-metric-l eg-ltr">PROFIT FACTOR</span>
-                    <span className="eg-metric-v eg-ltr" data-tone={decided ? undefined : 'muted'}>
-                      {!decided ? '—' : Number.isFinite(stats.profitFactor) ? (stats.profitFactor * cu).toFixed(2) : '∞'}
-                    </span>
-                  </span>
-
+                  {/* Win rate and profit factor used to sit here as well.
+                      They are the dashboard's numbers, and a doorway that
+                      quotes them is a second place for the same figure to be
+                      read — and eventually to disagree. What stays is what
+                      this screen alone can say: the streak, and the last
+                      thirty days as a single line. */}
                   <span className="eg-metric">
                     <span className="eg-metric-l eg-ltr">PNL · 30D</span>
                     <span

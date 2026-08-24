@@ -27,14 +27,13 @@ vi.mock('../../app/lib/supabase/server', () => ({
   createServerSupabaseClient: () => fakeDb,
 }));
 
-// The phrasing layer echoes the sample size it was handed, so an assertion on
-// the returned text is an assertion on the number the pipeline believed.
+// The dashboard note is the surface these invariants now protect — the journal
+// panel that used to sit beside it is gone, and both always ran through the
+// same freshness path. `sampleSize` on the returned insight is the number the
+// pipeline believed, so asserting on it asserts on the whole chain.
 vi.mock('../../app/lib/ai/insightPhrasing', () => ({
   generateHypothesisPhrasing: vi.fn(async () => ({ description: 'hypothesis', evidence: 'evidence' })),
   generatePatternPhrasing: vi.fn(async () => ({ title: 'pattern', evidence: 'evidence', action: 'watch' })),
-  generateWorkingStrengthsPhrasing: vi.fn(async () => null),
-  generateInsightsPhrasing: vi.fn(async (inputs: Array<{ metric: { trades: number; confidence: { sampleSize: number } } }>) =>
-    inputs.map(i => `built on ${Math.max(i.metric.trades, i.metric.confidence.sampleSize)} trades`)),
   metricsEvidence: (metrics: Record<string, { trades?: number }>) => `מבוסס על ${Object.values(metrics)[0]?.trades ?? 0} עסקאות.`,
 }));
 
@@ -67,12 +66,8 @@ function history(): TradeEntry[] {
  *  why the stale row used to be read straight back out and quoted. */
 async function settleThenFreeze(patternRow: Record<string, unknown>) {
   fakeDb.seed('journal_trades', threeTrades().map(t => row(t)));
-  await service.generatePersonalizedInsights(CLERK, 'he');
+  await service.generateDashboardPrimaryInsight(CLERK, 'he');
   fakeDb.tables['pattern_memory'] = [patternRow];
-}
-
-function claimedNumbers(texts: string[]): number[] {
-  return texts.flatMap(t => [...t.matchAll(/built on (\d+) trades/g)].map(m => Number(m[1])));
 }
 
 beforeEach(() => { fakeDb.tables = {}; });
@@ -115,25 +110,17 @@ describe('an insight can never outlive the trades behind it', () => {
   it('does not quote a 19-trade pattern to a trader holding three', async () => {
     await settleThenFreeze(frozenPatternRow(19));
 
-    const { insights } = await service.generatePersonalizedInsights(CLERK, 'he');
-
-    for (const n of claimedNumbers(insights.map(i => i.text))) {
-      expect(n).toBeLessThanOrEqual(3);
-    }
-    expect(insights.map(i => i.text).join(' ')).not.toContain('19');
-  });
-
-  it('the dashboard insight is held to the same floor', async () => {
-    await settleThenFreeze(frozenPatternRow(19));
-
     const insight = await service.generateDashboardPrimaryInsight(CLERK, 'he');
-    if (insight) expect(insight.sampleSize).toBeLessThanOrEqual(3);
+    if (insight) {
+      expect(insight.sampleSize).toBeLessThanOrEqual(3);
+      expect(`${insight.title} ${insight.evidence}`).not.toContain('19');
+    }
   });
 
   it('rewrites a rediscovered pattern down to its real sample instead of keeping the old one', async () => {
     await settleThenFreeze(frozenPatternRow(19));
 
-    await service.generatePersonalizedInsights(CLERK, 'he');
+    await service.generateDashboardPrimaryInsight(CLERK, 'he');
 
     const stored = fakeDb.getAll('pattern_memory').find(r => r.pattern_id === 'ES_nyam');
     expect(stored?.current_sample_size).toBeLessThanOrEqual(3);
@@ -147,7 +134,7 @@ describe('an insight can never outlive the trades behind it', () => {
     const orphan = { ...frozenPatternRow(19), pattern_id: 'NQ_london', subject: { instrument: 'NQ', session: 'london' } };
     await settleThenFreeze(orphan);
 
-    await service.generatePersonalizedInsights(CLERK, 'he');
+    await service.generateDashboardPrimaryInsight(CLERK, 'he');
 
     const stored = fakeDb.getAll('pattern_memory').find(r => r.pattern_id === 'NQ_london');
     expect(stored?.consecutive_misses).toBe(1);
@@ -161,7 +148,7 @@ describe('an insight can never outlive the trades behind it', () => {
     // old gate saw equal counts and served the previous run's rows forever.
     const first = history();
     fakeDb.seed('journal_trades', first.map(t => row(t)));
-    await service.generatePersonalizedInsights(CLERK, 'he');
+    await service.generateDashboardPrimaryInsight(CLERK, 'he');
 
     const replacement = [
       ...Array.from({ length: 12 }, () => makeTrade({ symbol: 'NQ', session: 'london', result: 'WIN', entry: 100, stop: 99, target: 103 })),
@@ -169,19 +156,23 @@ describe('an insight can never outlive the trades behind it', () => {
     ];
     fakeDb.tables['journal_trades'] = replacement.map(t => row(t));
 
-    const after = await service.generatePersonalizedInsights(CLERK, 'he');
-    expect(after.insights.map(i => i.subject).join(' ')).not.toMatch(/ES/);
+    const after = await service.generateDashboardPrimaryInsight(CLERK, 'he');
+    // The stored rows must describe the new history, not the old one.
+    const live = fakeDb.getAll('pattern_memory')
+      .filter(r => r.status === 'active' || r.status === 'strengthening')
+      .map(r => String(r.pattern_id)).join(' ');
+    expect(live).not.toMatch(/ES/);
+    if (after) expect(`${after.title} ${after.evidence}`).not.toMatch(/\bES\b/);
   });
 
   it('says nothing rather than something false when every claim is stale', async () => {
     const trades = history();
     fakeDb.seed('journal_trades', trades.map(t => row(t)));
-    await service.generatePersonalizedInsights(CLERK, 'he');
+    await service.generateDashboardPrimaryInsight(CLERK, 'he');
 
     // Every trade gone. Silence is the only honest output.
     fakeDb.tables['journal_trades'] = trades.map(t => row(t, true));
 
-    const after = await service.generatePersonalizedInsights(CLERK, 'he');
-    expect(after.insights).toEqual([]);
+    expect(await service.generateDashboardPrimaryInsight(CLERK, 'he')).toBeNull();
   });
 });
