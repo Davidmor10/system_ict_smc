@@ -10,21 +10,16 @@ import { usePlan } from '../../components/PlanProvider';
 import TradeForm from '../../components/TradeForm';
 import AIInsightPanel from '../../components/AIInsightPanel';
 import JournalCalendar from '../../components/JournalCalendar';
-import JournalTradeCard from '../../components/JournalTradeCard';
+import TradeDetailsTable from '../../components/journal/TradeDetailsTable';
 import EmptyState from '../../components/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Link from 'next/link';
 
 const M_HEB = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
-const D_HEB = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
 
 function labelDate(dateISO: string): string {
   const [y, m, d] = dateISO.split('-').map(Number);
   return `${d} ב${M_HEB[m - 1]} ${y}`;
-}
-function weekdayLabel(dateISO: string): string {
-  const [y, m, d] = dateISO.split('-').map(Number);
-  return D_HEB[new Date(y, m - 1, d).getDay()];
 }
 
 const usd = (n: number) => {
@@ -44,6 +39,10 @@ function JournalPageInner() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<TradeEntry | null>(null);
+  /** The trade whose chart screenshot is being viewed. The journal stored
+   *  screenshots for months with nothing that displayed them; the table's
+   *  "גרף" button is the first thing that does. */
+  const [chartTrade, setChartTrade] = useState<TradeEntry | null>(null);
   const [editingTrade, setEditingTrade] = useState<TradeEntry | null>(null);
   const [presetModel, setPresetModel] = useState<string | null>(null);
   // Ref-based scroll target for the form panel. window.scrollTo() is a no-op
@@ -127,7 +126,12 @@ function JournalPageInner() {
   const activeSession = activeSessionIdx >= 0 ? sessions[activeSessionIdx] : null;
 
   const dates = useMemo(() => [...new Set(trades.map(t => t.dateISO))].sort((a, b) => b.localeCompare(a)), [trades]);
-  const shownDates = selectedDate ? dates.filter(d => d === selectedDate) : dates;
+  // The table groups by day itself, so the page hands it a flat list carrying
+  // the date filter that is already on screen above it.
+  const shownTrades = useMemo(
+    () => (selectedDate ? trades.filter(t => t.dateISO === selectedDate) : trades),
+    [trades, selectedDate],
+  );
 
   const stats = useMemo(() => computeStats(trades), [trades]);
   const bestTrade = useMemo(() => {
@@ -305,34 +309,41 @@ function JournalPageInner() {
               }
             />
           ) : (
-            shownDates.map(date => {
-              const dayTrades = trades.filter(t => t.dateISO === date);
-              if (dayTrades.length === 0) return null;
-              const dayPnl = dayTrades.map(tradePnL).filter((n): n is number => n !== null).reduce((a, b) => a + b, 0);
-              return (
-                <div key={date} className="mt-9 first:mt-0">
-                  <div className="flex items-baseline gap-3.5 mb-[18px]">
-                    <span style={{ fontFamily: 'var(--serif)' }} className="text-[22px] font-bold text-white">{labelDate(date)}</span>
-                    <span className="h-px flex-1 bg-[#1c1c1e]" />
-                    <span className="text-[13px] text-white/40">{weekdayLabel(date)} · {dayTrades.length} עסקאות</span>
-                    <span className="font-mono text-[19px] font-extrabold tabular-nums" style={{ color: pnlColor(dayPnl) }}>{usd(dayPnl)}</span>
-                  </div>
-                  <div className="flex flex-col gap-4">
-                    {dayTrades.map(t => (
-                      <JournalTradeCard
-                        key={t.id}
-                        trade={t}
-                        onDelete={() => setDeleteTarget(t)}
-                        onEdit={handleEdit}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })
+            <TradeDetailsTable
+              trades={shownTrades}
+              onEdit={handleEdit}
+              onDelete={t => setDeleteTarget(t)}
+              onOpenChart={t => setChartTrade(t)}
+            />
           )}
         </section>
       </div>
+
+      {chartTrade?.screenshots?.[0] && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="צילום הגרף של העסקה"
+          onClick={() => setChartTrade(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm"
+        >
+          {/* The image is the dialog; anywhere else closes it. No frame, no
+              chrome — the screenshot is what the trader came to look at. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={chartTrade.screenshots[0]}
+            alt={`גרף · ${chartTrade.symbol} · ${chartTrade.dateISO}`}
+            className="max-h-full max-w-full rounded-sm border border-[#2a2a2d] object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setChartTrade(null)}
+            aria-label="סגור"
+            className="fixed top-6 end-6 font-mono text-sm text-white/60 transition-colors hover:text-white"
+          >✕</button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}

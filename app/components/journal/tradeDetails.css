@@ -1,0 +1,90 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Trade details — the compact log that replaced the large trade cards.
+   Everything a component's inline styles cannot express: hover states, the
+   open/fill animations, and the reduced-motion contract.
+
+   Scoped under .tdt so nothing here can reach the rest of the journal page.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.tdt { --tdt-ease: cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ── Filter chips ─────────────────────────────────────────────────────────── */
+.tdt-filter {
+  padding: 7px 14px; border-radius: 2px; cursor: pointer;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  border: 1px solid #1c1c1e; background: transparent; color: rgba(255,255,255,0.45);
+  transition: all 0.35s var(--tdt-ease);
+}
+.tdt-filter:hover { border-color: rgba(212,175,55,0.5); color: #d4af37; }
+.tdt-filter:active { transform: scale(0.97); }
+.tdt-filter[data-on='true'] {
+  border-color: rgba(212,175,55,0.5); background: rgba(212,175,55,0.12);
+  color: #d4af37; box-shadow: 0 0 22px -8px rgba(212,175,55,0.7);
+}
+
+/* ── Row ──────────────────────────────────────────────────────────────────
+   The gold rail is an inset shadow on the inline edge, so it costs no layout
+   and cannot shift the grid it sits on. */
+.tdt-row {
+  transition: background 0.3s var(--tdt-ease), box-shadow 0.3s var(--tdt-ease);
+}
+.tdt-row:hover {
+  background: rgba(255,255,255,0.028);
+  box-shadow: inset -2px 0 0 0 rgba(212,175,55,0.55);
+}
+.tdt-row[data-open='true'] {
+  background: rgba(212,175,55,0.045);
+  box-shadow: inset -2px 0 0 0 #d4af37;
+}
+.tdt-caret { transition: transform 0.4s var(--tdt-ease), color 0.3s ease; }
+
+/* ── Expanded detail ──────────────────────────────────────────────────────── */
+@keyframes tdt-open {
+  from { opacity: 0; transform: translateY(-6px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+@keyframes tdt-bar   { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes tdt-mark  { from { opacity: 0; transform: translateX(50%) scale(0.4); } to { opacity: 1; transform: translateX(50%) scale(1); } }
+@keyframes tdt-sweep { 0% { transform: translateX(-110%); } 100% { transform: translateX(210%); } }
+
+.tdt-detail { animation: tdt-open 0.4s var(--tdt-ease); }
+.tdt-sweep  { animation: tdt-sweep 1.5s var(--tdt-ease) forwards; }
+.tdt-fill   { animation: tdt-bar 0.7s var(--tdt-ease); }
+.tdt-exit   { animation: tdt-mark 0.6s 0.25s var(--tdt-ease) backwards; }
+
+.tdt-cell { transition: background 0.3s ease; }
+.tdt-cell:hover { background: #111114; }
+.tdt-chip { transition: border-color 0.3s ease; }
+.tdt-chip:hover { border-color: #2a2a2d; }
+
+/* ── Actions ──────────────────────────────────────────────────────────────── */
+.tdt-act {
+  border-radius: 2px; cursor: pointer;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  transition: all 0.3s var(--tdt-ease);
+}
+.tdt-act:active { transform: scale(0.97); }
+.tdt-act-chart { padding: 8px 15px; border: 1px solid rgba(212,175,55,0.35); background: rgba(212,175,55,0.08); color: #d4af37; }
+.tdt-act-chart:hover { background: rgba(212,175,55,0.16); box-shadow: 0 0 24px -6px rgba(212,175,55,0.5); }
+.tdt-act-edit { padding: 8px 15px; border: 1px solid #2a2a2d; background: none; color: rgba(255,255,255,0.45); }
+.tdt-act-edit:hover { color: #d4af37; border-color: rgba(212,175,55,0.4); }
+.tdt-act-del { padding: 8px 12px; border: 1px solid rgba(139,58,58,0.3); background: none; color: rgba(201,128,128,0.55); letter-spacing: normal; }
+.tdt-act-del:hover { color: #c98080; border-color: rgba(139,58,58,0.7); }
+
+/* Motion is decoration here — every one of these states is also carried by a
+   colour or a position, so removing the movement removes nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .tdt *, .tdt *::before, .tdt *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Below the grid's natural width the columns stop being columns. The panel
+   scrolls inside itself rather than widening the page. */
+@media (max-width: 900px) {
+  .tdt-scroll { overflow-x: auto; }
+  .tdt-scroll > * { min-width: 860px; }
+}
