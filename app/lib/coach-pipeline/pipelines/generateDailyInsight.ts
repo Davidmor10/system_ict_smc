@@ -19,8 +19,8 @@ import { createHash } from 'crypto';
 
 import type { DailyInsightRow, FallbackReason, InsightKind, Provider, Statistical, TradeRow } from '../types';
 import { getUserProfile } from '../db/profile';
-import { listTradesForDate, listRecentTrades } from '../db/trades';
-import { getInsightForDate, insertInsight } from '../db/insights';
+import { listTradesForDate, listRecentTrades, listLateLoggedTrades } from '../db/trades';
+import { getInsightForDate, insertInsight, listRecentInsights } from '../db/insights';
 import { logUsage, sumUserMonthlyCost, sumSystemCostSince } from '../db/usage';
 import { flags } from '../db/flags';
 import { callClaudeInsight, CLAUDE_MODEL } from '../providers/anthropic';
@@ -140,6 +140,27 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   ]);
   const signals = computeTodaySignals(todayTrades);
 
+  // Trades the trader logged since the last note went out, for other days.
+  // A trade's `date` is when it happened; `created_at` is when it was written
+  // down. Log Tuesday's trade on Friday and no note ever remarks on it —
+  // Tuesday's was filed before it existed and is never rewritten, and Friday's
+  // is correctly about Friday. This is where the coach gets to notice it.
+  //
+  // Never fails the run: a note without this block is the note as it was.
+  let lateLogged: TradeRow[] = [];
+  try {
+    const [previous] = await listRecentInsights(cid, 1);
+    // No previous note means this is the trader's first — everything is new,
+    // and a "you logged these late" block on a first note is nonsense.
+    if (previous?.generated_at) {
+      lateLogged = await listLateLoggedTrades(cid, inputs.date, previous.generated_at);
+    }
+  } catch (err) {
+    logger.warn('late-logged lookup failed — continuing without it', {
+      clerkId: cid, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // The rolling profile is written by a background agent. Until it has run at
   // least once — which for every new user is "not yet" — profile.statistical
   // is empty, and the model would be asked to coach on a single day's trades
@@ -185,6 +206,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     todayTrades,
     signals,
     pastWritingBlock: retrieval.block,
+    lateLogged,
     statisticalFallback,
     behavior: behavior.block,
     traderProfile,
@@ -357,6 +379,10 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     statistical_n:        statisticalFallback?.n ?? profile?.statistical?.n ?? 0,
     trade_ids:            todayTrades.map(t => t.id),
     today_signals:        signals,
+    // Trades written down after the last note, for other days. Kept in the
+    // snapshot because a note that mentions a trade absent from `trade_ids` is
+    // otherwise indistinguishable from one that invented it.
+    late_logged_ids:      lateLogged.map(t => t.id),
     retrieval_query_text: retrieval.queryText,
     retrieval_skipped:    retrieval.skipped,
     retrieval_error:      retrieval.error ?? null,

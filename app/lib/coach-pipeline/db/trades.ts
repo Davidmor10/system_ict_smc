@@ -65,6 +65,41 @@ export async function listTradesForDate(
   return (data ?? []) as TradeRow[];
 }
 
+/** Trades the trader logged AFTER the coach last wrote, for a day other than
+ *  the one being reported on.
+ *
+ *  A trade carries two different times: `date`, the day it happened, and
+ *  `created_at`, the moment it reached the system. They are usually the same
+ *  day and nobody notices the difference — until someone logs Tuesday's trade
+ *  on Friday. The nightly note is written once per day and never rewritten, so
+ *  Tuesday's note was already filed saying "no trades", and Friday's note
+ *  correctly says the same about Friday. The trade lands in the totals, the
+ *  win rate and every behaviour check, but no note ever remarks on it.
+ *
+ *  This is the query that lets the next note remark on it: everything logged
+ *  since the last note went out, minus what the report day already covers.
+ *  Capped — a first-time import of a year of history is not a day's reading.
+ */
+export async function listLateLoggedTrades(
+  clerkId: string,
+  reportDate: string,   // 'YYYY-MM-DD' — the day the note is about
+  since: string,        // ISO timestamp — when the coach last wrote
+  limit = 10,
+): Promise<TradeRow[]> {
+  const cid = requireClerkId(clerkId);
+  const { data, error } = await getClient()
+    .from(T.trades)
+    .select('*')
+    .eq('clerk_id', cid)
+    .neq('date', reportDate)
+    .gt('created_at', since)
+    .is('deleted_at', null)
+    .order('date', { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 50));
+  if (error) throw error;
+  return (data ?? []) as TradeRow[];
+}
+
 /** This user's most recent trades, newest first, capped at `limit`.
  *
  *  Feeds computeStatistical when the rolling profile hasn't been built yet.

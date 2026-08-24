@@ -397,3 +397,68 @@ describe('SYSTEM_PROMPT — the trader\'s own words', () => {
     expect(SYSTEM_PROMPT).toContain('Never restate it as your own');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// <late_logged> — trades written down after the note for their own day
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A trade carries two different times: the day it happened, and the moment it
+// reached the system. Log Tuesday's trade on Friday and no note ever remarks
+// on it — Tuesday's note was filed before it existed and is never rewritten,
+// and Friday's note is correctly about Friday. It still lands in the totals,
+// the win rate and every behaviour check; it just never gets mentioned. This
+// block is where the next note gets to mention it.
+
+describe('buildUserMessage — late-logged trades', () => {
+  const base = {
+    profile: profile(),
+    todayTrades: [] as TradeRow[],
+    signals: computeTodaySignals([]),
+    pastWritingBlock: '[]',
+  };
+
+  it('omits the block entirely when nothing was logged late', () => {
+    const msg = buildUserMessage({ ...base, lateLogged: [] });
+    expect(msg).not.toContain('<late_logged>');
+  });
+
+  it('omits it when the field is not passed at all', () => {
+    const msg = buildUserMessage(base);
+    expect(msg).not.toContain('<late_logged>');
+  });
+
+  it('carries the day each trade actually happened on', () => {
+    const msg = buildUserMessage({
+      ...base,
+      lateLogged: [T({ date: '2026-08-18', result: 'BE', r_multiple: 0 })],
+    });
+
+    expect(msg).toContain('<late_logged>');
+    // The date is the whole point: without it a late-logged trade is
+    // indistinguishable from one of today's, which is the single reading that
+    // must not happen.
+    expect(msg).toMatch(/<late_logged>[\s\S]*2026-08-18[\s\S]*<\/late_logged>/);
+  });
+
+  it('keeps them out of <today>, which stays empty on a no-trade day', () => {
+    const msg = buildUserMessage({
+      ...base,
+      lateLogged: [T({ date: '2026-08-18' })],
+    });
+
+    const today = msg.slice(msg.indexOf('<today>'), msg.indexOf('</today>'));
+    expect(today).toContain('[]');
+    expect(msg).toMatch(/"n_trades":\s*0/);
+  });
+
+  it('sits between the day summary and the notebook, per the data contract', () => {
+    const msg = buildUserMessage({ ...base, lateLogged: [T({ date: '2026-08-18' })] });
+    expect(msg.indexOf('<today_signals>')).toBeLessThan(msg.indexOf('<late_logged>'));
+    expect(msg.indexOf('<late_logged>')).toBeLessThan(msg.indexOf('<past_writing>'));
+  });
+
+  it('tells the model these are not today, in the contract it reads', () => {
+    expect(SYSTEM_PROMPT).toContain('<late_logged>');
+    expect(SYSTEM_PROMPT).toContain('They did NOT happen today');
+  });
+});

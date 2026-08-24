@@ -186,6 +186,25 @@ writing a single word.
   setups used, emotions logged, rules_violated count, significance tag.
 </today_signals>
 
+<late_logged>
+  Trades the trader entered into the journal AFTER your last note went out,
+  for a day OTHER than the one above. Each: { date, ...same fields as <today> }.
+  OMITTED ENTIRELY when there are none — which is the normal case.
+
+  These are trades no note has ever remarked on: the note for their own day was
+  already written before they existed, and it is never rewritten. This is the
+  one chance to say something about them.
+
+  They did NOT happen today. Never describe them as today's trading, never fold
+  them into today's count, and never let them turn a no-trade day into a
+  trading day. Refer to them by their own date — "the trade you logged from
+  Tuesday" — and treat a day with no trades of its own as exactly that.
+
+  When the list is short and the day itself was empty, they are the most
+  interesting thing you have; say something specific about them. When today had
+  its own trades, today comes first and these get a sentence at most.
+</late_logged>
+
 <past_writing>
   Up to 5 excerpts the trader wrote in their notebook, retrieved because they
   are semantically related to today's context. Each: { date, snippet, kind }.
@@ -260,6 +279,9 @@ export interface DailyInsightInputs {
   /** What the trader wrote about themselves in settings. '' when they have
    *  written nothing, which omits the block entirely. */
   traderProfile?:   string;
+  /** Trades logged since the last note, for days other than the reported one.
+   *  Empty is the normal case and omits the block entirely. */
+  lateLogged?:      readonly TradeRow[];
   /** Deterministic stats to use when the rolling profile has none yet.
    *  Computed by analyzers/statistical.ts from the user's real trade history —
    *  never invented, never a placeholder. Ignored when the profile already
@@ -310,6 +332,13 @@ function compact(t: TradeRow): CompactTrade {
   };
 }
 
+/** Same compact shape, plus the day it happened. The date is the whole point
+ *  of the block: without it a late-logged trade is indistinguishable from
+ *  today's, which is the one reading that must not happen. */
+function datedCompact(t: TradeRow): CompactTrade & { date: string } {
+  return { date: t.date, ...compact(t) };
+}
+
 /** True when the profile's statistical blob has nothing usable in it — no
  *  row at all, or a row whose stats were never computed. */
 function statsAreEmpty(s: Statistical | undefined | null): boolean {
@@ -349,6 +378,12 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
     '<today_signals>',
     safeJson(inputs.signals),
     '</today_signals>',
+    '',
+    // Omitted when there is nothing late — an empty list here reads as a
+    // prompt to comment on the absence, and there is nothing to say about it.
+    ...(inputs.lateLogged?.length
+      ? ['', '<late_logged>', safeJson(inputs.lateLogged.map(datedCompact)), '</late_logged>']
+      : []),
     '',
     '<past_writing>',
     safeBlock(inputs.pastWritingBlock),

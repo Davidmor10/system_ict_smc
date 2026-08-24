@@ -52,6 +52,7 @@ const scopedHelpers: Array<[string, (arg: string, ...rest: unknown[]) => Promise
   ['trades.listUnprocessedTrades',   (id) => trades.listUnprocessedTrades(id)],
   ['trades.countTradesSince',        (id) => trades.countTradesSince(id, new Date().toISOString())],
   ['trades.listTradesForDate',       (id) => trades.listTradesForDate(id, '2026-08-07')],
+  ['trades.listLateLoggedTrades',    (id) => trades.listLateLoggedTrades(id, '2026-08-07', '2026-08-01T00:00:00Z')],
   ['trades.markTradesProcessed',     (id) => trades.markTradesProcessed(id, ['x'], 1)],
   ['notebook.listEntriesNeedingEmbed', (id) => notebook.listEntriesNeedingEmbed(id)],
   ['notebook.getEntry',              (id) => notebook.getEntry(id, 'x')],
