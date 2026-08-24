@@ -25,12 +25,22 @@ export default function DashboardBias() {
   const [declared, setDeclared] = useState<DeclaredBias | null>(null);
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState(false);
+  /** Open while the direction is still a question, one line once it is
+   *  answered. A control used once a morning should not hold a band of the
+   *  screen for the rest of the day — but it must be unmissable until it has
+   *  been used, which is why the undeclared state is never collapsed. */
+  const [open, setOpen] = useState(true);
   const savedTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const current = readDeclaredBias();
     setDeclared(current);
     setNote(current?.note ?? '');
+    // Collapsed on arrival when today's call was already made. Not collapsed
+    // right after making it: the reason is usually typed in the same breath as
+    // the direction, and closing the panel under the trader's hands would take
+    // the field away mid-thought.
+    if (current) setOpen(false);
   }, []);
 
   useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current); }, []);
@@ -60,6 +70,25 @@ export default function DashboardBias() {
   }, [declared, note, flash]);
 
   const at = declared?.at ? new Date(declared.at) : null;
+  const meta = declared ? BIAS_META[declared.bias] : null;
+  const arrowFor = (key: BiasChoice) => (key === 'bull' ? '▲' : key === 'bear' ? '▼' : '—');
+
+  // ── Collapsed: the answer, on one line ────────────────────────────────────
+  if (declared && meta && !open) {
+    return (
+      <section className="dp-bias dp-bias-mini dp-rise" aria-label="ביאס היום">
+        <button type="button" className="dp-bias-mini-btn" onClick={() => setOpen(true)}>
+          <span className="dp-bias-k">ביאס היום</span>
+          <span className="dp-bias-mini-v" style={{ color: meta.color }}>
+            <span aria-hidden>{arrowFor(declared.bias)}</span> {meta.he}
+          </span>
+          {declared.note && <span className="dp-bias-mini-why">{declared.note}</span>}
+          {at && <span className="dp-bias-at">{clockInZone(undefined, at)}</span>}
+          <span className="dp-bias-mini-cta">לשנות ←</span>
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="dp-bias dp-rise" aria-label="ביאס היום">
@@ -67,13 +96,15 @@ export default function DashboardBias() {
         <span className="dp-bias-k">ביאס היום</span>
         {at && <span className="dp-bias-at">הוצהר {clockInZone(undefined, at)}</span>}
         <span className="dp-bias-saved" data-on={saved} aria-live="polite">נשמר ✓</span>
+        {declared && (
+          <button type="button" className="dp-bias-close" onClick={() => setOpen(false)}>סגור ✕</button>
+        )}
       </div>
 
       <div className="dp-bias-picks" role="group">
         {(Object.keys(BIAS_META) as BiasChoice[]).map(key => {
           const meta = BIAS_META[key];
           const on = declared?.bias === key;
-          const arrow = key === 'bull' ? '▲' : key === 'bear' ? '▼' : '—';
           return (
             <button
               key={key}
@@ -86,7 +117,7 @@ export default function DashboardBias() {
                 ? { color: meta.color, borderColor: meta.color, background: `color-mix(in srgb, ${meta.color} 12%, transparent)` }
                 : undefined}
             >
-              <span className="dp-bias-arrow" aria-hidden>{arrow}</span>
+              <span className="dp-bias-arrow" aria-hidden>{arrowFor(key)}</span>
               <span className="dp-bias-he">{meta.he}</span>
               <span className="dp-bias-en">{meta.en}</span>
             </button>

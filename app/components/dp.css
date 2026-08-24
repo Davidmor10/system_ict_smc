@@ -216,8 +216,48 @@
 .dp-app .dp-bias-empty{font-size:13px;line-height:1.7;color:var(--dp-w55);margin:0;text-wrap:pretty;}
 .dp-app .dp-bias-note{font-size:11.5px;line-height:1.7;color:var(--dp-w40);margin:0;text-wrap:pretty;}
 
+/* The card once the question has been answered: one line, and only as tall as
+   it needs to be. The full control is a morning decision; the answer is a
+   reference the trader glances at all day. */
+.dp-app .dp-bias-mini{padding:0;background:none;border:0;}
+.dp-app .dp-bias-mini-btn{
+  display:flex;align-items:center;gap:12px;width:100%;
+  padding:11px 18px;border-radius:14px;cursor:pointer;text-align:start;
+  background:linear-gradient(160deg,rgba(35,32,40,.5),rgba(24,22,33,.3));
+  border:1px solid var(--dp-border);
+  transition:border-color .2s var(--dp-ease),background-color .2s var(--dp-ease);
+}
+.dp-app .dp-bias-mini-btn:hover{border-color:var(--dp-border-strong);}
+.dp-app .dp-bias-mini-v{font-family:var(--dp-ff-sans);font-size:14px;font-weight:800;white-space:nowrap;}
+/* The reason is the part that can be any length, so it is the part that gives
+   way — everything either side of it keeps its size. */
+.dp-app .dp-bias-mini-why{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13px;color:var(--dp-w55);
+}
+.dp-app .dp-bias-mini-cta{
+  margin-inline-start:auto;white-space:nowrap;
+  font-family:var(--dp-ff-mono);font-size:10px;letter-spacing:.1em;color:var(--dp-gold);
+}
+.dp-app .dp-bias-mini-why + .dp-bias-at + .dp-bias-mini-cta{margin-inline-start:0;}
+.dp-app .dp-bias-close{
+  margin-inline-start:auto;cursor:pointer;background:none;border:0;
+  font-family:var(--dp-ff-mono);font-size:10px;letter-spacing:.1em;color:var(--dp-w40);
+  transition:color .2s var(--dp-ease);
+}
+.dp-app .dp-bias-close:hover{color:var(--dp-w92);}
+/* The saved chip and the close control both want the far end. When both are
+   present the chip sits before the control rather than fighting it for the
+   auto margin. */
+.dp-app .dp-bias-saved:has(+ .dp-bias-close){margin-inline-start:auto;}
+.dp-app .dp-bias-saved:has(+ .dp-bias-close) + .dp-bias-close{margin-inline-start:0;}
+
 @media (max-width:720px){
   .dp-app .dp-bias-picks{grid-template-columns:1fr;}
+  /* On a narrow screen the one-line summary is three lines; let it wrap rather
+     than clipping the reason to nothing. */
+  .dp-app .dp-bias-mini-btn{flex-wrap:wrap;}
+  .dp-app .dp-bias-mini-why{flex:1 1 100%;white-space:normal;}
 }
 
 .dp-app .dp-control-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;flex-wrap:wrap;}
