@@ -67,3 +67,5 @@ export * from './types';
 
 export { loadMacroContext, buildMacroContext, EMPTY_MACRO_CONTEXT } from './macroHistory';
 export type { MacroContext } from './macroHistory';
+
+export { prune, DEGENERATE_SHARE } from './patterns';

@@ -3,6 +3,7 @@
 
 import type { FullAnalysis } from '../analytics';
 import { summarizeAnalysis, summarizePatterns, summarizeDepth } from './factsBlock';
+import { prune } from '../analytics';
 import {
   HEBREW_MENTOR_STYLE, CHALLENGE_TRADER_STYLE, MENTOR_FLOW_STYLE, ICT_SMC_EXPERTISE,
   TRADING_PRECISION, DISCRETION_OVERRIDE, PSYCHOLOGY_NOTE, TEACHING_STRUCTURE,
@@ -38,7 +39,10 @@ export function buildFactsContext(analysis: FullAnalysis, knownFactsBlock: strin
   const depth = summarizeDepth(analysis);
   if (depth) parts.push(`\n${depth}`);
 
-  const patterns = summarizePatterns(analysis.patterns);
+  // Pruned for the same reason the cards are: handing the model the same
+  // finding under three labels makes it read as three findings, and it will
+  // cite them as three.
+  const patterns = summarizePatterns(prune(analysis.patterns, analysis.performance.totalTrades));
   if (patterns) parts.push(`\nDISCOVERED SLICES OF THIS TRADER'S HISTORY:\n${patterns}`);
 
   if (hypothesisLine) parts.push(`\n${hypothesisLine}`);

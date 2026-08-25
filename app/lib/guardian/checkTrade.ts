@@ -72,7 +72,7 @@ export function checkTrade(pending: PendingTrade, trades: TradeEntry[], todayISO
         warnings.push({
           id: 'weak_session_direction',
           severity: 'caution',
-          text: `${DIRECTION_HE[pending.direction]} ב${sessionHe(sess)}: ${g.winRate.toFixed(0)}% הצלחה על ${g.confidence.sampleSize} עסקאות מוכרעות — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
+          text: `${DIRECTION_HE[pending.direction]} ב${sessionHe(sess)}: ${g.winRate.toFixed(0)}% הצלחה על ${g.confidence.sampleSize} עסקאות שנסגרו — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
         });
       }
     }

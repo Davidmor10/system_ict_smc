@@ -640,9 +640,9 @@ export default function StatsView() {
                 {!s.evidence.enoughForConfirmed && (
                   <p className="st-caveat">
                     {!s.evidence.enoughForClaim ? (
-                      <>הציון מחושב על <span className="st-n">{s.evidence.decided}</span> עסקאות מוכרעות. מתחת ל־<span className="st-n">{s.evidence.forClaim}</span> המערכת לא מתייחסת לזה כטענה על המסחר שלך — זה תיאור של מה שקרה עד עכשיו, לא של היתרון שלך.</>
+                      <>הציון מחושב על <span className="st-n">{s.evidence.decided}</span> עסקאות שנסגרו. מתחת ל־<span className="st-n">{s.evidence.forClaim}</span> המערכת לא מתייחסת לזה כטענה על המסחר שלך — זה תיאור של מה שקרה עד עכשיו, לא של היתרון שלך.</>
                     ) : (
-                      <>הציון מחושב על <span className="st-n">{s.evidence.decided}</span> עסקאות מוכרעות. מ־<span className="st-n">{s.evidence.forConfirmed}</span> ומעלה הוא נחשב מבוסס; עד אז הוא עדיין זז הרבה מעסקה לעסקה.</>
+                      <>הציון מחושב על <span className="st-n">{s.evidence.decided}</span> עסקאות שנסגרו. מ־<span className="st-n">{s.evidence.forConfirmed}</span> ומעלה הוא נחשב מבוסס; עד אז הוא עדיין זז הרבה מעסקה לעסקה.</>
                     )}
                   </p>
                 )}

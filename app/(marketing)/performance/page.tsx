@@ -713,7 +713,7 @@ export default function PerformancePage() {
           <div className="pf-cta-bloom" aria-hidden />
           <h2 className="pf-cta-h2">תעד את העסקאות. תראה את התמונה.</h2>
           <p className="pf-cta-p">
-            כל העסקאות שלך במקום אחד, מסודרות לפי חתכים — כדי שתדע מה עובד לך ומה כדאי לשנות.
+            כל העסקאות שלך במקום אחד, מסודרות לפי צירופי תנאים — כדי שתדע מה עובד לך ומה כדאי לשנות.
           </p>
           <div className="pf-cta-row">
             <Link href="/pricing" className="pf-btn pf-btn-primary">הצטרפות למערכת</Link>

@@ -67,7 +67,7 @@ export function deriveKnownFacts(profile: TraderProfile, previousFacts: KnownFac
   if (exitDetail.captureRatio !== null && exitDetail.winnerCount >= MIN_EXIT_WINNERS) {
     if (exitDetail.captureRatio < EXIT_EARLY_RATIO_THRESHOLD) {
       candidates.push({
-        fact: `אתה נוטה לחתוך מנצחים מוקדם — בממוצע אתה ממש רק ${Math.round(exitDetail.captureRatio * 100)}% מהיעד המתוכנן שלך בעסקאות מנצחות.`,
+        fact: `אתה נוטה לצאת מעסקאות רווחיות מוקדם — בממוצע אתה מממש רק ${Math.round(exitDetail.captureRatio * 100)}% מהיעד שקבעת מראש בעסקאות הרווחיות.`,
         sourceField: 'exitBehavior',
         confidence: exitDetail.winnerCount >= 10 ? 'high' : 'medium',
       });

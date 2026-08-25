@@ -72,9 +72,9 @@ describe('the evidence line is computed, not generated', () => {
   it('writes the sentence that used to come back in English', () => {
     // The exact card from the bug report: 11 trades, 82%, R/R 0.65, PF 3.02.
     const line = groupEvidence(G(), 61, true);
-    expect(line).toContain('מבוסס על 11 עסקאות');
+    expect(line).toContain('11 עסקאות');
     expect(line).toContain('82% הצלחה');
-    expect(line).toContain('61% בממוצע הכללי');
+    expect(line).toContain('61% בשאר היומן');
     expect(line).toContain('0.65');
     expect(line).toContain('3.02');
     expect(isMostlyLatin(line)).toBe(false);
@@ -98,8 +98,8 @@ describe('the evidence line is computed, not generated', () => {
     // Keyed by pattern id ("session:nyam"); those are internals, not words a
     // trader uses.
     const line = metricsEvidence({ 'session:nyam': G(), 'instrument:MNQ': G({ trades: 6 }) }, true);
-    expect(line).toContain('מבוסס על 11 עסקאות');
-    expect(line).toContain('ועוד 1 חתך תומך');
+    expect(line).toContain('11 עסקאות');
+    expect(line).toContain('ועוד 1 צירוף תומך');
     expect(line).not.toContain('session:');
   });
 

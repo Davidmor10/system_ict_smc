@@ -378,7 +378,7 @@ export default function AiAnalyticsPage() {
       aTone = exp.expectancyUsd > 0 ? 'good' : exp.expectancyUsd < 0 ? 'warn' : 'none';
       const per = exp.expectancyUsd;
       const dir = per > 0 ? 'כן' : per < 0 ? 'לא' : 'בדיוק באיזון';
-      a = `${dir} — כל עסקה שווה לך בממוצע ${per >= 0 ? '' : 'מינוס '}$${Math.abs(per).toFixed(0)}, על פני ${closed} עסקאות מוכרעות.`;
+      a = `${dir} — כל עסקה שווה לך בממוצע ${per >= 0 ? '' : 'מינוס '}$${Math.abs(per).toFixed(0)}, על פני ${closed} עסקאות שנסגרו.`;
     }
 
     // B — doing what you said.
@@ -389,10 +389,10 @@ export default function AiAnalyticsPage() {
       const cap = pve.captureRate === null ? null : Math.round(pve.captureRate * 100);
       bTone = cap === null ? 'none' : cap >= 90 ? 'good' : 'warn';
       b = cap === null
-        ? `נמדדו ${pve.measured} עסקאות, אבל עדיין אין מספיק מנצחים כדי לחשב כמה מהיעד אתה לוקח.`
+        ? `נמדדו ${pve.measured} עסקאות, אבל עדיין אין מספיק עסקאות רווחיות כדי לחשב כמה מהיעד אתה לוקח.`
         : cap >= 90
           ? `כן — אתה לוקח ${cap}% מהיעד שתכננת, על ${pve.measured} עסקאות שנמדדו.`
-          : `לא לגמרי — אתה לוקח ${cap}% מהיעד שתכננת, כלומר סוגר מנצחים לפני התוכנית. נמדד על ${pve.measured} עסקאות.`;
+          : `לא לגמרי — אתה לוקח ${cap}% מהיעד שתכננת, כלומר אתה יוצא מעסקאות רווחיות לפני שהן מגיעות ליעד. נמדד על ${pve.measured} עסקאות.`;
     }
 
     // C — is any of it real.
@@ -402,13 +402,13 @@ export default function AiAnalyticsPage() {
     if (tested === 0) {
       c = 'עדיין אין מספיק עסקאות כדי לחתוך את ההיסטוריה ולבדוק משהו.';
     } else if (sig.length === 0) {
-      c = `עדיין לא. נבדקו ${tested} חתכים ואף אחד לא שרד את התיקון על מספר הבדיקות — כלומר שום דבר כאן עדיין לא נבדל ממקריות.`;
+      c = `עדיין לא. בדקנו ${tested} צירופים שונים של תנאים, ואף אחד מהם לא החזיק אחרי שלקחנו בחשבון כמה בדיקות נעשו — כלומר שום דבר כאן עדיין לא שונה ממקרה.`;
     } else {
       // Deliberately not naming them here. The Hebrew labeller lives in the
       // AI module, which drags the provider client into a page bundle that has
       // no business holding it — and the section below names them anyway.
       cTone = 'good';
-      c = `כן — ${sig.length} מתוך ${tested} חתכים שרדו את התיקון על מספר הבדיקות. הם מפורטים למטה.`;
+      c = `כן — ${sig.length} מתוך ${tested} הצירופים שנבדקו החזיקו גם אחרי שלקחנו בחשבון כמה בדיקות נעשו. הם מפורטים למטה.`;
     }
 
     return { a, b, c, aTone, bTone, cTone };
@@ -680,7 +680,7 @@ export default function AiAnalyticsPage() {
 
         <QuestionBand
           n="A" question="האם אני רווחי — ולמה?" answer={bandAnswers.a} tone={bandAnswers.aTone}
-          body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה לנבוע מאחוז הצלחה גבוה עם מנצחים קטנים, או מאחוז נמוך עם מנצחים גדולים — ואלה שתי בעיות הפוכות."
+          body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה להיווצר משתי דרכים הפוכות: הרבה עסקאות רווחיות קטנות, או מעט עסקאות רווחיות גדולות. כל אחת מהן דורשת תיקון אחר לגמרי."
         />
 
         {/* ══════════ EXPECTANCY ══════════ */}
@@ -693,7 +693,7 @@ export default function AiAnalyticsPage() {
           }
         >
           {exp.trades === 0 ? (
-            <p className="text-sm text-white/30">אין עדיין עסקאות מוכרעות.</p>
+            <p className="text-sm text-white/30">אין עדיין עסקאות שנסגרו.</p>
           ) : (
             <div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
@@ -706,7 +706,7 @@ export default function AiAnalyticsPage() {
                 <ExitTile
                   label="אחוז הצלחה"
                   value={`${Math.round(exp.winRate * 100)}%`}
-                  sub="מהעסקאות המוכרעות"
+                  sub="מהעסקאות שנסגרו"
                 />
                 <ExitTile
                   label="מנצח ממוצע"
@@ -754,7 +754,7 @@ export default function AiAnalyticsPage() {
                 <ExitTile
                   label="מימוש התוכנית"
                   value={pve.captureRate === null ? '—' : `${Math.round(pve.captureRate * 100)}%`}
-                  sub="מהיעד, במנצחים"
+                  sub="מהיעד שקבעת, בעסקאות רווחיות"
                   color={pve.captureRate === null ? '#fff' : pve.captureRate < 0.6 ? '#c98080' : pve.captureRate < 0.9 ? '#d4af37' : '#6fa580'}
                 />
                 <ExitTile
@@ -789,7 +789,7 @@ export default function AiAnalyticsPage() {
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
-              : 'איך אתה באמת יוצא — האם אתה חותך מנצחים מתחת לתוכנית שלך, וכמה אתה מוציא בחלקים.'
+              : 'איך אתה באמת יוצא — האם אתה יוצא מעסקאות רווחיות לפני היעד שקבעת, וכמה אתה מממש בשלבים.'
           }
         >
           {exits.sampleSize === 0 ? (
@@ -800,11 +800,11 @@ export default function AiAnalyticsPage() {
                 <ExitTile
                   label="מימוש היעד"
                   value={exits.captureRatio === null ? '—' : `${Math.round(exits.captureRatio * 100)}%`}
-                  sub="מהיעד המתוכנן במנצחים"
+                  sub="מהיעד שקבעת, בעסקאות הרווחיות"
                   color={exits.captureRatio === null ? '#fff' : exits.captureRatio < 0.6 ? '#c98080' : exits.captureRatio < 0.9 ? '#d4af37' : '#6fa580'}
                 />
                 <ExitTile
-                  label="מנצחים שנחתכו"
+                  label="נסגרו לפני היעד"
                   value={`${exits.winnersCutShort}/${exits.winnerCount}`}
                   sub="נסגרו מתחת ל-60% מהיעד"
                   color={exits.winnersCutShort > 0 ? '#d4af37' : '#6fa580'}
@@ -823,7 +823,7 @@ export default function AiAnalyticsPage() {
               </div>
               {exits.captureRatio !== null && exits.captureRatio < 0.7 && (
                 <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
-                  אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — סימן שאתה נוטה לחתוך מנצחים מוקדם. שווה לבחון האם להחזיק חלק מהפוזיציה קרוב יותר ליעד המקורי.
+                  אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — כלומר אתה נוטה לצאת מעסקאות רווחיות מוקדם. שווה לבחון אם להשאיר חלק מהפוזיציה קרוב יותר ליעד שקבעת.
                 </p>
               )}
             </div>
@@ -841,7 +841,7 @@ export default function AiAnalyticsPage() {
 
         <QuestionBand
           n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c} tone={bandAnswers.cTone}
-          body="רק ממצאים שעברו תיקון סטטיסטי על מספר החתכים שנבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת בניית אמונה על רעש."
+          body="רק ממצאים שהחזיקו אחרי שלקחנו בחשבון כמה צירופים נבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת ממך לבנות אמונה על מקריות."
         />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
         <NumberedSection
@@ -896,7 +896,7 @@ export default function AiAnalyticsPage() {
 
         <QuestionBand
           n="D" question="להתמצאות בלבד"
-          body="פילוחים, לא ממצאים. הם מראים איפה העסקאות שלך יושבות — לא מה עובד. אף אחד מהם לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה ולא סיבה לשנות משהו."
+          body="פילוחים, לא ממצאים. הם מראים איפה העסקאות שלך יושבות — לא מה עובד. אף אחד מהם לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה בלבד, לא סיבה לשנות משהו."
           muted
         />
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
@@ -1135,7 +1135,7 @@ export default function AiAnalyticsPage() {
                   {whatIf.confidence.level === 'low' && (
                     <div className="mb-5 px-4 py-3 rounded-xl border border-[#d4af37]/25 bg-[#d4af37]/[0.05]">
                       <span className="font-mono text-[12px] text-[#d4af37] leading-relaxed">
-                        ⚠ נותרו רק {whatIf.keptClosed} עסקאות מוכרעות בתרחיש הזה — דגימה קטנה מדי כדי להסיק מסקנה, רק כיוון ראשוני.
+                        ⚠ נותרו רק {whatIf.keptClosed} עסקאות שנסגרו בתרחיש הזה — מדגם קטן מדי כדי להסיק ממנו מסקנה — זה כיוון ראשוני בלבד.
                       </span>
                     </div>
                   )}
@@ -1166,7 +1166,7 @@ export default function AiAnalyticsPage() {
                     })}
                   </div>
                   <p className="mt-4 font-mono text-[12px] text-white/45 leading-relaxed text-right">
-                    התרחיש שומר {whatIf.keptTrades} עסקאות ({whatIf.keptClosed} מוכרעות) ומסיר {whatIf.removedTrades}. ההשוואה היא מול כלל היומן שלך.
+                    התרחיש שומר {whatIf.keptTrades} עסקאות ({whatIf.keptClosed} שנסגרו) ומסיר {whatIf.removedTrades}. ההשוואה היא מול כלל היומן שלך.
                   </p>
                 </div>
               )}

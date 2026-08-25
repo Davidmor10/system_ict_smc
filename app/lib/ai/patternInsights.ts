@@ -1,5 +1,5 @@
 import type { TradeEntry } from '../journal';
-import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel, type MacroContext } from '../analytics';
+import { runFullAnalysis, prune, type PatternCandidate, type ConfidenceLevel, type MacroContext } from '../analytics';
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
@@ -68,6 +68,12 @@ const LOGGING_HE: Record<string, string> = { same_day: 'תועד באותו יו
  *  in a handful of months the release slips to the second Friday. The heading
  *  therefore carries both — what the release is, and the rule the group was
  *  actually built from — so a trader can tell which one the numbers describe. */
+/** The trader's own verdict, named as their words rather than as a metric. */
+const RULES_HE: Record<string, string> = {
+  kept:   'עסקאות שבהן עמדת בחוקים שלך',
+  broken: 'עסקאות שבהן חרגת מהחוקים שלך',
+};
+
 const MACRO_HE: Record<string, string> = {
   release_day: 'יום דוח התעסוקה (שישי ראשון בחודש)',
   other_day:   'שאר הימים',
@@ -86,7 +92,12 @@ const MACRO_HE: Record<string, string> = {
  *  candidates were ever shown and they were nearly always instrument or session
  *  slices; widening the list is what brought the rest to the surface. */
 function subjectLabel(c: PatternCandidate): string {
-  const s = c.subject;
+  return subjectOf(c.subject);
+}
+
+/** The Hebrew name for a subject object, independent of the candidate. */
+function subjectOf(subject: PatternCandidate['subject']): string {
+  const s = subject;
   const parts: string[] = [];
   if (s.instrument) parts.push(String(s.instrument));
   if (s.confirmation) parts.push(String(s.confirmation));
@@ -103,6 +114,7 @@ function subjectLabel(c: PatternCandidate): string {
   if (s.plannedRR) parts.push(RR_HE[String(s.plannedRR)] ?? String(s.plannedRR));
   if (s.logging) parts.push(LOGGING_HE[String(s.logging)] ?? String(s.logging));
   if (s.macro) parts.push(MACRO_HE[String(s.macro)] ?? String(s.macro));
+  if (s.rules) parts.push(RULES_HE[String(s.rules)] ?? String(s.rules));
   // Nothing matched: better a truthful placeholder than a blank heading over a
   // real sentence.
   return parts.length > 0 ? parts.join(' · ') : 'חתך כללי';
@@ -138,12 +150,20 @@ function evidenceLine(c: PatternCandidate, he: boolean): string {
       `avg R/R ${g.avgRR.toFixed(2)}, profit factor ${fmtPF(g.profitFactor)}.`;
   }
   const parts = [
-    `מבוסס על ${g.trades} עסקאות`,
-    `${g.winRate.toFixed(0)}% הצלחה מול ${c.baseline.toFixed(0)}% בממוצע הכללי`,
-    `יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)}`,
-    `פרופיט פקטור ${fmtPF(g.profitFactor)}`,
+    `${g.trades} עסקאות`,
+    `${g.winRate.toFixed(0)}% הצלחה, מול ${c.baseline.toFixed(0)}% בשאר היומן`,
+    `יחס סיכון־סיכוי ${g.avgRR.toFixed(2)}`,
+    `על כל דולר שהפסדת הרווחת ${fmtPF(g.profitFactor)}`,
   ];
-  return `${parts.join(' · ')}.`;
+  const line = `${parts.join(' · ')}.`;
+
+  // When several conditions describe the identical trades, the journal cannot
+  // say which of them matters — they are perfectly confounded. Printing one
+  // label alone would assert a cause the numbers do not support, so the others
+  // are named and the limit is stated outright.
+  const also = (c.alsoMatches ?? []).map(subjectOf).filter(Boolean);
+  if (!also.length) return line;
+  return `${line} שים לב: אלה בדיוק אותן עסקאות שמתאימות גם ל${also.length === 1 ? '' : '־'}${also.join(' ול')} — ולכן אי אפשר לדעת מהיומן איזה מהם באמת משפיע.`;
 }
 
 /** The candidate, written for the model.
@@ -166,9 +186,9 @@ function describeCandidate(c: PatternCandidate, he: boolean): string {
     return `${subjectLabel(c)}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}% (overall ${c.baseline.toFixed(0)}%), ` +
       `PnL $${g.totalPnl.toFixed(0)}, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, confidence ${conf} (n=${c.confidence.sampleSize})`;
   }
-  return `${subjectLabel(c)}: ${g.trades} עסקאות, ${g.winRate.toFixed(0)}% הצלחה (מול ${c.baseline.toFixed(0)}% בממוצע הכללי), ` +
-    `רווח כולל ${g.totalPnl >= 0 ? '' : '-'}$${Math.abs(g.totalPnl).toFixed(0)}, יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)}, ` +
-    `פרופיט פקטור ${fmtPF(g.profitFactor)}, רמת ביטחון ${conf} (מדגם ${c.confidence.sampleSize})`;
+  return `${subjectLabel(c)}: ${g.trades} עסקאות, ${g.winRate.toFixed(0)}% הצלחה (מול ${c.baseline.toFixed(0)}% בשאר היומן), ` +
+    `רווח כולל ${g.totalPnl >= 0 ? '' : '-'}$${Math.abs(g.totalPnl).toFixed(0)}, יחס סיכון־סיכוי ${g.avgRR.toFixed(2)}, ` +
+    `על כל דולר שהופסד הורווחו ${fmtPF(g.profitFactor)}, רמת ביטחון ${conf} (מדגם ${c.confidence.sampleSize})`;
 }
 
 const CONFIDENCE_HE: Record<string, string> = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
@@ -198,7 +218,13 @@ export async function generatePatternInsights(
   if (trades.length < 3) return [];
 
   const analysis = runFullAnalysis(trades, macro);
-  const eligible = analysis.patterns.filter(c => c.confidence.sampleSize >= 3);
+  // Cut the duplicates and the whole-journal slices before anything is
+  // phrased. Without this the page filled with the same finding under three
+  // labels — "MNQ · לונדון", "לונדון" and "MNQ · Turtle Soup" were three cards
+  // describing one set of fifteen trades — beside a row of cards that just
+  // reported the overall win rate back with a label on it.
+  const eligible = prune(analysis.patterns, trades.length)
+    .filter(c => c.confidence.sampleSize >= 3);
   const significant = eligible.filter(c => c.significant);
   const emerging = eligible.filter(c => !c.significant);
   // Everything that passed the test, then as many of the rest as the cap allows.

@@ -121,7 +121,10 @@ export type PatternKind =
   /** Scheduled US release days (and the window around the release) against
    *  ordinary days. See lib/analytics/macro — the calendar is derived, not
    *  fetched, and covers only what a date rule can prove. */
-  | 'macro';
+  | 'macro'
+  /** Trades where the trader said they kept their own rules, against the ones
+   *  where they said they did not. Their verdict, not ours. */
+  | 'rules';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,
@@ -153,6 +156,22 @@ export interface PatternCandidate {
   /** pAdjusted below the threshold AND a real sample behind it. Only these may
    *  be presented to the trader as something that works. */
   significant: boolean;
+  /** The exact trades this slice selected, as a stable key.
+   *
+   *  Carried so that two dimensions which happen to pick the identical set can
+   *  be recognised as one finding wearing two labels — which is what filled
+   *  the screen with "MNQ · London", "London" and "MNQ · Turtle Soup", three
+   *  cards describing the same fifteen trades. */
+  signature?: string;
+  /** Other subjects that selected the EXACT same trades, dropped as duplicates.
+   *
+   *  Kept rather than discarded because they are a finding in themselves. When
+   *  every trade in a group is also the same hour, the same tag and the same
+   *  emotional state, the data cannot say which of them matters — they are
+   *  perfectly confounded. Showing one label alone would assert a cause the
+   *  numbers cannot support; naming the others says plainly that they are
+   *  inseparable in this journal. */
+  alsoMatches?: Array<Record<string, string | number>>;
 }
 
 export interface FullAnalysis {

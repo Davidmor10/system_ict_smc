@@ -297,7 +297,7 @@ function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string
       // A win rate never stands naked: always carry the sample it's built on,
       // and flag a small sample as an early sign — same honesty as the
       // dashboard's confidence badge, so we never sell an n=3 "67%" as fact.
-      const basis = `מבוסס על ${decided.length} עסקאות מוכרעות`;
+      const basis = `מבוסס על ${decided.length} עסקאות שנסגרו`;
       const caveat = confidenceLevelFor(decided.length) === 'low' ? ' — עדיין מדגם קטן, סימן מוקדם בלבד' : '';
       return `זו העסקה ה-${sessionThisWeek.length} שלך השבוע בסשן ${label}. אחוז ההצלחה בסשן: ${winRate}% (${basis})${caveat}.`;
     }

@@ -84,7 +84,12 @@ export function discoverPatterns(
   const push = (kind: PatternCandidate['kind'], id: string, subject: Record<string, string | number>, subset: TradeEntry[], label: string) => {
     if (subset.length < 3) return; // below this, "patterns" are just noise
     const metric = computeGroupPerformance(subset, id, label);
-    candidates.push(rawCandidate(id, kind, subject, metric, baseline, allWins, allLosses));
+    const c = rawCandidate(id, kind, subject, metric, baseline, allWins, allLosses);
+    // The exact set this slice selected. Two dimensions that happen to pick
+    // the same trades are the same finding wearing two labels, and the only
+    // way to know that is to compare the sets themselves.
+    c.signature = signatureOf(subset);
+    candidates.push(c);
   };
 
   // instrument × session
@@ -300,6 +305,24 @@ export function discoverPatterns(
     }
   }
 
+  // rules kept vs rules broken — the trader's own verdict on the trade.
+  //
+  // The behaviour layer already counts rule breaks; nothing compared the
+  // RESULTS of the two groups. "I lose more on the trades where I broke my own
+  // rules" is the most actionable sentence this engine can produce, and it was
+  // the one dimension the trader supplies directly that nobody sliced on.
+  //
+  // Absent is not 'kept'. A trade with no answer is invisible to this
+  // comparison rather than counted as clean.
+  {
+    const kept  = trades.filter(t => t.followedRules === true);
+    const broke = trades.filter(t => t.followedRules === false);
+    if (kept.length >= 3 && broke.length >= 3) {
+      push('rules', 'rules_kept',   { rules: 'kept' },   kept,  'Rules kept');
+      push('rules', 'rules_broken', { rules: 'broken' }, broke, 'Rules broken');
+    }
+  }
+
   // weekday — day of week the trade was taken
   const weekdaysSeen = new Set<number>();
   for (const t of trades) weekdaysSeen.add(weekdayOf(t));
@@ -339,10 +362,128 @@ export function discoverPatterns(
   // Significant first, then the old ordering within each group. Candidates that
   // failed the test are kept — they are the raw material for next month, when
   // the sample may have grown — but nothing downstream may call them an edge.
+  //
+  // The full list is returned, deliberately. `prune` below cuts it down for a
+  // HUMAN reader, and it is applied by the surfaces that show cards — never
+  // here. The intelligence layer tracks every candidate across weeks to notice
+  // when one weakens or disappears; hiding a duplicate from it would make a
+  // still-present pattern look gone, and the whole point of that layer is to
+  // stop a claim outliving its evidence.
   return candidates.sort((a, b) => {
     if (a.significant !== b.significant) return a.significant ? -1 : 1;
     const tierDiff = tierWeight(b) - tierWeight(a);
     if (tierDiff !== 0) return tierDiff;
     return Math.abs(b.delta) - Math.abs(a.delta);
+  });
+}
+
+/** A stable identity for the exact set of trades a slice selected. */
+function signatureOf(subset: TradeEntry[]): string {
+  return subset.map(t => t.id).sort((a, b) => a - b).join(',');
+}
+
+/** A slice this large is the journal wearing a label.
+ *
+ *  "MNQ" for a trader who only trades MNQ, "reversal" for a trader who only
+ *  takes reversals: 33 of 33 trades, the overall win rate, and a card that
+ *  says nothing. Ninety per cent is deliberately generous — at that point the
+ *  "outside" group is three trades and the comparison has nothing left to
+ *  compare against. */
+export const DEGENERATE_SHARE = 0.9;
+
+/** How many dimensions the subject names. Fewer is a better label for the same
+ *  set: if "MNQ · London" and "London" select exactly the same trades, the
+ *  trader learns nothing from the instrument and reads one word less. */
+const specificity = (c: PatternCandidate) => Object.keys(c.subject).length;
+
+/** Which subject a candidate really speaks about.
+ *
+ *  Kinds are how the engine slices; topics are what the trader asks about.
+ *  Three kinds all reporting on London is three cards about one thing, and
+ *  that is what the screen looked like. */
+const TOPIC_OF: Partial<Record<PatternCandidate['kind'], string>> = {
+  'instrument+session':   'session',
+  'session+direction':    'session',
+  'session_vs_overall':   'session',
+  'hour+instrument':      'timing',
+  'direction+hour':       'timing',
+  'confirmation+hour':    'timing',
+  weekday:                'timing',
+  instrument_best:        'instrument',
+  'instrument+confirmation': 'setup',
+  setup:                  'setup',
+  confirmation_tag:       'confirmations',
+  confirmation_combo:     'confirmations',
+  emotion:                'emotion',
+  bias_alignment:         'bias',
+  documentation:          'documentation',
+  planned_rr:             'planning',
+  logging:                'logging',
+  macro:                  'macro',
+  rules:                  'rules',
+};
+
+/** Cut the list down to what is actually worth READING.
+ *
+ *  For display only. discoverPatterns returns everything it tested, because
+ *  the intelligence layer needs the complete picture to tell "this pattern
+ *  weakened" from "this pattern is no longer in the list". This is what the
+ *  card surfaces call before rendering.
+ *
+ *  Three passes, in order, and each removes a different kind of noise the
+ *  screen was full of:
+ *
+ *    1. DEGENERATE — a slice covering almost the whole journal. It reports the
+ *       overall win rate back with a label on it.
+ *    2. DUPLICATE — different dimensions that selected the identical trades.
+ *       "MNQ · London", "London", and "MNQ · Turtle Soup" were three cards
+ *       describing one set of fifteen trades.
+ *    3. ONE PER TOPIC — of what survives, the strongest card per subject. A
+ *       trader wants to know whether session matters, not to read four cards
+ *       ranking the same session against itself.
+ *
+ *  Pruning happens AFTER the correction, never before: every slice was
+ *  genuinely tested, so every slice counts toward the number of comparisons.
+ *  Dropping duplicates first would quietly loosen the correction and let a
+ *  weaker finding pass. */
+export function prune(ranked: PatternCandidate[], totalTrades: number): PatternCandidate[] {
+  const maxShare = totalTrades > 0 ? totalTrades * DEGENERATE_SHARE : Infinity;
+  const informative = ranked.filter(c => c.metric.trades < maxShare);
+
+  const bySignature = new Map<string, PatternCandidate>();
+  const alsoBySignature = new Map<string, Array<Record<string, string | number>>>();
+  for (const c of informative) {
+    const key = c.signature ?? c.id;
+    const held = bySignature.get(key);
+    if (!held) { bySignature.set(key, c); continue; }
+    // Same trades, two labels: keep the simpler one, and among equals the one
+    // that stood up better to the correction.
+    const better =
+      specificity(c) !== specificity(held) ? (specificity(c) < specificity(held) ? c : held)
+      : c.pAdjusted < held.pAdjusted ? c : held;
+    const other = better === c ? held : c;
+    const list = alsoBySignature.get(key) ?? [];
+    if (!list.some(sub => JSON.stringify(sub) === JSON.stringify(other.subject))) list.push(other.subject);
+    alsoBySignature.set(key, list);
+    bySignature.set(key, better);
+  }
+
+  const byTopic = new Map<string, PatternCandidate>();
+  const kept: PatternCandidate[] = [];
+  // `informative` is already ranked, so the first candidate reaching a topic is
+  // its strongest.
+  for (const c of informative) {
+    if (bySignature.get(c.signature ?? c.id) !== c) continue;
+    const topic = TOPIC_OF[c.kind];
+    if (!topic) { kept.push(c); continue; }
+    if (byTopic.has(topic)) continue;
+    byTopic.set(topic, c);
+    kept.push(c);
+  }
+  // Hand back the labels that were merged away, so the surface can say the
+  // conditions are inseparable rather than implying the survivor is the cause.
+  return kept.map(c => {
+    const also = alsoBySignature.get(c.signature ?? c.id);
+    return also && also.length ? { ...c, alsoMatches: also } : c;
   });
 }

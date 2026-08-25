@@ -113,10 +113,10 @@ function parseIndexedTexts(raw: string, count: number): string[] | null {
 export function groupEvidence(g: GroupPerformance, baselineWinRate: number | null, he: boolean): string {
   const vs = baselineWinRate === null
     ? ''
-    : he ? ` מול ${baselineWinRate.toFixed(0)}% בממוצע הכללי` : ` vs ${baselineWinRate.toFixed(0)}% overall`;
+    : he ? ` מול ${baselineWinRate.toFixed(0)}% בשאר היומן` : ` vs ${baselineWinRate.toFixed(0)}% overall`;
 
   return he
-    ? `מבוסס על ${g.trades} עסקאות · ${g.winRate.toFixed(0)}% הצלחה${vs} · יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)} · פרופיט פקטור ${fmtPF(g.profitFactor)}.`
+    ? `${g.trades} עסקאות · ${g.winRate.toFixed(0)}% הצלחה${vs} · יחס סיכון־סיכוי ${g.avgRR.toFixed(2)} · על כל דולר שהפסדת הרווחת ${fmtPF(g.profitFactor)}.`
     : `Based on ${g.trades} trades: ${g.winRate.toFixed(0)}% win rate${vs}, avg R/R ${g.avgRR.toFixed(2)}, profit factor ${fmtPF(g.profitFactor)}.`;
 }
 
@@ -135,7 +135,7 @@ export function metricsEvidence(metrics: Record<string, GroupPerformance>, he: b
 
   const others = all.length - 1;
   const also = others <= 0 ? ''
-    : he ? ` · ועוד ${others} ${others === 1 ? 'חתך תומך' : 'חתכים תומכים'}`
+    : he ? ` · ועוד ${others} ${others === 1 ? 'צירוף תומך' : 'צירופים תומכים'}`
          : ` · plus ${others} corroborating slice${others === 1 ? '' : 's'}`;
 
   return groupEvidence(anchor, null, he).replace(/\.$/, '') + also + '.';

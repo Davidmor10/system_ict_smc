@@ -138,7 +138,7 @@ function perfSummaryOf(perf: RulePerformance): string {
   if (total === 0) return 'אין עדיין נתונים על החוק הזה';
   const pct = Math.round((perf.followedTrades / total) * 100);
   if (perf.hasEnough && perf.followedAvgR != null) return `${pct}% נשמר · ${fmtR(perf.followedAvgR)} ממוצע כשנשמר`;
-  return `${pct}% נשמר · מדגם קטן (${perf.sampleSize} מוכרעות)`;
+  return `${pct}% נשמר · מדגם קטן (${perf.sampleSize} שנסגרו)`;
 }
 
 // ── Primitives (mapped from the design system) ───────────────────────────────
@@ -292,7 +292,7 @@ function RuleCard({ rule, perf, history, trades, expanded, todayReported, onTogg
                     <Metric label="R ממוצע · הופר" value={fmtR(perf.violatedAvgR)} tone="short" />
                     <Metric label="רמת ביטחון" value={confidenceLabel(confidence)} tone="gold" />
                   </div>
-                  <p className="m-0 font-mono text-[11px] text-white/35">מבוסס על {perf.sampleSize} עסקאות מוכרעות.</p>
+                  <p className="m-0 font-mono text-[11px] text-white/35">מבוסס על {perf.sampleSize} עסקאות שנסגרו.</p>
                 </>
               ) : total > 0 ? (
                 <>
@@ -301,7 +301,7 @@ function RuleCard({ rule, perf, history, trades, expanded, todayReported, onTogg
                     <Metric label="הופר" value={String(perf.violatedTrades)} tone="white" />
                     <Metric label="רמת ביטחון" value={confidenceLabel(confidence)} tone="gold" />
                   </div>
-                  <p className="m-0 font-mono text-[12px] text-white/40">עדיין אין מספיק נתונים להשוואה אמינה. (מבוסס על {perf.sampleSize} עסקאות מוכרעות)</p>
+                  <p className="m-0 font-mono text-[12px] text-white/40">עדיין אין מספיק נתונים להשוואה אמינה. (מבוסס על {perf.sampleSize} עסקאות שנסגרו)</p>
                 </>
               ) : (
                 <p className="m-0 font-mono text-[12px] text-white/40">אין עדיין מספיק נתונים — המשך לתעד כדי לפתוח סטטיסטיקת ביצועים.</p>
