@@ -214,15 +214,19 @@ function QuestionBand({ n, question, body, muted }: {
   return (
     <section className="border-t border-[#1c1c1e]" style={{ padding: 'clamp(46px,4.5vw,74px) 0 clamp(6px,1vw,14px)' }}>
       <Reveal className="text-right">
-        <div className="flex items-baseline gap-3 justify-start flex-row-reverse" style={{ justifyContent: 'flex-end' }}>
-          <span className="font-mono text-xs font-bold tracking-[0.28em]" style={{ color: accent }} dir="ltr">{n}</span>
-          <h2
-            className="font-serif font-bold leading-tight"
-            style={{ fontSize: muted ? 'clamp(20px,2vw,26px)' : 'clamp(28px,3vw,40px)', color: muted ? 'rgba(255,255,255,0.62)' : '#fff' }}
-          >
-            {question}
-          </h2>
+        {/* The marker goes on its own line, exactly where every section puts
+            its "04 / 12". Inline beside the question it landed after the
+            question mark in RTL and read as a stray character left behind
+            rather than as a label. */}
+        <div className="font-mono text-xs font-bold tracking-[0.28em] mb-4" style={{ color: accent }} dir="ltr">
+          {n}
         </div>
+        <h2
+          className="font-serif font-bold leading-tight"
+          style={{ fontSize: muted ? 'clamp(20px,2vw,26px)' : 'clamp(28px,3vw,40px)', color: muted ? 'rgba(255,255,255,0.62)' : '#fff' }}
+        >
+          {question}
+        </h2>
         <p className="mt-3 text-sm text-white/45 leading-relaxed" style={{ maxWidth: '62ch' }}>{body}</p>
       </Reveal>
     </section>
