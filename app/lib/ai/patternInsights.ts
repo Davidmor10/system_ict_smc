@@ -61,6 +61,20 @@ const RR_HE: Record<string, string> = {
 };
 const LOGGING_HE: Record<string, string> = { same_day: 'תועד באותו יום', later: 'תועד באיחור' };
 
+/** Named for the rule that was computed, never for the conclusion.
+ *
+ *  "First Friday of the month" is arithmetic and always exactly true;
+ *  "employment report day" is a claim about what the BLS did that month, and
+ *  in a handful of months the release slips to the second Friday. The heading
+ *  therefore carries both — what the release is, and the rule the group was
+ *  actually built from — so a trader can tell which one the numbers describe. */
+const MACRO_HE: Record<string, string> = {
+  release_day: 'יום דוח התעסוקה (שישי ראשון בחודש)',
+  other_day:   'שאר הימים',
+  in_window:   'סביב שעת פרסום הדוח',
+  out_window:  'הרחק משעת הפרסום',
+};
+
 /** The name the trader reads above the sentence.
  *
  *  Every dimension discoverPatterns can produce has to appear here. It used to
@@ -86,6 +100,7 @@ function subjectLabel(c: PatternCandidate): string {
   if (s.documented) parts.push(s.documented === 'yes' ? 'עם צילום מסך' : 'בלי צילום מסך');
   if (s.plannedRR) parts.push(RR_HE[String(s.plannedRR)] ?? String(s.plannedRR));
   if (s.logging) parts.push(LOGGING_HE[String(s.logging)] ?? String(s.logging));
+  if (s.macro) parts.push(MACRO_HE[String(s.macro)] ?? String(s.macro));
   // Nothing matched: better a truthful placeholder than a blank heading over a
   // real sentence.
   return parts.length > 0 ? parts.join(' · ') : 'חתך כללי';

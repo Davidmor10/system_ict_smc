@@ -115,7 +115,11 @@ export type PatternKind =
   /** Bucketed planned reward-to-risk — am I planning targets I can reach. */
   | 'planned_rr'
   /** Written down the same day, or later. */
-  | 'logging';
+  | 'logging'
+  /** Scheduled US release days (and the window around the release) against
+   *  ordinary days. See lib/analytics/macro — the calendar is derived, not
+   *  fetched, and covers only what a date rule can prove. */
+  | 'macro';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,

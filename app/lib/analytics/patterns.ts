@@ -9,6 +9,7 @@ import { analyzeSessions } from './sessions';
 import type { PatternCandidate } from './types';
 import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
+import { splitByRelease } from './macro';
 
 const DIRECTIONS: Direction[] = ['LONG', 'SHORT'];
 
@@ -239,6 +240,38 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
     if (documented.length >= 3 && undocumented.length >= 3) {
       push('documentation', 'doc_yes', { documented: 'yes' }, documented, 'Documented');
       push('documentation', 'doc_no', { documented: 'no' }, undocumented, 'Not documented');
+    }
+  }
+
+  // scheduled US release days, and the tight window around the release.
+  //
+  // The one macro fact that needs no data feed: the Employment Situation
+  // report is released 08:30 New York on the first Friday of most months, and
+  // for index futures it is the largest scheduled mover of the month. See
+  // lib/analytics/macro for why FOMC and CPI are deliberately absent.
+  //
+  // Two slices, and they answer different questions. The DAY split asks
+  // whether this trader should be in the market at all on release day — it
+  // needs only the date, so it works on every trade. The WINDOW split asks
+  // about the ninety minutes around the print, and only sees trades that
+  // recorded an entry time; its counterpart group is restricted the same way,
+  // so a trader who logs times inconsistently is not compared against himself
+  // on two different standards.
+  //
+  // The zone is the app default rather than the trader's setting: this runs
+  // server-side, where the setting (localStorage) is not readable. For every
+  // zone from the US through Europe and Israel the release lands on the same
+  // calendar day either way; only the far-east zones can roll over, and for
+  // those the day split would be a square out.
+  {
+    const split = splitByRelease(trades);
+    if (split.releaseDay.length >= 3 && split.otherDays.length >= 3) {
+      push('macro', 'macro_release_day', { macro: 'release_day' }, split.releaseDay, 'First Friday of the month');
+      push('macro', 'macro_other_day',   { macro: 'other_day' },   split.otherDays,  'Other days');
+    }
+    if (split.inWindow.length >= 3 && split.outOfWindow.length >= 3) {
+      push('macro', 'macro_in_window',  { macro: 'in_window' },  split.inWindow,  'Around the release');
+      push('macro', 'macro_out_window', { macro: 'out_window' }, split.outOfWindow, 'Away from the release');
     }
   }
 
