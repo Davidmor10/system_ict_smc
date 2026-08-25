@@ -2,7 +2,7 @@
 // it can be unit-tested in isolation. chat.ts wires these to the real data.
 
 import type { FullAnalysis } from '../analytics';
-import { summarizeAnalysis } from './factsBlock';
+import { summarizeAnalysis, summarizePatterns, summarizeDepth } from './factsBlock';
 import {
   HEBREW_MENTOR_STYLE, CHALLENGE_TRADER_STYLE, MENTOR_FLOW_STYLE, ICT_SMC_EXPERTISE,
   TRADING_PRECISION, DISCRETION_OVERRIDE, PSYCHOLOGY_NOTE, TEACHING_STRUCTURE,
@@ -25,6 +25,22 @@ export const HISTORY_TURNS = 6;
     honest about how little is established. */
 export function buildFactsContext(analysis: FullAnalysis, knownFactsBlock: string, hypothesisLine: string): string {
   const parts = [summarizeAnalysis(analysis)];
+
+  // The depth layer and the discovered patterns.
+  //
+  // Both were computed and neither reached this prompt. The chat could recite
+  // a trader's win rate by session and had no idea what one of their trades
+  // was worth, how long their current run was, whether their exits were
+  // undercutting their own plan, or that the engine had already tested a
+  // hundred slices of their history and found — or failed to find — something
+  // in them. It answered "am I losing on macro days?" from first principles
+  // over a summary, while the corrected comparison sat one function away.
+  const depth = summarizeDepth(analysis);
+  if (depth) parts.push(`\n${depth}`);
+
+  const patterns = summarizePatterns(analysis.patterns);
+  if (patterns) parts.push(`\nDISCOVERED SLICES OF THIS TRADER'S HISTORY:\n${patterns}`);
+
   if (hypothesisLine) parts.push(`\n${hypothesisLine}`);
   if (knownFactsBlock) parts.push(`\nESTABLISHED FACTS ABOUT THIS TRADER:\n${knownFactsBlock}`);
   return parts.join('\n');
@@ -88,6 +104,9 @@ export function buildChatPrompt(
   · A small slice (under ~10 decided trades) → call it an early sign, not a firm conclusion.
   · Not enough data → say it straight: "כרגע אין לי מספיק נתונים כדי לקבוע את זה." Never force an answer.
 - Shape the answer naturally (never as visible headings): the direct answer first, then what the data actually shows in real numbers, then what can't be concluded yet, and — when useful — what data would sharpen it. One explanation, one reason, one conclusion; never restate the same point in different words.
+- The DISCOVERED SLICES block is the engine's own answer to "does X matter for this trader", already corrected for the ~100 slices it tests. Use it before reasoning a condition out from the summary tables — if the question is about a weekday, a macro day, a setup, an emotion, screenshots or planned R:R, the comparison has already been run and the answer is there. Respect the verdict on each line absolutely: a CONFIRMED line may be called a pattern; an UNCONFIRMED line may have its numbers quoted but must never be called a pattern, an edge, a tendency, or a thing that "seems to" be true. If nothing was confirmed, "not yet distinguishable from chance" IS the answer — give it plainly instead of reaching for the closest unconfirmed slice.
+- RECORD COMPLETENESS bounds every answer. When a question depends on a field logged on only a small share of trades, the honest reply is that the record cannot answer it yet, and the useful half of that reply is naming the field to start filling in. Do not build a cautious claim on the handful of trades that happen to carry it — a thin field is an ABSENT signal, not a weak one.
+- EXPECTANCY is decomposed for a reason. When they ask how they are doing, or why they are not making money with a decent win rate, answer from the decomposition — win rate against average winner against average loser — because the same expectancy points at exits in one trader and at entries in another.
 - If the question needs something the journal doesn't track or has too little of, say so specifically ("כרגע אין לי מספיק נתונים על יציאות ומימושים כדי לדעת אם אתה יוצא מוקדם מדי") and name the concrete data that would answer it (for exits: exit price, how many contracts were closed, and whether it was a manual exit or the planned target).
 - For a "why did metric X change?" question (e.g. "למה ה-RR שלי ירד?"), don't give advice like "תנסה להרוויח יותר" / "תפסיד פחות" — those are worthless. Investigate the competing causes: did stops widen, did targets shrink, were there more early partials, more manual early exits, a changed instrument or session or trade-type, more break-evens, a bigger first-partial size, is the sample too small, or is one outlier trade dragging it? Pick the best-supported cause. If the exit data isn't there, say exactly: "אני רואה שה-RR ירד, אבל עדיין אין לי מספיק מידע כדי לקבוע אם הסיבה היא יציאה מוקדמת, סטופ רחב יותר או שינוי ביעדים."
 - If asked what you DON'T know about them ("מה אתה עדיין לא יודע עליי?"), answer with a concrete list of untracked data — how they manage exits, whether they move stops, whether they exit under pressure, the conditions before entry, whether the trade fit their plan, how they behave after a loss, whether they trade around news, which fields the journal doesn't record. Never answer with "אתה עדיין לומד" / "אתה עדיין בתהליך" / motivational filler.

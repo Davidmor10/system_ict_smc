@@ -6,6 +6,8 @@
 // explanation layer's job, and it's only allowed to phrase what's here.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { Expectancy, Streaks, PlanVsExecution, Completeness } from './journalStats';
+
 export type ConfidenceLevel = 'low' | 'medium' | 'high';
 
 /** Sample-size rule: <10 relevant trades = low, 10-29 = medium, 30+ = high. */
@@ -169,6 +171,22 @@ export interface FullAnalysis {
   emotions: GroupPerformance[];
   /** Real exit-management behavior derived from recorded exit legs. */
   exits: ExitBehavior;
+  /** What one trade is worth, decomposed. Reported alongside its parts because
+      the two ways to reach the same expectancy call for opposite work. */
+  expectancy: Expectancy;
+  /** Current and longest runs. Breakevens break a streak rather than
+      extending it. */
+  streaks: Streaks;
+  /** What the plan asked for against what the exits delivered, on the trades
+      that recorded both. */
+  planVsExecution: PlanVsExecution;
+  /** How much of the record is actually filled in.
+   *
+   *  Carried here because it is the one block that tells a consumer what it
+   *  may NOT conclude: a field logged on a fifth of trades cannot support a
+   *  claim about that field, and without this the only signal of that is a
+   *  quietly small sample nobody reads. */
+  completeness: Completeness;
   time: TimeSummary;
   direction: DirectionSummary;
   patterns: PatternCandidate[];

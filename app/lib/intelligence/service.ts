@@ -20,7 +20,7 @@ import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { generateHypothesisPhrasing, generatePatternPhrasing, metricsEvidence } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
-  summarizeAnalysis, summarizeComparison, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
+  summarizeAnalysis, summarizeComparison, summarizeDepth, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
 } from '../ai/factsBlock';
 
 import * as repo from './repository';
@@ -346,7 +346,9 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
     : thisAnalysis.performance.confidence.level;
 
   const facts: NarrativeFacts = {
-    thisWeekSummary: summarizeAnalysis(thisAnalysis),
+    // The depth layer, scoped explicitly to the week. Without the label the
+    // model would read a within-the-week longest streak as a career figure.
+    thisWeekSummary: `${summarizeAnalysis(thisAnalysis)}\n\n${summarizeDepth(thisAnalysis, 'THIS WEEK ONLY')}`,
     prevWeekSummary: prevAnalysis ? summarizeAnalysis(prevAnalysis) : null,
     baselineSummary: baselineAnalysis ? summarizeAnalysis(baselineAnalysis) : null,
     comparisonSummary: summarizeComparison(comparison),

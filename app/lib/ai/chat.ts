@@ -12,7 +12,7 @@
 
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { getRecentTrades, getTraderProfile, getHypothesis } from '../intelligence/repository';
-import { runFullAnalysis, type FullAnalysis } from '../analytics';
+import { runFullAnalysis, loadMacroContext, type FullAnalysis } from '../analytics';
 import { summarizeKnownFacts } from './factsBlock';
 import { generateCoachJson } from './client';
 import { buildFactsContext, buildChatPrompt, type ChatTurn } from './chatPrompt';
@@ -83,11 +83,17 @@ export async function answerCoachQuestion(
     const trades = await getRecentTrades(supabase, userId);
     closedCount = trades.filter(t => t.result !== 'OPEN').length;
     if (closedCount >= MIN_CLOSED_TRADES) {
-      analysis = runFullAnalysis(trades);
-      const [profileRecord, hypothesis] = await Promise.all([
+      // The macro context comes from the cached calendar, exactly as the
+      // pattern-insights route loads it — without it the chat's own copy of
+      // the analysis is missing the event/quiet comparison while the AI
+      // analytics page has it, and the two surfaces answer the same question
+      // differently.
+      const [profileRecord, hypothesis, macroCtx] = await Promise.all([
         getTraderProfile(supabase, userId),
         getHypothesis(supabase, userId),
+        loadMacroContext(supabase),
       ]);
+      analysis = runFullAnalysis(trades, macroCtx);
       const knownFactsBlock = profileRecord && profileRecord.knownFacts.length > 0
         ? summarizeKnownFacts(profileRecord.knownFacts)
         : '';
