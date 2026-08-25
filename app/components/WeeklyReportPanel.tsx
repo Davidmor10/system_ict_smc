@@ -16,6 +16,7 @@ import { useEffect, useState, useMemo } from 'react';
 import InsightText from './InsightText';
 import TypingDots from './TypingDots';
 import { readInsightCache, writeInsightCache } from '../lib/ai/insightCache';
+import { MIN_TRADES_FOR_WEEKLY } from '../lib/intelligence/weeklyRules';
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; }
@@ -60,6 +61,10 @@ function ConfChip({ level, size = 'md' }: { level: string; size?: 'sm' | 'md' })
 }
 
 /* ── Panel ────────────────────────────────────────────────────────────── */
+
+/** Imported, never retyped. The message used to say "3 עסקאות" while the
+ *  code required 5, so the screen told the trader a rule the system did not
+ *  follow — and they waited for a report that was never going to appear. */
 
 export default function WeeklyReportPanel({
   hasEnoughData, isoWeekKey, todayISO, fingerprint,
@@ -163,7 +168,10 @@ function CurrentReport({
     return (
       <div className="rounded-[16px] border border-[#1c1c1e] bg-[#0a0a0b] p-8 text-center">
         <div className="font-mono text-[11px] font-bold tracking-[0.14em] uppercase text-[#d4af37]/60 mb-2">אין עדיין דוח</div>
-        <div className="text-[15px] text-white/55">רגע שיצטברו לפחות 3 עסקאות ברמת ביטחון סבירה, המערכת תפתח כאן את הדוח השבועי הראשון.</div>
+        <div className="text-[15px] text-white/55">
+          הדוח נכתב על <b className="text-white/80">השבוע הנוכחי בלבד</b> — מיום שני ועד היום — ונדרשות בו לפחות {MIN_TRADES_FOR_WEEKLY} עסקאות שנסגרו.
+          עסקאות משבועות קודמים לא נספרות כאן, גם אם יש לך הרבה כאלה ביומן.
+        </div>
       </div>
     );
   }

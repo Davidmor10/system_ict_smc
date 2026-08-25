@@ -392,7 +392,7 @@ export default function AiAnalyticsPage() {
         ? `נמדדו ${pve.measured} עסקאות, אבל עדיין אין מספיק עסקאות רווחיות כדי לחשב כמה מהיעד אתה לוקח.`
         : cap >= 90
           ? `כן — אתה לוקח ${cap}% מהיעד שתכננת, על ${pve.measured} עסקאות שנמדדו.`
-          : `לא לגמרי — אתה לוקח ${cap}% מהיעד שתכננת, כלומר אתה יוצא מעסקאות רווחיות לפני שהן מגיעות ליעד. נמדד על ${pve.measured} עסקאות.`;
+          : `לא לגמרי — בעסקאות שהרוויחו לקחת בממוצע ${cap}% מהיעד שקבעת מראש. נמדד על ${pve.measured} עסקאות שיש בהן גם תוכנית וגם מחיר יציאה.`;
     }
 
     // C — is any of it real.
@@ -776,7 +776,9 @@ export default function AiAnalyticsPage() {
                 />
               </div>
               <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
-                שלמות התיעוד היא לא ציון על המסחר — היא קובעת אילו שאלות היומן שלך בכלל מסוגל לענות עליהן.
+                <b className="text-white/75">מה המספר הזה כן אומר ומה לא:</b> הוא משווה את מחיר היציאה שרשמת ליעד שקבעת מראש.
+                המערכת לא רואה את הגרף ולא יודעת אם המחיר היה מגיע ליעד בהמשך — היא יודעת רק איפה אתה יצאת ביחס למה שתכננת.
+                {' '}שלמות התיעוד היא לא ציון על המסחר — היא קובעת אילו שאלות היומן שלך בכלל מסוגל לענות עליהן.
                 {comp.exitPrice < 0.8 && ` כרגע רק ${Math.round(comp.exitPrice * 100)}% מהעסקאות הסגורות נושאות מחיר יציאה, ולכן כל מה שקשור ליציאות נשען על חלק מהתמונה.`}
               </p>
             </div>
@@ -789,7 +791,7 @@ export default function AiAnalyticsPage() {
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
-              : 'איך אתה באמת יוצא — האם אתה יוצא מעסקאות רווחיות לפני היעד שקבעת, וכמה אתה מממש בשלבים.'
+              : 'איך אתה באמת יוצא — איפה סגרת ביחס ליעד שקבעת מראש, וכמה אתה מממש בשלבים. הבסיס הוא מחיר היציאה שרשמת, לא מה שהמחיר עשה אחר כך.'
           }
         >
           {exits.sampleSize === 0 ? (
@@ -823,7 +825,7 @@ export default function AiAnalyticsPage() {
               </div>
               {exits.captureRatio !== null && exits.captureRatio < 0.7 && (
                 <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
-                  אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — כלומר אתה נוטה לצאת מעסקאות רווחיות מוקדם. שווה לבחון אם להשאיר חלק מהפוזיציה קרוב יותר ליעד שקבעת.
+                  אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — כלומר אתה נוטה לסגור לפני היעד שקבעת לעצמך. המערכת לא יודעת אם המחיר היה מגיע לשם — רק שאתה יצאת קודם.
                 </p>
               )}
             </div>
@@ -868,7 +870,12 @@ export default function AiAnalyticsPage() {
                         style={ins.delta >= 0
                           ? { color: '#6fa580', borderColor: 'rgba(74,124,89,.4)', background: 'rgba(74,124,89,.1)' }
                           : { color: '#c98080', borderColor: 'rgba(139,58,58,.4)', background: 'rgba(139,58,58,.1)' }}>
-                        {ins.delta >= 0 ? '▲' : '▼'} {Math.abs(ins.delta).toFixed(0)} נק׳ מהבסיס
+                        {/* "נק׳ מהבסיס" is the engine's word for it, not a
+                            reader's. The number is the gap in percentage
+                            points between this group's success rate and the
+                            rest of the journal, and saying so is shorter than
+                            explaining what a "בסיס" is. */}
+                        {ins.delta >= 0 ? '▲' : '▼'} {Math.abs(ins.delta).toFixed(0)} נק׳ אחוז מול שאר היומן
                       </span>
                       {!ins.significant && (
                         <span className="font-mono text-[10px] font-bold tracking-[0.1em] px-2 py-1 rounded-sm border border-[#2a2a2d] text-white/35">
@@ -888,7 +895,7 @@ export default function AiAnalyticsPage() {
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
           index={6} total={12} eyebrow="AI · Weekly Review" title="סיכום השבוע"
-          description="שבעת הימים האחרונים משתי זוויות — מה עשו התוצאות, ומה זז בהתנהגות. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
+          description="השבוע הנוכחי משתי זוויות: מה עשו המספרים, ומה עשית אתה. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
         >
           <WeeklyTabs hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>

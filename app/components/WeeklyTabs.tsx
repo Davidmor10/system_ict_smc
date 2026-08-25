@@ -17,8 +17,8 @@ import WeeklyBehaviorReview from './WeeklyBehaviorReview';
  *  Stacked, they read as the same thing said twice and cost two screenfuls.
  *  One at a time, the reader picks the question. */
 const TABS = [
-  { key: 'results',  label: 'מה עשו התוצאות' },
-  { key: 'behavior', label: 'מה זז בהתנהגות' },
+  { key: 'results',  label: 'תוצאות השבוע' },
+  { key: 'behavior', label: 'התנהגות ומשמעת' },
 ] as const;
 
 type TabKey = typeof TABS[number]['key'];

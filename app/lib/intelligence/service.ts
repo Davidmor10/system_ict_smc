@@ -56,7 +56,9 @@ const MAX_RECURRING_PATTERNS = 5;
     was the old bar, inherited from weeklyReport.ts. Describing a three-trade
     week is fine; the report's whole structure is comparison, and a three-trade
     week compared against another one is noise with a narrative on top. */
-const MIN_TRADES_FOR_WEEKLY = 5;
+// Defined in ./weeklyRules so the on-screen message is built from the same
+// number the gate uses — they had drifted apart once already.
+import { MIN_TRADES_FOR_WEEKLY } from './weeklyRules';
 /** Decided trades a PREVIOUS week needs before it is used as a comparison.
     Higher than the bar for writing the report: a thin week can still be
     described, it just cannot be measured against. Shared floor — see
