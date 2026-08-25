@@ -552,3 +552,29 @@ describe('buildUserMessage — the trader\'s own material', () => {
     expect(SYSTEM_PROMPT).toContain('never which');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The note is about yesterday, and has to say so
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Reported as "this insight doesn't match any trade I have". It matched
+// perfectly — the trade was real, on the day the note covered. The note simply
+// called that day "today", and the trader read it the next morning over a
+// session in which they had not traded at all.
+
+describe('SYSTEM_PROMPT — which day the note is about', () => {
+  it('tells the model the analysed day is yesterday from the reader\'s side', () => {
+    expect(SYSTEM_PROMPT).toContain('YESTERDAY, NOT TODAY');
+    expect(SYSTEM_PROMPT).toContain('אתמול');
+  });
+
+  it('explains that <today> is a block name, not the word to use', () => {
+    // Without this the rule reads as contradicting the data contract, and a
+    // contradicted rule is a rule the model picks its way around.
+    expect(SYSTEM_PROMPT).toContain('not the word to use in the note');
+  });
+
+  it('bumps the version, so a note can be traced to the text that produced it', () => {
+    expect(DAILY_INSIGHT_PROMPT_VERSION).toBeGreaterThanOrEqual(9);
+  });
+});

@@ -46,6 +46,13 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       model's remaining job is prose — and the tier rules below are what
  *       stop it from promoting a correlation into a cause on the way.
  *
+ *  v9 — the note stops calling yesterday "today". It is written overnight and
+ *       read the next morning, so "the only trade today was a reversal on MNQ"
+ *       reached a trader who had not yet traded that morning and read as a
+ *       description of trades they never made. The note was correct every
+ *       time; only the word for the day was wrong, and the date in the card's
+ *       corner never won against the prose.
+ *
  *  v8 — the trader's own words and their own rules. Three inputs that had been
  *       collected for weeks and read by nothing: WHICH rule they ticked as
  *       broken (the behaviour block counts that one was, never which), the
@@ -70,7 +77,7 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       background with an explicit rule that it can never outrank the data,
  *       because it is the one input here the trader can simply be wrong about.
  */
-export const DAILY_INSIGHT_PROMPT_VERSION = 8;
+export const DAILY_INSIGHT_PROMPT_VERSION = 9;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -89,6 +96,14 @@ export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE sh
    or a behavioral trend from the profile. Do not fabricate a trading day.
 8. If the trader is new (profile.statistical.n < 10), be gentler and more
    curious. Don't diagnose patterns from tiny samples.
+9a. THE DAY YOU ARE WRITING ABOUT IS YESTERDAY, NOT TODAY. This note is
+   written overnight and read the following morning, so the session in <today>
+   already ended before the trader opens it. Call it "אתמול". Writing "היום"
+   makes every sentence land one day late: the trader reads "the only trade
+   today was a reversal on MNQ" over a morning in which they have not traded
+   at all, and concludes the coach is describing trades they never made. The
+   block is named <today> because it is the day being analysed — that is a
+   label in this contract, not the word to use in the note.
 9. You cannot see a calendar. You receive ONE day plus all-time aggregates —
    nothing tells you what happened yesterday, or the day before. Never write
    "the third day in a row", "this week", "lately", "since Monday", or any
@@ -235,7 +250,8 @@ writing a single word.
 </user_profile>
 
 <today>
-  Today's trades as compact JSON. May be []. Each trade:
+  The analysed day's trades as compact JSON — that day is YESTERDAY from the
+  reader's point of view (style rule 9a). May be []. Each trade:
   { t: 'HH:mm', sym, dir, r, result: 'WIN'|'LOSS'|'BE', session, setup, emo }
 </today>
 

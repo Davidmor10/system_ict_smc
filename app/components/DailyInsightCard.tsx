@@ -42,7 +42,13 @@ const STR = {
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'היום';
       const d = new Date(`${dateIso}T12:00:00Z`);
-      return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+      const label = d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+      // The note is written overnight, so the usual case is yesterday — and
+      // saying so beats a bare date the reader has to convert. A date alone in
+      // the corner never wins against prose that says "today".
+      const yesterday = new Date(`${today}T12:00:00Z`);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      return dateIso === yesterday.toISOString().slice(0, 10) ? `אתמול · ${label}` : label;
     },
   },
   en: {
@@ -65,7 +71,10 @@ const STR = {
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'Today';
       const d = new Date(`${dateIso}T12:00:00Z`);
-      return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long' });
+      const label = d.toLocaleDateString('en-US', { day: 'numeric', month: 'long' });
+      const yesterday = new Date(`${today}T12:00:00Z`);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      return dateIso === yesterday.toISOString().slice(0, 10) ? `Yesterday · ${label}` : label;
     },
   },
 } as const;
