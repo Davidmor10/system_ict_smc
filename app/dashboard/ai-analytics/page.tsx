@@ -207,10 +207,26 @@ function ExitTile({ label, value, sub, color }: { label: string; value: string; 
  *  gives the orientation-only bands somewhere honest to live — `muted` renders
  *  them a rank down, so "here is where your trades sit" never again looks like
  *  "here is what works". */
-function QuestionBand({ n, question, body, answer, muted }: {
-  n: string; question: string; body: string; answer?: string; muted?: boolean;
+/** The verdict a band's answer carries, which decides its colour.
+ *
+ *  Not decoration. It is the only part of the answer that reads before the
+ *  sentence does, and on a page a trader scans rather than reads it is often
+ *  the only part that reads at all. `none` is for an answer that is neither
+ *  good nor bad — "not yet, and here is why" is an honest state, not a
+ *  failure, and colouring it red would say otherwise. */
+type BandTone = 'good' | 'warn' | 'none';
+
+const TONE: Record<BandTone, { rail: string; label: string }> = {
+  good: { rail: '#6fa580', label: '#6fa580' },
+  warn: { rail: '#d4af37', label: '#d4af37' },
+  none: { rail: '#3f3f46', label: 'rgba(255,255,255,0.42)' },
+};
+
+function QuestionBand({ n, question, body, answer, tone = 'none', muted }: {
+  n: string; question: string; body: string; answer?: string; tone?: BandTone; muted?: boolean;
 }) {
   const accent = muted ? '#52525b' : '#d4af37';
+  const t = TONE[tone];
   return (
     <section className="border-t border-[#1c1c1e]" style={{ padding: 'clamp(46px,4.5vw,74px) 0 clamp(6px,1vw,14px)' }}>
       <Reveal className="text-right">
@@ -227,20 +243,46 @@ function QuestionBand({ n, question, body, answer, muted }: {
         >
           {question}
         </h2>
-        {/* The answer, directly under the question.
-            Without it the band asked something in 40px type and then handed
-            the reader a paragraph about METHOD, while the actual answer sat in
-            a differently-styled section below. It read as unanswered — which
-            is exactly what it was, at the point where the eye lands. */}
+
+        {/* The answer is built to look like a DIFFERENT KIND OF THING.
+            
+            It used to be the same serif face as the question, one size down —
+            which reads as a subtitle, not as a reply. Question and answer blur
+            into one block and the reader has to parse the sentence to work out
+            which is which.
+            
+            Three separations now do the work, and each carries meaning rather
+            than shape: the sans face against the question's serif, so the
+            faces themselves say "this is a different voice"; a panel with a
+            coloured rail, so it reads as an object placed under the question
+            rather than more of the question; and the rail's colour, which is
+            the verdict — the part that reads before the sentence does. */}
         {answer && (
-          <p
-            className="mt-4 font-serif leading-snug"
-            style={{ fontSize: 'clamp(17px,1.7vw,21px)', color: 'rgba(255,255,255,0.88)', maxWidth: '62ch' }}
+          <div
+            className="mt-5 flex overflow-hidden"
+            style={{ maxWidth: '68ch', background: '#0d0d0f', border: '1px solid #1c1c1e', borderRadius: 2 }}
           >
-            {answer}
-          </p>
+            <div style={{ width: 2, background: t.rail, flex: '0 0 auto' }} />
+            <div className="px-5 py-4" style={{ minWidth: 0 }}>
+              <div
+                className="font-mono font-bold mb-2"
+                style={{ fontSize: 10.5, letterSpacing: '0.22em', color: t.label }}
+              >
+                ◈ התשובה
+              </div>
+              <p
+                className="leading-relaxed"
+                style={{ fontSize: 'clamp(15px,1.45vw,17.5px)', fontWeight: 500, color: 'rgba(255,255,255,0.92)' }}
+              >
+                {answer}
+              </p>
+            </div>
+          </div>
         )}
-        <p className={`text-sm text-white/45 leading-relaxed ${answer ? 'mt-3' : 'mt-3'}`} style={{ maxWidth: '62ch' }}>{body}</p>
+
+        {/* Method, and clearly third. Small, grey, and below the answer rather
+            than between it and the question. */}
+        <p className="mt-4 text-[13px] text-white/38 leading-relaxed" style={{ maxWidth: '62ch' }}>{body}</p>
       </Reveal>
     </section>
   );
@@ -329,21 +371,23 @@ export default function AiAnalyticsPage() {
     const closed = exp.trades;
 
     // A — profitable, and why.
-    let a: string;
+    let a: string; let aTone: BandTone = 'none';
     if (closed === 0) {
       a = 'עדיין אין עסקאות סגורות, אז אין תוחלת לחשב.';
     } else {
+      aTone = exp.expectancyUsd > 0 ? 'good' : exp.expectancyUsd < 0 ? 'warn' : 'none';
       const per = exp.expectancyUsd;
       const dir = per > 0 ? 'כן' : per < 0 ? 'לא' : 'בדיוק באיזון';
       a = `${dir} — כל עסקה שווה לך בממוצע ${per >= 0 ? '' : 'מינוס '}$${Math.abs(per).toFixed(0)}, על פני ${closed} עסקאות מוכרעות.`;
     }
 
     // B — doing what you said.
-    let b: string;
+    let b: string; let bTone: BandTone = 'none';
     if (pve.measured === 0) {
       b = `אי אפשר לענות עדיין: אף עסקה לא נושאת גם תוכנית וגם מחיר יציאה${pve.assumed > 0 ? `, ול-${pve.assumed} מהן יש תוצאה בלי מחיר יציאה` : ''}.`;
     } else {
       const cap = pve.captureRate === null ? null : Math.round(pve.captureRate * 100);
+      bTone = cap === null ? 'none' : cap >= 90 ? 'good' : 'warn';
       b = cap === null
         ? `נמדדו ${pve.measured} עסקאות, אבל עדיין אין מספיק מנצחים כדי לחשב כמה מהיעד אתה לוקח.`
         : cap >= 90
@@ -354,7 +398,7 @@ export default function AiAnalyticsPage() {
     // C — is any of it real.
     const sig = analysis.patterns.filter(p => p.significant);
     const tested = analysis.patterns.length;
-    let c: string;
+    let c: string; let cTone: BandTone = 'none';
     if (tested === 0) {
       c = 'עדיין אין מספיק עסקאות כדי לחתוך את ההיסטוריה ולבדוק משהו.';
     } else if (sig.length === 0) {
@@ -363,10 +407,11 @@ export default function AiAnalyticsPage() {
       // Deliberately not naming them here. The Hebrew labeller lives in the
       // AI module, which drags the provider client into a page bundle that has
       // no business holding it — and the section below names them anyway.
+      cTone = 'good';
       c = `כן — ${sig.length} מתוך ${tested} חתכים שרדו את התיקון על מספר הבדיקות. הם מפורטים למטה.`;
     }
 
-    return { a, b, c };
+    return { a, b, c, aTone, bTone, cTone };
   }, [exp, pve, analysis]);
   const activeSession = getActiveSessionKey();
 
@@ -634,7 +679,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="A" question="האם אני רווחי — ולמה?" answer={bandAnswers.a}
+          n="A" question="האם אני רווחי — ולמה?" answer={bandAnswers.a} tone={bandAnswers.aTone}
           body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה לנבוע מאחוז הצלחה גבוה עם מנצחים קטנים, או מאחוז נמוך עם מנצחים גדולים — ואלה שתי בעיות הפוכות."
         />
 
@@ -685,7 +730,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="B" question="האם אני עושה מה שאמרתי שאעשה?" answer={bandAnswers.b}
+          n="B" question="האם אני עושה מה שאמרתי שאעשה?" answer={bandAnswers.b} tone={bandAnswers.bTone}
           body="החלק שנמצא במאה אחוז בשליטתך ולא דורש שום דעה על השוק. מכאן מגיע רוב השיפור של סוחר — לא ממציאת יתרון חדש."
         />
 
@@ -795,7 +840,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c}
+          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c} tone={bandAnswers.cTone}
           body="רק ממצאים שעברו תיקון סטטיסטי על מספר החתכים שנבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת בניית אמונה על רעש."
         />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
