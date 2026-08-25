@@ -196,6 +196,39 @@ function ExitTile({ label, value, sub, color }: { label: string; value: string; 
   );
 }
 
+/** The band that introduces a group of sections with the question it answers.
+ *
+ *  The page used to be ten numbered sections in the order they were built, so
+ *  a corrected pattern finding and a raw weekday breakdown sat at the same
+ *  visual rank and read as equally load-bearing. They are not: one survived a
+ *  test and the other is a distribution.
+ *
+ *  Grouping by QUESTION rather than by data source is what fixes that. It also
+ *  gives the orientation-only bands somewhere honest to live — `muted` renders
+ *  them a rank down, so "here is where your trades sit" never again looks like
+ *  "here is what works". */
+function QuestionBand({ n, question, body, muted }: {
+  n: string; question: string; body: string; muted?: boolean;
+}) {
+  const accent = muted ? '#52525b' : '#d4af37';
+  return (
+    <section className="border-t border-[#1c1c1e]" style={{ padding: 'clamp(46px,4.5vw,74px) 0 clamp(6px,1vw,14px)' }}>
+      <Reveal className="text-right">
+        <div className="flex items-baseline gap-3 justify-start flex-row-reverse" style={{ justifyContent: 'flex-end' }}>
+          <span className="font-mono text-xs font-bold tracking-[0.28em]" style={{ color: accent }} dir="ltr">{n}</span>
+          <h2
+            className="font-serif font-bold leading-tight"
+            style={{ fontSize: muted ? 'clamp(20px,2vw,26px)' : 'clamp(28px,3vw,40px)', color: muted ? 'rgba(255,255,255,0.62)' : '#fff' }}
+          >
+            {question}
+          </h2>
+        </div>
+        <p className="mt-3 text-sm text-white/45 leading-relaxed" style={{ maxWidth: '62ch' }}>{body}</p>
+      </Reveal>
+    </section>
+  );
+}
+
 /** Section shell — sticky numbered index card on the right (RTL start), content on the left. */
 function NumberedSection({ index, total, eyebrow, title, description, extra, children }: {
   index: number; total: number; eyebrow: string; title: string; description: string; extra?: React.ReactNode; children: React.ReactNode;
@@ -238,6 +271,36 @@ export default function AiAnalyticsPage() {
   // their caches expire when the trades change and not merely at midnight.
   const fingerprint = useMemo(() => tradesFingerprint(trades), [trades]);
   const hasEnoughData = trades.filter(t => t.result !== 'OPEN').length >= 3;
+
+  // The depth layer, now that runFullAnalysis carries it. Read here rather
+  // than recomputed so this page and the coach cannot disagree about what a
+  // trade is worth.
+  const exp  = analysis.expectancy;
+  const pve  = analysis.planVsExecution;
+  const comp = analysis.completeness;
+
+  /** Which half of the expectancy the trader should actually work on.
+   *
+   *  Stated as a reading of the decomposition rather than as advice: the same
+   *  expectancy reached two ways calls for opposite work, and naming which way
+   *  it was reached is the whole value of showing the parts. */
+  const expectancyRead = useMemo(() => {
+    if (exp.trades === 0) return '';
+    const wr = exp.winRate * 100;
+    const payoff = exp.avgLossR !== 0 ? Math.abs(exp.avgWinR / exp.avgLossR) : Infinity;
+    const verdict = exp.expectancyUsd >= 0 ? 'חיובית' : 'שלילית';
+    const head = `כרגע התוחלת שלך ${verdict}: כל עסקה שווה בממוצע ${exp.expectancyUsd >= 0 ? '' : 'מינוס '}$${Math.abs(exp.expectancyUsd).toFixed(0)}.`;
+    if (wr >= 55 && payoff < 1.2) {
+      return `${head} אתה צודק ברוב הפעמים (${Math.round(wr)}%) אבל המנצח הממוצע שלך קרוב בגודלו למפסיד — כלומר המקום להסתכל בו הוא היציאות, לא הכניסות.`;
+    }
+    if (wr < 45 && payoff >= 1.8) {
+      // payoff is Infinity when there are no losers at all — a real state for a
+      // short history, and "פי Infinity" is not a sentence.
+      const ratio = Number.isFinite(payoff) ? `פי ${payoff.toFixed(1)}` : 'הרבה יותר';
+      return `${head} אתה צודק בפחות ממחצית הפעמים (${Math.round(wr)}%) אבל כשאתה צודק אתה מוציא ${ratio} ממה שאתה משלם — כלומר המקום להסתכל בו הוא בחירת הכניסות, לא היציאות.`;
+    }
+    return `${head} אחוז הצלחה ${Math.round(wr)}%, ויחס של פי ${Number.isFinite(payoff) ? payoff.toFixed(1) : '∞'} בין המנצח הממוצע למפסיד הממוצע. אין כאן צד אחד שבולט כחלש — שני החלקים תורמים לתוצאה במידה דומה.`;
+  }, [exp]);
   const activeSession = getActiveSessionKey();
 
   // ── Pattern insights (AI-phrased, cached per day) ──
@@ -496,172 +559,115 @@ export default function AiAnalyticsPage() {
           </div>
         </section>
 
-        {/* ══════════ 01 · INSTRUMENT ══════════ */}
+
+        <QuestionBand
+          n="A" question="האם אני רווחי — ולמה?"
+          body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה לנבוע מאחוז הצלחה גבוה עם מנצחים קטנים, או מאחוז נמוך עם מנצחים גדולים — ואלה שתי בעיות הפוכות."
+        />
+
+        {/* ══════════ EXPECTANCY ══════════ */}
         <NumberedSection
-          index={1} total={10} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={12} eyebrow="Expectancy" title="מה שווה לך עסקה"
           description={
-            instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
-            : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
-            : `${bestInst.key} מוביל עם הרווח הגבוה ביותר; ${worstInst.key} כרגע החלש מביניהם.`
+            exp.trades === 0
+              ? 'צריך עסקאות סגורות כדי לחשב תוחלת.'
+              : 'כמה דולרים, בממוצע, שווה לך עסקה אחת — ומאיפה המספר הזה מגיע.'
           }
-          extra={instrumentRows.length > 0 && (
-            <span className="block font-mono text-[10.5px] font-bold text-white/38 tracking-[0.14em] mt-4">
-              {instrumentRows.map(g => g.key).join(' · ')}
-            </span>
-          )}
         >
-          {instrumentRows.length === 0 ? (
-            <p className="text-sm text-white/30">אין עדיין מספיק נתונים.</p>
+          {exp.trades === 0 ? (
+            <p className="text-sm text-white/30">אין עדיין עסקאות מוכרעות.</p>
           ) : (
             <div>
-              {instrumentRows.map(g => (
-                <div key={g.key} className="grid gap-5 sm:gap-8 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: '110px minmax(0,1fr) clamp(240px,26vw,320px)' }}>
-                  <div className="text-right">
-                    <span className="font-mono text-xl font-extrabold text-white tracking-[0.04em]">{g.key}</span>
-                    {g.badge === 'best' && <span className="block w-fit mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#6fa580] border border-[#6fa580]/45 bg-[#6fa580]/12 px-2 py-0.5 rounded-sm">◆ מיטבי</span>}
-                    {g.badge === 'worst' && <span className="block w-fit mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#c98080] border border-[#8b3a3a]/45 bg-[#8b3a3a]/12 px-2 py-0.5 rounded-sm">חלש ביותר</span>}
-                  </div>
-                  <div>
-                    <HBar pct={g.pct} />
-                    <div className="flex justify-between mt-2.5 font-mono text-[12.5px] font-bold text-white/50 tracking-[0.03em]">
-                      <span>{g.trades} עסקאות · {g.winRate.toFixed(0)}% הצלחה</span>
-                      <span className="num text-base font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-0.5 text-center">
-                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">R:R</span><span className="num font-mono text-lg font-extrabold text-white">{g.avgRR.toFixed(2)}</span></div>
-                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">PF</span><span className="num font-mono text-lg font-extrabold text-[#d4af37]">{fmtPF(g.profitFactor)}</span></div>
-                    <div><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-lg font-extrabold text-[#6fa580]">{g.winRate.toFixed(0)}%</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </NumberedSection>
-
-        {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
-        <NumberedSection
-          index={2} total={10} eyebrow="Time Signature" title="חתימת זמן"
-          description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי שעה בסשן וחודש. הפילוח לפי יום בשבוע נמצא בדף הסטטיסטיקה."
-        >
-          <div>
-            <div className="grid gap-9" style={{ gridTemplateColumns: '1fr' }}>
-              {hourRows.length > 0 && (
-                <div>
-                  <div className="mb-5 text-right">
-                    <span className="block font-mono text-base font-extrabold text-white/74">
-                      {analysis.time.bestHour && <>שיא <b style={{ color: '#d4af37' }}>{analysis.time.bestHour.label}</b></>}
-                      {analysis.time.worstHour && analysis.time.worstHour.key !== analysis.time.bestHour?.key && <> · שפל <b style={{ color: '#c98080' }}>{analysis.time.worstHour.label}</b></>}
-                    </span>
-                    <span className="block font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] text-[#d4af37] mt-2">שעה · IDT</span>
-                  </div>
-                  <div className="flex gap-0.5 items-end h-[130px]">
-                    {hourRows.map(g => <VBar key={g.key} pct={g.pct} tone={g.tone} label={g.label} labelSize={10} />)}
-                  </div>
-                </div>
-              )}
-              {hourRows.length === 0 && (
-                <p className="text-sm text-white/30">אין עדיין מספיק נתונים לניתוח זמן.</p>
-              )}
-            </div>
-
-            {analysis.time.bestMonth && (
-              <div className="flex items-center justify-between gap-6 flex-wrap pt-8 mt-8 border-t border-[#1c1c1e]">
-                <p className="max-w-md text-[13.5px] text-white/55 leading-relaxed text-right order-2">
-                  {monthCount <= 1
-                    ? 'כל העסקאות שלך רוכזו בחודש אחד. עדיין אין חודשים קודמים להשוואה — הדגימה החודשית תתמלא עם הזמן.'
-                    : `מבין ${monthCount} חודשים בהם תעדת עסקאות, זה החודש החזק ביותר עד כה.`}
-                </p>
-                <div className="text-right order-1">
-                  <span className="block font-mono text-sm font-extrabold uppercase tracking-[0.14em] text-[#9a9aa2] mb-3.5">החודש החזק ביותר</span>
-                  <span className="block font-serif font-extrabold leading-none num" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.35)' }}>{analysis.time.bestMonth.key.replace('-', '·')}</span>
-                  <span className="block font-mono text-sm font-extrabold text-white/66 tracking-[0.06em] mt-3">
-                    {MONTH_HE[Number(analysis.time.bestMonth.key.slice(5, 7)) - 1]} · {analysis.time.bestMonth.trades} עסקאות · {analysis.time.bestMonth.totalPnl >= 0 ? '+' : '-'}${Math.abs(analysis.time.bestMonth.totalPnl).toFixed(0)}
-                  </span>
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
+                <ExitTile
+                  label="תוחלת לעסקה"
+                  value={`${exp.expectancyUsd >= 0 ? '+' : '-'}$${Math.abs(exp.expectancyUsd).toFixed(0)}`}
+                  sub={`${exp.expectancyR >= 0 ? '+' : ''}${exp.expectancyR.toFixed(2)}R · ${exp.trades} עסקאות`}
+                  color={exp.expectancyUsd >= 0 ? '#6fa580' : '#c98080'}
+                />
+                <ExitTile
+                  label="אחוז הצלחה"
+                  value={`${Math.round(exp.winRate * 100)}%`}
+                  sub="מהעסקאות המוכרעות"
+                />
+                <ExitTile
+                  label="מנצח ממוצע"
+                  value={`+${exp.avgWinR.toFixed(2)}R`}
+                  sub="כמה אתה מוציא כשצדקת"
+                  color="#6fa580"
+                />
+                <ExitTile
+                  label="מפסיד ממוצע"
+                  value={`${exp.avgLossR.toFixed(2)}R`}
+                  sub="כמה אתה משלם כשטעית"
+                  color="#c98080"
+                />
               </div>
-            )}
-          </div>
-        </NumberedSection>
-
-        {/* ══════════ 04 · MODEL / SETUP ══════════ */}
-        <NumberedSection
-          index={3} total={10} eyebrow="Model / Setup" title="מודל / סטאפ"
-          description={
-            confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
-            : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
-            : `לפי תגית המודל/הסטאפ שסימנת בכל עסקה — "${bestConf.key}" נושא את הרווח; "${worstConf.key}" חלש יותר.`
-          }
-        >
-          {confirmationRows.length === 0 ? (
-            <p className="text-sm text-white/30">תייג עסקאות עם מודל/סטאפ מהפלייבוק כדי לקבל ניתוח כאן.</p>
-          ) : (
-            <div>
-              {confirmationRows.map(g => (
-                <div key={g.key} className="grid gap-6 sm:gap-9 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: 'minmax(0,1fr) clamp(200px,24vw,260px)' }}>
-                  <div className="text-right">
-                    <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 11 }}>◈</span><span className="font-mono text-base font-bold text-white">{g.key}</span></div>
-                    <HBar pct={g.pct} />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">עסקאות</span><span className="num font-mono text-[19px] font-extrabold text-white">{g.trades}</span></div>
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: '#6fa580' }}>{g.winRate.toFixed(0)}%</span></div>
-                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">נטו</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span></div>
-                  </div>
-                </div>
-              ))}
+              <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
+                {expectancyRead}
+              </p>
             </div>
           )}
         </NumberedSection>
 
-        {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
-        <NumberedSection
-          index={4} total={10} eyebrow="Confluence Tags" title="אישורי כניסה"
-          description={
-            confirmationTagRows.length === 0
-              ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
-              : 'לפי אישורי הכניסה שסימנת — כל אישור בפני עצמו, ואילו שילובים באמת עובדים ביחד.'
-          }
-        >
-          {confirmationTagRows.length === 0 ? (
-            <p className="text-sm text-white/30">סמן אישורי כניסה (SMT, IFVG, CISD...) בטופס העסקה כדי לראות מה באמת עובד.</p>
-          ) : (
-            <div>
-              {confirmationTagRows.map(g => <StatRow key={g.key} label={confLabel(g.key)} ltr g={g} />)}
-              {comboRows.filter(c => c.key.includes('+')).length > 0 && (
-                <div className="mt-9">
-                  <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#d4af37] mb-1">שילובי אישורים</span>
-                  <p className="text-[13px] text-white/45 mb-4 leading-relaxed">האם ערימת אישורים באמת משפרת את התוצאה — או שאתה מסבך בלי תמורה.</p>
-                  {comboRows.filter(c => c.key.includes('+')).map(g => (
-                    <StatRow key={g.key} label={g.key.split('+').map(confLabel).join(' + ')} ltr g={g} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </NumberedSection>
 
-        {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
+        <QuestionBand
+          n="B" question="האם אני עושה מה שאמרתי שאעשה?"
+          body="החלק שנמצא במאה אחוז בשליטתך ולא דורש שום דעה על השוק. מכאן מגיע רוב השיפור של סוחר — לא ממציאת יתרון חדש."
+        />
+
+        {/* ══════════ PLAN VS EXECUTION ══════════ */}
         <NumberedSection
-          index={5} total={10} eyebrow="Psychology" title="מצב רגשי"
+          index={2} total={12} eyebrow="Plan vs Execution" title="תוכנית מול ביצוע"
           description={
-            emotionRows.length === 0
-              ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
-              : 'איך המצב הרגשי שלך לפני הכניסה משתקף בתוצאות — הפער שבין מסחר רגוע למסחר מתוך לחץ או FOMO.'
+            pve.measured === 0
+              ? 'רשום יעד, סטופ ומחיר יציאה כדי שאפשר יהיה להשוות תוכנית לביצוע.'
+              : 'מה ביקשת מהעסקה לעומת מה שבאמת לקחת ממנה.'
           }
         >
-          {emotionRows.length === 0 ? (
-            <p className="text-sm text-white/30">בחר מצב רגשי בטופס העסקה כדי לגלות איך רגש משפיע על הביצועים שלך.</p>
+          {pve.measured === 0 ? (
+            <p className="text-sm text-white/30">
+              אין עדיין עסקאות שנרשמו בהן גם תוכנית וגם יציאה.
+              {pve.assumed > 0 && ` ל-${pve.assumed} עסקאות יש תוצאה בלי מחיר יציאה — הן לא יכולות לענות על זה.`}
+            </p>
           ) : (
             <div>
-              {emotionRows.map(g => <StatRow key={g.key} label={EMOTION_HE[g.key] ?? g.key} g={g} />)}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#1c1c1e] border border-[#1c1c1e] rounded-[4px] overflow-hidden">
+                <ExitTile
+                  label="מימוש התוכנית"
+                  value={pve.captureRate === null ? '—' : `${Math.round(pve.captureRate * 100)}%`}
+                  sub="מהיעד, במנצחים"
+                  color={pve.captureRate === null ? '#fff' : pve.captureRate < 0.6 ? '#c98080' : pve.captureRate < 0.9 ? '#d4af37' : '#6fa580'}
+                />
+                <ExitTile
+                  label="תכננת"
+                  value={`${pve.avgPlannedRR.toFixed(2)}R`}
+                  sub="יחס סיכוי-סיכון ממוצע"
+                />
+                <ExitTile
+                  label="לקחת"
+                  value={`${pve.avgRealizedR >= 0 ? '+' : ''}${pve.avgRealizedR.toFixed(2)}R`}
+                  sub="בפועל, בממוצע"
+                  color={pve.avgRealizedR >= 0 ? '#6fa580' : '#c98080'}
+                />
+                <ExitTile
+                  label="שלמות התיעוד"
+                  value={`${Math.round(comp.overall * 100)}%`}
+                  sub={`${pve.measured} נמדדו · ${pve.assumed} לא`}
+                  color={comp.overall < 0.5 ? '#c98080' : comp.overall < 0.8 ? '#d4af37' : '#6fa580'}
+                />
+              </div>
+              <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
+                שלמות התיעוד היא לא ציון על המסחר — היא קובעת אילו שאלות היומן שלך בכלל מסוגל לענות עליהן.
+                {comp.exitPrice < 0.8 && ` כרגע רק ${Math.round(comp.exitPrice * 100)}% מהעסקאות הסגורות נושאות מחיר יציאה, ולכן כל מה שקשור ליציאות נשען על חלק מהתמונה.`}
+              </p>
             </div>
           )}
         </NumberedSection>
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={6} total={10} eyebrow="Exit Management" title="ניהול יציאות"
+          index={3} total={12} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -706,9 +712,22 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
+        {/* ══════════ TRACKING ARCHIVE ══════════ */}
+        <NumberedSection
+          index={4} total={12} eyebrow="Tracking" title="מה היה במעקב"
+          description="כל חלון מעקב שנסגר ומה הוא הראה — כולל המקרה שבו היעד השתפר ומשהו אחר נחלש בדרך. המקור הוא תמיד מה שאתה מתעד בעצמך."
+        >
+          <TrackingArchive />
+        </NumberedSection>
+
+
+        <QuestionBand
+          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?"
+          body="רק ממצאים שעברו תיקון סטטיסטי על מספר החתכים שנבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת בניית אמונה על רעש."
+        />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
         <NumberedSection
-          index={7} total={10} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={5} total={12} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -750,23 +769,190 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={8} total={10} eyebrow="AI · Weekly Review" title="סיכום השבוע"
+          index={6} total={12} eyebrow="AI · Weekly Review" title="סיכום השבוע"
           description="שבעת הימים האחרונים משתי זוויות — מה עשו התוצאות, ומה זז בהתנהגות. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
         >
           <WeeklyTabs hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
-        {/* ══════════ TRACKING ARCHIVE ══════════ */}
+
+        <QuestionBand
+          n="D" question="להתמצאות בלבד"
+          body="פילוחים, לא ממצאים. הם מראים איפה העסקאות שלך יושבות — לא מה עובד. אף אחד מהם לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה ולא סיבה לשנות משהו."
+          muted
+        />
+        {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={9} total={10} eyebrow="Tracking" title="מה היה במעקב"
-          description="כל חלון מעקב שנסגר ומה הוא הראה — כולל המקרה שבו היעד השתפר ומשהו אחר נחלש בדרך. המקור הוא תמיד מה שאתה מתעד בעצמך."
+          index={7} total={12} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          description={
+            instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
+            : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
+            : `${bestInst.key} מוביל עם הרווח הגבוה ביותר; ${worstInst.key} כרגע החלש מביניהם.`
+          }
+          extra={instrumentRows.length > 0 && (
+            <span className="block font-mono text-[10.5px] font-bold text-white/38 tracking-[0.14em] mt-4">
+              {instrumentRows.map(g => g.key).join(' · ')}
+            </span>
+          )}
         >
-          <TrackingArchive />
+          {instrumentRows.length === 0 ? (
+            <p className="text-sm text-white/30">אין עדיין מספיק נתונים.</p>
+          ) : (
+            <div>
+              {instrumentRows.map(g => (
+                <div key={g.key} className="grid gap-5 sm:gap-8 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: '110px minmax(0,1fr) clamp(240px,26vw,320px)' }}>
+                  <div className="text-right">
+                    <span className="font-mono text-xl font-extrabold text-white tracking-[0.04em]">{g.key}</span>
+                    {g.badge === 'best' && <span className="block w-fit mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#6fa580] border border-[#6fa580]/45 bg-[#6fa580]/12 px-2 py-0.5 rounded-sm">◆ מיטבי</span>}
+                    {g.badge === 'worst' && <span className="block w-fit mt-2 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#c98080] border border-[#8b3a3a]/45 bg-[#8b3a3a]/12 px-2 py-0.5 rounded-sm">חלש ביותר</span>}
+                  </div>
+                  <div>
+                    <HBar pct={g.pct} />
+                    <div className="flex justify-between mt-2.5 font-mono text-[12.5px] font-bold text-white/50 tracking-[0.03em]">
+                      <span>{g.trades} עסקאות · {g.winRate.toFixed(0)}% הצלחה</span>
+                      <span className="num text-base font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-0.5 text-center">
+                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">R:R</span><span className="num font-mono text-lg font-extrabold text-white">{g.avgRR.toFixed(2)}</span></div>
+                    <div className="border-s border-[#1c1c1e]"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">PF</span><span className="num font-mono text-lg font-extrabold text-[#d4af37]">{fmtPF(g.profitFactor)}</span></div>
+                    <div><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-lg font-extrabold text-[#6fa580]">{g.winRate.toFixed(0)}%</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </NumberedSection>
 
+        {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
+        <NumberedSection
+          index={8} total={12} eyebrow="Time Signature" title="חתימת זמן"
+          description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי שעה בסשן וחודש. הפילוח לפי יום בשבוע נמצא בדף הסטטיסטיקה."
+        >
+          <div>
+            <div className="grid gap-9" style={{ gridTemplateColumns: '1fr' }}>
+              {hourRows.length > 0 && (
+                <div>
+                  <div className="mb-5 text-right">
+                    <span className="block font-mono text-base font-extrabold text-white/74">
+                      {analysis.time.bestHour && <>שיא <b style={{ color: '#d4af37' }}>{analysis.time.bestHour.label}</b></>}
+                      {analysis.time.worstHour && analysis.time.worstHour.key !== analysis.time.bestHour?.key && <> · שפל <b style={{ color: '#c98080' }}>{analysis.time.worstHour.label}</b></>}
+                    </span>
+                    <span className="block font-mono text-[13px] font-extrabold uppercase tracking-[0.14em] text-[#d4af37] mt-2">שעה · IDT</span>
+                  </div>
+                  <div className="flex gap-0.5 items-end h-[130px]">
+                    {hourRows.map(g => <VBar key={g.key} pct={g.pct} tone={g.tone} label={g.label} labelSize={10} />)}
+                  </div>
+                </div>
+              )}
+              {hourRows.length === 0 && (
+                <p className="text-sm text-white/30">אין עדיין מספיק נתונים לניתוח זמן.</p>
+              )}
+            </div>
+
+            {analysis.time.bestMonth && (
+              <div className="flex items-center justify-between gap-6 flex-wrap pt-8 mt-8 border-t border-[#1c1c1e]">
+                <p className="max-w-md text-[13.5px] text-white/55 leading-relaxed text-right order-2">
+                  {monthCount <= 1
+                    ? 'כל העסקאות שלך רוכזו בחודש אחד. עדיין אין חודשים קודמים להשוואה — הדגימה החודשית תתמלא עם הזמן.'
+                    : `מבין ${monthCount} חודשים בהם תעדת עסקאות, זה החודש החזק ביותר עד כה.`}
+                </p>
+                <div className="text-right order-1">
+                  <span className="block font-mono text-sm font-extrabold uppercase tracking-[0.14em] text-[#9a9aa2] mb-3.5">החודש החזק ביותר</span>
+                  <span className="block font-serif font-extrabold leading-none num" style={{ fontSize: 'clamp(30px,3.4vw,46px)', color: '#d4af37', textShadow: '0 0 34px rgba(212,175,55,.35)' }}>{analysis.time.bestMonth.key.replace('-', '·')}</span>
+                  <span className="block font-mono text-sm font-extrabold text-white/66 tracking-[0.06em] mt-3">
+                    {MONTH_HE[Number(analysis.time.bestMonth.key.slice(5, 7)) - 1]} · {analysis.time.bestMonth.trades} עסקאות · {analysis.time.bestMonth.totalPnl >= 0 ? '+' : '-'}${Math.abs(analysis.time.bestMonth.totalPnl).toFixed(0)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </NumberedSection>
+
+        {/* ══════════ 04 · MODEL / SETUP ══════════ */}
+        <NumberedSection
+          index={9} total={12} eyebrow="Model / Setup" title="מודל / סטאפ"
+          description={
+            confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
+            : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
+            : `לפי תגית המודל/הסטאפ שסימנת בכל עסקה — "${bestConf.key}" נושא את הרווח; "${worstConf.key}" חלש יותר.`
+          }
+        >
+          {confirmationRows.length === 0 ? (
+            <p className="text-sm text-white/30">תייג עסקאות עם מודל/סטאפ מהפלייבוק כדי לקבל ניתוח כאן.</p>
+          ) : (
+            <div>
+              {confirmationRows.map(g => (
+                <div key={g.key} className="grid gap-6 sm:gap-9 items-center py-[26px] border-b border-[#1c1c1e] last:border-0" style={{ gridTemplateColumns: 'minmax(0,1fr) clamp(200px,24vw,260px)' }}>
+                  <div className="text-right">
+                    <div className="flex items-center gap-2.5 mb-3"><span style={{ color: '#d4af37', fontSize: 11 }}>◈</span><span className="font-mono text-base font-bold text-white">{g.key}</span></div>
+                    <HBar pct={g.pct} />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">עסקאות</span><span className="num font-mono text-[19px] font-extrabold text-white">{g.trades}</span></div>
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">הצלחה</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: '#6fa580' }}>{g.winRate.toFixed(0)}%</span></div>
+                    <div className="text-center"><span className="block font-mono text-[13px] font-extrabold text-[#9a9aa2] tracking-[0.05em] mb-2">נטו</span><span className="num font-mono text-[19px] font-extrabold" style={{ color: g.totalPnl >= 0 ? '#6fa580' : '#c98080' }}>{g.totalPnl >= 0 ? '+' : '-'}${Math.abs(g.totalPnl).toFixed(0)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
+        <NumberedSection
+          index={10} total={12} eyebrow="Confluence Tags" title="אישורי כניסה"
+          description={
+            confirmationTagRows.length === 0
+              ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
+              : 'לפי אישורי הכניסה שסימנת — כל אישור בפני עצמו, ואילו שילובים באמת עובדים ביחד.'
+          }
+        >
+          {confirmationTagRows.length === 0 ? (
+            <p className="text-sm text-white/30">סמן אישורי כניסה (SMT, IFVG, CISD...) בטופס העסקה כדי לראות מה באמת עובד.</p>
+          ) : (
+            <div>
+              {confirmationTagRows.map(g => <StatRow key={g.key} label={confLabel(g.key)} ltr g={g} />)}
+              {comboRows.filter(c => c.key.includes('+')).length > 0 && (
+                <div className="mt-9">
+                  <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#d4af37] mb-1">שילובי אישורים</span>
+                  <p className="text-[13px] text-white/45 mb-4 leading-relaxed">האם ערימת אישורים באמת משפרת את התוצאה — או שאתה מסבך בלי תמורה.</p>
+                  {comboRows.filter(c => c.key.includes('+')).map(g => (
+                    <StatRow key={g.key} label={g.key.split('+').map(confLabel).join(' + ')} ltr g={g} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </NumberedSection>
+
+        {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
+        <NumberedSection
+          index={11} total={12} eyebrow="Psychology" title="מצב רגשי"
+          description={
+            emotionRows.length === 0
+              ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
+              : 'איך המצב הרגשי שלך לפני הכניסה משתקף בתוצאות — הפער שבין מסחר רגוע למסחר מתוך לחץ או FOMO.'
+          }
+        >
+          {emotionRows.length === 0 ? (
+            <p className="text-sm text-white/30">בחר מצב רגשי בטופס העסקה כדי לגלות איך רגש משפיע על הביצועים שלך.</p>
+          ) : (
+            <div>
+              {emotionRows.map(g => <StatRow key={g.key} label={EMOTION_HE[g.key] ?? g.key} g={g} />)}
+            </div>
+          )}
+        </NumberedSection>
+
+
+        <QuestionBand
+          n="E" question="כלי"
+          body="לא ניתוח אלא שאלה שאתה שואל: מה היו המספרים אילו סיננת תנאי מסוים."
+          muted
+        />
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
-          index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
+          index={12} total={12} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
           {baseScenarios.length === 0 && !hourCapable ? (

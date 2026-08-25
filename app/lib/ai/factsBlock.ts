@@ -46,11 +46,29 @@ export function summarizeAnalysis(a: FullAnalysis): string {
     );
   }
 
-  if (a.time.bestHour) lines.push(`\nBest hour: ${fmtGroup(a.time.bestHour)}`);
-  if (a.time.worstHour) lines.push(`Worst hour: ${fmtGroup(a.time.worstHour)}`);
-  if (a.time.bestWeekday) lines.push(`Best weekday: ${fmtGroup(a.time.bestWeekday)}`);
-  if (a.time.worstWeekday) lines.push(`Worst weekday: ${fmtGroup(a.time.worstWeekday)}`);
-  if (a.time.bestMonth) lines.push(`Best month: ${fmtGroup(a.time.bestMonth)}`);
+  // The superlatives, and the sentence that stops them being read as findings.
+  //
+  // These now clear a sample floor, so a single lucky trade can no longer be
+  // "your best hour". They are still NOT corrected for multiple comparisons —
+  // the highest of twenty-four hours is high partly because it is the highest
+  // of twenty-four — and the DISCOVERED SLICES block, built from the same
+  // trades, applies that correction and will often disagree. Stating the
+  // difference here is what keeps the model from quoting whichever half suits
+  // the question.
+  const extremes: string[] = [];
+  if (a.time.bestHour) extremes.push(`Best hour: ${fmtGroup(a.time.bestHour)}`);
+  if (a.time.worstHour) extremes.push(`Worst hour: ${fmtGroup(a.time.worstHour)}`);
+  if (a.time.bestWeekday) extremes.push(`Best weekday: ${fmtGroup(a.time.bestWeekday)}`);
+  if (a.time.worstWeekday) extremes.push(`Worst weekday: ${fmtGroup(a.time.worstWeekday)}`);
+  if (a.time.bestMonth) extremes.push(`Best month: ${fmtGroup(a.time.bestMonth)}`);
+  if (extremes.length) {
+    lines.push(
+      `\nHIGHEST AND LOWEST BUCKETS — ranking only, NOT tested for significance. ` +
+      `The best of twenty-four hours is partly the best because it is the best of twenty-four. ` +
+      `Use these for orientation; where they disagree with the DISCOVERED SLICES block, that block wins, ` +
+      `and never call one of these an edge, a pattern or a reason to trade a particular hour or day:\n${extremes.join('\n')}`
+    );
+  }
 
   return lines.join('\n');
 }

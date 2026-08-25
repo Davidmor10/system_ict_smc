@@ -2,6 +2,7 @@ import type { TradeEntry } from '../journal';
 import { computeGroupPerformance } from './metrics';
 import { pairedExtremes } from './extremes';
 import type { GroupPerformance, TimeSummary } from './types';
+import { canSupportClaim } from '../stats/evidence';
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -66,10 +67,35 @@ export function isoWeekKey(dateISO: string): string {
     bestMonth). Paired best/worst go through the shared `pairedExtremes` so the
     same group can never be both. */
 function pickBest(groups: GroupPerformance[], by: (g: GroupPerformance) => number): GroupPerformance | null {
-  const eligible = groups.filter(g => g.trades > 0);
+  const eligible = groups.filter(canClaim);
   if (eligible.length === 0) return null;
   return eligible.reduce((best, g) => (by(g) > by(best) ? g : best));
 }
+
+/** Enough decided trades to be NAMED as a best or worst.
+ *
+ *  The eligibility test used to be `trades > 0`. One trade at 03:00 that
+ *  happened to win therefore produced "your best hour: 03:00, 100% win rate",
+ *  and that sentence went into the coach's prompt as a plain fact — beside a
+ *  patterns block, built from the same trades, reporting that no hour slice
+ *  survived correction. The model was handed a contradiction and could quote
+ *  either side of it.
+ *
+ *  The floor comes from lib/stats/evidence rather than a number chosen here,
+ *  for the reason that file exists: two surfaces disagreeing about how much
+ *  evidence it takes to say something is a contradiction the trader sees and
+ *  neither surface survives.
+ *
+ *  This gates only the SUPERLATIVES. byHour / byWeekday / byMonth stay
+ *  complete, because a distribution is a set of counts and a count is a fact
+ *  at any size. What needs earning is the word "best". */
+const canClaim = (g: GroupPerformance) => canSupportClaim(g.confidence.sampleSize);
+
+/** Weeks are exempt, and the difference is real: "your best week was the week
+ *  of the 12th, +$900" is a statement about something that happened, not a
+ *  claim that a condition works. Nobody trades more on the week of the 12th
+ *  again. Hours, weekdays and months are conditions that recur, and naming one
+ *  the best is an implicit recommendation. */
 const hasTrades = (g: GroupPerformance) => g.trades > 0;
 
 function bucketBy<K extends string | number>(trades: TradeEntry[], keyOf: (t: TradeEntry) => K | null): Map<K, TradeEntry[]> {
@@ -104,8 +130,8 @@ export function analyzeTime(trades: TradeEntry[]): TimeSummary {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mk, ts]) => computeGroupPerformance(ts, mk, mk));
 
-  const hour = pairedExtremes(byHour, g => g.winRate, hasTrades);
-  const weekday = pairedExtremes(byWeekday, g => g.winRate, hasTrades);
+  const hour = pairedExtremes(byHour, g => g.winRate, canClaim);
+  const weekday = pairedExtremes(byWeekday, g => g.winRate, canClaim);
   const week = pairedExtremes(byWeek, g => g.totalPnl, hasTrades);
 
   return {
