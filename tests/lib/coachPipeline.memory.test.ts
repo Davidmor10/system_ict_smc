@@ -143,7 +143,10 @@ describe('opening an experiment', () => {
     const { record, transition } = reconcile(input({ stored: confirmed, isPrimary: true }));
     expect(record.status).toBe('experiment');
     expect(transition?.to).toBe('experiment');
-    expect(record.experiment?.instruction).toContain(String(EXPERIMENT_WINDOW));
+    // The window lives in the field, not in the prose — the sentence spells it
+    // in words now that it reads as a measurement rather than an order.
+    expect(record.experiment?.windowTrades).toBe(EXPERIMENT_WINDOW);
+    expect(record.experiment?.instruction).toContain('נעקוב');
     expect(record.experimentBaseline?.opportunitiesAtStart).toBe(16);
     expect(record.experimentBaseline?.occurrencesAtStart).toBe(8);
     expect(record.experimentBaseline?.guardrails).toEqual(READINGS);

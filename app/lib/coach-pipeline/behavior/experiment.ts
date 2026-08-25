@@ -82,23 +82,36 @@ const GUARDRAILS: Record<BehaviorKind, GuardrailKind[]> = {
   stop_widened:       ['trade_frequency', 'avg_loss_r', 'logging_rate'],
 };
 
-/** The instruction. Concrete, checkable, and about the next few trades — not
- *  "be disciplined", which names a virtue and specifies no action. */
+/** What is being tracked — stated as a measurement, never as an instruction.
+ *
+ *  These sentences used to be commands: "set a target and a stop before entry
+ *  and exit only at one of them", and worst of all "if there is no confirmation
+ *  to log — don't enter". That last one is a direct instruction about whether
+ *  to take a trade, which is the one thing this system must never say.
+ *
+ *  The rewrite is not cosmetic. Every line here now names a field the trader
+ *  fills in themselves and says that it will be counted, so the system
+ *  originates no instruction at all: it measures a decision the trader already
+ *  makes and reports what the count came to. A trader reading "we will track
+ *  whether the stop stayed where you put it" has been told a fact about the
+ *  measurement; a trader reading "don't move your stop" has been given advice,
+ *  and advice about trading is not what this product is. */
 function instructionFor(kind: BehaviorKind, trigger: TriggerFinding | null): string {
   const when = trigger && trigger.strength !== 'weak'
-    ? ' שים לב במיוחד לרגעים שזיהינו.'
+    ? ' בעיקר ברגעים שכבר זיהינו.'
     : '';
+  const head = `בעשר העסקאות הבאות נעקוב`;
   switch (kind) {
     case 'discretionary_exit':
-      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: קבע יעד וסטופ לפני הכניסה, וצא רק באחד מהם.${when}`;
+      return `${head} אם היציאה הייתה ביעד או בסטופ שקבעת מראש.${when}`;
     case 'no_confirmation':
-      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: תעד את האישור שראית לפני הכניסה. אם אין אישור לתעד — אל תיכנס.${when}`;
+      return `${head} אם תיעדת אישור כניסה לפני הכניסה.${when}`;
     case 'rule_violation':
-      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: לפני כל כניסה, עבור על החוקים שלך וסמן אם עמדת בהם.${when}`;
+      return `${head} אם סימנת שעמדת בחוקים שכתבת.${when}`;
     case 'size_spike':
-      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: החזק גודל פוזיציה קבוע, גם אחרי רצף.${when}`;
+      return `${head} אם גודל הפוזיציה נשאר קבוע.${when}`;
     case 'stop_widened':
-      return `ב-${EXPERIMENT_WINDOW} העסקאות הבאות: הסטופ שקבעת בכניסה נשאר במקומו. מותר לקדם אותו לטובתך, לא להרחיק אותו.${when}`;
+      return `${head} אם הסטופ שקבעת בכניסה נשאר במקומו.${when}`;
   }
 }
 

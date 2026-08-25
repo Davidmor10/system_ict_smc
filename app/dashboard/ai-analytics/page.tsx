@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyTabs from '../../components/WeeklyTabs';
+import TrackingArchive from '../../components/TrackingArchive';
 import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
 
 /** Mirror app/lib/ai/patternInsights.ts and app/lib/intelligence/service.ts's
@@ -497,7 +498,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={1} total={9} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={1} total={10} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -540,7 +541,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={2} total={9} eyebrow="Time Signature" title="חתימת זמן"
+          index={2} total={10} eyebrow="Time Signature" title="חתימת זמן"
           description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי שעה בסשן וחודש. הפילוח לפי יום בשבוע נמצא בדף הסטטיסטיקה."
         >
           <div>
@@ -585,7 +586,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={3} total={9} eyebrow="Model / Setup" title="מודל / סטאפ"
+          index={3} total={10} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
             confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
@@ -615,7 +616,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={4} total={9} eyebrow="Confluence Tags" title="אישורי כניסה"
+          index={4} total={10} eyebrow="Confluence Tags" title="אישורי כניסה"
           description={
             confirmationTagRows.length === 0
               ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
@@ -642,7 +643,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
         <NumberedSection
-          index={5} total={9} eyebrow="Psychology" title="מצב רגשי"
+          index={5} total={10} eyebrow="Psychology" title="מצב רגשי"
           description={
             emotionRows.length === 0
               ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
@@ -660,7 +661,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={6} total={9} eyebrow="Exit Management" title="ניהול יציאות"
+          index={6} total={10} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -707,7 +708,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
         <NumberedSection
-          index={7} total={9} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={7} total={10} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -749,15 +750,23 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         <NumberedSection
-          index={8} total={9} eyebrow="AI · Weekly Review" title="סיכום השבוע"
+          index={8} total={10} eyebrow="AI · Weekly Review" title="סיכום השבוע"
           description="שבעת הימים האחרונים משתי זוויות — מה עשו התוצאות, ומה זז בהתנהגות. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
         >
           <WeeklyTabs hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
+        {/* ══════════ TRACKING ARCHIVE ══════════ */}
+        <NumberedSection
+          index={9} total={10} eyebrow="Tracking" title="מה היה במעקב"
+          description="כל חלון מעקב שנסגר ומה הוא הראה — כולל המקרה שבו היעד השתפר ומשהו אחר נחלש בדרך. המקור הוא תמיד מה שאתה מתעד בעצמך."
+        >
+          <TrackingArchive />
+        </NumberedSection>
+
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
-          index={9} total={9} eyebrow="What-If" title="סימולטור תרחישים"
+          index={10} total={10} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
           {baseScenarios.length === 0 && !hourCapable ? (

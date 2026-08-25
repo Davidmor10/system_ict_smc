@@ -8,6 +8,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
 import DashboardBias from './DashboardBias';
+import TrackingLine from './TrackingLine';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
@@ -603,6 +604,11 @@ export default function DashboardView() {
           outcome. A direction chosen underneath a green P&L is not the same
           call as one chosen above it. */}
       <DashboardBias />
+
+      {/* What is being counted right now. Renders nothing when nothing is —
+          directly under the declaration, because both are the morning's
+          standing commitments and neither is a number about yesterday. */}
+      <TrackingLine />
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">

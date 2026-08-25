@@ -360,9 +360,15 @@ describe('pickPrimary', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('designExperiment', () => {
-  it('names an action, not a virtue', () => {
+  it('names something checkable and a window, not a virtue', () => {
+    // The window used to be written as a digit and is now spelled out, because
+    // the sentence stopped being an instruction ("in the next 10 trades: do X")
+    // and became a measurement ("over the next ten trades we will track Y").
+    // What has to survive that change is the concreteness: a window the trader
+    // can count, and no platitude.
     const e = designExperiment('discretionary_exit', 0.6, null);
-    expect(e.instruction).toMatch(/\d/);
+    expect(e.instruction).toContain('בעשר');
+    expect(e.windowTrades).toBe(EXPERIMENT_WINDOW);
     for (const platitude of ['תהיה ממושמע', 'תסמוך על התוכנית', 'שלוט ברגשות', 'תהיה סבלני']) {
       expect(e.instruction).not.toContain(platitude);
     }
