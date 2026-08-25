@@ -19,8 +19,9 @@ import { analyzeTime } from './time';
 import { analyzeDirection } from './direction';
 import { discoverPatterns } from './patterns';
 import type { FullAnalysis } from './types';
+import type { MacroContext } from './macroHistory';
 
-export function runFullAnalysis(trades: TradeEntry[]): FullAnalysis {
+export function runFullAnalysis(trades: TradeEntry[], macro?: MacroContext): FullAnalysis {
   return {
     performance: analyzePerformance(trades),
     instruments: analyzeInstruments(trades),
@@ -32,7 +33,7 @@ export function runFullAnalysis(trades: TradeEntry[]): FullAnalysis {
     exits: analyzeExits(trades),
     time: analyzeTime(trades),
     direction: analyzeDirection(trades),
-    patterns: discoverPatterns(trades),
+    patterns: discoverPatterns(trades, macro),
   };
 }
 
@@ -51,3 +52,6 @@ export { discoverPatterns } from './patterns';
 export { confidenceFor, confidenceLevelFor } from './confidence';
 export { computeGroupPerformance, normSession } from './metrics';
 export * from './types';
+
+export { loadMacroContext, buildMacroContext, EMPTY_MACRO_CONTEXT } from './macroHistory';
+export type { MacroContext } from './macroHistory';

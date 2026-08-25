@@ -1,5 +1,5 @@
 import type { TradeEntry } from '../journal';
-import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel } from '../analytics';
+import { runFullAnalysis, type PatternCandidate, type ConfidenceLevel, type MacroContext } from '../analytics';
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
 import { generateInsightJson } from './client';
@@ -73,6 +73,8 @@ const MACRO_HE: Record<string, string> = {
   other_day:   'שאר הימים',
   in_window:   'סביב שעת פרסום הדוח',
   out_window:  'הרחק משעת הפרסום',
+  high_impact: 'יום עם אירוע מאקרו חזק',
+  calm_day:    'יום בלי אירוע מאקרו חזק',
 };
 
 /** The name the trader reads above the sentence.
@@ -155,10 +157,15 @@ function describeCandidate(c: PatternCandidate): string {
     Confidence and sample size always come from the computed candidate, never
     from the model's output — the AI is only allowed to describe numbers that
     already exist. */
-export async function generatePatternInsights(trades: TradeEntry[], lang: 'he' | 'en', clerkId?: string | null): Promise<PatternInsight[]> {
+export async function generatePatternInsights(
+  trades: TradeEntry[],
+  lang: 'he' | 'en',
+  clerkId?: string | null,
+  macro?: MacroContext,
+): Promise<PatternInsight[]> {
   if (trades.length < 3) return [];
 
-  const analysis = runFullAnalysis(trades);
+  const analysis = runFullAnalysis(trades, macro);
   const eligible = analysis.patterns.filter(c => c.confidence.sampleSize >= 3);
   const significant = eligible.filter(c => c.significant);
   const emerging = eligible.filter(c => !c.significant);

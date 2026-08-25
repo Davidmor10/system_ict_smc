@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePatternInsights } from '../../../lib/ai/patternInsights';
 import { getRecentTrades } from '../../../lib/intelligence/repository';
+import { loadMacroContext } from '../../../lib/analytics';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../../lib/supabase/server';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
@@ -46,9 +47,17 @@ export async function POST(req: NextRequest) {
     // database never supported. The pattern and its sample size have to come
     // from the same place the journal page's own totals come from.
     if (!isSupabaseConfigured()) return NextResponse.json({ insights: [] });
-    const trades = await getRecentTrades(createServerSupabaseClient(), userId);
+    const supabase = createServerSupabaseClient();
+    const trades = await getRecentTrades(supabase, userId);
 
-    const insights = await generatePatternInsights(trades, lang, userId);
+    // The macro calendar the app has been caching daily since it went live.
+    // Folded in here so the event/quiet comparison runs on the real diary
+    // rather than on a date rule; days the cache never covered are excluded
+    // from that comparison instead of being counted as quiet. Empty context on
+    // any failure, which switches the comparison off rather than guessing.
+    const macro = await loadMacroContext(supabase);
+
+    const insights = await generatePatternInsights(trades, lang, userId, macro);
     return NextResponse.json({ insights });
   } catch (err) {
     console.error('[AI Pattern Insights]', err);

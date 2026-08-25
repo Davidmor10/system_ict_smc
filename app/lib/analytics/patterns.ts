@@ -10,6 +10,7 @@ import type { PatternCandidate } from './types';
 import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { splitByRelease } from './macro';
+import { EMPTY_MACRO_CONTEXT, type MacroContext } from './macroHistory';
 
 const DIRECTIONS: Direction[] = ['LONG', 'SHORT'];
 
@@ -67,7 +68,10 @@ function rawCandidate(
     the trades outside it, corrected for how many slices were tried. Consumers
     rank by `significant` first; a candidate that failed is still tracked, and
     still may not be called an edge. */
-export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
+export function discoverPatterns(
+  trades: TradeEntry[],
+  macro: MacroContext = EMPTY_MACRO_CONTEXT,
+): PatternCandidate[] {
   const overall = computeGroupPerformance(trades, 'ALL', 'All');
   const baseline = overall.winRate;
   const candidates: PatternCandidate[] = [];
@@ -272,6 +276,27 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
     if (split.inWindow.length >= 3 && split.outOfWindow.length >= 3) {
       push('macro', 'macro_in_window',  { macro: 'in_window' },  split.inWindow,  'Around the release');
       push('macro', 'macro_out_window', { macro: 'out_window' }, split.outOfWindow, 'Away from the release');
+    }
+
+    // The real calendar, when the app has cached enough of it.
+    //
+    // Kept as its own pair rather than merged into the first-Friday split,
+    // because the two answer different questions and are known to different
+    // standards: the rule above is arithmetic and covers all of history, this
+    // one is the actual feed and covers only the days the app was running for.
+    // Merging them would produce one group nobody could name.
+    //
+    // Days outside `coveredDays` appear in NEITHER group. That is the point —
+    // an uncached FOMC afternoon filed under "quiet" would put the loudest day
+    // of the month in the control group.
+    if (macro.coveredDays.size > 0) {
+      const seen  = trades.filter(t => macro.coveredDays.has(t.dateISO));
+      const loud  = seen.filter(t => macro.eventDays.has(t.dateISO));
+      const quiet = seen.filter(t => !macro.eventDays.has(t.dateISO));
+      if (loud.length >= 3 && quiet.length >= 3) {
+        push('macro', 'macro_high_impact', { macro: 'high_impact' }, loud,  'High-impact event day');
+        push('macro', 'macro_calm_day',    { macro: 'calm_day' },    quiet, 'No high-impact event');
+      }
     }
   }
 

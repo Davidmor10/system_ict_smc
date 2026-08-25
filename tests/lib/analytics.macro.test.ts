@@ -33,7 +33,7 @@ const trade = (over: Partial<TradeEntry>): TradeEntry => ({
   stop: 95,
   target: 115,
   result: 'WIN',
-  pnl: 100,
+  pnlUsd: 100,
   contracts: 1,
   bias: 'BULLISH',
   model: '',
