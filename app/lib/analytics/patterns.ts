@@ -4,6 +4,7 @@ import { SESS } from '../sessions';
 import { computeGroupPerformance, normSession } from './metrics';
 import { hourOf, weekdayOf } from './time';
 import { analyzeInstruments } from './instruments';
+import { calcRR } from '../calc/trade';
 import { analyzeSessions } from './sessions';
 import type { PatternCandidate } from './types';
 import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
@@ -170,6 +171,56 @@ export function discoverPatterns(trades: TradeEntry[]): PatternCandidate[] {
   for (const s of ['REVERSAL', 'CONTINUATION'] as const) {
     const subset = trades.filter(t => t.setup === s);
     push('setup', `setup_${s}`, { setup: s }, subset, `Setup: ${s}`);
+  }
+
+  // planned reward-to-risk, in buckets.
+  //
+  // The one comparison a journal exists to make, and the only one the engine
+  // was not making: everything else measures a slice against the trader's
+  // baseline, never against what the trader themselves planned. "Your win rate
+  // on two-R plans is 61% and on four-R plans it is 22%" answers a question no
+  // other dimension can — am I planning targets I can actually reach.
+  //
+  // Bucketed rather than continuous on purpose. A slice per exact ratio is a
+  // slice of one, and the honest resolution here is coarse.
+  {
+    const RR_BUCKETS: Array<{ key: string; label: string; lo: number; hi: number }> = [
+      { key: 'rr_lt15', label: 'Planned R:R under 1.5', lo: 0,   hi: 1.5 },
+      { key: 'rr_15_25', label: 'Planned R:R 1.5–2.5',  lo: 1.5, hi: 2.5 },
+      { key: 'rr_25_4', label: 'Planned R:R 2.5–4',     lo: 2.5, hi: 4 },
+      { key: 'rr_gt4', label: 'Planned R:R above 4',    lo: 4,   hi: Infinity },
+    ];
+    for (const b of RR_BUCKETS) {
+      const subset = trades.filter(t => {
+        const rr = calcRR(t.entry, t.stop, t.target);
+        return rr !== null && rr >= b.lo && rr < b.hi;
+      });
+      push('planned_rr', b.key, { plannedRR: b.key }, subset, b.label);
+    }
+  }
+
+  // logged the same day, or later.
+  //
+  // The journal's id is the millisecond the trade was written down, and
+  // `dateISO` is the day it happened — so the gap between them is a habit the
+  // trader has never been shown. Late logging is not a mistake in itself; it
+  // is worth measuring because it travels with the days someone would rather
+  // not look at, and that is a claim the numbers can settle rather than assert.
+  {
+    const lagOf = (t: TradeEntry): number | null => {
+      // Ids predate this convention in imported histories; a value that is not
+      // a plausible millisecond timestamp is silence, not zero.
+      if (!Number.isFinite(t.id) || t.id < 946684800000) return null;
+      const logged = new Date(t.id);
+      const day = `${logged.getFullYear()}-${String(logged.getMonth() + 1).padStart(2, '0')}-${String(logged.getDate()).padStart(2, '0')}`;
+      return day === t.dateISO ? 0 : 1;
+    };
+    const sameDay = trades.filter(t => lagOf(t) === 0);
+    const later   = trades.filter(t => lagOf(t) === 1);
+    if (sameDay.length >= 3 && later.length >= 3) {
+      push('logging', 'log_same_day', { logging: 'same_day' }, sameDay, 'Logged same day');
+      push('logging', 'log_later',    { logging: 'later' },    later,   'Logged later');
+    }
   }
 
   // documented vs not — the trades the trader bothered to screenshot.

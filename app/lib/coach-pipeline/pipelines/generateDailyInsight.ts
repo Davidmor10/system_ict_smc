@@ -23,6 +23,7 @@ import { listTradesForDate, listRecentTrades, listLateLoggedTrades } from '../db
 import { getInsightForDate, insertInsight, listRecentInsights } from '../db/insights';
 import { loadDayPlan, loadRuleBreaches } from '../db/collections';
 import { rankRuleBreaches, type RuleBreach } from '../analyzers/rulesBroken';
+import { computeLoggingHabit, computePlanExecution } from '../analyzers/planExecution';
 import { logUsage, sumUserMonthlyCost, sumSystemCostSince } from '../db/usage';
 import { flags } from '../db/flags';
 import { callClaudeInsight, CLAUDE_MODEL } from '../providers/anthropic';
@@ -181,6 +182,21 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     }
   }
 
+  // The plan against the execution, and how promptly the journal gets filled.
+  // Both read the recent window rather than the reported day: a capture rate
+  // built on one session is a number that will be quoted and should not exist.
+  let planExecution: ReturnType<typeof computePlanExecution> = null;
+  let loggingHabit: ReturnType<typeof computeLoggingHabit> = null;
+  try {
+    const window = await listRecentTrades(cid, 60);
+    planExecution = computePlanExecution(window);
+    loggingHabit = computeLoggingHabit(window);
+  } catch (err) {
+    logger.warn('plan/logging window failed — continuing without it', {
+      clerkId: cid, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // The trader's own rules, by name, and the plan they wrote that morning.
   // Both live in user_collections, which nothing on the server had ever read —
   // the ticks and the sentence were being stored and never opened. Neither can
@@ -228,6 +244,8 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     signals,
     pastWritingBlock: retrieval.block,
     lateLogged,
+    planExecution,
+    logging: loggingHabit,
     rulesBroken,
     dayPlan: dayPlan ? { bias: dayPlan.bias, note: dayPlan.note } : null,
     statisticalFallback,
@@ -407,6 +425,8 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     // otherwise indistinguishable from one that invented it.
     late_logged_ids:      lateLogged.map(t => t.id),
     rules_broken:         rulesBroken,
+    plan_execution:       planExecution,
+    logging_habit:        loggingHabit,
     day_plan_present:     !!(dayPlan?.bias || dayPlan?.note),
     retrieval_query_text: retrieval.queryText,
     retrieval_skipped:    retrieval.skipped,

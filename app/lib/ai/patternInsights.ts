@@ -53,6 +53,13 @@ const EMOTION_HE: Record<string, string> = {
 const WEEKDAY_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const BIAS_ALIGN_HE: Record<string, string> = { ALIGNED: 'עם הכיוון שהצהרת', COUNTER: 'נגד הכיוון שהצהרת' };
 const SETUP_HE: Record<string, string> = { REVERSAL: 'היפוך', CONTINUATION: 'המשכיות' };
+const RR_HE: Record<string, string> = {
+  rr_lt15:  'תוכנית מתחת ל-1.5R',
+  rr_15_25: 'תוכנית 1.5R–2.5R',
+  rr_25_4:  'תוכנית 2.5R–4R',
+  rr_gt4:   'תוכנית מעל 4R',
+};
+const LOGGING_HE: Record<string, string> = { same_day: 'תועד באותו יום', later: 'תועד באיחור' };
 
 /** The name the trader reads above the sentence.
  *
@@ -77,6 +84,8 @@ function subjectLabel(c: PatternCandidate): string {
   if (s.setup) parts.push(SETUP_HE[String(s.setup)] ?? String(s.setup));
   if (s.weekday !== undefined) parts.push(`יום ${WEEKDAY_HE[Number(s.weekday)] ?? String(s.weekday)}`);
   if (s.documented) parts.push(s.documented === 'yes' ? 'עם צילום מסך' : 'בלי צילום מסך');
+  if (s.plannedRR) parts.push(RR_HE[String(s.plannedRR)] ?? String(s.plannedRR));
+  if (s.logging) parts.push(LOGGING_HE[String(s.logging)] ?? String(s.logging));
   // Nothing matched: better a truthful placeholder than a blank heading over a
   // real sentence.
   return parts.length > 0 ? parts.join(' · ') : 'חתך כללי';

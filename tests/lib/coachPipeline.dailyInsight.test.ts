@@ -578,3 +578,48 @@ describe('SYSTEM_PROMPT — which day the note is about', () => {
     expect(DAILY_INSIGHT_PROMPT_VERSION).toBeGreaterThanOrEqual(9);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The plan, beside the outcome
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('buildUserMessage — plan vs execution and the logging habit', () => {
+  const base = {
+    profile: profile(),
+    todayTrades: [] as TradeRow[],
+    signals: computeTodaySignals([]),
+    pastWritingBlock: '[]',
+  };
+
+  it('sends the planned ratio beside the realised one, per trade', () => {
+    const t = T({ rr_planned: 3, r_multiple: 1.2 });
+    const msg = buildUserMessage({ ...base, todayTrades: [t], signals: computeTodaySignals([t]) });
+    expect(msg).toMatch(/"rrPlan":\s*3/);
+    expect(msg).toMatch(/"r":\s*1\.2/);
+  });
+
+  it('carries the aggregate, and omits it when there is nothing to carry', () => {
+    const withIt = buildUserMessage({
+      ...base,
+      planExecution: { n: 12, avgPlanned: 3, avgRealised: 1.8, capturePct: 60, shortOfTarget: 5 },
+    });
+    expect(withIt).toContain('<plan_vs_execution>');
+    expect(withIt).toContain('"capturePct":60');
+
+    expect(buildUserMessage({ ...base, planExecution: null })).not.toContain('<plan_vs_execution>');
+  });
+
+  it('carries the logging habit, and omits it when there is nothing to carry', () => {
+    const withIt = buildUserMessage({ ...base, logging: { n: 20, sameDayPct: 45, maxLagDays: 6 } });
+    expect(withIt).toContain('<logging>');
+    expect(buildUserMessage({ ...base, logging: null })).not.toContain('<logging>');
+  });
+
+  it('forbids reading a low capture rate as a failure', () => {
+    // 0.8R out of a 3R plan is either good management or a flinch, and this
+    // block cannot tell which. A prompt that lets the model decide will pick
+    // the scolding reading every time.
+    expect(SYSTEM_PROMPT).toContain('is not a failure and must never be');
+    expect(SYSTEM_PROMPT).toContain('A habit, never a fault');
+  });
+});

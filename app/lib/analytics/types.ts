@@ -111,7 +111,11 @@ export type PatternKind =
   | 'weekday'
   /** Trades the trader stopped to screenshot, against the ones they did not.
    *  A proxy for care, not a claim about screenshots. */
-  | 'documentation';
+  | 'documentation'
+  /** Bucketed planned reward-to-risk — am I planning targets I can reach. */
+  | 'planned_rr'
+  /** Written down the same day, or later. */
+  | 'logging';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,

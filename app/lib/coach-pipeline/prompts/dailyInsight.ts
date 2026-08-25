@@ -22,29 +22,12 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *  daily_insights.prompt_version so a later regression can be traced to a
  *  specific prompt revision.
  *
- *  v2 — statistical fallback (profile-less users now get real numbers) and
- *       angle-bracket escaping in every interpolated block.
- *  v3 — field glossary + no-calendar rule. The first live insight claimed
- *       "the fourth day in a row without trading" (invented — the model gets
- *       one day, never a sequence) and read n=6 as six trading days rather
- *       than six trades. Both were the prompt's fault: it handed over a JSON
- *       blob of bare abbreviations and told the model not to invent numbers,
- *       without ever saying what the numbers meant.
- *  v4 — the v3 glossary fixed the misreadings and created a new problem: the
- *       model started citing the field names it had just been taught, so the
- *       first Claude insight told the trader about their "streak_now" and
- *       "pf", and openly wondered whether a streak of 4 meant wins or losses
- *       — a detail the glossary answers. Teaching the vocabulary without
- *       forbidding its use in the output was half a fix.
- *  v5 — the behaviour block, and the rules that make it binding. Everything
- *       before this version asked the model to find the pattern itself, from a
- *       profile and a day of trades. It cannot: it sees one day, has no
- *       denominator, no significance test and no memory, so anything it called
- *       a pattern was a guess phrased confidently. The analysis now happens
- *       upstream, deterministically, and arrives as statements that are
- *       already true and already carry the strength of their evidence. The
- *       model's remaining job is prose — and the tier rules below are what
- *       stop it from promoting a correlation into a cause on the way.
+ *  v10 — the plan, against the execution. rr_planned sat in every mirrored row
+ *        and no analysis had ever read it, so every claim in this pipeline was
+ *        measured against the trader's own baseline and none against what the
+ *        trader themselves planned. Also the logging habit — carried as an
+ *        observation with an explicit ban on treating it as a fault.
+ *
  *
  *  v9 — the note stops calling yesterday "today". It is written overnight and
  *       read the next morning, so "the only trade today was a reversal on MNQ"
@@ -53,12 +36,14 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       time; only the word for the day was wrong, and the date in the card's
  *       corner never won against the prose.
  *
+ *
  *  v8 — the trader's own words and their own rules. Three inputs that had been
  *       collected for weeks and read by nothing: WHICH rule they ticked as
  *       broken (the behaviour block counts that one was, never which), the
  *       sentence they wrote on each trade and on its stop, and the direction
  *       plus reason they declared that morning. The coach had been reasoning
  *       about a trader's numbers while their reasoning sat one table away.
+ *
  *
  *  v7 — what is going right. Every detector in the behaviour layer answers
  *       "how often does this go wrong", so every note was written from the
@@ -70,14 +55,43 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *       and that is the most useful true thing to tell them that morning.
  *       Deliberately non-monetary; see rule 23 for why.
  *
+ *
  *  v6 — the trader's own description of themselves, from settings. The field
  *       had existed for months, described in the UI as something the coach
  *       reads, and nothing read it: every insight met the trader as a stranger
  *       and inferred their horizon from a day of trades. It arrives as
  *       background with an explicit rule that it can never outrank the data,
  *       because it is the one input here the trader can simply be wrong about.
+ *
+ *  v5 — the behaviour block, and the rules that make it binding. Everything
+ *       before this version asked the model to find the pattern itself, from a
+ *       profile and a day of trades. It cannot: it sees one day, has no
+ *       denominator, no significance test and no memory, so anything it called
+ *       a pattern was a guess phrased confidently. The analysis now happens
+ *       upstream, deterministically, and arrives as statements that are
+ *       already true and already carry the strength of their evidence. The
+ *       model's remaining job is prose — and the tier rules below are what
+ *       stop it from promoting a correlation into a cause on the way.
+ *
+ *
+ *  v4 — the v3 glossary fixed the misreadings and created a new problem: the
+ *       model started citing the field names it had just been taught, so the
+ *       first Claude insight told the trader about their "streak_now" and
+ *       "pf", and openly wondered whether a streak of 4 meant wins or losses
+ *       — a detail the glossary answers. Teaching the vocabulary without
+ *       forbidding its use in the output was half a fix.
+ *
+ *  v3 — field glossary + no-calendar rule. The first live insight claimed
+ *       "the fourth day in a row without trading" (invented — the model gets
+ *       one day, never a sequence) and read n=6 as six trading days rather
+ *       than six trades. Both were the prompt's fault: it handed over a JSON
+ *       blob of bare abbreviations and told the model not to invent numbers,
+ *       without ever saying what the numbers meant.
+ *
+ *  v2 — statistical fallback (profile-less users now get real numbers) and
+ *       angle-bracket escaping in every interpolated block.
  */
-export const DAILY_INSIGHT_PROMPT_VERSION = 9;
+export const DAILY_INSIGHT_PROMPT_VERSION = 10;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -286,6 +300,39 @@ writing a single word.
   (what is currently going right — see rules 21-23). Any of them may be empty.
 </behavior>
 
+<plan_vs_execution>
+  Across the recent window: avgPlanned (the reward-to-risk the trades were
+  TAKEN for), avgRealised (what they returned), capturePct (realised as a share
+  of planned) and shortOfTarget (winners that closed before the level they were
+  taken for).
+
+  This is the comparison the whole journal exists for, and the only one here
+  that is against the trader's OWN plan rather than their baseline. Say it
+  plainly when it is worth saying: "you are taking about six tenths of what you
+  plan" lands where a win rate does not.
+
+  What it is NOT: capturePct below 100 is not a failure and must never be
+  written as one. Taking 0.8R out of a 3R plan can be excellent trade
+  management or a flinch, and this block cannot tell you which — the exit
+  behaviour in <behavior> is what speaks to that. A capture rate above 100 is
+  equally normal and means winners ran past target. Report the number, connect
+  it to a behaviour only if <behavior> already carries one, and never scold.
+
+  OMITTED when too few trades carry both a plan and an outcome.
+</plan_vs_execution>
+
+<logging>
+  sameDayPct — the share of trades written down on the day they happened — and
+  maxLagDays, the longest gap.
+
+  A habit, never a fault. Late logging is not a mistake and must not be
+  phrased as one; it is here because it tends to travel with the days a trader
+  would rather not revisit, and if their own numbers show that, the numbers can
+  say it. Raise it at most as an observation, and only when the share is low
+  enough to be real. Never open a note with it. OMITTED when there is too
+  little to measure.
+</logging>
+
 <rules_broken>
   The trader's OWN rules, in their own wording, with how many times they ticked
   each one as broken in the last 60 days and when they last did.
@@ -391,6 +438,10 @@ export interface DailyInsightInputs {
   /** Trades logged since the last note, for days other than the reported one.
    *  Empty is the normal case and omits the block entirely. */
   lateLogged?:      readonly TradeRow[];
+  /** How much of the plan gets taken, across the recent window. */
+  planExecution?:   { n: number; avgPlanned: number; avgRealised: number; capturePct: number; shortOfTarget: number } | null;
+  /** How promptly the journal gets filled. */
+  logging?:         { n: number; sameDayPct: number; maxLagDays: number } | null;
   /** Which of the trader's own rules they ticked as broken, by name. */
   rulesBroken?:     ReadonlyArray<{ rule: string; count: number; lastDate: string }>;
   /** The direction they declared that morning, and the reason they gave. */
@@ -426,6 +477,7 @@ interface CompactTrade {
   sym:     string;
   dir:     string;
   r:       number | null;
+  rrPlan:  number | null;
   result:  string;
   session: string | null;
   setup:   string | null;
@@ -448,6 +500,10 @@ function compact(t: TradeRow): CompactTrade {
     sym:     t.symbol,
     dir:     t.direction,
     r:       t.r_multiple,
+    // The reward-to-risk the trade was TAKEN for, beside what it returned.
+    // Without the pair the note can only report the outcome, and a journal
+    // exists for the gap between the two.
+    rrPlan:  t.rr_planned,
     result:  t.result,
     session: t.session,
     setup:   t.setup,
@@ -507,6 +563,12 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
     safeJson(inputs.signals),
     '</today_signals>',
     '',
+    ...(inputs.planExecution
+      ? ['', '<plan_vs_execution>', safeJson(inputs.planExecution), '</plan_vs_execution>']
+      : []),
+    ...(inputs.logging
+      ? ['', '<logging>', safeJson(inputs.logging), '</logging>']
+      : []),
     ...(inputs.rulesBroken?.length
       ? ['', '<rules_broken>', safeJson(inputs.rulesBroken), '</rules_broken>']
       : []),
