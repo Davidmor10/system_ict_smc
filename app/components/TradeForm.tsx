@@ -8,6 +8,10 @@ import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { commitList, hydrateList } from '../lib/sync/collections';
+import {
+  DEFAULT_CONFIRMATIONS, labelForConfirmation, chipList, addTag, removeTag,
+  loadConfirmations, saveConfirmations, type CustomConfirmation,
+} from '../lib/confirmationTags';
 import { ruleTitle, type Rule } from '../lib/rules/types';
 import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } from '../lib/sessions';
 import { clockInZone } from '../lib/time/zone';
@@ -24,35 +28,6 @@ const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שו
 const RESULT_HE: Record<TradeResult, string> = { OPEN: 'פתוחה', WIN: 'פרופיט', LOSS: 'הפסד', BE: 'ברייק איוון' };
 const BIAS_HE: Record<string, string> = { BULLISH: 'עולה', BEARISH: 'יורד', INDECISIVE: 'ניטרלי' };
 
-// The four the app ships with. Traders add their own on top of these (persisted
-// per-device in localStorage) — the field is stored as free `string[]`, so a
-// custom tag like "Silver Bullet" is a first-class confirmation just like these.
-const DEFAULT_CONFIRMATIONS = ['SMT', 'IFVG', 'CISD', 'ORDER_BLOCK'] as const;
-const CONFIRMATION_LABELS: Record<string, string> = { ORDER_BLOCK: 'Order Block' };
-const labelForConfirmation = (tag: string) => CONFIRMATION_LABELS[tag] ?? tag;
-
-const CONFIRMATIONS_STORAGE_KEY = 'onyx_confirmations';
-
-function loadCustomConfirmations(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(CONFIRMATIONS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string' && s.length > 0) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomConfirmations(list: string[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(CONFIRMATIONS_STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore quota/serialization errors — custom tags are a convenience, not critical state */
-  }
-}
 
 const EMOTIONAL_STATE_OPTIONS: { key: EmotionalState; label: string }[] = [
   { key: 'CALM', label: 'רגוע' },
@@ -447,7 +422,7 @@ export default function TradeForm({
     () => (initial ? fromTrade(initial) : { ...empty(), model: presetModel ?? '' }),
   );
   const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
-  const [customConfirmations, setCustomConfirmations] = useState<string[]>([]);
+  const [customConfirmations, setCustomConfirmations] = useState<CustomConfirmation[]>([]);
   const [newConfirmation, setNewConfirmation] = useState('');
   const [stopMoveDraft, setStopMoveDraft] = useState('');
   /** The trader's own active rules — the list shown when they say they broke one. */
@@ -460,7 +435,10 @@ export default function TradeForm({
 
   useEffect(() => {
     setPlaybookSetups(loadPlaybookSetups());
-    setCustomConfirmations(loadCustomConfirmations());
+    // The catalogue is a cloud collection now, so this is a round-trip rather
+    // than a localStorage read. It resolves after the first paint; the chips
+    // are additive, so a tag appearing a beat late is invisible in practice.
+    void loadConfirmations().then(setCustomConfirmations).catch(() => {});
     hydrateList<Rule>('rules', 'onyx_trading_rules')
       .then(rs => setActiveRules(rs.filter(r => r.isActive && !r.deleted)))
       .catch(() => { /* no rules yet, or offline — the question just has no list */ });
@@ -468,10 +446,7 @@ export default function TradeForm({
 
   // Defaults first, then whatever the trader has added — de-duplicated so a
   // custom tag can never shadow a built-in one.
-  const availableConfirmations = [
-    ...DEFAULT_CONFIRMATIONS,
-    ...customConfirmations.filter(c => !DEFAULT_CONFIRMATIONS.includes(c as typeof DEFAULT_CONFIRMATIONS[number])),
-  ];
+  const availableConfirmations = chipList(customConfirmations);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -599,15 +574,27 @@ export default function TradeForm({
       setForm(prev => ({ ...prev, confirmations: prev.confirmations.includes(existing) ? prev.confirmations : [...prev.confirmations, existing] }));
       return;
     }
-    const updated = [...customConfirmations, tag];
+    const updated = addTag(customConfirmations, tag);
+    // addTag returns null when the tag is already in the catalogue. The
+    // case-insensitive check above normally catches that first; this covers the
+    // race where another device added the same tag between hydrate and now.
+    if (!updated) {
+      setForm(prev => ({ ...prev, confirmations: prev.confirmations.includes(tag) ? prev.confirmations : [...prev.confirmations, tag] }));
+      return;
+    }
     setCustomConfirmations(updated);
-    saveCustomConfirmations(updated);
+    void saveConfirmations(updated);
     setForm(prev => ({ ...prev, confirmations: [...prev.confirmations, tag] }));
   }
   function removeCustomConfirmation(tag: string) {
-    const updated = customConfirmations.filter(c => c !== tag);
+    const updated = removeTag(customConfirmations, tag);
     setCustomConfirmations(updated);
-    saveCustomConfirmations(updated);
+    // Tombstoned rather than dropped, so the delete reaches the other device
+    // instead of the tag reappearing on the next merge.
+    void saveConfirmations(updated);
+    // Deselecting it here only affects the trade being written. Tags already
+    // recorded on past trades are untouched — the catalogue is the vocabulary,
+    // not the history, and removing a word does not unsay it.
     setForm(prev => ({ ...prev, confirmations: prev.confirmations.filter(c => c !== tag) }));
   }
   function selectModel(name: string) {

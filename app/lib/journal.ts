@@ -31,7 +31,6 @@ export type Direction = 'LONG' | 'SHORT';
 export type Setup = 'REVERSAL' | 'CONTINUATION';
 /** @deprecated superseded by ConfirmationTag/`confirmations[]` — kept only so old
     records (which always had this defaulted to a fixed placeholder) keep loading. */
-export type IFVGConfirmation = 'IFVG_1M' | 'IFVG_2M' | 'IFVG_3M' | 'IFVG_5M';
 export type BiasAlignment = 'ALIGNED' | 'COUNTER';
 
 /** Built-in entry-confirmation tags. The trader isn't limited to these — the
@@ -77,8 +76,6 @@ export interface TradeEntry {
   accountId?: string;
   /** Setup type: reversal (liquidity sweep + flip) or continuation (gap entry). */
   setup?: Setup;
-  /** IFVG timeframe used for confirmation (1M / 2M / 3M / 5M). */
-  confirmation?: IFVGConfirmation;
   /** Whether direction aligns with the day's bias. Auto-computed on submit. */
   biasAlignment?: BiasAlignment;
   /** Realized R multiple: WIN=planned R, LOSS=−1, BE=0, OPEN=0. */
@@ -324,9 +321,6 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   // Backward-compat: compute derived fields if missing.
   const setupVal: Setup = (r.setup === 'REVERSAL' || r.setup === 'CONTINUATION')
     ? r.setup : 'REVERSAL';
-  const confirmVal: IFVGConfirmation =
-    (['IFVG_1M','IFVG_2M','IFVG_3M','IFVG_5M'] as IFVGConfirmation[]).includes(r.confirmation as IFVGConfirmation)
-    ? r.confirmation as IFVGConfirmation : 'IFVG_2M';
 
   // One implementation, shared with the form. These had drifted into
   // opposites: this one called a trade with no declared bias COUNTER, while
@@ -396,7 +390,6 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
     notes: typeof r.notes === 'string' ? r.notes : '',
     accountId: typeof r.accountId === 'string' ? r.accountId : undefined,
     setup: setupVal,
-    confirmation: confirmVal,
     biasAlignment: typeof r.biasAlignment === 'string' ? r.biasAlignment as BiasAlignment : (alignment ?? undefined),
     tradeR,
     pnlUsd,

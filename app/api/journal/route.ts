@@ -19,7 +19,7 @@ async function parseJsonBody(req: Request): Promise<unknown | null> {
 }
 import type {
   TradeEntry, Symbol, Direction, TradeResult, Bias,
-  Setup, IFVGConfirmation, BiasAlignment, TradeExit, EmotionalState,
+  Setup, BiasAlignment, TradeExit, EmotionalState,
 } from '../../lib/journal';
 
 export type TradeRow = {
@@ -40,7 +40,6 @@ export type TradeRow = {
   notes: string;
   account_id: string | null;
   setup: string | null;
-  confirmation: string | null;
   bias_alignment: string | null;
   trade_r: number | null;
   pnl_usd: number | null;
@@ -80,7 +79,6 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     notes: row.notes,
     accountId: row.account_id ?? undefined,
     setup: (row.setup as Setup) ?? undefined,
-    confirmation: (row.confirmation as IFVGConfirmation) ?? undefined,
     biasAlignment: (row.bias_alignment as BiasAlignment) ?? undefined,
     tradeR: row.trade_r ?? undefined,
     pnlUsd: row.pnl_usd ?? undefined,
@@ -122,7 +120,6 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     notes: trade.notes,
     account_id: trade.accountId ?? null,
     setup: trade.setup ?? null,
-    confirmation: trade.confirmation ?? null,
     bias_alignment: trade.biasAlignment ?? null,
     trade_r: trade.tradeR ?? null,
     pnl_usd: trade.pnlUsd ?? null,

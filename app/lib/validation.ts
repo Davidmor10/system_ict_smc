@@ -42,7 +42,6 @@ export const tradeEntrySchema = z.object({
   notes: z.string().max(MAX_TEXT),
   accountId: z.string().max(200).optional(),
   setup: z.enum(['REVERSAL', 'CONTINUATION']).optional(),
-  confirmation: z.enum(['IFVG_1M', 'IFVG_2M', 'IFVG_3M', 'IFVG_5M']).optional(),
   biasAlignment: z.enum(['ALIGNED', 'COUNTER']).optional(),
   tradeR: z.number().finite().optional(),
   pnlUsd: z.number().finite().optional(),
