@@ -35,6 +35,19 @@ const csp = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  // The commit the client bundle was built from, exposed to the browser.
+  //
+  // The AI panels cache their phrased results in localStorage, keyed by the
+  // day and by a fingerprint of the trades. Neither changes when the CODE
+  // changes — so a deploy that fixes the wording left the old wording sitting
+  // in the browser of anyone who had already opened the page that day, and the
+  // page never asked the server again. Folding the build into the key means a
+  // deploy retires its own stale text instead of waiting for midnight.
+  env: {
+    NEXT_PUBLIC_BUILD_ID:
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev',
+  },
+
   // /fractal-engine described a market-reading engine that produced a scored
   // daily bias. No such thing exists in the product — the bias is a direction
   // the trader declares — so the page is gone. Anything still linking to it

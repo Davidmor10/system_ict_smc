@@ -207,8 +207,8 @@ function ExitTile({ label, value, sub, color }: { label: string; value: string; 
  *  gives the orientation-only bands somewhere honest to live — `muted` renders
  *  them a rank down, so "here is where your trades sit" never again looks like
  *  "here is what works". */
-function QuestionBand({ n, question, body, muted }: {
-  n: string; question: string; body: string; muted?: boolean;
+function QuestionBand({ n, question, body, answer, muted }: {
+  n: string; question: string; body: string; answer?: string; muted?: boolean;
 }) {
   const accent = muted ? '#52525b' : '#d4af37';
   return (
@@ -227,7 +227,20 @@ function QuestionBand({ n, question, body, muted }: {
         >
           {question}
         </h2>
-        <p className="mt-3 text-sm text-white/45 leading-relaxed" style={{ maxWidth: '62ch' }}>{body}</p>
+        {/* The answer, directly under the question.
+            Without it the band asked something in 40px type and then handed
+            the reader a paragraph about METHOD, while the actual answer sat in
+            a differently-styled section below. It read as unanswered — which
+            is exactly what it was, at the point where the eye lands. */}
+        {answer && (
+          <p
+            className="mt-4 font-serif leading-snug"
+            style={{ fontSize: 'clamp(17px,1.7vw,21px)', color: 'rgba(255,255,255,0.88)', maxWidth: '62ch' }}
+          >
+            {answer}
+          </p>
+        )}
+        <p className={`text-sm text-white/45 leading-relaxed ${answer ? 'mt-3' : 'mt-3'}`} style={{ maxWidth: '62ch' }}>{body}</p>
       </Reveal>
     </section>
   );
@@ -305,6 +318,56 @@ export default function AiAnalyticsPage() {
     }
     return `${head} אחוז הצלחה ${Math.round(wr)}%, ויחס של פי ${Number.isFinite(payoff) ? payoff.toFixed(1) : '∞'} בין המנצח הממוצע למפסיד הממוצע. אין כאן צד אחד שבולט כחלש — שני החלקים תורמים לתוצאה במידה דומה.`;
   }, [exp]);
+
+  /** The one-line answer each band opens with.
+   *
+   *  Computed, never phrased by a model, and allowed to say "not yet" — a
+   *  band whose question cannot be answered has to say so in the same place it
+   *  would have put an answer, or the reader is left deciding whether the
+   *  feature is empty or broken. */
+  const bandAnswers = useMemo(() => {
+    const closed = exp.trades;
+
+    // A — profitable, and why.
+    let a: string;
+    if (closed === 0) {
+      a = 'עדיין אין עסקאות סגורות, אז אין תוחלת לחשב.';
+    } else {
+      const per = exp.expectancyUsd;
+      const dir = per > 0 ? 'כן' : per < 0 ? 'לא' : 'בדיוק באיזון';
+      a = `${dir} — כל עסקה שווה לך בממוצע ${per >= 0 ? '' : 'מינוס '}$${Math.abs(per).toFixed(0)}, על פני ${closed} עסקאות מוכרעות.`;
+    }
+
+    // B — doing what you said.
+    let b: string;
+    if (pve.measured === 0) {
+      b = `אי אפשר לענות עדיין: אף עסקה לא נושאת גם תוכנית וגם מחיר יציאה${pve.assumed > 0 ? `, ול-${pve.assumed} מהן יש תוצאה בלי מחיר יציאה` : ''}.`;
+    } else {
+      const cap = pve.captureRate === null ? null : Math.round(pve.captureRate * 100);
+      b = cap === null
+        ? `נמדדו ${pve.measured} עסקאות, אבל עדיין אין מספיק מנצחים כדי לחשב כמה מהיעד אתה לוקח.`
+        : cap >= 90
+          ? `כן — אתה לוקח ${cap}% מהיעד שתכננת, על ${pve.measured} עסקאות שנמדדו.`
+          : `לא לגמרי — אתה לוקח ${cap}% מהיעד שתכננת, כלומר סוגר מנצחים לפני התוכנית. נמדד על ${pve.measured} עסקאות.`;
+    }
+
+    // C — is any of it real.
+    const sig = analysis.patterns.filter(p => p.significant);
+    const tested = analysis.patterns.length;
+    let c: string;
+    if (tested === 0) {
+      c = 'עדיין אין מספיק עסקאות כדי לחתוך את ההיסטוריה ולבדוק משהו.';
+    } else if (sig.length === 0) {
+      c = `עדיין לא. נבדקו ${tested} חתכים ואף אחד לא שרד את התיקון על מספר הבדיקות — כלומר שום דבר כאן עדיין לא נבדל ממקריות.`;
+    } else {
+      // Deliberately not naming them here. The Hebrew labeller lives in the
+      // AI module, which drags the provider client into a page bundle that has
+      // no business holding it — and the section below names them anyway.
+      c = `כן — ${sig.length} מתוך ${tested} חתכים שרדו את התיקון על מספר הבדיקות. הם מפורטים למטה.`;
+    }
+
+    return { a, b, c };
+  }, [exp, pve, analysis]);
   const activeSession = getActiveSessionKey();
 
   // ── Pattern insights (AI-phrased, cached per day) ──
@@ -316,7 +379,13 @@ export default function AiAnalyticsPage() {
     // v3: keyed by the trades it describes as well as the day. Under a
     // date-only key, deleting or editing a trade left the morning's rows on
     // screen describing a journal that no longer exists.
-    const cachePrefix = 'onyx_ai_patterns_v3_';
+    // v4: the build id is part of the key. Under v3 the key moved only when
+    // the day or the trades changed, so a deploy that changed the WORDING left
+    // the previous wording cached in the browser of anyone who had already
+    // opened the page that day — and the page, finding a cache hit, never
+    // asked the server what it now said. That is how an English phrasing
+    // survived the deploy that removed it.
+    const cachePrefix = `onyx_ai_patterns_v4_${process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev'}_`;
     const cacheKey = cachePrefix + todayISO();
     const cached = readInsightCache<PatternInsight[]>(cacheKey, fingerprint);
     if (cached && Array.isArray(cached.value)) { setPatternInsights(cached.value); return; }
@@ -565,7 +634,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="A" question="האם אני רווחי — ולמה?"
+          n="A" question="האם אני רווחי — ולמה?" answer={bandAnswers.a}
           body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה לנבוע מאחוז הצלחה גבוה עם מנצחים קטנים, או מאחוז נמוך עם מנצחים גדולים — ואלה שתי בעיות הפוכות."
         />
 
@@ -616,7 +685,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="B" question="האם אני עושה מה שאמרתי שאעשה?"
+          n="B" question="האם אני עושה מה שאמרתי שאעשה?" answer={bandAnswers.b}
           body="החלק שנמצא במאה אחוז בשליטתך ולא דורש שום דעה על השוק. מכאן מגיע רוב השיפור של סוחר — לא ממציאת יתרון חדש."
         />
 
@@ -726,7 +795,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?"
+          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c}
           body="רק ממצאים שעברו תיקון סטטיסטי על מספר החתכים שנבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת בניית אמונה על רעש."
         />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}

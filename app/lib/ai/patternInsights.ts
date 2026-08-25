@@ -146,10 +146,42 @@ function evidenceLine(c: PatternCandidate, he: boolean): string {
   return `${parts.join(' · ')}.`;
 }
 
-function describeCandidate(c: PatternCandidate): string {
+/** The candidate, written for the model.
+ *
+ *  The labels follow the ANSWER's language, and that is not cosmetic. This
+ *  block used to be English always — "winRate 50%, PnL $520, avgRR 0.23,
+ *  PF 1.87" — and the model, asked to write a Hebrew sentence citing those
+ *  numbers, copied the labels with them. The result on screen was a Hebrew
+ *  sentence with four English tokens wedged into it, which no guard caught:
+ *  isMostlyLatin only fires when Latin OUTWEIGHS Hebrew, and four tokens in a
+ *  Hebrew sentence never do.
+ *
+ *  Fixing it at the prompt is the only fix that holds. Filtering the output
+ *  would mean deleting a card whose numbers were correct, and rewriting the
+ *  model's sentence after the fact means guessing what it meant. */
+function describeCandidate(c: PatternCandidate, he: boolean): string {
   const g = c.metric;
-  return `${subjectLabel(c)}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}% (overall ${c.baseline.toFixed(0)}%), ` +
-    `PnL $${g.totalPnl.toFixed(0)}, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, confidence ${c.confidence.level} (n=${c.confidence.sampleSize})`;
+  const conf = he ? (CONFIDENCE_HE[c.confidence.level] ?? c.confidence.level) : c.confidence.level;
+  if (!he) {
+    return `${subjectLabel(c)}: ${g.trades} trades, winRate ${g.winRate.toFixed(0)}% (overall ${c.baseline.toFixed(0)}%), ` +
+      `PnL $${g.totalPnl.toFixed(0)}, avgRR ${g.avgRR.toFixed(2)}, PF ${fmtPF(g.profitFactor)}, confidence ${conf} (n=${c.confidence.sampleSize})`;
+  }
+  return `${subjectLabel(c)}: ${g.trades} עסקאות, ${g.winRate.toFixed(0)}% הצלחה (מול ${c.baseline.toFixed(0)}% בממוצע הכללי), ` +
+    `רווח כולל ${g.totalPnl >= 0 ? '' : '-'}$${Math.abs(g.totalPnl).toFixed(0)}, יחס סיכון־סיכוי ממוצע ${g.avgRR.toFixed(2)}, ` +
+    `פרופיט פקטור ${fmtPF(g.profitFactor)}, רמת ביטחון ${conf} (מדגם ${c.confidence.sampleSize})`;
+}
+
+const CONFIDENCE_HE: Record<string, string> = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
+
+/** Latin metric labels that only ever reach a Hebrew sentence by being copied
+ *  out of the prompt. Kept as a guard behind the prompt fix, not instead of
+ *  it: a model can still reach for "PF" on its own, and one English token is
+ *  the difference between a page that reads as finished and one that does
+ *  not. */
+const LATIN_METRIC_TOKENS = /\b(winRate|avgRR|PnL|PF|profitFactor|winrate|R:R)\b/;
+
+export function hasLatinMetricLabel(text: string): boolean {
+  return LATIN_METRIC_TOKENS.test(text);
 }
 
 /** Phrases the top-ranked pattern candidates already discovered by the
@@ -176,7 +208,7 @@ export async function generatePatternInsights(
   const isHe = lang === 'he';
   const langInstruction = isHe ? HEBREW_MENTOR_STYLE : 'Respond in English.';
 
-  const list = candidates.map((c, i) => `${i + 1}. ${describeCandidate(c)}`).join('\n');
+  const list = candidates.map((c, i) => `${i + 1}. ${describeCandidate(c, isHe)}`).join('\n');
 
   const prompt = `You are Onyx, an experienced trading mentor reviewing a futures day-trader's journal — talking straight, like one trader to another. You do NOT predict markets and you NEVER give buy/sell signals — you only explain recurring patterns already found in the trader's own historical data.
 
@@ -197,6 +229,7 @@ Rules:
 - Every number must come directly from the data given above. Never invent, round dramatically, or estimate.
 - If confidence is "low", explicitly say this is an early/emerging pattern, not a strong conclusion.
 - Never use phrasing like "should buy", "should sell", "will go up/down", or any market prediction.
+${isHe ? '- כתוב את המשפט כולו בעברית, כולל שמות המדדים. אל תשתמש ב-winRate, PnL, avgRR או PF — כתוב "אחוז הצלחה", "רווח כולל", "יחס סיכון־סיכוי" ו"פרופיט פקטור". מותר להשאיר באנגלית רק סימבול של מכשיר (MNQ) או שם תגית.' : ''}
 - JSON only, no extra text.`;
 
   let raw: string;
@@ -250,5 +283,10 @@ Rules:
     // fewer is a smaller failure than an English card on a Hebrew page, and
     // unlike the evidence line there is nothing to rebuild it from — the title
     // is the interpretation, which is the part only the model can write.
-    .filter(p => p.title && !(isHe && isMostlyLatin(p.title)));
+    // Two guards, and they catch different failures. isMostlyLatin drops a
+    // title that came back as an English sentence; hasLatinMetricLabel drops a
+    // Hebrew one carrying English metric labels copied from the prompt — the
+    // case that actually shipped, and the one the first guard cannot see,
+    // because four Latin tokens never outweigh a Hebrew sentence.
+    .filter(p => p.title && !(isHe && (isMostlyLatin(p.title) || hasLatinMetricLabel(p.title))));
 }
