@@ -16,7 +16,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from 'next/server';
-import { scheduleNightlyJobs } from '../../../lib/coach-pipeline/pipelines/scheduleNightlyJobs';
+import { scheduleNightlyJobs, enumerateEligibleUsers } from '../../../lib/coach-pipeline/pipelines/scheduleNightlyJobs';
+import { reconcileTrades } from '../../../lib/coach-pipeline/mirror/reconcile';
 import { processJobBatch, type BatchResult } from '../../../lib/coach-pipeline/pipelines/processJobBatch';
 import { assertCronAuth } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
@@ -78,6 +79,33 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
   return { picked, completed, failed, retried };
 }
 
+
+/** Reconcile every eligible trader's journal against the mirror.
+ *
+ *  Bounded by the same budget as everything else in this handler: a pass over
+ *  a consistent journal is two reads and no writes, so the cost is small and
+ *  flat, but it is per-user and this cron has sixty seconds for everything.
+ *  Never throws — a reconciliation failure must not cost the insights, which
+ *  are the thing the trader actually sees.
+ *
+ *  Reported through `cron_runs` only as counts. The rows themselves are named
+ *  in the log, and orphans are never touched. */
+async function reconcileAll(): Promise<{ repairedMissing: number; repairedGhosts: number; orphans: number }> {
+  let repairedMissing = 0, repairedGhosts = 0, orphans = 0;
+  try {
+    const users = await enumerateEligibleUsers();
+    for (const u of users) {
+      const r = await reconcileTrades(u.clerkId);
+      repairedMissing += r.missing;
+      repairedGhosts  += r.ghosts;
+      orphans         += r.orphans;
+    }
+  } catch (err) {
+    logger.error('reconcile pass failed', { error: err instanceof Error ? err.message : String(err) });
+  }
+  return { repairedMissing, repairedGhosts, orphans };
+}
+
 /** Vercel Cron invokes its target with GET, so GET is the handler that
  *  actually matters here — POST exists for manual invocation.
  *
@@ -98,12 +126,18 @@ export async function POST(req: Request) {
   const started   = Date.now();
   const startedAt = new Date(started).toISOString();
   try {
+    // Reconcile FIRST, so tonight's analysis runs over a journal the mirror
+    // agrees with. Doing it after the drain would repair the rows and then
+    // wait a day to use them — and the whole reason this exists is that a
+    // failed mirror is invisible for exactly that long.
+    const repaired = await reconcileAll();
+
     // Schedule with spread=0 — every job is due immediately so the drain
     // below picks them all in the first pass.
     const scheduled = await scheduleNightlyJobs(new Date(), 0);
     const drained   = await drainUntilEmptyOrBudget(started);
 
-    const combined = { ...scheduled, ...drained };
+    const combined = { ...scheduled, ...drained, ...repaired };
     await logRun(startedAt, true, combined);
     return NextResponse.json({ ok: true, ...combined });
   } catch (err) {
