@@ -35,6 +35,17 @@ export function calcRR(
   stopLoss: number,
   takeProfit: number,
 ): number | null {
+  // Typed as numbers, reached with absences. A trade row read back from the
+  // database carries NULL for a target that was never set, and a form field
+  // left blank parses to NaN — neither is stopped by the type, and arithmetic
+  // on either returns NaN rather than throwing.
+  //
+  // NaN was then handed back as a "number | null" that is neither. It survives
+  // every `!= null` guard in the codebase, because NaN != null is true, so it
+  // travelled from one missing target all the way into an average: a single
+  // such trade turns an expectancy into NaN and the screen into blanks. An
+  // absent input has to leave through the same door as a zero-risk one.
+  if (!Number.isFinite(entry) || !Number.isFinite(stopLoss) || !Number.isFinite(takeProfit)) return null;
   const risk = Math.abs(entry - stopLoss);
   if (risk === 0) return null;
   const dir = entry > stopLoss ? 1 : -1; // LONG if entry > stop (stop below entry)

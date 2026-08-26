@@ -603,7 +603,11 @@ export function tradePnL(t: TradeEntry): number | null {
   if (typeof t.pnlUsd === 'number' && Number.isFinite(t.pnlUsd)) return t.pnlUsd;
   if (t.result === 'BE') return 0;
   const exit = t.result === 'WIN' ? t.target : t.stop;
-  return calcPnL(t.entry, exit, t.direction, t.symbol, t.contracts || 1);
+  const assumed = calcPnL(t.entry, exit, t.direction, t.symbol, t.contracts || 1);
+  // The fallback needs the level it is assuming the trade reached. Without it
+  // the arithmetic yields NaN, which is not "no answer" — it is an answer that
+  // passes every null check and poisons whatever sum it lands in.
+  return Number.isFinite(assumed) ? assumed : null;
 }
 
 /** What the trade actually returned, in R.
@@ -617,7 +621,7 @@ export function rMultiple(t: TradeEntry): number | null {
   if (typeof t.tradeR === 'number' && Number.isFinite(t.tradeR)) return t.tradeR;
   if (t.result === 'BE') return 0;
   const planned = calcRR(t.entry, t.stop, t.target);
-  if (planned == null) return null;
+  if (planned == null || !Number.isFinite(planned)) return null;
   return t.result === 'WIN' ? planned : -1;
 }
 
