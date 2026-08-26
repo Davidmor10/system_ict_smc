@@ -331,14 +331,37 @@ function detectStopWidened(t: TradeRow): [boolean, BehaviorOccurrence | null] {
  *
  *  Needs history, so it is the one detector that reads more than its own
  *  trade. Median, not mean, so a single outlier can't drag the baseline up
- *  and hide the next outlier behind it. */
-function detectSizeSpike(t: TradeRow, priorContracts: number[]): [boolean, BehaviorOccurrence | null] {
-  if (priorContracts.length < SIZE_BASELINE_MIN) return [false, null];
-  const base = median(priorContracts.slice(-SIZE_BASELINE_WINDOW));
+ *  and hide the next outlier behind it.
+ *
+ *  PER INSTRUMENT, BECAUSE A CONTRACT IS NOT A UNIT
+ *
+ *  "Three contracts" means nothing on its own. Three MNQ is a fraction of one
+ *  NQ, and a trader who moves between the two would show a baseline that is
+ *  neither instrument's — every switch down to the micro reading as a size
+ *  spike, and every switch up to the full-size contract hiding inside a
+ *  baseline the micros inflated. The comparison is only meaningful against the
+ *  same instrument, so the history is filtered to it first.
+ *
+ *  The cost is that a new instrument has no baseline until it has its own
+ *  five trades. That is the correct answer rather than a limitation: there is
+ *  no "usual size" in something traded twice.
+ *
+ *  A trade with no contract count is not an opportunity, and never joins a
+ *  baseline. Counting it as zero — which is what an absent number becomes on
+ *  the way into arithmetic — drags the median down and turns ordinary size
+ *  into a standing alarm. */
+function detectSizeSpike(t: TradeRow, priorSizes: PriorSize[]): [boolean, BehaviorOccurrence | null] {
+  const size = sizeOf(t);
+  if (size == null) return [false, null];
+
+  const symbol = symbolKey(t.symbol);
+  const sameInstrument = priorSizes.filter(p => p.symbol === symbol).map(p => p.contracts);
+  if (sameInstrument.length < SIZE_BASELINE_MIN) return [false, null];
+
+  const base = median(sameInstrument.slice(-SIZE_BASELINE_WINDOW));
   if (base <= 0) return [false, null];
 
-  const size = t.contracts ?? 0;
-  if (size <= base || size < base * SIZE_SPIKE_MULT) return [true, null];
+  if (size < base * SIZE_SPIKE_MULT) return [true, null];
 
   return [true, {
     kind: 'size_spike',
@@ -348,9 +371,26 @@ function detectSizeSpike(t: TradeRow, priorContracts: number[]): [boolean, Behav
       contracts:      size,
       usual_contracts: round2(base),
       multiple:       round2(size / base),
+      symbol,
       session:        t.session,
     },
   }];
+}
+
+/** One prior trade's size, kept with the instrument it was traded in. */
+interface PriorSize { symbol: string; contracts: number }
+
+/** Case and stray whitespace must not split one instrument into two
+ *  baselines — "mnq" and "MNQ " are the same contract. */
+function symbolKey(symbol: string | null | undefined): string {
+  return (symbol ?? '').trim().toUpperCase();
+}
+
+/** The contract count, or null when there isn't one. Zero and negative are
+ *  absences too: no position was taken in a trade of zero contracts. */
+function sizeOf(t: TradeRow): number | null {
+  const n = t.contracts;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 // ── public API ──────────────────────────────────────────────────────────────
@@ -379,14 +419,15 @@ export function detectBehaviors(trades: readonly TradeRow[]): BehaviorTally[] {
   // before it is silence about the journal rather than evidence about a trade.
   const firstConfirmation = decided.findIndex(t => (t.confirmations?.length ?? 0) > 0);
 
-  const priorContracts: number[] = [];
+  const priorSizes: PriorSize[] = [];
   for (const [i, t] of decided.entries()) {
     bump('discretionary_exit', t.id, ...detectDiscretionaryExit(t));
     bump('no_confirmation', t.id, ...detectNoConfirmation(t, firstConfirmation >= 0 && i >= firstConfirmation));
     bump('rule_violation',  t.id, ...detectRuleViolation(t));
-    bump('size_spike',      t.id, ...detectSizeSpike(t, priorContracts));
+    bump('size_spike',      t.id, ...detectSizeSpike(t, priorSizes));
     bump('stop_widened',    t.id, ...detectStopWidened(t));
-    priorContracts.push(t.contracts ?? 0);
+    const size = sizeOf(t);
+    if (size != null) priorSizes.push({ symbol: symbolKey(t.symbol), contracts: size });
   }
 
   return [...acc.entries()]

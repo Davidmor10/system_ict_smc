@@ -388,6 +388,94 @@ describe('size_spike', () => {
     expect(__internals.median([1, 2, 100])).toBe(2);
     expect(__internals.median([])).toBe(0);
   });
+
+  // ── one contract is not one unit ─────────────────────────────────────────
+  //
+  // Three MNQ is a fraction of one NQ. A flat baseline across both makes every
+  // switch to the micro read as a size spike, and hides a real one in the
+  // full-size contract behind a median the micros inflated.
+
+  it('does not call a switch to the micro a size spike', () => {
+    // THE REGRESSION. Six 1-lot NQ trades, then 5 MNQ — a tenth of the
+    // notional. Against a flat baseline the median is 1 and the MNQ trade is
+    // 5x it, which is what used to be reported.
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN + 1 }, () => T({ symbol: 'NQ', contracts: 1 })),
+      T({ symbol: 'MNQ', contracts: 5 }),
+    ];
+    const t = tally(trades, 'size_spike')!;
+    // The sixth NQ trade is judgeable and clean. The MNQ trade has no MNQ
+    // history to be unusual against, so it is not judged at all.
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(0);
+  });
+
+  it('builds a separate baseline per instrument', () => {
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN }, () => T({ symbol: 'NQ',  contracts: 1 })),
+      ...Array.from({ length: SIZE_BASELINE_MIN }, () => T({ symbol: 'MNQ', contracts: 10 })),
+      T({ symbol: 'MNQ', contracts: 12 }),   // ordinary for MNQ, 12x the NQ median
+      T({ symbol: 'NQ',  contracts: 2 }),    // doubled for NQ, tiny next to MNQ
+    ];
+    const t = tally(trades, 'size_spike')!;
+    expect(t.occurrences).toBe(1);
+    expect(t.events[0].evidence).toMatchObject({ symbol: 'NQ', contracts: 2, usual_contracts: 1 });
+  });
+
+  it('waits for a new instrument to earn its own baseline', () => {
+    // There is no usual size in something traded twice, and borrowing the
+    // other instrument's is how the wrong answer got produced.
+    const trades = [
+      ...Array.from({ length: 20 }, () => T({ symbol: 'NQ', contracts: 1 })),
+      T({ symbol: 'ES', contracts: 4 }),
+      T({ symbol: 'ES', contracts: 4 }),
+    ];
+    expect(tally(trades, 'size_spike')!.occurrences).toBe(0);
+  });
+
+  it('reads one instrument written two ways as one instrument', () => {
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN }, () => T({ symbol: 'mnq ', contracts: 2 })),
+      T({ symbol: 'MNQ', contracts: 6 }),
+    ];
+    expect(tally(trades, 'size_spike')!.occurrences).toBe(1);
+  });
+
+  // ── an absent contract count is not a zero ───────────────────────────────
+
+  it('keeps a trade with no contract count out of the baseline', () => {
+    // Pushed as 0, four of these drag a 2-lot median to 0 and every ordinary
+    // trade after them becomes a spike.
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN }, () => T({ contracts: 2 })),
+      ...Array.from({ length: 4 }, () => T({ contracts: undefined })),
+      T({ contracts: 2 }),
+    ];
+    expect(tally(trades, 'size_spike')!.occurrences).toBe(0);
+  });
+
+  it('does not judge a trade that has no contract count of its own', () => {
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN + 1 }, () => T({ contracts: 2 })),
+      T({ contracts: undefined }),
+    ];
+    const t = tally(trades, 'size_spike')!;
+    // The sixth 2-lot is the only judgeable trade; the countless one is left
+    // out rather than being read as a zero-lot position.
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(0);
+  });
+
+  it('treats zero contracts as an absence, not as a position', () => {
+    const trades = [
+      ...Array.from({ length: SIZE_BASELINE_MIN }, () => T({ contracts: 2 })),
+      T({ contracts: 0 }),
+      T({ contracts: 6 }),
+    ];
+    const t = tally(trades, 'size_spike')!;
+    expect(t.occurrences).toBe(1);
+    expect(t.events[0].evidence).toMatchObject({ usual_contracts: 2 });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
