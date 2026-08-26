@@ -1,4 +1,5 @@
 import type { TradeEntry } from '../journal';
+import { isMostlyLatin, hasLatinMetricLabel } from './language';
 import { runFullAnalysis, prune, type PatternCandidate, type ConfidenceLevel, type MacroContext } from '../analytics';
 import { SESS } from '../sessions';
 import { fmtPF } from './factsBlock';
@@ -132,18 +133,6 @@ function subjectOf(subject: PatternCandidate['subject']): string {
   return parts.length > 0 ? parts.join(' · ') : 'חתך כללי';
 }
 
-/** True when a sentence is written in Latin script rather than Hebrew. Counts
- *  letters only: tickers, tags and digits are expected inside Hebrew prose and
- *  must not tip the verdict on their own. */
-export function isMostlyLatin(text: string): boolean {
-  const hebrew = (text.match(/[\u0590-\u05FF]/g) ?? []).length;
-  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
-  // Below a dozen Latin letters there is no English sentence — only tickers,
-  // tags and units ("MNQ", "NY AM", "+1.31R"), all of which belong in Hebrew
-  // prose and must not be mistaken for it.
-  if (latin < 12) return false;
-  return latin > hebrew;
-}
 
 /**
  * The evidence line — computed, never generated.
@@ -205,31 +194,7 @@ function describeCandidate(c: PatternCandidate, he: boolean): string {
 
 const CONFIDENCE_HE: Record<string, string> = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
 
-/** Latin metric labels that only ever reach a Hebrew sentence by being copied
- *  out of the prompt. Kept as a guard behind the prompt fix, not instead of
- *  it: a model can still reach for "PF" on its own, and one English token is
- *  the difference between a page that reads as finished and one that does
- *  not. */
-const LATIN_METRIC_TOKENS = /\b(winRate|avgRR|PnL|PF|profitFactor|winrate|R:R)\b/;
 
-/** The slice's trade ids, from the signature the pattern engine already built.
- *
- *  Tolerant on purpose: a candidate that somehow reached here without one
- *  yields an empty list, and the card simply cannot be opened. A crash on the
- *  analytics page would be a far worse outcome than a missing toggle. */
-function idsFromSignature(signature: string | undefined): number[] {
-  if (!signature) return [];
-  return signature.split(',')
-    // An empty segment must not become an id. Number('') is 0, which is finite
-    // and would put a trade that does not exist into the list.
-    .filter(part => part.trim() !== '')
-    .map(Number)
-    .filter(n => Number.isInteger(n));
-}
-
-export function hasLatinMetricLabel(text: string): boolean {
-  return LATIN_METRIC_TOKENS.test(text);
-}
 
 /** Phrases the top-ranked pattern candidates already discovered by the
     analytics engine (`discoverPatterns`) into one sentence + evidence each.
@@ -347,3 +312,21 @@ ${isHe ? '- כתוב את המשפט כולו בעברית, כולל שמות ה
 
 // ── exports for tests ───────────────────────────────────────────────────────
 export const __testing = { idsFromSignature };
+
+/** The slice's trade ids, from the signature the pattern engine already built.
+ *
+ *  Tolerant on purpose: a candidate that somehow reached here without one
+ *  yields an empty list, and the card simply cannot be opened. A crash on the
+ *  analytics page would be a far worse outcome than a missing toggle. */
+function idsFromSignature(signature: string | undefined): number[] {
+  if (!signature) return [];
+  return signature.split(',')
+    // An empty segment must not become an id. Number('') is 0, which is finite
+    // and would put a trade that does not exist into the list.
+    .filter(part => part.trim() !== '')
+    .map(Number)
+    .filter(n => Number.isInteger(n));
+}
+
+// Re-exported: these lived here before they were shared.
+export { isMostlyLatin, hasLatinMetricLabel };

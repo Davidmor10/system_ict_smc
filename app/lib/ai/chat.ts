@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
+import { checkProse, hasHardViolation, buildCorrection } from '../coach-pipeline/quality/insightCheck';
 import { getRecentTrades, getTraderProfile, getHypothesis } from '../intelligence/repository';
 import { runFullAnalysis, loadMacroContext, type FullAnalysis } from '../analytics';
 import { summarizeKnownFacts } from './factsBlock';
@@ -158,6 +159,35 @@ export async function answerCoachQuestion(
     // fixed error, never a scrap of raw model output.
     await logCoachFallback(supabase, userId, 'failed', question);
     return { answer: null, reason: 'ai_unavailable', chatId: resolvedChatId ?? undefined };
+  }
+
+  // The answer parsed. Whether it is an answer this product is allowed to give
+  // is a separate question, and until now nobody asked it: the daily insight
+  // has run these checks since it shipped and the chat ran none, so the same
+  // model publishing the same two failures — a coaching platitude, a claim
+  // about the trader's own psychology — was caught in the morning note and
+  // waved through in the conversation.
+  //
+  // One corrective retry, the same shape the JSON contract already uses. A
+  // second failure keeps the first answer rather than refusing: a reply
+  // carrying a soft violation is worth more to the trader than an error
+  // message, and the violations are logged either way.
+  try {
+    const violations = checkProse(answer, lang);
+    if (hasHardViolation(violations)) {
+      logger.warn('coach chat output violated its own rules', {
+        clerkId: userId, rules: violations.filter(v => v.severity === 'hard').map(v => v.rule),
+      });
+      const corrected = parseCoachJson(
+        await generateCoachJson(prompt + buildCorrection(violations), {
+          clerkId: userId, purpose: 'coach_chat_recheck',
+        }),
+      );
+      if (corrected && !hasHardViolation(checkProse(corrected, lang))) answer = corrected;
+    }
+  } catch (err) {
+    // A failed re-ask must not cost the answer we already have.
+    logger.warn('coach chat recheck failed', { error: err instanceof Error ? err.message : String(err) });
   }
 
   // Persist the turn — best effort, never fail the answer over a write.

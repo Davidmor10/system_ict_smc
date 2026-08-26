@@ -33,6 +33,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BehaviorBlock } from '../pipelines/analyzeBehavior';
+import { isMostlyLatin, hasLatinMetricLabel } from '../../ai/language';
 
 export type Severity = 'hard' | 'soft';
 
@@ -170,12 +171,25 @@ function find(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
-/** Run every check against one generated insight.
+/** The rules that hold for ANY prose this product publishes.
  *
- *  `block` is what the model was given. Most of the rules are about the
- *  relationship between the two — a claim is only a violation relative to the
- *  evidence that was available when it was written. */
-export function checkInsight(text: string, block: BehaviorBlock): Violation[] {
+ *  Split out because the daily insight was the only surface that checked
+ *  anything. The coach's chat answers and the weekly report went from the
+ *  model to the trader with nothing in between — and the two failures that
+ *  matter most are not specific to a daily note. A worthless coaching sentence
+ *  is worthless in a chat reply; a claim about the trader's psychology is
+ *  unfounded in a weekly report for exactly the same reason it is unfounded in
+ *  the morning.
+ *
+ *  Everything here is checkable without knowing what the model was given,
+ *  which is what makes it shareable. Rules that depend on the evidence — an
+ *  invented pattern, a behaviour that was held back, a duration nobody
+ *  measured — stay in `checkInsight`, because they are only violations
+ *  relative to a specific block.
+ *
+ *  `lang` gates the Hebrew-only guards. An English answer to an English
+ *  question is not a language failure. */
+export function checkProse(text: string, lang: 'he' | 'en' = 'he'): Violation[] {
   const out: Violation[] = [];
   const push = (rule: string, severity: Severity, detail: string) =>
     out.push({ rule, severity, detail });
@@ -190,6 +204,31 @@ export function checkInsight(text: string, block: BehaviorBlock): Violation[] {
   if (field) push('field_name', 'hard', field);
   const short = SHORT_FIELDS.exec(text);
   if (short) push('field_name', 'hard', short[1]);
+
+  if (lang === 'he') {
+    // Two guards catching different failures. The first drops an answer that
+    // came back as an English sentence; the second drops a Hebrew one carrying
+    // English metric labels copied out of the prompt — the case that actually
+    // shipped, and the one the first cannot see, because four Latin tokens
+    // never outweigh a Hebrew paragraph.
+    if (isMostlyLatin(text)) push('latin_output', 'hard', 'answer is mostly Latin');
+    if (hasLatinMetricLabel(text)) push('latin_metric_label', 'hard', 'English metric label');
+  }
+
+  if (text.includes('!')) push('exclamation', 'soft', '!');
+
+  return out;
+}
+
+/** Run every check against one generated insight.
+ *
+ *  `block` is what the model was given. Most of the rules are about the
+ *  relationship between the two — a claim is only a violation relative to the
+ *  evidence that was available when it was written. */
+export function checkInsight(text: string, block: BehaviorBlock): Violation[] {
+  const out: Violation[] = [...checkProse(text, 'he')];
+  const push = (rule: string, severity: Severity, detail: string) =>
+    out.push({ rule, severity, detail });
 
   // Nothing cleared the bar, so there is no pattern to describe. Rule 15.
   if (block.insufficientEvidence) {
@@ -227,7 +266,6 @@ export function checkInsight(text: string, block: BehaviorBlock): Violation[] {
   const questionMarks = (text.match(/\?/g) ?? []).length;
   if (primary?.question && questionMarks === 0) push('missing_question', 'soft', 'no question asked');
   if (questionMarks > 1) push('two_questions', 'soft', `${questionMarks} question marks`);
-  if (text.includes('!')) push('exclamation', 'soft', '!');
 
   return out;
 }
@@ -258,6 +296,10 @@ export function buildCorrection(violations: readonly Violation[]): string {
         return `- You referred to "${v.detail}", which you were not given. Only the behaviour in the block.`;
       case 'sequence_claim':
         return `- You wrote "${v.detail}". You receive one day and cannot see a sequence of days.`;
+      case 'latin_output':
+        return `- You answered in English. Answer in Hebrew.`;
+      case 'latin_metric_label':
+        return `- You used an English metric label. Write the metric in Hebrew — "אחוז הצלחה", not "winRate".`;
       case 'unreported_guardrail':
         return `- The experiment improved the target but "${v.detail}" got worse, and you reported only the improvement. Report both, in the same paragraph.`;
       default:

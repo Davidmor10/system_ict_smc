@@ -1,4 +1,5 @@
 import type { ConfidenceLevel } from '../analytics';
+import { checkProse, hasHardViolation, buildCorrection } from '../coach-pipeline/quality/insightCheck';
 import { generateInsightJson } from './client';
 import { logger } from '../logger';
 import { CHALLENGE_TRADER_STYLE, HEBREW_MENTOR_STYLE } from './styleGuide';
@@ -122,5 +123,43 @@ Rules:
   const paragraphs = parsed.paragraphs.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
   if (paragraphs.length < MIN_PARAGRAPHS) return null;
 
-  return { paragraphs: paragraphs.slice(0, MAX_PARAGRAPHS) };
+  const kept = paragraphs.slice(0, MAX_PARAGRAPHS);
+
+  // The letter parsed. Whether it is a letter this product is allowed to send
+  // is a separate question, and nothing asked it until now: the daily insight
+  // has checked its own output since it shipped, and this — the longest piece
+  // of prose the system writes, the one the trader is most likely to read end
+  // to end — went from the model to the page unexamined.
+  //
+  // One corrective retry, then keep whichever version is cleaner. A weekly
+  // letter carrying a platitude is still worth more than no letter at all, so
+  // a failed re-ask never costs the report; it is logged instead.
+  try {
+    const violations = checkProse(kept.join('\n\n'), lang);
+    if (hasHardViolation(violations)) {
+      logger.warn('weekly narrative violated its own rules', {
+        clerkId, rules: violations.filter(v => v.severity === 'hard').map(v => v.rule),
+      });
+      const retry = await generateInsightJson(
+        prompt + buildCorrection(violations),
+        clerkId === undefined ? undefined : { clerkId, purpose: 'weekly_narrative_retry' },
+      );
+      const match = retry.match(/\{[\s\S]*\}/);
+      const reparsed = match ? (JSON.parse(match[0]) as { paragraphs?: unknown }) : {};
+      if (Array.isArray(reparsed.paragraphs)) {
+        const fixed = reparsed.paragraphs
+          .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+          .slice(0, MAX_PARAGRAPHS);
+        if (fixed.length >= MIN_PARAGRAPHS && !hasHardViolation(checkProse(fixed.join('\n\n'), lang))) {
+          return { paragraphs: fixed };
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('weekly narrative recheck failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return { paragraphs: kept };
 }
