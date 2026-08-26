@@ -273,6 +273,13 @@ export interface CronRunRow {
   jobs_failed:           number;
   jobs_retried:          number;
   error:                 string | null;
+  /** What the mirror reconciliation found and repaired. Null on rows written
+   *  before the reconciler existed, or by a database that has not run
+   *  supabase-migration-cron-reconcile.sql — which is a different fact from
+   *  zero, and the health surface says so. */
+  repaired_missing?:     number | null;
+  repaired_ghosts?:      number | null;
+  orphans?:              number | null;
 }
 
 // ── Table names — single source of truth for the DB layer ───────────────────

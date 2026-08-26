@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser, useClerk, SignOutButton } from '@clerk/nextjs';
 import { hydrateDoc, saveDoc } from '../lib/sync/collections';
 import { usePlan } from './PlanProvider';
+import NightlyHealth from './NightlyHealth';
 import {
   DEFAULT_SETTINGS, SETTINGS_KEY, SETTINGS_KIND, withDefaults,
   type UserSettings, type TradingStyle,
@@ -278,6 +279,12 @@ export default function SettingsView() {
                       </SignOutButton>
                     </div>
                   </div>
+
+                  {/* Whether the thing that produces every insight actually
+                      ran. It has recorded itself since it shipped and nothing
+                      read the record, so a failure was indistinguishable from
+                      a quiet night. */}
+                  <NightlyHealth />
                 </div>
               )}
             </div>

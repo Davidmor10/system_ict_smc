@@ -30,21 +30,49 @@ export const dynamic     = 'force-dynamic';
 const ROUTE = '/api/cron/nightly-orchestrate';
 const DRAIN_BUDGET_MS = 45_000;   // leave 15s for enqueue + logging + response
 
+/** Columns added by `supabase-migration-cron-reconcile.sql`.
+ *
+ *  PostgREST rejects the whole insert when one column in the payload is
+ *  missing from its schema cache, so a database that has not run the migration
+ *  would lose the entire run record rather than three numbers. Same posture as
+ *  the journal route's PATCH_COLUMNS: write them, and on that one error write
+ *  the row again without them. */
+const RECONCILE_COLUMNS = ['repaired_missing', 'repaired_ghosts', 'orphans'] as const;
+
+function isMissingReconcileColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const message = error.message ?? '';
+  return error.code === 'PGRST204' || RECONCILE_COLUMNS.some(c => message.includes(c));
+}
+
 async function logRun(startedAt: string, ok: boolean, extra: Record<string, unknown> & {
   enqueued?: number; completed?: number; failed?: number; retried?: number; error?: string;
+  repairedMissing?: number; repairedGhosts?: number; orphans?: number;
 }): Promise<void> {
+  const base = {
+    cron_key:       'nightly-orchestrate' as const,
+    started_at:     startedAt,
+    finished_at:    new Date().toISOString(),
+    duration_ms:    Date.now() - Date.parse(startedAt),
+    jobs_picked:    Number(extra.enqueued  ?? 0),
+    jobs_completed: Number(extra.completed ?? 0),
+    jobs_failed:    Number(extra.failed    ?? 0),
+    jobs_retried:   Number(extra.retried   ?? 0),
+    error:          ok ? null : String(extra.error ?? '').slice(0, 500),
+  };
+  // Null, not zero, when the pass did not report. "It ran and found nothing"
+  // and "it never ran" are different facts and the health surface shows which.
+  const withReconcile = {
+    ...base,
+    repaired_missing: extra.repairedMissing ?? null,
+    repaired_ghosts:  extra.repairedGhosts  ?? null,
+    orphans:          extra.orphans         ?? null,
+  };
   try {
-    await getClient().from(T.cronRuns).insert({
-      cron_key:       'nightly-orchestrate',
-      started_at:     startedAt,
-      finished_at:    new Date().toISOString(),
-      duration_ms:    Date.now() - Date.parse(startedAt),
-      jobs_picked:    Number(extra.enqueued  ?? 0),
-      jobs_completed: Number(extra.completed ?? 0),
-      jobs_failed:    Number(extra.failed    ?? 0),
-      jobs_retried:   Number(extra.retried   ?? 0),
-      error:          ok ? null : String(extra.error ?? '').slice(0, 500),
-    });
+    const { error } = await getClient().from(T.cronRuns).insert(withReconcile);
+    if (error && isMissingReconcileColumn(error)) {
+      await getClient().from(T.cronRuns).insert(base);
+    }
   } catch { /* observability shouldn't take down the endpoint */ }
 }
 
