@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { TradeEntry, Direction, TradeResult, EmotionalState, Bias } from '../lib/journal';
-import { analyzeStopMoves, type ManagementEvent } from '../lib/trade/management';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
@@ -154,7 +153,6 @@ interface FormState {
    *  when followedRules === 'no'. Saved as violation records, not on the
    *  trade — the rules page already owns that model. */
   brokenRules: string[];
-  management: ManagementEvent[];
   confirmations: string[];
   emotionalState: EmotionalState | '';
   model: string;
@@ -185,7 +183,6 @@ function empty(): FormState {
     stopMoved: '',
     stopNote: '',
     brokenRules: [],
-    management: [],
     confirmations: last.confirmations,
     emotionalState: '',
     model: last.model,
@@ -217,7 +214,6 @@ function fromTrade(t: TradeEntry): FormState {
     stopMoved: t.stopMoved ?? '',
     stopNote: t.stopNote ?? '',
     brokenRules: [],
-    management: t.management ?? [],
     confirmations: t.confirmations ?? [],
     emotionalState: t.emotionalState ?? '',
     model: t.model && t.model !== UNSPECIFIED_MODEL ? t.model : '',
@@ -416,7 +412,6 @@ export default function TradeForm({
   const [playbookSetups, setPlaybookSetups] = useState<PlaybookSetup[]>([]);
   const [customConfirmations, setCustomConfirmations] = useState<CustomConfirmation[]>([]);
   const [newConfirmation, setNewConfirmation] = useState('');
-  const [stopMoveDraft, setStopMoveDraft] = useState('');
   /** The trader's own active rules — the list shown when they say they broke one. */
   const [activeRules, setActiveRules] = useState<Rule[]>([]);
   /** Group 5 is folded by default: a trader in a hurry never opens it. */
@@ -534,20 +529,6 @@ export default function TradeForm({
    *  entire value of an event over the answer at the end is that it was
    *  recorded while it was true, and a hand-typed time gives that away for
    *  nothing. */
-  function logStopMove(price: string) {
-    const to = parseFloat(price);
-    if (!Number.isFinite(to)) return;
-    setForm(prev => ({
-      ...prev,
-      management: [...prev.management, { at: new Date().toISOString(), kind: 'stop', to }],
-      // The plan's stop stays as it was — it is the plan. The new level lives
-      // in the event, which is what makes the difference measurable.
-    }));
-    setStopMoveDraft('');
-  }
-  function removeManagement(i: number) {
-    setForm(prev => ({ ...prev, management: prev.management.filter((_, idx) => idx !== i) }));
-  }
 
   function toggleConfirmation(tag: string) {
     setForm(prev => ({
@@ -614,15 +595,6 @@ export default function TradeForm({
     setForm(prev => ({ ...prev, emotionalState: prev.emotionalState === state ? '' : state }));
   }
 
-  // Auto-derived — no extra click, just shown as context.
-  // What the logged moves add up to. Computed from the record, so the trader
-  // sees the same number the detector will.
-  const stopRecord = analyzeStopMoves(
-    parseFloat(form.stop) || 0,
-    form.direction,
-    form.management,
-  );
-
   const entryHour: number | null = parseHour(form.time);
   const autoSession: SessionKey | null = entryHour !== null ? sessionForHour(entryHour) : getActiveSessionKey();
   // From the field on this form, not from a plan somewhere else. `null` means
@@ -678,7 +650,6 @@ export default function TradeForm({
       stopMoved: form.stopMoved || undefined,
       // The tag only means anything on the branch it belongs to.
       stopNote: form.stopNote.trim() || undefined,
-      management: form.management.length ? form.management : undefined,
       tradeR: realizedR ?? undefined,
       pnlUsd: realizedPnl ?? undefined,
       biasAlignment: alignment ?? undefined,
@@ -967,58 +938,6 @@ export default function TradeForm({
               at the end is that it was recorded while it was true. When events
               exist they OVERRIDE the buttons above: a record beats a
               recollection, and the readout says which one is in force. */}
-          <details className="group/log">
-            <summary className="cursor-pointer list-none font-mono text-[11px] text-white/35 hover:text-white/60 transition-colors duration-150 select-none">
-              <span className="inline-block transition-transform duration-200 group-open/log:rotate-90">›</span>{' '}
-              רישום הזזות בזמן אמת {form.management.length > 0 && `(${form.management.length})`}
-            </summary>
-            <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" step="0.25"
-                  placeholder="הזזתי את הסטופ ל…"
-                  value={stopMoveDraft}
-                  onChange={e => setStopMoveDraft(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); logStopMove(stopMoveDraft); } }}
-                  className={inputCls}
-                />
-                <button
-                  type="button"
-                  onClick={() => logStopMove(stopMoveDraft)}
-                  disabled={!stopMoveDraft.trim()}
-                  className="shrink-0 px-4 py-2.5 rounded-lg border border-[#d4af37]/35 text-[#d4af37] font-mono text-xs hover:bg-[#d4af37]/10 transition-colors duration-150 disabled:text-white/20 disabled:border-white/[0.06] disabled:cursor-not-allowed"
-                >
-                  רשום
-                </button>
-              </div>
-
-              {form.management.length > 0 && (
-                <div className="space-y-1.5">
-                  {form.management.map((m, i) => (
-                    <div key={i} className="flex items-center gap-2 font-mono text-[11px] text-white/50">
-                      <span className="text-white/30" dir="ltr">
-                        {clockInZone(undefined, new Date(m.at))}
-                      </span>
-                      <span>סטופ → {m.to}</span>
-                      <button
-                        type="button" onClick={() => removeManagement(i)} aria-label="מחק רישום"
-                        className="text-white/20 hover:text-[#ef4444] transition-colors duration-150"
-                      >✕</button>
-                    </div>
-                  ))}
-                  {stopRecord.moves > 0 && (
-                    <p className="font-mono text-[11px] text-[#d4af37]/80 leading-relaxed pt-1">
-                      מהרישום: {stopRecord.advanced > 0 && `${stopRecord.advanced} קידום`}
-                      {stopRecord.advanced > 0 && stopRecord.widened > 0 && ' · '}
-                      {stopRecord.widened > 0 && `${stopRecord.widened} הרחקה`}
-                      {stopRecord.widened === 0 && stopRecord.advanced === 0 && 'ללא שינוי בפועל'}
-                      {' — '}זה מה שייספר, לא הכפתורים למעלה.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </details>
         </Group>
 
         {/* ── 3 · THE SETUP — why you entered ── */}
