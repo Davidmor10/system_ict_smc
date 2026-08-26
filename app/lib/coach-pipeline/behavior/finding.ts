@@ -403,20 +403,49 @@ export function pickPrimary(
     return { primary: inFlight, watching: eligible.filter(f => f !== inFlight) };
   }
 
+  // Readiness outranks severity, and this is the fix for a real deadlock.
+  //
+  // A measurement window only opens for a primary that is 'confirmed'. Ranking
+  // by severity alone let an 'investigating' finding — real, but still being
+  // established — take the single primary slot and hold it. Nothing could
+  // start: the finding holding the slot was not ready to begin, and the
+  // findings that WERE ready could not get the slot. Observed in production
+  // with two confirmed behaviours sitting idle for a fortnight behind an
+  // investigating one.
+  //
+  // Severity still decides everything WITHIN a tier. This only says that among
+  // findings the system has something to say about, the ones it can actually
+  // act on go first — which is the order the lifecycle already implied and
+  // nobody had written down.
   const ranked = [...eligible].sort(
-    (a, b) => b.priorityScore - a.priorityScore || a.kind.localeCompare(b.kind),
+    (a, b) =>
+      readinessTier(b) - readinessTier(a)
+      || b.priorityScore - a.priorityScore
+      || a.kind.localeCompare(b.kind),
   );
   const incumbent = previousPrimaryKind
     ? ranked.find(f => f.kind === previousPrimaryKind) ?? null
     : null;
 
   let primary = ranked[0];
-  if (incumbent && primary !== incumbent) {
+  // The incumbent's grip does not survive being unable to start. A challenger
+  // that can open a window today beats a sitting finding that cannot, whatever
+  // the margin says — otherwise the deadlock simply reappears one run later.
+  if (incumbent && primary !== incumbent && readinessTier(primary) === readinessTier(incumbent)) {
     const needed = incumbent.priorityScore * (1 + PRIORITY_MARGIN);
     if (primary.priorityScore < needed) primary = incumbent;
   }
 
   return { primary, watching: ranked.filter(f => f !== primary) };
+}
+
+/** Can this finding actually start a measurement today.
+ *
+ *  'confirmed' is the only status the experiment branch will open a window
+ *  for, so it is the only one that counts as ready. Everything else is a real
+ *  finding that cannot yet be acted on. */
+function readinessTier(f: BehaviorFinding): number {
+  return f.status === 'confirmed' ? 1 : 0;
 }
 
 // ── exports for tests ───────────────────────────────────────────────────────
