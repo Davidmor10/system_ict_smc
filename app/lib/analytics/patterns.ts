@@ -6,7 +6,7 @@ import { hourOf, weekdayOf } from './time';
 import { analyzeInstruments } from './instruments';
 import { calcRR } from '../calc/trade';
 import { analyzeSessions } from './sessions';
-import type { PatternCandidate } from './types';
+import type { PatternCandidate, PatternRun } from './types';
 import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { splitByRelease } from './macro';
@@ -72,6 +72,17 @@ export function discoverPatterns(
   trades: TradeEntry[],
   macro: MacroContext = EMPTY_MACRO_CONTEXT,
 ): PatternCandidate[] {
+  return discoverPatternRun(trades, macro).candidates;
+}
+
+/** Discovery, plus the shape of the run — the comparison count and the overall
+ *  split. Callers that only want the list use `discoverPatterns`; anything
+ *  that has to EXPLAIN a verdict needs the run, because the threshold a
+ *  candidate was measured against depends on how many partitions were tried. */
+export function discoverPatternRun(
+  trades: TradeEntry[],
+  macro: MacroContext = EMPTY_MACRO_CONTEXT,
+): { candidates: PatternCandidate[]; run: PatternRun } {
   const overall = computeGroupPerformance(trades, 'ALL', 'All');
   const baseline = overall.winRate;
   const candidates: PatternCandidate[] = [];
@@ -92,6 +103,25 @@ export function discoverPatterns(
     candidates.push(c);
   };
 
+  // A note on collapsed combinations, because the obvious optimisation is a
+  // trap and this is where someone will try it again.
+  //
+  // For a trader who only holds MNQ, "MNQ · London" selects exactly the trades
+  // "London" selects. It is tempting to stop GENERATING such a pair. I built
+  // that, measured it, and took it out: the comparison count below already
+  // deduplicates by trade set, so skipping the pair removes an object and
+  // changes no p-value at all. What it does change is which pattern IDs exist
+  // — and pattern_memory is keyed on those IDs, so a stored pattern under an
+  // id the run no longer produces is orphaned, keeping its old sample size on
+  // record forever. A test caught it. The redundant pair is cheap; the orphan
+  // is not.
+  const modelsSeen = new Set(trades.map(t => t.model).filter(Boolean));
+  const hoursSeen  = new Set<number>();
+  for (const t of trades) {
+    const h = hourOf(t);
+    if (h !== null) hoursSeen.add(h);
+  }
+
   // instrument × session
   for (const sym of INSTRUMENT_KEYS) {
     for (const s of SESS) {
@@ -108,12 +138,25 @@ export function discoverPatterns(
     }
   }
 
-  // hour × instrument
-  const hoursSeen = new Set<number>();
-  for (const t of trades) {
-    const h = hourOf(t);
-    if (h !== null) hoursSeen.add(h);
+  // hour, on its own.
+  //
+  // New. The hour used to reach the engine only inside a pair — hour×instrument
+  // and model×hour — so "does the time of day matter for me" could not be asked
+  // directly. For a single-instrument trader the pair collapses onto this same
+  // set anyway and the two are deduplicated; for anyone else it is a genuinely
+  // different question with a genuinely different answer.
+  for (const h of hoursSeen) {
+    const subset = trades.filter(t => hourOf(t) === h);
+    push('hour', `hour_${h}`, { hour: h }, subset, `${String(h).padStart(2, '0')}:00`);
   }
+
+  // model / setup, on its own — same gap, same reasoning as the hour.
+  for (const m of modelsSeen) {
+    const subset = trades.filter(t => t.model === m);
+    push('model', `model_${m}`, { confirmation: m }, subset, `${m}`);
+  }
+
+  // hour × instrument
   for (const h of hoursSeen) {
     for (const sym of INSTRUMENT_KEYS) {
       const subset = trades.filter(t => hourOf(t) === h && t.symbol === sym);
@@ -121,9 +164,7 @@ export function discoverPatterns(
     }
   }
 
-  // instrument × confirmation (model/setup tag) and confirmation × hour
-  const modelsSeen = new Set<string>();
-  for (const t of trades) if (t.model) modelsSeen.add(t.model);
+  // instrument × model, and model × hour
   for (const m of modelsSeen) {
     for (const sym of INSTRUMENT_KEYS) {
       const subset = trades.filter(t => t.model === m && t.symbol === sym);
@@ -332,13 +373,25 @@ export function discoverPatterns(
   }
 
   // single-dimension standouts, in case combos stay too sparse for a while
+  //
+  // These two come from the group analyzers rather than from `push`, so their
+  // signature has to be attached here. Missing it is not cosmetic: a candidate
+  // with no signature cannot be recognised as selecting the same trades as
+  // another, so it escaped the deduplication entirely and kept charging the
+  // correction for a question already counted. For a single-instrument trader
+  // "MNQ" IS the whole journal and "London" IS the MNQ·London slice, which is
+  // exactly the pair the fix exists to collapse.
   for (const g of analyzeInstruments(trades)) {
     if (g.trades < 3) continue;
-    candidates.push(rawCandidate(`inst_${g.key}`, 'instrument_best', { instrument: g.key }, g, baseline, allWins, allLosses));
+    const c = rawCandidate(`inst_${g.key}`, 'instrument_best', { instrument: g.key }, g, baseline, allWins, allLosses);
+    c.signature = signatureOf(trades.filter(t => t.symbol === g.key));
+    candidates.push(c);
   }
   for (const g of analyzeSessions(trades)) {
     if (g.trades < 3) continue;
-    candidates.push(rawCandidate(`sess_${g.key}`, 'session_vs_overall', { session: g.key }, g, baseline, allWins, allLosses));
+    const c = rawCandidate(`sess_${g.key}`, 'session_vs_overall', { session: g.key }, g, baseline, allWins, allLosses);
+    c.signature = signatureOf(trades.filter(t => normSession(t.session) === normSession(g.key)));
+    candidates.push(c);
   }
 
   // The correction, applied once every slice is known.
@@ -350,7 +403,19 @@ export function discoverPatterns(
   // chance alone — for every trader, every time, including one trading at
   // random. Ranking them and showing the top of the list is a machine for
   // manufacturing confident nonsense.
-  const comparisons = candidates.length;
+  // Count PARTITIONS, not candidates.
+  //
+  // Several dimensions can select the identical set of trades — that is one
+  // test looked at from several angles, not several tests. Counting each angle
+  // separately made the correction harsher in exact proportion to how
+  // consistent the trader is: someone who always runs one model in one session
+  // paid the steepest price for having a routine, which is backwards.
+  //
+  // Deduplicating by the trade set is the conservative half of the fix. It
+  // does not pretend that overlapping-but-different slices are independent —
+  // they are not, and Bonferroni still over-corrects for that. It only stops
+  // charging four times for a question asked once.
+  const comparisons = new Set(candidates.map(c => c.signature ?? c.id)).size;
   for (const c of candidates) {
     c.pAdjusted = bonferroni(c.pValue, comparisons);
     c.significant = c.pAdjusted < PATTERN_ALPHA
@@ -369,12 +434,13 @@ export function discoverPatterns(
   // when one weakens or disappears; hiding a duplicate from it would make a
   // still-present pattern look gone, and the whole point of that layer is to
   // stop a claim outliving its evidence.
-  return candidates.sort((a, b) => {
+  const sorted = candidates.sort((a, b) => {
     if (a.significant !== b.significant) return a.significant ? -1 : 1;
     const tierDiff = tierWeight(b) - tierWeight(a);
     if (tierDiff !== 0) return tierDiff;
     return Math.abs(b.delta) - Math.abs(a.delta);
   });
+  return { candidates: sorted, run: { comparisons, allWins, allLosses } };
 }
 
 /** A stable identity for the exact set of trades a slice selected. */
@@ -405,6 +471,8 @@ const TOPIC_OF: Partial<Record<PatternCandidate['kind'], string>> = {
   'instrument+session':   'session',
   'session+direction':    'session',
   'session_vs_overall':   'session',
+  hour:                   'timing',
+  model:                  'setup',
   'hour+instrument':      'timing',
   'direction+hour':       'timing',
   'confirmation+hour':    'timing',

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
-import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios } from '../../lib/analytics';
+import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios,
+  closestToSignificance, sampleNeededFor, PATTERN_ALPHA } from '../../lib/analytics';
 import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind, RuleForWhatIf } from '../../lib/analytics';
 import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
@@ -402,7 +403,29 @@ export default function AiAnalyticsPage() {
     if (tested === 0) {
       c = 'עדיין אין מספיק עסקאות כדי לחתוך את ההיסטוריה ולבדוק משהו.';
     } else if (sig.length === 0) {
-      c = `עדיין לא. בדקנו ${tested} צירופים שונים של תנאים, ואף אחד מהם לא החזיק אחרי שלקחנו בחשבון כמה בדיקות נעשו — כלומר שום דבר כאן עדיין לא שונה ממקרה.`;
+      // "Nothing found" on its own is useless — it does not tell the trader
+      // whether to keep watching or drop the idea. The closest candidate and
+      // the size of its remaining gap do.
+      const near = closestToSignificance(analysis.patterns);
+      const run  = analysis.patternRun;
+      const need = near
+        ? sampleNeededFor(
+            near,
+            { wins: run.allWins - near.metric.wins, losses: run.allLosses - near.metric.losses },
+            run.comparisons,
+            PATTERN_ALPHA,
+          )
+        : null;
+
+      if (near && need) {
+        c = `עדיין לא, אבל יש כיוון: ${near.metric.winRate.toFixed(0)}% הצלחה מול ${near.baseline.toFixed(0)}% בשאר היומן, על ${near.metric.trades} עסקאות. `
+          + `אם הקצב הזה יישאר, בערך ${need.totalDecided} עסקאות סגורות ביומן יספיקו כדי לקבוע — עוד ${need.additional} בערך.`;
+      } else if (near) {
+        c = `עדיין לא. הכי קרוב הוא ${near.metric.winRate.toFixed(0)}% מול ${near.baseline.toFixed(0)}% על ${near.metric.trades} עסקאות, `
+          + `אבל הפער קטן מכדי להיסגר בעוד עסקאות — עוד מהן ישאירו אותו במקום.`;
+      } else {
+        c = `בדקנו ${tested} צירופים שונים של תנאים ואף אחד לא החזיק. עדיין אין כאן משהו שנבדל ממקרה.`;
+      }
     } else {
       // Deliberately not naming them here. The Hebrew labeller lives in the
       // AI module, which drags the provider client into a page bundle that has

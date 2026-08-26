@@ -124,7 +124,15 @@ export type PatternKind =
   | 'macro'
   /** Trades where the trader said they kept their own rules, against the ones
    *  where they said they did not. Their verdict, not ours. */
-  | 'rules';
+  | 'rules'
+  /** Hour of entry on its own, and model/setup on its own.
+   *
+   *  Both used to reach the engine only inside a pair (hour×instrument,
+   *  model×hour). A trader with one instrument and one model would have lost
+   *  the dimension entirely once those collapsed pairs stopped being
+   *  generated, so each now stands alone. */
+  | 'hour'
+  | 'model';
 
 /** One candidate fact discovered by combining dimensions. Ranked, not yet
     phrased — the AI explanation layer turns the top candidate into prose,
@@ -174,6 +182,19 @@ export interface PatternCandidate {
   alsoMatches?: Array<Record<string, string | number>>;
 }
 
+/** What the correction was computed over, carried so a surface can explain a
+ *  "not yet" instead of only stating it. Without the comparison count, no
+ *  consumer can work out how much more evidence a candidate would need — the
+ *  threshold depends on it. */
+export interface PatternRun {
+  /** Distinct trade-partitions tested. This is the divisor the correction used. */
+  comparisons: number;
+  /** Wins and losses across the whole journal, so a group's complement can be
+   *  reconstructed without re-reading the trades. */
+  allWins: number;
+  allLosses: number;
+}
+
 export interface FullAnalysis {
   performance: PerformanceSummary;
   instruments: GroupPerformance[];
@@ -209,4 +230,6 @@ export interface FullAnalysis {
   time: TimeSummary;
   direction: DirectionSummary;
   patterns: PatternCandidate[];
+  /** The shape of the run that produced `patterns`. */
+  patternRun: PatternRun;
 }

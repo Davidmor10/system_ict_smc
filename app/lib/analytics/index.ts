@@ -17,7 +17,7 @@ import { analyzeEmotions } from './emotions';
 import { analyzeExits } from './exits';
 import { analyzeTime } from './time';
 import { analyzeDirection } from './direction';
-import { discoverPatterns } from './patterns';
+import { discoverPatternRun } from './patterns';
 import { expectancy, streaks, planVsExecution, completeness } from './journalStats';
 import type { FullAnalysis } from './types';
 import type { MacroContext } from './macroHistory';
@@ -34,7 +34,7 @@ export function runFullAnalysis(trades: TradeEntry[], macro?: MacroContext): Ful
     exits: analyzeExits(trades),
     time: analyzeTime(trades),
     direction: analyzeDirection(trades),
-    patterns: discoverPatterns(trades, macro),
+    ...(() => { const r = discoverPatternRun(trades, macro); return { patterns: r.candidates, patternRun: r.run }; })(),
     // The depth layer. These were computed for the stats page and nowhere
     // else, so every AI surface reasoned about this trader without the four
     // numbers that describe them best: what a trade is worth, what runs they
@@ -68,4 +68,9 @@ export * from './types';
 export { loadMacroContext, buildMacroContext, EMPTY_MACRO_CONTEXT } from './macroHistory';
 export type { MacroContext } from './macroHistory';
 
-export { prune, DEGENERATE_SHARE } from './patterns';
+export { prune, DEGENERATE_SHARE, PATTERN_ALPHA } from './patterns';
+
+export { sampleNeededFor, closestToSignificance, MAX_PROJECTED_DECIDED } from './sampleNeeded';
+export type { SampleNeeded } from './sampleNeeded';
+export { discoverPatternRun } from './patterns';
+export type { PatternRun } from './types';
