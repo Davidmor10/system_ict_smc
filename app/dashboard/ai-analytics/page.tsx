@@ -8,6 +8,7 @@ import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCo
 import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind, RuleForWhatIf } from '../../lib/analytics';
 import { SESS, getActiveSessionKey } from '../../lib/sessions';
 import EmptyState from '../../components/EmptyState';
+import PatternEvidence from '../../components/PatternEvidence';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyTabs from '../../components/WeeklyTabs';
@@ -23,6 +24,10 @@ interface PatternInsight {
   subject: string; title: string; evidence: string;
   confidenceLevel: ConfidenceLevel; sampleSize: number;
   delta: number; significant: boolean;
+  /** The trades the slice selected, so the card can be opened. Optional here
+   *  and only here: an insight cached by an older build has no such field, and
+   *  a missing toggle is a better outcome than a page that throws. */
+  tradeIds?: number[];
 }
 
 function fmtPF(n: number): string {
@@ -909,6 +914,10 @@ export default function AiAnalyticsPage() {
                     <div className="flex items-center gap-2"><span className="font-mono text-sm font-bold text-white">{ins.subject}</span><span style={{ color: '#d4af37', fontSize: 12 }}>◈</span></div>
                   </div>
                   <InsightText text={ins.title + ' ' + ins.evidence} className="text-[15px] font-medium text-[#c0c0c0] leading-relaxed" />
+                  {/* The claim, openable. Every number above this line came
+                      from these rows, and until it was here the only way to
+                      check one was to read the engine's source. */}
+                  <PatternEvidence tradeIds={ins.tradeIds ?? []} trades={trades} subject={ins.subject} />
                 </Reveal>
               ))}
             </div>

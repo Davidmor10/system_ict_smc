@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import './Evidence.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EvidenceList — the trades behind a claim.

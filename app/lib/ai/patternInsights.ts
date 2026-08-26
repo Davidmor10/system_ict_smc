@@ -26,6 +26,18 @@ export interface PatternInsight {
    *  compared. A pattern that did not is real raw material and worth showing —
    *  it is simply not yet an edge, and the page has to say which is which. */
   significant: boolean;
+  /** The exact trades this slice selected.
+   *
+   *  Carried so the card can be opened. A claim the trader cannot check is an
+   *  oracle — believable or not, never correctable — and the pattern cards had
+   *  no way to be opened at all. The ids come from the candidate's signature,
+   *  which is already the sorted list of trade ids in the slice, so nothing is
+   *  recomputed and the list cannot drift from the numbers above it.
+   *
+   *  Ids rather than trades: the page already holds the journal, and shipping
+   *  the rows through an AI route would put trade data somewhere it has no
+   *  reason to be. */
+  tradeIds: number[];
 }
 
 /** How many patterns reach the page.
@@ -200,6 +212,21 @@ const CONFIDENCE_HE: Record<string, string> = { low: 'נמוכה', medium: 'בי
  *  not. */
 const LATIN_METRIC_TOKENS = /\b(winRate|avgRR|PnL|PF|profitFactor|winrate|R:R)\b/;
 
+/** The slice's trade ids, from the signature the pattern engine already built.
+ *
+ *  Tolerant on purpose: a candidate that somehow reached here without one
+ *  yields an empty list, and the card simply cannot be opened. A crash on the
+ *  analytics page would be a far worse outcome than a missing toggle. */
+function idsFromSignature(signature: string | undefined): number[] {
+  if (!signature) return [];
+  return signature.split(',')
+    // An empty segment must not become an id. Number('') is 0, which is finite
+    // and would put a trade that does not exist into the list.
+    .filter(part => part.trim() !== '')
+    .map(Number)
+    .filter(n => Number.isInteger(n));
+}
+
 export function hasLatinMetricLabel(text: string): boolean {
   return LATIN_METRIC_TOKENS.test(text);
 }
@@ -304,6 +331,7 @@ ${isHe ? '- כתוב את המשפט כולו בעברית, כולל שמות ה
       sampleSize: c.confidence.sampleSize,
       delta: c.delta,
       significant: c.significant,
+      tradeIds: idsFromSignature(c.signature),
     }))
     // A title that came back in Latin is dropped rather than printed. One card
     // fewer is a smaller failure than an English card on a Hebrew page, and
@@ -316,3 +344,6 @@ ${isHe ? '- כתוב את המשפט כולו בעברית, כולל שמות ה
     // because four Latin tokens never outweigh a Hebrew sentence.
     .filter(p => p.title && !(isHe && (isMostlyLatin(p.title) || hasLatinMetricLabel(p.title))));
 }
+
+// ── exports for tests ───────────────────────────────────────────────────────
+export const __testing = { idsFromSignature };

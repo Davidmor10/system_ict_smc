@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import EvidenceList from './EvidenceList';
 
 /** What the trader is currently being counted on — one line, under the bias.
  *
@@ -18,6 +19,10 @@ import { useEffect, useState } from 'react';
  *  is a field the trader fills in themselves, and what the line reports is how
  *  many times it has been filled. */
 interface Active {
+  /** The behaviour being counted, so the claim can be opened. Without it the
+   *  line states a number the trader has no way to check — and the number is
+   *  the one the whole window is built on. */
+  kind: string;
   label: string;
   what: string;
   done: number;
@@ -56,6 +61,11 @@ export default function TrackingLine() {
       <p className="dp-track-note">
         מבוסס על מה שאתה מתעד בעצמך. זה מדד, לא המלצה.
       </p>
+      {/* The trades behind the count. A window measures one behaviour for ten
+          opportunities; if the detector is picking the wrong trades, this is
+          where the trader sees it — and they know their own trades better than
+          any detector does. */}
+      <EvidenceList kind={active.kind} />
     </section>
   );
 }
