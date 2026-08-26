@@ -27,7 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeRow } from '../types';
-import { resolveStopMoved, type ManagementEvent } from '../../trade/management';
+import { resolveStopMoved, analyzeStopMoves, type ManagementEvent } from '../../trade/management';
 
 export type BehaviorKind =
   | 'discretionary_exit'
@@ -140,7 +140,33 @@ function median(values: number[]): number {
  *
  *  Requires exit_price, so it only fires on trades where the exit was actually
  *  recorded. A trade whose R was assumed from its result cannot testify about
- *  where it closed — the assumption already decided the answer. */
+ *  where it closed — the assumption already decided the answer.
+ *
+ *  AN ADVANCED STOP IS NOT A DISCRETIONARY EXIT
+ *
+ *  The detector compares the exit against the stop set AT ENTRY, because that
+ *  is the stop the plan named. A trader who advances their stop to protect a
+ *  position and is then taken out at the new level has closed at a stop — just
+ *  not the one this comparison knows about. Judged against the entry stop,
+ *  that exit sits between the two planned prices and looks identical to a
+ *  mid-trade decision.
+ *
+ *  It is the opposite of one. Advancing a stop is the discipline this layer
+ *  exists to encourage, and calling it a discretionary exit does not merely
+ *  miscount — it opens a measurement window asking the trader to stop doing
+ *  the right thing. Observed on live data: eight of ten flagged exits were
+ *  trades where the trader had reported advancing their stop.
+ *
+ *  What happens next depends on whether the level survived. A trade carrying
+ *  management events knows where the stop ended up, so the question is decided
+ *  rather than guessed: the exit either reached that level or it did not, and
+ *  only the second is a decision. A trade carrying only the trader's reported
+ *  "I advanced it" has no level at all, and there "the advanced stop was hit"
+ *  and "the stop was advanced and then the position was closed by hand" are
+ *  the same row. That trade leaves the OPPORTUNITY set entirely — crediting it
+ *  as a clean exit would assert the first reading, and flagging it asserts the
+ *  second. Same rule as the stop and rule detectors below: silence is not a
+ *  verdict, and an honest denominator leaves out what nobody can grade. */
 function detectDiscretionaryExit(t: TradeRow): [boolean, BehaviorOccurrence | null] {
   const exit   = t.exit_price;
   const target = t.take_profit;
@@ -162,6 +188,34 @@ function detectDiscretionaryExit(t: TradeRow): [boolean, BehaviorOccurrence | nu
   const reachedTarget = progress >= 1 - EXIT_TOLERANCE;
   const hitStop       = (exit! - stop!) * dir <= EXIT_TOLERANCE * Math.abs(entry - stop!);
   if (reachedTarget || hitStop) return [true, null];
+
+  // Between the two planned prices — which is also where an advanced stop
+  // sits. Resolved the same way the stop detector resolves it, so a logged
+  // move and a remembered one are read identically in both places.
+  const direction = t.direction === 'SHORT' ? 'SHORT' : 'LONG';
+  const events = (t.management ?? null) as ManagementEvent[] | null;
+  const { value: stopMoved } = resolveStopMoved(
+    stop!,
+    direction,
+    events,
+    t.stop_moved === 'none' || t.stop_moved === 'advanced' || t.stop_moved === 'widened'
+      ? t.stop_moved : undefined,
+  );
+
+  if (stopMoved === 'advanced') {
+    // With the levels on record there is nothing to guess: the exit either
+    // reached the stop the trader moved to, or it did not, and only the second
+    // is a decision. This is the case the events were added for.
+    const moved = events ? analyzeStopMoves(stop!, direction, events).finalStop : null;
+    if (moved != null) {
+      const hitMovedStop = (exit! - moved) * dir <= EXIT_TOLERANCE * Math.abs(entry - stop!);
+      if (hitMovedStop) return [true, null];
+    } else {
+      // Reported, with no level. Unjudgeable, and left out of the denominator
+      // rather than credited as clean — see the note above.
+      return [false, null];
+    }
+  }
 
   return [true, {
     kind: 'discretionary_exit',

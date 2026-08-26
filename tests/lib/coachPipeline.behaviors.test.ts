@@ -159,6 +159,129 @@ describe('discretionary_exit', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// An advanced stop is not a discretionary exit
+//
+// THE REGRESSION. The detector reads the stop set at entry, because that is
+// the stop the plan named. A trader who moves their stop up to protect a
+// position and is then taken out at the new level closed AT A STOP — one this
+// function cannot see, since the level is not recorded. Against the entry
+// stop it looks exactly like a mid-trade decision.
+//
+// Measured on live data before the fix: of ten flagged exits, eight were
+// trades the trader had reported advancing their stop on. The behaviour was
+// about to be handed a measurement window asking them to stop protecting
+// their positions.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('discretionary_exit vs an advanced stop', () => {
+  const planned = (o: Partial<TradeRow> = {}) =>
+    T({ entry_price: 20000, stop_loss: 19980, take_profit: 20040, ...o });
+
+  it('does not flag an exit on a trade whose stop was advanced', () => {
+    const t = tally([planned({ exit_price: 20010, stop_moved: 'advanced' })], 'discretionary_exit');
+    expect(t).toBeUndefined();
+  });
+
+  it('drops it from the denominator too, rather than crediting a clean exit', () => {
+    // With the level gone, "the advanced stop was hit" and "the stop was
+    // advanced and then the position was closed by hand" are the same row.
+    // Counting it as an opportunity that stayed clean asserts the first.
+    const trades = [
+      planned({ exit_price: 20010, stop_moved: 'advanced' }),
+      planned({ exit_price: 20010, stop_moved: 'none' }),
+    ];
+    const t = tally(trades, 'discretionary_exit')!;
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(1);
+  });
+
+  it('still flags one where the stop was explicitly not moved', () => {
+    expect(tally([planned({ exit_price: 20010, stop_moved: 'none' })], 'discretionary_exit')!.occurrences).toBe(1);
+  });
+
+  it('still flags one where the trader never answered', () => {
+    // Silence about the stop is not a claim that it moved. The trade stays
+    // judgeable, and the entry stop is the only stop there is evidence for.
+    expect(tally([planned({ exit_price: 20010, stop_moved: null })], 'discretionary_exit')!.occurrences).toBe(1);
+  });
+
+  it('still flags one where the stop was widened', () => {
+    // Widening moves the stop AWAY. An exit between entry and target cannot
+    // be a widened stop being hit, so the mid-trade decision stands.
+    expect(tally([planned({ exit_price: 20010, stop_moved: 'widened' })], 'discretionary_exit')!.occurrences).toBe(1);
+  });
+
+  it('keeps a target reached on an advanced stop as a clean opportunity', () => {
+    // Nothing ambiguous here: the plan's own target was hit. Advancing the
+    // stop on the way is irrelevant, and dropping the trade would shrink the
+    // denominator for no reason.
+    const t = tally([planned({ exit_price: 20040, stop_moved: 'advanced' })], 'discretionary_exit')!;
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(0);
+  });
+
+  it('keeps the entry stop being hit as a clean opportunity', () => {
+    const t = tally([planned({ exit_price: 19980, result: 'LOSS', stop_moved: 'advanced' })], 'discretionary_exit')!;
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(0);
+  });
+
+  // ── when the level survived, nothing is guessed ──────────────────────────
+
+  it('clears the trade when the exit reached the level the stop moved to', () => {
+    // Advanced to 20005, taken out there. A stop was hit; it just was not the
+    // one written at entry.
+    const t = tally([planned({
+      exit_price: 20005,
+      stop_moved: null,
+      management: [{ kind: 'stop', at: '2026-08-01T10:05:00Z', to: 20005 }],
+    } as Partial<TradeRow>)], 'discretionary_exit')!;
+    expect(t.opportunities).toBe(1);
+    expect(t.occurrences).toBe(0);
+  });
+
+  it('still flags an exit taken ABOVE the level the stop moved to', () => {
+    // THE CASE THE EVENT LOG EXISTS FOR. Advanced to 20005, closed by hand at
+    // 20020 — the advanced stop was never reached, so this is a decision, and
+    // the record proves it rather than the detector assuming it.
+    const t = tally([planned({
+      exit_price: 20020,
+      stop_moved: 'advanced',
+      management: [{ kind: 'stop', at: '2026-08-01T10:05:00Z', to: 20005 }],
+    } as Partial<TradeRow>)], 'discretionary_exit')!;
+    expect(t.occurrences).toBe(1);
+  });
+
+  it('allows the same slippage against the advanced stop as against the planned one', () => {
+    const t = tally([planned({
+      exit_price: 20005 + 20 * EXIT_TOLERANCE * 0.5,
+      stop_moved: 'advanced',
+      management: [{ kind: 'stop', at: '2026-08-01T10:05:00Z', to: 20005 }],
+    } as Partial<TradeRow>)], 'discretionary_exit')!;
+    expect(t.occurrences).toBe(0);
+  });
+
+  it('works for shorts', () => {
+    const short = T({
+      direction: 'SHORT', entry_price: 20000, stop_loss: 20020, take_profit: 19960,
+      exit_price: 19990, result: 'WIN', stop_moved: 'advanced',
+    });
+    expect(tally([short], 'discretionary_exit')).toBeUndefined();
+  });
+
+  it('reproduces the live split — eight advanced, two real', () => {
+    const trades = [
+      ...Array.from({ length: 8 }, () => planned({ exit_price: 20010, stop_moved: 'advanced' })),
+      ...Array.from({ length: 2 }, () => planned({ exit_price: 20010, stop_moved: 'none' })),
+      ...Array.from({ length: 6 }, () => planned({ exit_price: 20040, stop_moved: 'none' })),
+    ];
+    const t = tally(trades, 'discretionary_exit')!;
+    expect(t.occurrences).toBe(2);
+    expect(t.opportunities).toBe(8);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // no_confirmation / rule_violation / size_spike
 // ═══════════════════════════════════════════════════════════════════════════
 
