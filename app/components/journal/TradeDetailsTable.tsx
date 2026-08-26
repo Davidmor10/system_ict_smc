@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { TradeEntry } from '../../lib/journal';
-import { plannedRR, rMultiple, tradePnL } from '../../lib/journal';
+import { plannedRR, rMultiple, tradePnL, missingAnswers } from '../../lib/journal';
 import { calcWeightedExitPrice } from '../../lib/calc/trade';
 import { pointValue } from '../../lib/instruments';
 import { sessionLabel } from '../../lib/sessions';
@@ -229,6 +229,10 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
   const reward = Math.abs(t.target - t.entry) * perPoint;
   const setup = t.model && t.model !== 'לא צוין' ? t.model : '';
   const chart = t.screenshots?.[0] ?? null;
+  // Logged before these answers were required. Marked rather than rewritten:
+  // a gap is a fact about the record, and filling it in from here would be
+  // inventing an answer the trader never gave.
+  const missing = missingAnswers(t);
 
   // Every position on the bar is measured FROM THE STOP, which is what makes
   // one formula correct for a long and a short alike.
@@ -263,6 +267,13 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
 
         <div className="flex items-center gap-[9px]">
           <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 900, color: '#fff', letterSpacing: '.05em' }}>{t.symbol}</span>
+          {missing.length > 0 && (
+            <span
+              title={`חסרות תשובות: ${missing.map(m => m.label).join(' · ')}`}
+              aria-label="חסרות תשובות"
+              style={{ fontSize: 10, color: 'rgba(212,175,55,.55)', lineHeight: 1 }}
+            >◇</span>
+          )}
           <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: long ? BULL : BEAR, letterSpacing: '.06em', whiteSpace: 'nowrap' }}>
             {long ? '▲ לונג' : '▼ שורט'}
           </span>
@@ -336,6 +347,25 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
             <Chip text={`סטאפ · ${setup || 'לא נרשם'}`} color={setup ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.3)'} />
             <Chip text={`×${t.contracts || 1} חוזים`} color="rgba(255,255,255,.6)" />
           </div>
+
+          {/* The answers this trade never got. Named, with the way to give
+              them — a mark with no route to fixing it is just a scold. */}
+          {missing.length > 0 && (
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                position: 'relative', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                marginBottom: 14, padding: '9px 12px', background: 'rgba(212,175,55,.05)',
+                border: '1px solid rgba(212,175,55,.18)',
+              }}
+            >
+              <span style={{ fontFamily: SANS, fontSize: 11.5, color: 'rgba(255,255,255,.55)', lineHeight: 1.6 }}>
+                העסקה הזאת נשמרה לפני שהשאלות האלה היו חובה, ולכן היא לא נספרת במדידה שלהן:{' '}
+                <b style={{ color: 'rgba(212,175,55,.9)' }}>{missing.map(m => m.label).join(' · ')}</b>
+              </span>
+              <button type="button" className="tdt-act tdt-act-edit" onClick={() => onEdit(t)}>השלם</button>
+            </div>
+          )}
 
           {/* 4 — the trader's own words, verbatim, and the actions. */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 22, flexWrap: 'wrap' }}>

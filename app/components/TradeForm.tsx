@@ -352,10 +352,20 @@ function Group({ label, tone = 'primary', children }: { label: string; tone?: 'p
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** `needed` marks a question a closed trade cannot be saved without.
+ *
+ *  Shown while it is still unanswered and cleared the moment it is, so the
+ *  form reads as a short list of what is left rather than a wall of asterisks
+ *  the eye stops seeing. */
+function Field({ label, children, needed }: {
+  label: string; children: React.ReactNode; needed?: boolean;
+}) {
   return (
     <div>
-      <label className="block font-mono text-[10px] uppercase tracking-[0.16em] text-white/35 mb-1.5">{label}</label>
+      <label className="block font-mono text-[10px] uppercase tracking-[0.16em] text-white/35 mb-1.5">
+        {label}
+        {needed && <span className="text-[#d4af37]/70 mr-1.5 tracking-normal">· חובה</span>}
+      </label>
       {children}
     </div>
   );
@@ -672,13 +682,45 @@ export default function TradeForm({
     }, 450);
   }
 
+  /** The three answers only the trader can give.
+   *
+   *  Every price on this form is already required, so the numeric side of a
+   *  trade is complete by construction. The human side was not, and that is
+   *  the side the behaviour layer is built on — with a specific cost: an
+   *  unanswered rule verdict or stop question does not make the trade look
+   *  clean, it removes the trade from the measurement entirely. A journal half
+   *  answered is a denominator half the size, and three behaviours sat at low
+   *  confidence for exactly that reason.
+   *
+   *  Each has an answer that means "nothing happened" — "I kept my rules",
+   *  "I didn't touch it". So this asks the trader to ANSWER, never to report
+   *  something. That distinction is what keeps it from shaping the data.
+   *
+   *  Confirmations are deliberately absent, and must stay absent. The
+   *  `no_confirmation` detector measures the EMPTINESS of that field; require
+   *  it and the detector can never fire again. A field whose blankness is the
+   *  signal cannot be made mandatory. */
+  const missingRequired = [
+    form.followedRules  === '' ? 'עמידה בחוקים'  : null,
+    form.stopMoved      === '' ? 'הזזת סטופ'     : null,
+    form.emotionalState === '' ? 'מצב רגשי'      : null,
+  ].filter((x): x is string => x !== null);
+
   /** A closed trade needs somewhere it closed. The result is no longer asked
    *  for, so the exit price is what decides whether this trade is finished.
    *  A new trade therefore needs an exit before it can be saved as closed —
    *  the "save as open" button is the path for one still running. An edit is
    *  always savable: the trade already exists, and reopening it to fix the
-   *  setup or the discipline notes must not require closing it first. */
-  const canSubmit = derivedResult !== 'OPEN' || initial != null;
+   *  setup or the discipline notes must not require closing it first.
+   *
+   *  The three answers are required on the same terms — a NEW trade being
+   *  saved as closed. Not on "save as open", because a position still running
+   *  has not finished being managed and its stop may yet move; and not on an
+   *  edit, because the trades logged before this existed must stay editable.
+   *  They are marked in the journal instead. */
+  const canSubmit =
+    (derivedResult !== 'OPEN' || initial != null)
+    && (initial != null || missingRequired.length === 0);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -827,7 +869,7 @@ export default function TradeForm({
               would count them as one thing and measure nothing. This replaces
               the separate "what happened to the stop" section, which asked the
               same question twice. */}
-          <Field label="נגעת בסטופ אחרי הכניסה?">
+          <Field label="נגעת בסטופ אחרי הכניסה?" needed={!initial && form.stopMoved === ''}>
             <div className="flex items-center gap-2">
               <FormResultBtn
                 label="לא נגעתי" glyph="=" active={form.stopMoved === 'none'}
@@ -1047,7 +1089,7 @@ export default function TradeForm({
               three answers. Silence must stay distinguishable from "yes",
               otherwise every rule-adherence number becomes a flattering
               fiction built from the trades nobody bothered to grade. */}
-          <Field label="עמדתי בחוקים שלי?">
+          <Field label="עמדתי בחוקים שלי?" needed={!initial && form.followedRules === ''}>
             <div className="flex items-center gap-2">
               <FormResultBtn
                 label="עמדתי" glyph="✓" active={form.followedRules === 'yes'}
@@ -1099,7 +1141,7 @@ export default function TradeForm({
             </p>
           </Field>
 
-          <Field label="מצב רגשי לפני הכניסה">
+          <Field label="מצב רגשי לפני הכניסה" needed={!initial && form.emotionalState === ''}>
             <div className="flex flex-wrap gap-1.5">
               {EMOTIONAL_STATE_OPTIONS.map(opt => (
                 <button
@@ -1174,6 +1216,18 @@ export default function TradeForm({
             </div>
           )}
         </div>
+        {/* What is still missing, named. A disabled button with no reason is a
+            dead end — the trader cannot tell whether the form is broken or
+            whether they are. Hidden while editing, where the rule does not
+            apply. */}
+        {!initial && missingRequired.length > 0 && (
+          <p className="font-mono text-[11px] text-[#d4af37]/75 pt-1 leading-relaxed">
+            כדי לשמור עסקה סגורה צריך לענות על: {missingRequired.join(' · ')}
+            <span className="block text-white/30 mt-0.5">
+              לכל אחת יש תשובה שמשמעותה &quot;לא קרה כלום&quot;. אם העסקה עוד רצה — שמור אותה פתוחה.
+            </span>
+          </p>
+        )}
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button

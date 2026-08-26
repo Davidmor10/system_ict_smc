@@ -627,6 +627,39 @@ export function plannedRR(t: TradeEntry): number | null {
   return calcRR(t.entry, t.stop, t.target);
 }
 
+// ── the answers only the trader can give ────────────────────────────────────
+//
+// Every price on the trade form is required, so a trade's numeric side is
+// complete by construction. Its human side was optional, and that is the side
+// the behaviour layer is built on — with a cost that is easy to miss: an
+// unanswered rule verdict or stop question does not make a trade look clean,
+// it takes the trade out of the measurement altogether. Three behaviours sat
+// at low confidence because the denominators were half the journal.
+//
+// Required going forward, on new closed trades only. Trades logged before the
+// rule existed keep their gaps and are marked here instead, because rewriting
+// history to satisfy a rule invented afterwards is how a journal stops being
+// a record.
+
+export interface MissingAnswer { key: string; label: string }
+
+/** Questions a decided trade should carry an answer to.
+ *
+ *  Confirmations are deliberately not on this list and must never be. The
+ *  `no_confirmation` detector measures the EMPTINESS of that field; requiring
+ *  it would mean the detector could never fire again. A field whose blankness
+ *  is the signal cannot be made mandatory. */
+export function missingAnswers(t: TradeEntry): MissingAnswer[] {
+  // An open position has not finished being managed — its stop may yet move,
+  // and asking how it went is asking about something that has not happened.
+  if (t.result === 'OPEN') return [];
+  const out: MissingAnswer[] = [];
+  if (t.followedRules === undefined)  out.push({ key: 'followedRules',  label: 'עמידה בחוקים' });
+  if (!t.stopMoved)                   out.push({ key: 'stopMoved',      label: 'הזזת סטופ' });
+  if (!t.emotionalState)              out.push({ key: 'emotionalState', label: 'מצב רגשי' });
+  return out;
+}
+
 export interface TradeStats {
   count: number;
   wins: number;
