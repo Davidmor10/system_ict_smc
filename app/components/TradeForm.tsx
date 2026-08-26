@@ -613,20 +613,20 @@ export default function TradeForm({
 
   /** Builds the trade record and runs the save animation flow. Called either
       directly (no warnings) or after the trader dismisses the guardian panel. */
-  /** `asOpen` saves the plan while the position is still running.
+  /** A trade is logged once, after it closed.
    *
-   *  Same form, same fields — the only difference is that the result is left
-   *  as OPEN and the record is written before the outcome exists. That timing
-   *  is the whole point: levels saved while a trade is live cannot have been
-   *  bent to match how it ended, because how it ended had not happened yet.
+   *  There used to be a second path here — "save as open", which wrote the
+   *  levels while the position was still running. The reasoning was that a
+   *  plan recorded mid-trade cannot have been bent to match how the trade
+   *  ended. What it produced in practice was half-written rows: a record with
+   *  no outcome, no stop answer and no rule verdict, which every analysis then
+   *  had to skip. A journal of trades nobody finished writing is not a
+   *  journal.
    *
-   *  Deliberately NOT required, and a trade logged in one go afterwards is not
-   *  marked, excluded or nagged about. The moment a missing plan costs the
-   *  trader something, the cheapest way to get it back is to fill the plan in
-   *  after the fact — and a fabricated plan the system believes is worse than
-   *  no plan at all, because it turns "we don't know" into a confident wrong
-   *  answer. */
-  function performSave(asOpen = false) {
+   *  OPEN survives as a RESULT, because trades saved that way are still in
+   *  people's journals and must stay editable and closable. Nothing new
+   *  arrives in that state. */
+  function performSave() {
     const trade: TradeEntry = {
       // Preserve the id when editing so the save is an in-place update, not a
       // duplicate row.
@@ -647,7 +647,7 @@ export default function TradeForm({
       // the only input and the label follows from it, so the two can never
       // disagree. An edit of a pre-exits trade keeps the result it was saved
       // with rather than being reset to OPEN.
-      result: asOpen ? 'OPEN' : (derivedResult !== 'OPEN' ? derivedResult : (initial?.result ?? 'OPEN')),
+      result: derivedResult !== 'OPEN' ? derivedResult : (initial?.result ?? 'OPEN'),
       session: autoSession ?? 'NONE',
       bias: form.dayBias || 'INDECISIVE',
       model: form.model || UNSPECIFIED_MODEL,
@@ -701,26 +701,20 @@ export default function TradeForm({
    *  it and the detector can never fire again. A field whose blankness is the
    *  signal cannot be made mandatory. */
   const missingRequired = [
+    derivedResult === 'OPEN'    ? 'מחיר יציאה'   : null,
     form.followedRules  === '' ? 'עמידה בחוקים'  : null,
     form.stopMoved      === '' ? 'הזזת סטופ'     : null,
     form.emotionalState === '' ? 'מצב רגשי'      : null,
   ].filter((x): x is string => x !== null);
 
-  /** A closed trade needs somewhere it closed. The result is no longer asked
-   *  for, so the exit price is what decides whether this trade is finished.
-   *  A new trade therefore needs an exit before it can be saved as closed —
-   *  the "save as open" button is the path for one still running. An edit is
-   *  always savable: the trade already exists, and reopening it to fix the
-   *  setup or the discipline notes must not require closing it first.
+  /** A new trade is complete or it is not saved.
    *
-   *  The three answers are required on the same terms — a NEW trade being
-   *  saved as closed. Not on "save as open", because a position still running
-   *  has not finished being managed and its stop may yet move; and not on an
-   *  edit, because the trades logged before this existed must stay editable.
-   *  They are marked in the journal instead. */
-  const canSubmit =
-    (derivedResult !== 'OPEN' || initial != null)
-    && (initial != null || missingRequired.length === 0);
+   *  An edit stays savable whatever is missing. Two reasons, and both matter:
+   *  trades logged before any of this was required must remain editable — they
+   *  are marked in the journal rather than held hostage — and a trade saved
+   *  while OPEN under the old flow has to be reachable in order to be closed.
+   *  Blocking the edit would strand exactly the rows that need finishing. */
+  const canSubmit = initial != null || missingRequired.length === 0;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -739,14 +733,6 @@ export default function TradeForm({
       return;
     }
     performSave();
-  }
-
-  /** Save the plan and leave the trade running. Skips the result requirement
-   *  and the guardian — the guardian warns about entering, and by the time
-   *  this button is pressed the trader is already in. */
-  function saveAsOpen() {
-    if (!form.entry || !form.stop || !form.target || stage !== 'idle') return;
-    performSave(true);
   }
 
   function logAnother() {
@@ -971,7 +957,7 @@ export default function TradeForm({
           ) : (
             <p className="font-mono text-[11px] text-white/40 leading-relaxed">
               מחיר היציאה הוא מה שקובע את ה-R ואת התוצאה — שניהם מחושבים, לא נשאלים.
-              בלי מחיר יציאה אפשר לשמור את העסקה כפתוחה ולהשלים אותה כשתיסגר.
+              עסקה מתועדת אחרי שהיא נסגרה, ולכן בלי מחיר יציאה אי אפשר לשמור אותה.
             </p>
           )}
 
@@ -1222,9 +1208,9 @@ export default function TradeForm({
             apply. */}
         {!initial && missingRequired.length > 0 && (
           <p className="font-mono text-[11px] text-[#d4af37]/75 pt-1 leading-relaxed">
-            כדי לשמור עסקה סגורה צריך לענות על: {missingRequired.join(' · ')}
+            עוד חסר: {missingRequired.join(' · ')}
             <span className="block text-white/30 mt-0.5">
-              לכל אחת יש תשובה שמשמעותה &quot;לא קרה כלום&quot;. אם העסקה עוד רצה — שמור אותה פתוחה.
+              עסקה מתועדת אחרי שהיא נסגרה. לכל שאלה יש תשובה שמשמעותה &quot;לא קרה כלום&quot;.
             </span>
           </p>
         )}
@@ -1237,20 +1223,6 @@ export default function TradeForm({
           >
             {initial ? 'שמור שינויים' : 'שמור עסקה'}
           </button>
-          {/* Save the plan while the position is still running.
-              Hidden when editing — a trade already in the journal is reopened
-              to be finished, not to be re-planned. */}
-          {!initial && (
-            <button
-              type="button"
-              onClick={saveAsOpen}
-              disabled={!form.entry || !form.stop || !form.target}
-              title="שומר את הרמות עכשיו. תשלים מחיר יציאה כשתסגור."
-              className="px-5 py-3.5 rounded-xl border border-[#d4af37]/35 text-[#d4af37] font-mono text-sm uppercase tracking-[0.14em] hover:bg-[#d4af37]/10 transition-colors duration-150 disabled:text-white/20 disabled:border-white/[0.06] disabled:cursor-not-allowed"
-            >
-              שמור פתוחה
-            </button>
-          )}
           {onCancel && (
             <button
               type="button"
