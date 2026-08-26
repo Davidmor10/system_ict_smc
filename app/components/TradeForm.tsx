@@ -129,11 +129,6 @@ function saveLastUsed(v: LastUsed): void {
 }
 
 /** The quick tags on the "advanced the stop" branch. */
-const STOP_TAGS: { key: 'breakeven' | 'trailing' | 'other'; label: string }[] = [
-  { key: 'breakeven', label: 'לאזור הפריצה' },
-  { key: 'trailing',  label: 'Trailing' },
-  { key: 'other',     label: 'אחר' },
-];
 
 function singleLeg(contracts: string): ExitRow[] {
   return [{ price: '', contracts }];
@@ -154,7 +149,6 @@ interface FormState {
       from a dashboard plan they may never have saved. */
   dayBias: Bias | '';
   stopMoved: '' | 'none' | 'advanced' | 'widened';
-  stopMoveTag: '' | 'breakeven' | 'trailing' | 'other';
   stopNote: string;
   /** Ids of the trader's own rules they broke on this trade. Only meaningful
    *  when followedRules === 'no'. Saved as violation records, not on the
@@ -189,7 +183,6 @@ function empty(): FormState {
     followedRules: '',
     dayBias: getTodaysDeclaredBias() ?? '',
     stopMoved: '',
-    stopMoveTag: '',
     stopNote: '',
     brokenRules: [],
     management: [],
@@ -222,7 +215,6 @@ function fromTrade(t: TradeEntry): FormState {
     followedRules: t.followedRules === true ? 'yes' : t.followedRules === false ? 'no' : '',
     dayBias: t.bias ?? '',
     stopMoved: t.stopMoved ?? '',
-    stopMoveTag: t.stopMoveTag ?? '',
     stopNote: t.stopNote ?? '',
     brokenRules: [],
     management: t.management ?? [],
@@ -685,7 +677,6 @@ export default function TradeForm({
       followedRules: form.followedRules === 'yes' ? true : form.followedRules === 'no' ? false : undefined,
       stopMoved: form.stopMoved || undefined,
       // The tag only means anything on the branch it belongs to.
-      stopMoveTag: form.stopMoved === 'advanced' ? (form.stopMoveTag || undefined) : undefined,
       stopNote: form.stopNote.trim() || undefined,
       management: form.management.length ? form.management : undefined,
       tradeR: realizedR ?? undefined,
@@ -883,20 +874,6 @@ export default function TradeForm({
                 onClick={() => set('stopMoved', form.stopMoved === 'widened' ? '' : 'widened')}
               />
             </div>
-
-            {/* The branch that has a branch. "Moved it" and "moved it to lock
-                in the entry" are not the same decision. */}
-            {form.stopMoved === 'advanced' && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5 onyx-pop-in">
-                {STOP_TAGS.map(t => (
-                  <button type="button" key={t.key}
-                    onClick={() => set('stopMoveTag', form.stopMoveTag === t.key ? '' : t.key)}
-                    className={chipBtn(form.stopMoveTag === t.key)}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
           </Field>
 
           {/* Where it actually closed. Deliberately never prefilled from

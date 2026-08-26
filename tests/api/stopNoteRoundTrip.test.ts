@@ -35,27 +35,29 @@ const savedTrade = {
   direction: 'LONG', entry: 100, stop: 95, target: 115, session: 'nyam',
   bias: 'BULLISH', model: 'Silver Bullet', result: 'WIN', notes: 'ראיתי sweep',
   exits: [{ price: 112, contracts: 2 }],
-  stopMoved: 'advanced', stopMoveTag: 'breakeven', stopNote: 'מתחת לפתיל התחתון',
+  stopMoved: 'advanced', stopNote: 'מתחת לפתיל התחתון',
   followedRules: true, emotionalState: 'CALM',
 };
 
-describe('stopMoveTag + stopNote survive the full save path', () => {
+// stopMoveTag was removed: the form asked whether an advanced stop went to
+// breakeven or to a trail, stored the answer, and no analysis ever read it.
+// stopNote stayed — it reaches the daily insight — so this file now guards
+// that one field through the same path.
+describe('stopNote survives the full save path', () => {
   beforeEach(() => { fakeDb.tables = {}; });
 
-  it('validation keeps them instead of stripping them', () => {
+  it('validation keeps it instead of stripping it', () => {
     const parsed = tradeEntrySchema.safeParse(savedTrade);
     expect(parsed.success).toBe(true);
-    expect(parsed.data?.stopMoveTag).toBe('breakeven');
     expect(parsed.data?.stopNote).toBe('מתחת לפתיל התחתון');
   });
 
-  it('migrateTrade keeps them, so a page refresh does not drop them', () => {
+  it('migrateTrade keeps it, so a page refresh does not drop it', () => {
     const reloaded = migrateTrade(JSON.parse(JSON.stringify(savedTrade)));
-    expect(reloaded?.stopMoveTag).toBe('breakeven');
     expect(reloaded?.stopNote).toBe('מתחת לפתיל התחתון');
   });
 
-  it('POST writes both columns to the database', async () => {
+  it('POST writes the column to the database', async () => {
     const res = await journalRoute.POST(new Request('http://localhost/api/journal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +67,6 @@ describe('stopMoveTag + stopNote survive the full save path', () => {
 
     const rows = fakeDb.getAll('journal_trades');
     expect(rows).toHaveLength(1);
-    expect(rows[0].stop_move_tag).toBe('breakeven');
     expect(rows[0].stop_note).toBe('מתחת לפתיל התחתון');
     // The derived result rode along too — it is computed by the form, not asked.
     expect(rows[0].result).toBe('WIN');
@@ -78,7 +79,6 @@ describe('stopMoveTag + stopNote survive the full save path', () => {
       body: JSON.stringify({ trades: [savedTrade] }),
     }));
     expect(res.status).toBe(200);
-    expect(fakeDb.getAll('journal_trades')[0].stop_move_tag).toBe('breakeven');
   });
 
   it('GET reads them back under the names the app uses', async () => {
@@ -90,12 +90,11 @@ describe('stopMoveTag + stopNote survive the full save path', () => {
 
     const res = await journalRoute.GET();
     const body = await res.json() as { trades: Array<Record<string, unknown>> };
-    expect(body.trades[0].stopMoveTag).toBe('breakeven');
     expect(body.trades[0].stopNote).toBe('מתחת לפתיל התחתון');
   });
 
   it('a trade that never touched its stop stores nulls, not junk', async () => {
-    const untouched = { ...savedTrade, stopMoved: 'none', stopMoveTag: undefined, stopNote: undefined };
+    const untouched = { ...savedTrade, stopMoved: 'none', stopNote: undefined };
     await journalRoute.POST(new Request('http://localhost/api/journal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,7 +102,6 @@ describe('stopMoveTag + stopNote survive the full save path', () => {
     }));
 
     const row = fakeDb.getAll('journal_trades')[0];
-    expect(row.stop_move_tag).toBeNull();
     expect(row.stop_note).toBeNull();
   });
 });
