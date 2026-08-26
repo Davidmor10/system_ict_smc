@@ -257,9 +257,28 @@ export function reconcile(input: ReconcileInput): Reconciled {
       : result.verdict === 'traded_one_problem_for_another' ? `היעד ירד אבל נשבר: ${result.broken.join(', ')}`
       : 'הניסוי הסתיים בלי שינוי מדיד';
 
+    // A window that ended without moving the target CLOSES. The experiment and
+    // its baseline go with it.
+    //
+    // Carrying them forward is what made this a loop. Status returns to
+    // `confirmed`, the next run falls into the open-a-window branch below,
+    // and an identical experiment reopens the same morning — with no line
+    // anywhere saying the last one had finished. The finding then holds the
+    // single primary slot for as long as it keeps not improving, which is
+    // exactly the behaviour least likely to release it, and no other
+    // behaviour ever gets a turn.
+    //
+    // `experimentResult` stays. It is the record that a window ran and what it
+    // came to, it is what the tracking archive reads, and it is how the next
+    // run knows this finding has already had its turn.
+    const cleared = result.verdict === 'unchanged'
+      ? { experiment: null, experimentBaseline: null, experimentStartedAt: null }
+      : {};
+
     return {
       record: {
         ...base,
+        ...cleared,
         status: to,
         statusSince: now,
         experimentResult: result,
@@ -373,6 +392,21 @@ export function reconcile(input: ReconcileInput): Reconciled {
       ? 'ללא שינוי'
       : `${fresh.occurrences} מתוך ${fresh.opportunities} — עבר ל-${fresh.status}`,
   );
+}
+
+/** Kinds that have had a measurement window close on them and have not
+ *  started another since.
+ *
+ *  `experimentResult` is the flag, and it is self-clearing: opening a new
+ *  window sets it back to null, so a finding counts as having had its turn
+ *  only between one window ending and the next beginning. That is exactly the
+ *  span in which another behaviour should get the slot. */
+export function alreadyMeasured(
+  stored: Iterable<StoredFinding>,
+): Set<BehaviorKind> {
+  const out = new Set<BehaviorKind>();
+  for (const f of stored) if (f.experimentResult) out.add(f.kind);
+  return out;
 }
 
 /** Which guardrails a stored experiment is watching. Empty when none is

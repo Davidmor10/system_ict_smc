@@ -31,7 +31,7 @@ import { computeHoldingStreaks, type HoldingStreak } from '../behavior/holding';
 import { buildContexts } from '../behavior/context';
 import { buildFinding, pickPrimary, ROLLING_WINDOW, type BehaviorFinding } from '../behavior/finding';
 import { computeGuardrails } from '../behavior/guardrails';
-import { reconcile, familiesFor, type StoredFinding } from '../behavior/memory';
+import { reconcile, familiesFor, alreadyMeasured, type StoredFinding } from '../behavior/memory';
 import type { EvidenceTier } from '../behavior/evidence';
 import { logger } from '../../logger';
 
@@ -150,7 +150,12 @@ export async function analyzeBehavior(
     }));
 
     const previousPrimary = [...stored.values()].find(s => s.isPrimary)?.kind;
-    const { primary, watching } = pickPrimary(findings, previousPrimary);
+    // Behaviours whose window has already closed rank behind ones that have
+    // not had a turn — otherwise the highest-scoring finding takes the slot
+    // back the morning after its own measurement and nothing else ever runs.
+    const { primary, watching } = pickPrimary(
+      findings, previousPrimary, alreadyMeasured(stored.values()),
+    );
 
     // Chronological — listRecentTrades is newest-first.
     const chronological = [...trades].reverse();

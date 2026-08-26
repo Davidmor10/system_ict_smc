@@ -379,6 +379,11 @@ export interface Prioritised {
 export function pickPrimary(
   findings: readonly BehaviorFinding[],
   previousPrimaryKind?: BehaviorKind,
+  /** Kinds whose last measurement window has closed and been judged, and that
+   *  have not started another since. Build it from the stored findings with
+   *  `alreadyMeasured` below. Omitted, everything ranks as never-measured,
+   *  which is the correct reading of an account with no history. */
+  measured: ReadonlySet<BehaviorKind> = new Set(),
 ): Prioritised {
   // 'always' and 'never' are excluded: neither can produce a trigger, so
   // neither can ever move forward. Left as primary, one of them would occupy
@@ -417,9 +422,23 @@ export function pickPrimary(
   // findings the system has something to say about, the ones it can actually
   // act on go first — which is the order the lifecycle already implied and
   // nobody had written down.
+  // A behaviour that has just had a window and did not move goes to the back
+  // of the queue, behind anything that has not been measured at all.
+  //
+  // Without this the rotation does not happen. The window closes, the finding
+  // returns to `confirmed`, and on the next run it is still the highest-scoring
+  // confirmed finding there is — so it takes the slot straight back and opens
+  // an identical experiment. Severity alone guarantees that the behaviour
+  // LEAST likely to improve is the one that never lets go of the slot.
+  //
+  // Ranked below readiness, not above it: a measured finding that can start
+  // today still beats an unmeasured one that cannot.
+  const turnTaken = (f: BehaviorFinding) => (measured.has(f.kind) ? 1 : 0);
+
   const ranked = [...eligible].sort(
     (a, b) =>
       readinessTier(b) - readinessTier(a)
+      || turnTaken(a) - turnTaken(b)
       || b.priorityScore - a.priorityScore
       || a.kind.localeCompare(b.kind),
   );
@@ -428,10 +447,14 @@ export function pickPrimary(
     : null;
 
   let primary = ranked[0];
-  // The incumbent's grip does not survive being unable to start. A challenger
-  // that can open a window today beats a sitting finding that cannot, whatever
-  // the margin says — otherwise the deadlock simply reappears one run later.
-  if (incumbent && primary !== incumbent && readinessTier(primary) === readinessTier(incumbent)) {
+  // The incumbent's grip does not survive being unable to start, and it does
+  // not survive having just had its turn. A challenger that can open a window
+  // today beats a sitting finding that cannot, whatever the margin says —
+  // otherwise the deadlock reappears one run later — and the margin cannot be
+  // used to reclaim a slot the incumbent has already spent a window on.
+  if (incumbent && primary !== incumbent
+      && readinessTier(primary) === readinessTier(incumbent)
+      && turnTaken(primary) === turnTaken(incumbent)) {
     const needed = incumbent.priorityScore * (1 + PRIORITY_MARGIN);
     if (primary.priorityScore < needed) primary = incumbent;
   }
