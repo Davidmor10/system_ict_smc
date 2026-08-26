@@ -620,7 +620,7 @@ export function rMultiple(t: TradeEntry): number | null {
   if (t.result === 'OPEN') return null;
   if (typeof t.tradeR === 'number' && Number.isFinite(t.tradeR)) return t.tradeR;
   if (t.result === 'BE') return 0;
-  const planned = calcRR(t.entry, t.stop, t.target);
+  const planned = calcRR(t.entry, t.stop, t.target, t.direction);
   if (planned == null || !Number.isFinite(planned)) return null;
   return t.result === 'WIN' ? planned : -1;
 }
@@ -628,7 +628,7 @@ export function rMultiple(t: TradeEntry): number | null {
 /** The reward-to-risk the trade was TAKEN for. The plan, kept apart from the
  *  outcome — comparing the two is the whole point of a journal. */
 export function plannedRR(t: TradeEntry): number | null {
-  return calcRR(t.entry, t.stop, t.target);
+  return calcRR(t.entry, t.stop, t.target, t.direction);
 }
 
 // ── the answers only the trader can give ────────────────────────────────────

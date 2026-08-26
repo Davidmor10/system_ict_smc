@@ -70,7 +70,7 @@ export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, 
     // refuse to draw conclusions from it.
     exit_price:      weightedExitPrice(trade),
     exits:           trade.exits ?? null,
-    rr_planned:      calcRR(trade.entry, trade.stop, trade.target),
+    rr_planned:      calcRR(trade.entry, trade.stop, trade.target, trade.direction),
     r_multiple:      trade.tradeR ?? null,
     pnl_usd:         trade.pnlUsd ?? null,
     result:          trade.result,

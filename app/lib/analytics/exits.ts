@@ -43,7 +43,7 @@ export function analyzeExits(trades: TradeEntry[]): ExitBehavior {
 
     if (t.result === 'WIN') {
       winnerRs.push(realizedR);
-      const plannedR = calcRR(t.entry, t.stop, t.target);
+      const plannedR = calcRR(t.entry, t.stop, t.target, t.direction);
       if (plannedR !== null && plannedR > 0) {
         sumWinnerRealized += realizedR;
         sumWinnerPlanned += plannedR;

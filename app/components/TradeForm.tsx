@@ -315,7 +315,7 @@ function buildFacts(trade: TradeEntry, priorTrades: TradeEntry[]): string[] {
     facts.push(`זמן הכניסה (${trade.time}) נופל מחוץ לחלונות הסשן שאנחנו עוקבים אחריהם.`);
   }
 
-  const rr = calcRR(trade.entry, trade.stop, trade.target);
+  const rr = calcRR(trade.entry, trade.stop, trade.target, trade.direction);
   if (rr !== null) facts.push(`ה-RR המתוכנן חושב אוטומטית: ${rr.toFixed(2)}R.`);
 
   if (trade.result === 'OPEN') {
@@ -472,7 +472,7 @@ export default function TradeForm({
   const contracts = Math.max(1, parseInt(form.contracts, 10) || 1);
 
   const rr = (isFinite(entry) && isFinite(stop) && isFinite(target))
-    ? calcRR(entry, stop, target)
+    ? calcRR(entry, stop, target, form.direction)
     : null;
 
   // ── Exits — derives result/PnL/R automatically instead of asking for them ──

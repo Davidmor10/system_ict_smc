@@ -34,6 +34,19 @@ export function calcRR(
   entry: number,
   stopLoss: number,
   takeProfit: number,
+  /** The direction the trader declared.
+   *
+   *  Optional for the callers that genuinely do not have it, and supplied by
+   *  everything that does. Without it this function INFERS the direction from
+   *  where the stop sits, which is right for every well-formed trade and wrong
+   *  in exactly the case worth catching: a long whose stop was typed above the
+   *  entry, or a short whose stop went below it.
+   *
+   *  That mattered because the realized side never inferred anything —
+   *  `calcRealizedR` takes the declared direction. So one mistyped price made
+   *  the plan and the outcome read the trade as opposite trades, and the pair
+   *  the journal exists to compare disagreed about which way it was pointing. */
+  direction?: 'LONG' | 'SHORT',
 ): number | null {
   // Typed as numbers, reached with absences. A trade row read back from the
   // database carries NULL for a target that was never set, and a form field
@@ -48,7 +61,14 @@ export function calcRR(
   if (!Number.isFinite(entry) || !Number.isFinite(stopLoss) || !Number.isFinite(takeProfit)) return null;
   const risk = Math.abs(entry - stopLoss);
   if (risk === 0) return null;
-  const dir = entry > stopLoss ? 1 : -1; // LONG if entry > stop (stop below entry)
+
+  const inferred: 'LONG' | 'SHORT' = entry > stopLoss ? 'LONG' : 'SHORT';
+  // A declared direction the prices contradict is not a plan to be measured,
+  // it is a typo. Returning a number here would report a reward-to-risk for a
+  // trade whose stop is on the profit side — and the sign would look ordinary.
+  if (direction && direction !== inferred) return null;
+
+  const dir = (direction ?? inferred) === 'LONG' ? 1 : -1;
   const reward = (takeProfit - entry) * dir;
   return reward / risk;
 }
@@ -78,6 +98,10 @@ export function calcRealizedR(
   stopLoss: number,
   direction: 'LONG' | 'SHORT',
 ): number | null {
+  // Same reason as calcRR: these are typed as numbers and reached with
+  // absences, and NaN would leave here as the number half of `number | null`
+  // and pass every guard downstream.
+  if (!Number.isFinite(entry) || !Number.isFinite(exitPrice) || !Number.isFinite(stopLoss)) return null;
   const risk = Math.abs(entry - stopLoss);
   if (risk === 0) return null;
   const dir = direction === 'LONG' ? 1 : -1;
@@ -144,13 +168,25 @@ export function calcMultiExitRealizedR(
   exits: ExitLeg[],
   direction: 'LONG' | 'SHORT',
 ): number | null {
-  const totalContracts = exits.reduce((sum, e) => sum + e.contracts, 0);
-  if (totalContracts === 0) return null;
-  const weightedR = exits.reduce((sum, e) => {
+  // A leg whose R cannot be computed is EXCLUDED, from the top and the bottom
+  // of the average alike. It used to be folded in as 0, which is not "no
+  // answer" — it is the claim that the leg came back flat, and it drags the
+  // whole trade toward break-even. A 2R trade with one unreadable leg reported
+  // about 1R, which looks like an ordinary trade rather than a broken record.
+  //
+  // Weighted by the contracts that actually produced a number, so the result
+  // is the realized R of the part of the position that can be read, and null
+  // when none of it can.
+  let weightedR = 0;
+  let counted = 0;
+  for (const e of exits) {
     const r = calcRealizedR(entry, e.price, stopLoss, direction);
-    return sum + (r ?? 0) * e.contracts;
-  }, 0);
-  return weightedR / totalContracts;
+    if (r == null || !Number.isFinite(e.contracts) || e.contracts <= 0) continue;
+    weightedR += r * e.contracts;
+    counted   += e.contracts;
+  }
+  if (counted === 0) return null;
+  return weightedR / counted;
 }
 
 /** Contracts-weighted average exit price across every leg — the single price

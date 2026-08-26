@@ -243,7 +243,7 @@ export function discoverPatternRun(
     ];
     for (const b of RR_BUCKETS) {
       const subset = trades.filter(t => {
-        const rr = calcRR(t.entry, t.stop, t.target);
+        const rr = calcRR(t.entry, t.stop, t.target, t.direction);
         return rr !== null && rr >= b.lo && rr < b.hi;
       });
       push('planned_rr', b.key, { plannedRR: b.key }, subset, b.label);
