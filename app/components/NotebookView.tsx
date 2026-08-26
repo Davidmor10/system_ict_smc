@@ -6,7 +6,7 @@ import { loadTrades, hydrateTradesFromCloud, tradePnL } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { hydrateList, commitList, hydrateDoc, saveDoc, initSyncListeners } from '../lib/sync/collections';
 import {
-  BUILTIN_FOLDERS, mergedFolders, seedTradeEntries, newEntry, newFolder,
+  BUILTIN_FOLDERS, mergedFolders, seedTradeEntries, renumberTradeEntries, newEntry, newFolder,
   CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY, ENTRIES_KIND, ENTRIES_KEY,
   BUILTIN_TEMPLATES, DEFAULT_TAGS, hebrewDateLabel,
   TEMPLATES_KIND, TEMPLATES_KEY, PREFS_KIND, PREFS_KEY,
@@ -163,8 +163,14 @@ export default function NotebookView() {
     if (!entriesHydrated || !trades.length) return;
     setEntries(prev => {
       const seeded = seedTradeEntries(trades, prev);
-      if (!seeded.length) return prev;
-      const next = [...prev, ...seeded];
+      // Headings are numbered by journal order, so a trade logged late and
+      // dated early shifts the ones after it — and entries seeded before that
+      // numbering existed still carry the raw database id. Only untouched
+      // titles are rewritten; a heading the trader edited is theirs.
+      const renumbered = renumberTradeEntries(trades, prev);
+      if (!seeded.length && !renumbered.length) return prev;
+      const patched = new Map(renumbered.map(e => [e.id, e]));
+      const next = [...prev.map(e => patched.get(e.id) ?? e), ...seeded];
       // Persist without blocking; commitList takes the ACTIVE list (no tombstones here since they're new)
       void commitList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY, next);
       return next;
@@ -602,16 +608,25 @@ export default function NotebookView() {
       <div className="nb-shell">
         {/* Topbar */}
         <div className="nb-topbar">
-          <div className="nb-brand"><span className="nb-brand-dot" /><span className="nb-brand-name">Onyx</span></div>
-          <span className="nb-breadcrumb"><b>מחברת</b></span>
+          <div className="nb-brand"><span className="nb-brand-dot" /><span className="nb-brand-name">Onyx Trading</span></div>
+          <div className="nb-top-rule" />
+          {/* The trail, not just the leaf. One line of orientation costs
+              nothing and tells a trader who arrived here from a link where
+              they are. */}
+          <span className="nb-breadcrumb"><span>דשבורד</span><span className="nb-crumb-sep">◈</span><b>מחברת</b></span>
           <div className="nb-top-spacer" />
+          {/* The loudest element in the bar, deliberately: it is the one
+              sentence explaining why writing here is worth the time. */}
           <div className="nb-ai-status" title="ה־AI Coach קורא את התוכן שאתה כותב כאן — טריידים, סיכומי יום, הערות אישיות — ומשלב אותו בתובנות שמופיעות בעמוד הראשי.">
             <span className="nb-ai-orb" />
-            <span className="nb-ai-status-txt">AI COACH · לומד מהתוכן</span>
+            <span className="nb-ai-status-txt">ה־AI לומד מהתוכן</span>
+            <span className="nb-ai-status-sep" />
+            <span className="nb-ai-status-tag">AI Coach</span>
           </div>
           <div className="nb-top-search">
-            <span className="ic">🔍</span>
+            <span className="ic">⌕</span>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש רשומות ותוכן..." />
+            <span className="nb-top-kbd">⌘K</span>
           </div>
         </div>
 
@@ -621,12 +636,12 @@ export default function NotebookView() {
           <div className="nb-col">
             <div className="nb-folders-head">
               <button className="nb-add-folder-btn" onClick={() => setFolderModal({ name: '', emoji: '📁', swatch: 'f-gold', pickerTab: 'frequent', pickerSearch: '' })}>
-                + הוסף תיקייה
+                <span className="nb-add-folder-ico">◈</span>תיקייה חדשה
               </button>
             </div>
             <div className="nb-col-scroll">
               <div className="nb-folder-section">
-                <div className="nb-folder-section-title"><span>תיקיות</span><span>▾</span></div>
+                <div className="nb-folder-section-title"><span>תיקיות</span><span>{String(folders.length).padStart(2, '0')}</span></div>
                 {folders.map(f => {
                   const count = (entriesByFolder.get(f.id) ?? []).length;
                   const isActive = !filterTag && f.id === currentFolderId;
@@ -654,7 +669,7 @@ export default function NotebookView() {
                 })}
               </div>
               <div className="nb-folder-section">
-                <div className="nb-folder-section-title"><span>תגיות</span><span>▾</span></div>
+                <div className="nb-folder-section-title"><span>ספריית תגיות</span><span>{String(allTagsWithCounts.length).padStart(2, '0')}</span></div>
                 <div className="nb-tags-list">
                   {allTagsWithCounts.map(t => {
                     const isDefault = DEFAULT_TAGS.some(d => d.name === t.name);
@@ -691,7 +706,7 @@ export default function NotebookView() {
           <div className="nb-col">
             <div className="nb-entries-head">
               <div className="nb-entries-head-row">
-                <span className="nb-entries-title"><span className="ico">📄</span><span>{filterTag ? `תגית: ${filterTag}` : currentFolder.name}</span></span>
+                <span className="nb-entries-title"><span className="ico">{filterTag ? '◈' : currentFolder.icon}</span><span>{filterTag ? `תגית: ${filterTag}` : currentFolder.name}</span></span>
                 <div className="nb-entries-actions">
                   <button className="nb-entries-btn primary" title="רשומה חדשה" onClick={() => createEntry(currentFolderId)}>+</button>
                 </div>
@@ -748,7 +763,7 @@ export default function NotebookView() {
               <>
                 <div className="nb-ed-header">
                   <div className="nb-ed-title-wrap">
-                    <div className="nb-ed-cal-ico">📅</div>
+                    <div className="nb-ed-cal-ico">◈</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <input className="nb-ed-title-edit"
                         value={currentEntry.title}
@@ -763,7 +778,10 @@ export default function NotebookView() {
                     </div>
                   </div>
                   <div className="nb-ed-head-right">
-                    <div className="nb-ed-meta">עודכן: {new Date(currentEntry.updatedAt ?? currentEntry.createdAt).toLocaleDateString('he-IL')}</div>
+                    <div className="nb-ed-meta">{(() => {
+                      const d = new Date(currentEntry.updatedAt ?? currentEntry.createdAt);
+                      return `עודכן ${d.toLocaleDateString('he-IL')} · ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
+                    })()}</div>
                     <button
                       type="button"
                       className={`nb-save-btn${dirty ? ' dirty' : ''}`}
@@ -780,7 +798,7 @@ export default function NotebookView() {
                 {stripStats && !('empty' in stripStats && stripStats.empty) && (
                   <div className="nb-ed-strip">
                     <div className="nb-ed-net-block">
-                      <span className="nb-ed-net-k">P&amp;L נטו</span>
+                      <span className="nb-ed-net-k">רווח סופי · Net P&amp;L</span>
                       <span className={`nb-ed-net-v ${stripStats.pnlNet! > 0 ? '' : stripStats.pnlNet! < 0 ? 'loss' : 'flat'}`}>{stripStats.pnlNet === 0 ? '—' : fmtMoney(stripStats.pnlNet!)}</span>
                       <span className="nb-ed-strip-meta">
                         {stripStats.kind === 'trade' ? `${stripStats.symbol} · ${stripStats.direction === 'LONG' ? 'לונג' : 'שורט'} · ${stripStats.volume} חוזים` : `${stripStats.trades} עסקאות · ${stripStats.volume} חוזים`}
@@ -826,7 +844,7 @@ export default function NotebookView() {
 
                 {/* Tag row */}
                 <div className="nb-ed-tagbar">
-                  <span className="nb-ed-tagbar-ico">🏷</span>
+                  <span className="nb-ed-tagbar-ico">◈</span>
                   {currentEntry.tags.map((t, i) => (
                     <span key={i} className={`nb-ed-tag ${tagClass(t)}`}>
                       {t}
@@ -843,7 +861,7 @@ export default function NotebookView() {
 
                 {/* Templates row */}
                 <div className="nb-ed-templates">
-                  <span className="nb-ed-templates-k">תבניות:</span>
+                  <span className="nb-ed-templates-k">תבניות</span>
                   {allTemplates.map(tpl => (
                     <span key={tpl.id} className="nb-ed-tpl" onClick={() => applyTemplate(tpl)}>
                       <span>{tpl.name}</span>
@@ -865,9 +883,6 @@ export default function NotebookView() {
 
                 {/* Toolbar */}
                 <div className="nb-ed-toolbar">
-                  <button className="nb-tb-btn" title="בטל" onClick={() => exec('undo')}>↺</button>
-                  <button className="nb-tb-btn" title="בצע מחדש" onClick={() => exec('redo')}>↻</button>
-                  <div className="nb-tb-sep" />
                   <select className="nb-tb-sel" defaultValue="Heebo" onMouseDown={saveRange} onChange={e => exec('fontName', e.target.value)}>
                     <option value="Heebo">Heebo</option>
                     <option value="Frank Ruhl Libre">Frank Ruhl Libre</option>
@@ -896,6 +911,10 @@ export default function NotebookView() {
                   <div className="nb-tb-sep" />
                   <button className="nb-tb-btn" title="קוד" onClick={() => exec('formatBlock', 'pre')}>&lt;/&gt;</button>
                   <button className="nb-tb-btn" title="ציטוט" onClick={() => exec('formatBlock', 'blockquote')}>❝</button>
+                  <div className="nb-tb-history">
+                    <button className="nb-tb-btn" title="בטל" onClick={() => exec('undo')}>↺</button>
+                    <button className="nb-tb-btn" title="בצע מחדש" onClick={() => exec('redo')}>↻</button>
+                  </div>
                 </div>
 
                 {/* Editor body */}
@@ -903,7 +922,7 @@ export default function NotebookView() {
                   ref={edBodyRef}
                   contentEditable
                   suppressContentEditableWarning
-                  data-placeholder="התחל לכתוב..."
+                  data-placeholder="התחל לכתוב...  ◈ בחר תבנית או כתוב חופשי"
                   onInput={markDirty}
                   onMouseUp={saveRange}
                   onKeyUp={saveRange} />
@@ -914,7 +933,7 @@ export default function NotebookView() {
       </div>
 
       {/* Autosave chip */}
-      <div className={`nb-autosave${autosaveVisible ? ' show' : ''}`}><span className="nb-autosave-dot" />נשמר</div>
+      <div className={`nb-autosave${autosaveVisible ? ' show' : ''}`}><span className="nb-autosave-dot" />נשמר אוטומטית</div>
 
       {/* Folder create modal */}
       {folderModal && (

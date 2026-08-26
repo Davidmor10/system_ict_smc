@@ -70,20 +70,55 @@ export function mergedFolders(customFolders: NotebookFolder[]): NotebookFolder[]
 /* ── Trade-log entries: seed one entry per trade so notes attach to a trade.
    The seeded entry sits alongside user-written entries in the same store; the
    user can add text/tags to it just like any other entry. */
+
+/** Position of each trade in the trader's own journal — #1 is the first trade
+ *  they ever documented.
+ *
+ *  The title used to carry the raw id: "עסקה #1786558819914". That number is a
+ *  millisecond timestamp, which is to say a database key printed in a heading
+ *  a person reads. It sorts the list correctly and tells the trader nothing —
+ *  they cannot recognise a trade by it, cannot say it out loud, and it pushes
+ *  the parts that DO identify the trade (instrument, direction) off the end of
+ *  a narrow column.
+ *
+ *  Chronological, so the numbering matches the order the trades happened in
+ *  rather than the order the rows were written. Ties break on id, which keeps
+ *  two trades logged on the same day in a stable order between runs. */
+function journalPositions(trades: readonly TradeEntry[]): Map<number, number> {
+  const ordered = [...trades].sort(
+    (a, b) => (a.dateISO + (a.time ?? '')).localeCompare(b.dateISO + (b.time ?? '')) || a.id - b.id,
+  );
+  return new Map(ordered.map((t, i) => [t.id, i + 1]));
+}
+
+/** The heading for a trade's entry. One place, so the seeder and the migration
+ *  below cannot drift apart. */
+export function tradeEntryTitle(t: TradeEntry, position: number): string {
+  const dir = t.direction === 'LONG' ? 'לונג' : 'שורט';
+  return `עסקה #${position} · ${t.symbol} · ${dir}`;
+}
+
+/** Does this title look untouched by the trader?
+ *
+ *  Renaming a heading someone wrote themselves would be the worse bug, so the
+ *  migration only rewrites titles still in the shape the seeder produces —
+ *  including the old id-carrying shape, which is the one being replaced. */
+const AUTO_TITLE = /^עסקה #\d+ · \S+ · (לונג|שורט)$/;
+
 export function seedTradeEntries(trades: TradeEntry[], existing: NotebookEntry[]): NotebookEntry[] {
   const byTradeId = new Map<number, NotebookEntry>();
   for (const e of existing) {
     if (e.folderId === 'trades' && typeof e.tradeId === 'number') byTradeId.set(e.tradeId, e);
   }
+  const position = journalPositions(trades);
   const now = Date.now();
   const seeded: NotebookEntry[] = [];
   for (const t of trades) {
     if (byTradeId.has(t.id)) continue;
-    const dir = t.direction === 'LONG' ? 'לונג' : 'שורט';
     seeded.push({
       id: `trade-${t.id}`,
       folderId: 'trades',
-      title: `עסקה #${t.id} · ${t.symbol} · ${dir}`,
+      title: tradeEntryTitle(t, position.get(t.id) ?? 0),
       bodyHtml: '',
       tags: [],
       tradeId: t.id,
@@ -93,6 +128,33 @@ export function seedTradeEntries(trades: TradeEntry[], existing: NotebookEntry[]
     });
   }
   return seeded;
+}
+
+/** Bring already-seeded entries onto the current numbering.
+ *
+ *  Two reasons this has to run on every pass rather than once: entries seeded
+ *  before this existed carry the raw id, and a trade logged late — dated
+ *  earlier than trades already in the journal — shifts every position after
+ *  it. A heading the trader edited is left exactly as they left it.
+ *
+ *  Returns only the entries that actually changed, so a settled journal
+ *  produces no write at all. */
+export function renumberTradeEntries(
+  trades: readonly TradeEntry[],
+  existing: readonly NotebookEntry[],
+): NotebookEntry[] {
+  const byId = new Map(trades.map(t => [t.id, t]));
+  const position = journalPositions(trades);
+  const out: NotebookEntry[] = [];
+  for (const e of existing) {
+    if (e.folderId !== 'trades' || typeof e.tradeId !== 'number') continue;
+    const trade = byId.get(e.tradeId);
+    if (!trade) continue;
+    if (!AUTO_TITLE.test(e.title)) continue;
+    const title = tradeEntryTitle(trade, position.get(trade.id) ?? 0);
+    if (title !== e.title) out.push({ ...e, title });
+  }
+  return out;
 }
 
 /* ── Entry helpers ────────────────────────────────────────────── */
