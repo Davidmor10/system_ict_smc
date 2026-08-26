@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { rMultiple, tradePnL, type TradeEntry } from './journal';
+import { decidedCounts, winRatePercent } from './calc/decided';
 import type { InstrumentKey } from './instruments';
 import type { SessionKey } from './sessions';
 
@@ -172,9 +173,7 @@ export function statsForTrades(trades: readonly TradeEntry[]): SetupStats {
   if (trades.length === 0) return EMPTY_STATS;
 
   const closed  = trades.filter(t => t.result !== 'OPEN');
-  const wins    = closed.filter(t => t.result === 'WIN').length;
-  const losses  = closed.filter(t => t.result === 'LOSS').length;
-  const decided = wins + losses;
+  const { decided } = decidedCounts(closed);
 
   const rs = closed
     .map(rMultiple)
@@ -187,7 +186,7 @@ export function statsForTrades(trades: readonly TradeEntry[]): SetupStats {
   return {
     trades:  trades.length,
     decided,
-    winRate: decided > 0 ? (wins / decided) * 100 : null,
+    winRate: winRatePercent(closed),
     avgR:    rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
     pnl,
     lastTradeISO: dates.length ? dates[dates.length - 1] : null,

@@ -1,6 +1,7 @@
 import type { TradeEntry } from '../journal';
 import { tradePnL, rMultiple } from '../journal';
 import { confidenceFor } from './confidence';
+import { decidedCounts, winRatePercent } from '../calc/decided';
 import type { GroupPerformance } from './types';
 
 /** Some legacy trades stored session as a raw uppercase label ("ASIA") before
@@ -15,10 +16,12 @@ export function normSession(session: string | undefined): string {
     "win rate" and "average RR" mean exactly the same thing everywhere. */
 export function computeGroupPerformance(trades: TradeEntry[], key: string, label: string): GroupPerformance {
   const closed = trades.filter(t => t.result !== 'OPEN');
-  const wins = closed.filter(t => t.result === 'WIN');
-  const losses = closed.filter(t => t.result === 'LOSS');
-  const decided = wins.length + losses.length;
-  const winRate = decided > 0 ? (wins.length / decided) * 100 : 0;
+  const { wins: winCount, losses: lossCount, decided } = decidedCounts(closed);
+  // 0 rather than null here, and only here: GroupPerformance.winRate is a
+  // plain number that dozens of consumers sort, compare and format. What the
+  // shared helper guarantees is that this 0 means "nothing decided" for the
+  // same reason everywhere — see calc/decided.
+  const winRate = winRatePercent(closed) ?? 0;
 
   const pnls = closed.map(tradePnL).filter((n): n is number => n !== null);
   const totalPnl = pnls.reduce((a, b) => a + b, 0);
@@ -40,8 +43,8 @@ export function computeGroupPerformance(trades: TradeEntry[], key: string, label
     key,
     label,
     trades: trades.length,
-    wins: wins.length,
-    losses: losses.length,
+    wins: winCount,
+    losses: lossCount,
     winRate,
     totalPnl,
     avgRR,

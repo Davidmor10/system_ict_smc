@@ -19,6 +19,7 @@ import {
 import { mergeById, active, type Syncable } from './sync/merge';
 import type { ManagementEvent } from './trade/management';
 import { computeBiasAlignment } from './dailyBias';
+import { decidedCounts, winRatePercent } from './calc/decided';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -639,10 +640,8 @@ export interface TradeStats {
 /** Aggregate realized performance across a set of trades. */
 export function computeStats(trades: TradeEntry[]): TradeStats {
   const closed = trades.filter((t) => t.result !== 'OPEN');
-  const wins = closed.filter((t) => t.result === 'WIN').length;
-  const losses = closed.filter((t) => t.result === 'LOSS').length;
-  const decided = wins + losses;
-  const winRate = decided > 0 ? (wins / decided) * 100 : 0;
+  const { wins, losses } = decidedCounts(closed);
+  const winRate = winRatePercent(closed) ?? 0;
 
   const pnls = closed.map(tradePnL).filter((n): n is number => n !== null);
   const grossWin = pnls.filter((n) => n > 0).reduce((a, b) => a + b, 0);
@@ -669,10 +668,8 @@ export interface GroupStats {
 
 export function statsByGroup(trades: TradeEntry[]): GroupStats {
   const closed = trades.filter(t => t.result !== 'OPEN');
-  const wins   = closed.filter(t => t.result === 'WIN').length;
-  const losses = closed.filter(t => t.result === 'LOSS').length;
-  const decided = wins + losses;
-  const winRate = decided > 0 ? (wins / decided) * 100 : 0;
+  const { wins, losses } = decidedCounts(closed);
+  const winRate = winRatePercent(closed) ?? 0;
   const totalPnl = closed.reduce((sum, t) => sum + (tradePnL(t) ?? 0), 0);
   const rs = closed
     .map(t => { const r = Math.abs(t.entry - t.stop); const dir = t.direction === 'LONG' ? 1 : -1; return r > 0 ? ((t.target - t.entry) * dir) / r : null; })

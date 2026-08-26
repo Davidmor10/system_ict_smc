@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { TradeEntry, Direction, TradeResult, EmotionalState, Bias } from '../lib/journal';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
+import { decidedCounts, winRatePercent } from '../lib/calc/decided';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { commitList, hydrateList } from '../lib/sync/collections';
 import {
@@ -277,16 +278,15 @@ function buildInstantInsight(trade: TradeEntry, allTrades: TradeEntry[]): string
   if (trade.session && trade.session !== 'NONE') {
     const week = isoWeekKey(trade.dateISO);
     const sessionThisWeek = allTrades.filter(t => normSession(t.session) === normSession(trade.session) && isoWeekKey(t.dateISO) === week);
-    const decided = sessionThisWeek.filter(t => t.result === 'WIN' || t.result === 'LOSS');
-    if (decided.length > 0) {
-      const wins = sessionThisWeek.filter(t => t.result === 'WIN').length;
-      const winRate = Math.round((wins / decided.length) * 100);
+    const { decided } = decidedCounts(sessionThisWeek);
+    if (decided > 0) {
+      const winRate = Math.round(winRatePercent(sessionThisWeek)!);
       const label = sessionLabel(trade.session);
       // A win rate never stands naked: always carry the sample it's built on,
       // and flag a small sample as an early sign — same honesty as the
       // dashboard's confidence badge, so we never sell an n=3 "67%" as fact.
-      const basis = `מבוסס על ${decided.length} עסקאות שנסגרו`;
-      const caveat = confidenceLevelFor(decided.length) === 'low' ? ' — עדיין מדגם קטן, סימן מוקדם בלבד' : '';
+      const basis = `מבוסס על ${decided} עסקאות שנסגרו`;
+      const caveat = confidenceLevelFor(decided) === 'low' ? ' — עדיין מדגם קטן, סימן מוקדם בלבד' : '';
       return `זו העסקה ה-${sessionThisWeek.length} שלך השבוע בסשן ${label}. אחוז ההצלחה בסשן: ${winRate}% (${basis})${caveat}.`;
     }
   }

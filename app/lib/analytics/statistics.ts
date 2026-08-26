@@ -161,6 +161,8 @@ function groupBy(
   }
 
   return Array.from(m.values()).map(g => {
+    // Counted inline above rather than through decidedCounts, because this
+    // loop tallies pnl in the same pass. Same rule, though: the label decides.
     const decided = g.wins + g.losses;
     return {
       ...g,

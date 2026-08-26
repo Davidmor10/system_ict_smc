@@ -23,6 +23,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeEntry } from '../journal';
+import { winRateFraction } from '../calc/decided';
 import { tradePnL, rMultiple, plannedRR } from '../journal';
 
 const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
@@ -131,6 +132,9 @@ export function rDistribution(trades: readonly TradeEntry[]): RBucket[] {
 
 export interface Expectancy {
   trades:     number;
+  /** A FRACTION between 0 and 1, unlike GroupPerformance.winRate which is
+   *  0–100. Both scales are in the codebase and the mix-up has shipped once:
+   *  rendered through the percent formatter, a 50% printed as 1%. */
   winRate:    number;
   /** Average R of the winners, and of the losers (negative). */
   avgWinR:    number;
@@ -151,15 +155,26 @@ export function expectancy(trades: readonly TradeEntry[]): Expectancy {
   const rs   = closed.map(rMultiple).filter((r): r is number => r != null);
   const usds = closed.map(tradePnL).filter((p): p is number => p != null);
 
-  const wins   = rs.filter(r => r > 0);
-  const losses = rs.filter(r => r < 0);
-  const decided = wins.length + losses.length;
+  // The win rate splits on the RESULT, not on the sign of R — same rule as
+  // every other win rate in the codebase. This function used to split on the
+  // sign, which made it disagree with the pattern cards rendered beside it
+  // whenever a trade's label and its R pointed different ways. See calc/decided.
+  const rate = winRateFraction(closed);
+
+  // The magnitudes still come from R, which is what R is for. Grouped by sign
+  // rather than by label on purpose: `avgWinR` is the average of the returns
+  // that were positive, and a win recorded at 0R belongs in neither average.
+  const winRs   = rs.filter(r => r > 0);
+  const lossRs  = rs.filter(r => r < 0);
 
   return {
     trades:  closed.length,
-    winRate: decided ? round2(wins.length / decided) : 0,
-    avgWinR:  round2(mean(wins)),
-    avgLossR: round2(mean(losses)),
+    // NOT rounded. round2 on a fraction is 1% granularity — it turned 56.25%
+    // into 56%, which put this number a quarter-point away from the identical
+    // rate on the same screen. Rounding belongs at the point of display.
+    winRate: rate ?? 0,
+    avgWinR:  round2(mean(winRs)),
+    avgLossR: round2(mean(lossRs)),
     expectancyR:   round2(mean(rs)),
     expectancyUsd: Math.round(mean(usds)),
   };
