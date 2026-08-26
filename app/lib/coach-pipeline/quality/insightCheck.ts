@@ -33,7 +33,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BehaviorBlock } from '../pipelines/analyzeBehavior';
-import { isMostlyLatin, hasLatinMetricLabel } from '../../ai/language';
+import { isMostlyLatin, hasLatinIdentifier } from '../../ai/language';
 
 export type Severity = 'hard' | 'soft';
 
@@ -212,7 +212,10 @@ export function checkProse(text: string, lang: 'he' | 'en' = 'he'): Violation[] 
     // shipped, and the one the first cannot see, because four Latin tokens
     // never outweigh a Hebrew paragraph.
     if (isMostlyLatin(text)) push('latin_output', 'hard', 'answer is mostly Latin');
-    if (hasLatinMetricLabel(text)) push('latin_metric_label', 'hard', 'English metric label');
+    // Identifiers only. "R:R" and "PF" are shorthand a mentor writes and this
+    // product's own statistics page prints — flagging them here would spend the
+    // one corrective retry on a correct sentence.
+    if (hasLatinIdentifier(text)) push('latin_metric_label', 'hard', 'English metric label');
   }
 
   if (text.includes('!')) push('exclamation', 'soft', '!');

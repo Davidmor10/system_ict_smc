@@ -394,18 +394,28 @@ export function reconcile(input: ReconcileInput): Reconciled {
   );
 }
 
-/** Kinds that have had a measurement window close on them and have not
- *  started another since.
+/** When each behaviour's last measurement window closed.
  *
- *  `experimentResult` is the flag, and it is self-clearing: opening a new
- *  window sets it back to null, so a finding counts as having had its turn
- *  only between one window ending and the next beginning. That is exactly the
- *  span in which another behaviour should get the slot. */
-export function alreadyMeasured(
+ *  Absent from the map means it has never had one, which sorts ahead of every
+ *  behaviour that has.
+ *
+ *  A BOOLEAN IS NOT ENOUGH, AND THAT IS THE WHOLE POINT
+ *
+ *  "Has it had a turn" rotates the slot exactly once. As soon as every
+ *  behaviour has been measured they are all equal again, the tiebreak falls
+ *  back to severity, and the highest-scoring finding takes the slot and keeps
+ *  it — which is the deadlock this was written to break, arriving one full
+ *  rotation later. Ordering by WHEN turns it into a real queue.
+ *
+ *  `statusSince` is the timestamp: a finding holding an `experimentResult` got
+ *  it when its window closed, and that is the transition that set the field.
+ *  Derived rather than stored, so no column has to exist for the queue to
+ *  work. */
+export function measuredAt(
   stored: Iterable<StoredFinding>,
-): Set<BehaviorKind> {
-  const out = new Set<BehaviorKind>();
-  for (const f of stored) if (f.experimentResult) out.add(f.kind);
+): Map<BehaviorKind, string> {
+  const out = new Map<BehaviorKind, string>();
+  for (const f of stored) if (f.experimentResult) out.set(f.kind, f.statusSince);
   return out;
 }
 

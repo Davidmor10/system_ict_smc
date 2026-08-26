@@ -17,7 +17,7 @@
 // same finding wins the next ranking and reopens.
 
 import { describe, it, expect } from 'vitest';
-import { reconcile, alreadyMeasured, type StoredFinding } from '../../app/lib/coach-pipeline/behavior/memory';
+import { reconcile, measuredAt, type StoredFinding } from '../../app/lib/coach-pipeline/behavior/memory';
 import { pickPrimary, type BehaviorFinding, type Baselines } from '../../app/lib/coach-pipeline/behavior/finding';
 import { EXPERIMENT_WINDOW } from '../../app/lib/coach-pipeline/behavior/experiment';
 import type { BehaviorKind } from '../../app/lib/coach-pipeline/behavior/behaviors';
@@ -129,7 +129,9 @@ describe('an improvement is left alone', () => {
 });
 
 describe('the slot rotates', () => {
-  const measuredSet = (...kinds: BehaviorKind[]) => new Set(kinds);
+  /** Each kind's last window close, oldest first in argument order. */
+  const measuredSet = (...kinds: BehaviorKind[]) =>
+    new Map(kinds.map((k, i) => [k, `2026-08-${String(10 + i).padStart(2, '0')}T04:00:00.000Z`]));
 
   it('hands the slot to a behaviour that has not had a turn', () => {
     // THE OTHER HALF. Closing the window is not enough — the finding is still
@@ -176,6 +178,27 @@ describe('the slot rotates', () => {
     expect(primary?.kind).toBe('discretionary_exit');
   });
 
+  it('keeps rotating after everything has had a turn', () => {
+    // THE SECOND DEADLOCK. A boolean "has it been measured" rotates the slot
+    // exactly once: once everyone has had a turn they are equal again, the
+    // tiebreak falls back to severity, and the highest-scoring finding takes
+    // the slot back for good. A simulation over twelve nightly runs produced
+    // exactly that. Ordering by WHEN each was last measured is what makes it a
+    // queue rather than a single pass.
+    const findings = [
+      fresh({ kind: 'discretionary_exit', priorityScore: 30 }),
+      fresh({ kind: 'size_spike', priorityScore: 20 }),
+      fresh({ kind: 'rule_violation', priorityScore: 10 }),
+    ];
+    // Everyone measured; size_spike waited longest.
+    const queue = new Map<BehaviorKind, string>([
+      ['size_spike',         '2026-08-01T04:00:00.000Z'],
+      ['rule_violation',     '2026-08-05T04:00:00.000Z'],
+      ['discretionary_exit', '2026-08-09T04:00:00.000Z'],
+    ]);
+    expect(pickPrimary(findings, 'discretionary_exit', queue).primary?.kind).toBe('size_spike');
+  });
+
   it('never interrupts a window that is still running', () => {
     const findings = [
       fresh({ kind: 'discretionary_exit', status: 'experiment', priorityScore: 1 }),
@@ -194,14 +217,15 @@ describe('the slot rotates', () => {
   });
 });
 
-describe('alreadyMeasured', () => {
-  it('lists a finding whose window has closed', () => {
+describe('measuredAt', () => {
+  it('stamps a finding whose window has closed with when it closed', () => {
     const closed = closeUnchanged().record;
-    expect([...alreadyMeasured([closed])]).toEqual(['discretionary_exit']);
+    const m = measuredAt([closed]);
+    expect(m.get('discretionary_exit')).toBe(NOW);
   });
 
   it('does not list one whose window is still open', () => {
-    expect(alreadyMeasured([running()]).size).toBe(0);
+    expect(measuredAt([running()]).size).toBe(0);
   });
 
   it('stops listing it once a new window opens', () => {
@@ -214,6 +238,6 @@ describe('alreadyMeasured', () => {
       ...noGuardrails, isPrimary: true, now: NOW,
     }).record;
     expect(reopened.status).toBe('experiment');
-    expect(alreadyMeasured([reopened]).size).toBe(0);
+    expect(measuredAt([reopened]).size).toBe(0);
   });
 });

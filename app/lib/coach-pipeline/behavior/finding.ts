@@ -379,11 +379,10 @@ export interface Prioritised {
 export function pickPrimary(
   findings: readonly BehaviorFinding[],
   previousPrimaryKind?: BehaviorKind,
-  /** Kinds whose last measurement window has closed and been judged, and that
-   *  have not started another since. Build it from the stored findings with
-   *  `alreadyMeasured` below. Omitted, everything ranks as never-measured,
+  /** When each behaviour's last measurement window closed, from `measuredAt`.
+   *  Absent means never. Omitted entirely, everything ranks as never-measured,
    *  which is the correct reading of an account with no history. */
-  measured: ReadonlySet<BehaviorKind> = new Set(),
+  measured: ReadonlyMap<BehaviorKind, string> = new Map(),
 ): Prioritised {
   // 'always' and 'never' are excluded: neither can produce a trigger, so
   // neither can ever move forward. Left as primary, one of them would occupy
@@ -422,23 +421,25 @@ export function pickPrimary(
   // findings the system has something to say about, the ones it can actually
   // act on go first — which is the order the lifecycle already implied and
   // nobody had written down.
-  // A behaviour that has just had a window and did not move goes to the back
-  // of the queue, behind anything that has not been measured at all.
+  // The queue: whoever was measured longest ago goes first, and anything never
+  // measured goes ahead of all of them.
   //
-  // Without this the rotation does not happen. The window closes, the finding
-  // returns to `confirmed`, and on the next run it is still the highest-scoring
-  // confirmed finding there is — so it takes the slot straight back and opens
-  // an identical experiment. Severity alone guarantees that the behaviour
-  // LEAST likely to improve is the one that never lets go of the slot.
+  // Ordering by WHEN rather than by WHETHER is load-bearing. A boolean rotates
+  // the slot exactly once — as soon as every behaviour has had a turn they are
+  // all equal again, the tiebreak falls back to severity, and the
+  // highest-scoring finding takes the slot and never gives it back. That is
+  // the same deadlock, arriving one rotation later, and it is what a
+  // simulation over twelve nightly runs actually produced.
   //
   // Ranked below readiness, not above it: a measured finding that can start
-  // today still beats an unmeasured one that cannot.
-  const turnTaken = (f: BehaviorFinding) => (measured.has(f.kind) ? 1 : 0);
+  // today still beats an unmeasured one that cannot. ISO timestamps compare
+  // lexicographically, and the empty string sorts before all of them.
+  const lastTurn = (f: BehaviorFinding) => measured.get(f.kind) ?? '';
 
   const ranked = [...eligible].sort(
     (a, b) =>
       readinessTier(b) - readinessTier(a)
-      || turnTaken(a) - turnTaken(b)
+      || lastTurn(a).localeCompare(lastTurn(b))
       || b.priorityScore - a.priorityScore
       || a.kind.localeCompare(b.kind),
   );
@@ -454,7 +455,7 @@ export function pickPrimary(
   // used to reclaim a slot the incumbent has already spent a window on.
   if (incumbent && primary !== incumbent
       && readinessTier(primary) === readinessTier(incumbent)
-      && turnTaken(primary) === turnTaken(incumbent)) {
+      && lastTurn(primary) === lastTurn(incumbent)) {
     const needed = incumbent.priorityScore * (1 + PRIORITY_MARGIN);
     if (primary.priorityScore < needed) primary = incumbent;
   }

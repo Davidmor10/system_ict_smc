@@ -24,28 +24,32 @@ export function isMostlyLatin(text: string): boolean {
   return latin > hebrew;
 }
 
-/** Latin metric labels that only ever reach a Hebrew sentence by being copied
- *  out of the prompt. Kept as a guard behind the prompt fix, not instead of
- *  it: a model can still reach for "PF" on its own, and one English token is
- *  the difference between a page that reads as finished and one that does
- *  not. */
-const LATIN_METRIC_TOKENS = /\b(winRate|avgRR|PnL|PF|profitFactor|winrate|R:R)\b/;
+/** Internal identifiers. Nobody writes these; they arrive by being copied out
+ *  of the prompt, and they are wrong in a card title and in a paragraph alike. */
+const LATIN_IDENTIFIERS = /\b(winRate|winrate|avgRR|profitFactor)\b/;
 
-/** The slice's trade ids, from the signature the pattern engine already built.
+/** Shorthand a trader genuinely uses.
  *
- *  Tolerant on purpose: a candidate that somehow reached here without one
- *  yields an empty list, and the card simply cannot be opened. A crash on the
- *  analytics page would be a far worse outcome than a missing toggle. */
-function idsFromSignature(signature: string | undefined): number[] {
-  if (!signature) return [];
-  return signature.split(',')
-    // An empty segment must not become an id. Number('') is 0, which is finite
-    // and would put a trade that does not exist into the list.
-    .filter(part => part.trim() !== '')
-    .map(Number)
-    .filter(n => Number.isInteger(n));
+ *  Wrong on a generated card, where the label should have been rendered in
+ *  Hebrew — and perfectly ordinary in prose. "יחס ה-R:R הממוצע שלך" is a
+ *  sentence a mentor writes, and this product's own statistics page labels the
+ *  metric "יחס R:R ממוצע". Flagging it inside a weekly letter costs a retry and
+ *  buys a worse letter, which is the failure this whole module is built to
+ *  avoid. */
+const LATIN_SHORTHAND = /\b(PnL|PF|R:R)\b/;
+
+/** For generated labels and card titles, where either kind is a failure: the
+ *  surface was supposed to render the metric in Hebrew. */
+export function hasLatinMetricLabel(text: string): boolean {
+  return LATIN_IDENTIFIERS.test(text) || LATIN_SHORTHAND.test(text);
 }
 
-export function hasLatinMetricLabel(text: string): boolean {
-  return LATIN_METRIC_TOKENS.test(text);
+/** For prose the trader reads as sentences.
+ *
+ *  Only the identifiers. The shorthand is left alone here on purpose — see
+ *  LATIN_SHORTHAND above. A checker that rejects a correct Hebrew sentence is
+ *  worse than no checker, because it spends the one corrective retry the
+ *  surface has and then publishes whatever came back instead. */
+export function hasLatinIdentifier(text: string): boolean {
+  return LATIN_IDENTIFIERS.test(text);
 }
