@@ -314,9 +314,22 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   const direction: Direction = r.direction === 'SHORT' ? 'SHORT' : 'LONG';
   const bias: Bias        = (r.bias as Bias) ?? 'INDECISIVE';
 
-  // Backward-compat: compute derived fields if missing.
-  const setupVal: Setup = (r.setup === 'REVERSAL' || r.setup === 'CONTINUATION')
-    ? r.setup : 'REVERSAL';
+  // Absent stays absent.
+  //
+  // This defaulted to 'REVERSAL', which is not a backward-compatibility repair
+  // — it is an answer invented on the trader's behalf. Nothing in the form has
+  // ever asked this question, so the fallback applied to EVERY trade, and
+  // `loadTrades` pushes what it parses to the cloud: the invented value
+  // reached intelligence_trades, and from there the coach's facts block, where
+  // `bySetup` built a bucket the model was told about by name. A setup the
+  // trader never chose, reported to them as their own.
+  //
+  // Undefined is what "they were never asked" looks like. Every reader of this
+  // field already handles it, because the cloud path (journalRow.rowToTrade)
+  // has always left it undefined — so the same trade meant different things
+  // depending on which side it was loaded from.
+  const setupVal: Setup | undefined =
+    r.setup === 'REVERSAL' || r.setup === 'CONTINUATION' ? r.setup : undefined;
 
   // One implementation, shared with the form. These had drifted into
   // opposites: this one called a trade with no declared bias COUNTER, while

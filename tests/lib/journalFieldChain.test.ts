@@ -19,7 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { tradeEntrySchema } from '../../app/lib/validation';
 import { rowToTrade, tradeToRow, type TradeRow } from '../../app/api/journal/route';
 import { tradeEntryToIntelligenceRow } from '../../app/lib/coach-pipeline/mirror/journalToIntelligence';
-import type { TradeEntry } from '../../app/lib/journal';
+import { migrateTrade, type TradeEntry } from '../../app/lib/journal';
 
 const base = {
   id: 1_700_000_000_000,
@@ -107,5 +107,60 @@ describe('the whole chain, validation → mirror', () => {
     const parsed = tradeEntrySchema.parse({ ...base });
     expect(tradeEntryToIntelligenceRow('user_1', parsed as TradeEntry).followed_rules).toBeNull();
     expect(tradeEntryToIntelligenceRow('user_1', parsed as TradeEntry).exit_price).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The setup field, and an answer nobody gave.
+//
+// `migrateTrade` defaulted a missing setup to 'REVERSAL'. That is not a
+// backward-compatibility repair — nothing in the form has ever asked this
+// question, so the fallback applied to every trade ever loaded from local
+// storage. And `loadTrades` pushes what it parses to the cloud, so the
+// invented value reached intelligence_trades and from there the coach's facts
+// block, where `bySetup` built a bucket the model was told about by name.
+//
+// The cloud path never did this — rowToTrade has always left it undefined — so
+// the same trade meant different things depending on which side it was loaded
+// from, which is the shape of every other defect found in this pass.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('migrateTrade and the setup field', () => {
+  const raw = (over: Record<string, unknown> = {}) => ({
+    id: 1_700_000_000_001,
+    dateISO: '2026-08-10', time: '17:00', symbol: 'MNQ', direction: 'LONG',
+    entry: 20000, stop: 19980, target: 20060, result: 'WIN',
+    session: 'ny_am', bias: 'BULLISH', model: '', notes: '',
+    ...over,
+  });
+
+  it('leaves setup undefined when the trade never carried one', () => {
+    // THE REGRESSION. Every trade came back marked REVERSAL.
+    expect(migrateTrade(raw())?.setup).toBeUndefined();
+  });
+
+  it('keeps a setup the trade actually carried', () => {
+    expect(migrateTrade(raw({ setup: 'CONTINUATION' }))?.setup).toBe('CONTINUATION');
+    expect(migrateTrade(raw({ setup: 'REVERSAL' }))?.setup).toBe('REVERSAL');
+  });
+
+  it('drops a value that is not one of the two', () => {
+    expect(migrateTrade(raw({ setup: 'SOMETHING' }))?.setup).toBeUndefined();
+    expect(migrateTrade(raw({ setup: null }))?.setup).toBeUndefined();
+  });
+
+  it('agrees with the cloud path on a trade with no setup', () => {
+    // The invariant that was broken: one trade, two loaders, one answer.
+    const local = migrateTrade(raw())?.setup;
+    const cloud = rowToTrade({
+      id: 1_700_000_000_001, clerk_id: 'u', date_iso: '2026-08-10', time_val: '17:00',
+      symbol: 'MNQ', contracts: 1, direction: 'LONG', entry: 20000, stop_price: 19980,
+      target: 20060, session: 'ny_am', bias: 'BULLISH', model: '', result: 'WIN',
+      notes: '', account_id: null, setup: null, bias_alignment: null, trade_r: 2,
+      pnl_usd: 200, screenshots: null, exits: null, confirmations: null,
+      emotional_state: null, followed_rules: null, stop_moved: null, stop_note: null,
+      management: null, deleted_at: null, updated_at: null,
+    }).setup;
+    expect(local).toBe(cloud);
   });
 });
