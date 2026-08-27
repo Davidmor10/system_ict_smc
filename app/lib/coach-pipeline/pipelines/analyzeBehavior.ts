@@ -26,12 +26,10 @@
 
 import { listRecentTrades } from '../db/trades';
 import { loadFindings, saveFinding } from '../db/behaviorFindings';
-import { detectBehaviors, type BehaviorKind } from '../behavior/behaviors';
-import { computeHoldingStreaks, type HoldingStreak } from '../behavior/holding';
-import { buildContexts } from '../behavior/context';
-import { buildFinding, pickPrimary, ROLLING_WINDOW, type BehaviorFinding } from '../behavior/finding';
-import { computeGuardrails } from '../behavior/guardrails';
-import { reconcile, familiesFor, measuredAt, type StoredFinding } from '../behavior/memory';
+import type { BehaviorKind } from '../behavior/behaviors';
+import type { HoldingStreak } from '../behavior/holding';
+import { runBehaviorLayer } from '../behavior/run';
+import type { StoredFinding } from '../behavior/memory';
 import type { EvidenceTier } from '../behavior/evidence';
 import { logger } from '../../logger';
 
@@ -125,11 +123,6 @@ export async function analyzeBehavior(
     const trades = await listRecentTrades(clerkId, 500);
     if (!trades.length) return { block: EMPTY_BLOCK, snapshot: [], error: null };
 
-    const contexts = buildContexts(trades);
-    const tallies  = detectBehaviors(trades);
-    // The other side of the same tallies: what has NOT gone wrong lately.
-    const holding  = computeHoldingStreaks(tallies, trades);
-
     // Memory is optional in the sense that its absence must not break the run:
     // an un-migrated database should produce a first-sighting analysis, not a
     // failed insight.
@@ -142,50 +135,16 @@ export async function analyzeBehavior(
       logger.warn('behaviour memory unavailable — running stateless', { clerkId, error: memoryError });
     }
 
-    const rByTradeId = new Map(trades.map(t => [t.id, t.r_multiple]));
-    const findings: BehaviorFinding[] = tallies.map(t => buildFinding(t, contexts, {
-      rByTradeId,
-      previousStatus: stored.get(t.kind)?.status,
-      extraFamilies:  familiesFor(stored.get(t.kind) ?? null),
-    }));
-
-    const previousPrimary = [...stored.values()].find(s => s.isPrimary)?.kind;
-    // A queue by when each behaviour was last measured. Whoever waited longest
-    // goes first; anything never measured goes ahead of all of them. Without
-    // it the highest-scoring finding takes the slot back the morning after its
-    // own measurement and nothing else ever runs.
-    const { primary, watching } = pickPrimary(
-      findings, previousPrimary, measuredAt(stored.values()),
-    );
-
-    // Chronological — listRecentTrades is newest-first.
-    const chronological = [...trades].reverse();
-    const guardrailsTrailing = computeGuardrails(chronological.slice(-ROLLING_WINDOW));
+    // The decision itself is pure and lives in behavior/run.ts, shared with
+    // the preview route so the two cannot disagree about what tonight does.
+    const { findings, primary, watching, holding, decisions } =
+      runBehaviorLayer({ trades, stored, now });
 
     let primaryRecord:  StoredFinding | null = null;
     let primaryOutcome: PrimaryOutcome | null = null;
 
-    for (const f of findings) {
-      const prior = stored.get(f.kind) ?? null;
-      // The trades since the window opened, sliced by position — the same
-      // trades the verdict is computed over. Filtering on `date >= the day it
-      // opened` re-derived a different set: it swept in whatever was already
-      // logged earlier that day, and missed anything logged late under an
-      // older date. Windows opened before `tradesAtStart` existed have no
-      // position to slice from, so they keep the date filter.
-      const start = prior?.experimentBaseline?.tradesAtStart;
-      const since = prior?.experimentStartedAt?.slice(0, 10);
-      const windowTrades =
-        start != null ? chronological.slice(start)
-        : since       ? chronological.filter(t => t.date >= since)
-        : chronological.slice(-ROLLING_WINDOW);
-      const guardrailsNow = computeGuardrails(windowTrades);
-      const { record, transition, measured } = reconcile({
-        stored: prior, fresh: f, guardrailsNow, guardrailsTrailing,
-        isPrimary: primary?.kind === f.kind, tradeCount: chronological.length, now,
-      });
-
-      if (primary?.kind === f.kind) {
+    for (const { finding, record, transition, measured } of decisions) {
+      if (primary?.kind === finding.kind) {
         primaryRecord = record;
         primaryOutcome = measured
           ? {
@@ -203,7 +162,7 @@ export async function analyzeBehavior(
         } catch (err) {
           // One failed write must not cost the other three, nor the insight.
           logger.warn('behaviour finding write failed', {
-            clerkId, kind: f.kind, error: err instanceof Error ? err.message : String(err),
+            clerkId, kind: finding.kind, error: err instanceof Error ? err.message : String(err),
           });
         }
       }

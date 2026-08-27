@@ -25,10 +25,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertOwner, safeEqual, cronSecret } from '../../../lib/coach-pipeline/auth/guards';
 import { listRecentTrades } from '../../../lib/coach-pipeline/db/trades';
-import { detectBehaviors, BEHAVIOR_LABELS } from '../../../lib/coach-pipeline/behavior/behaviors';
-import { buildContexts } from '../../../lib/coach-pipeline/behavior/context';
-import { buildFinding, pickPrimary } from '../../../lib/coach-pipeline/behavior/finding';
-import { designExperiment } from '../../../lib/coach-pipeline/behavior/experiment';
+import { BEHAVIOR_LABELS } from '../../../lib/coach-pipeline/behavior/behaviors';
+import { runBehaviorLayer } from '../../../lib/coach-pipeline/behavior/run';
 import {
   CONFIRM_MIN_OCCURRENCES, CONFIRM_MIN_OPPORTUNITIES,
   INVESTIGATE_MIN_OCCURRENCES, INVESTIGATE_MIN_OPPORTUNITIES,
@@ -39,7 +37,7 @@ import { computeGuardrails } from '../../../lib/coach-pipeline/behavior/guardrai
 // trader reads. Two copies of it would drift, and the version that drifted
 // would be the one nobody was looking at.
 import { computeReadiness } from '../../../lib/coach-pipeline/behavior/readiness';
-import { reconcile, familiesFor, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
+import type { StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
 import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBehavior';
 import { ROLLING_WINDOW } from '../../../lib/coach-pipeline/behavior/finding';
@@ -136,9 +134,7 @@ export async function GET(req: NextRequest) {
 
   const started = Date.now();
   try {
-    const trades   = await listRecentTrades(userId, 500);
-    const contexts = buildContexts(trades);
-    const tallies  = detectBehaviors(trades);
+    const trades = await listRecentTrades(userId, 500);
 
     // What the last run concluded. Missing table (the migration hasn't been
     // run yet) is reported rather than thrown: the whole point of this route
@@ -153,55 +149,34 @@ export async function GET(req: NextRequest) {
       memoryError = err instanceof Error ? err.message : String(err);
     }
 
-    // Average R per trade, for prioritising by cost. Only present on trades
-    // whose R was measured rather than assumed.
-    const rByTradeId = new Map<string, number | null>(
-      trades.map(t => [t.id, t.r_multiple]),
-    );
-
-    const findings = tallies.map(t => buildFinding(t, contexts, {
-      rByTradeId,
-      // Both come from memory, and both change the answer: a running
-      // experiment must not be recomputed back to 'investigating', and an
-      // answered question is the only evidence family that isn't telemetry.
-      previousStatus: stored.get(t.kind)?.status,
-      extraFamilies:  familiesFor(stored.get(t.kind) ?? null),
-    }));
-    const previousPrimary = [...stored.values()].find(s => s.isPrimary)?.kind;
-    const { primary, watching } = pickPrimary(findings, previousPrimary);
-
-    // Chronological, for the trailing guardrail window — listRecentTrades
-    // hands them back newest-first.
-    const chronological = [...trades].reverse();
-    const guardrailsTrailing = computeGuardrails(chronological.slice(-ROLLING_WINDOW));
+    // The decision itself — the same pure function the nightly run calls, so
+    // this route cannot describe a run that differs from the one that will
+    // happen. It used to repeat the sequence here, and the copy drifted: it
+    // went on ranking by severity after the run started rotating by when each
+    // behaviour was last measured, and it kept deriving the experiment window
+    // from a date after the run started slicing by position.
     const now = new Date().toISOString();
+    const { findings, primary, watching, decisions } =
+      runBehaviorLayer({ trades, stored, now });
+
+    const previousPrimary = [...stored.values()].find(s => s.isPrimary)?.kind;
+    const guardrailsTrailing = computeGuardrails([...trades].reverse().slice(-ROLLING_WINDOW));
 
     // What memory WOULD record tonight. Nothing is written here; the nightly
     // run owns the write. Reading the transition before it happens is the
     // only way to catch a lifecycle that moves for the wrong reason.
-    const wouldRecord = findings.map(f => {
-      const prior = stored.get(f.kind) ?? null;
-      const since = prior?.experimentStartedAt?.slice(0, 10);
-      const guardrailsNow = computeGuardrails(
-        since ? chronological.filter(t => t.date >= since) : chronological.slice(-ROLLING_WINDOW),
-      );
-      const { record, transition, measured } = reconcile({
-        stored: prior, fresh: f, guardrailsNow, guardrailsTrailing,
-        isPrimary: primary?.kind === f.kind, now,
-      });
-      return {
-        kind: f.kind,
-        knownSince:  prior?.firstDetectedAt ?? null,
-        statusNow:   prior?.status ?? null,
-        statusAfter: record.status,
-        transition,
-        relapses:    record.relapses,
-        experiment:  record.experiment,
-        measured,
-        openQuestion: record.question,
-        answered:     record.traderAnswer != null,
-      };
-    });
+    const wouldRecord = decisions.map(({ finding, prior, record, transition, measured }) => ({
+      kind: finding.kind,
+      knownSince:  prior?.firstDetectedAt ?? null,
+      statusNow:   prior?.status ?? null,
+      statusAfter: record.status,
+      transition,
+      relapses:    record.relapses,
+      experiment:  record.experiment,
+      measured,
+      openQuestion: record.question,
+      answered:     record.traderAnswer != null,
+    }));
 
     return NextResponse.json({
       ranAt: new Date().toISOString(),
@@ -258,9 +233,11 @@ export async function GET(req: NextRequest) {
             status:     primary.status,
             wouldSay:   primary.statements.map(s => s.text),
             wouldAsk:   primary.question,
-            experiment: primary.status === 'confirmed'
-              ? designExperiment(primary.kind, primary.rate, primary.trigger)
-              : null,
+            // The experiment as memory would record it, not a fresh
+            // design: a window only opens for a primary that is confirmed,
+            // has a counter-example and has been seen on a previous run, and
+            // recomputing it here answered a different question.
+            experiment: decisions.find(d => d.finding.kind === primary.kind)?.record.experiment ?? null,
           }
         : null,
       watching: watching.map(f => f.kind),
