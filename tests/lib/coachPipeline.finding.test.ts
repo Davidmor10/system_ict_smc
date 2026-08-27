@@ -102,9 +102,11 @@ describe('lifecycle', () => {
   // 'investigating' and throw away the only window that could show whether
   // the intervention worked.
   it('a running experiment holds its status against a recount', () => {
-    expect(deriveStatus(tallyOf(history(6, 3)), 'low', 'experiment')).toBe('experiment');
-    expect(deriveStatus(tallyOf(history(6, 3)), 'low', 'monitoring')).toBe('monitoring');
-    expect(deriveStatus(tallyOf(history(6, 3)), 'low', 'resolved')).toBe('resolved');
+    const t = tallyOf(history(6, 3));
+    const a = assessConfidence({ tally: t, trigger: null });
+    expect(deriveStatus(t, a, 'experiment')).toBe('experiment');
+    expect(deriveStatus(t, a, 'monitoring')).toBe('monitoring');
+    expect(deriveStatus(t, a, 'resolved')).toBe('resolved');
   });
 });
 

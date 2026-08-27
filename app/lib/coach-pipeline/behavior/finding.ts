@@ -133,12 +133,34 @@ export function computeBaselines(tally: BehaviorTally): Baselines {
 
 /** Where a freshly computed finding sits, absent any stored history.
  *
- *  Deliberately conservative at the top: `confirmed` needs the sample floors
- *  AND a confidence that isn't `low`. A behaviour can be frequent and still
- *  not confirmable if it only ever showed up in one stretch of the history. */
+ *  `confirmed` MEANS READY TO MEASURE, NOT READY TO EXPLAIN
+ *
+ *  It used to require a confidence of `medium` or better, and `medium`
+ *  requires a trigger — a context the behaviour demonstrably concentrates in.
+ *  So a habit the system could count perfectly well was refused a measurement
+ *  window because nobody could say WHEN it happened.
+ *
+ *  Those are different questions and only one of them is being asked here. A
+ *  measurement window compares a rate before against the same rate after; it
+ *  never reads the trigger. `designExperiment` takes one only to add a clause
+ *  to a sentence, and `measureExperiment` does not take one at all. The gate
+ *  was borrowed from the explanation ladder and did not belong.
+ *
+ *  Observed on a live journal: three behaviours sat at 7-of-28, 6-of-33 and
+ *  6-of-33, every one of them with a HIGH sample grade and present in both
+ *  halves of the history — and none of them measurable, because their
+ *  contexts came in at a corrected p of 0.31 and 0.43. The evidence for WHERE
+ *  they happen is genuinely weak. The evidence that they happen is not, and
+ *  that is all a window needs.
+ *
+ *  What the trigger still gates is untouched: `explanationTier` caps a
+ *  low-confidence finding at the `observed` statement, so a behaviour
+ *  confirmed under this rule can still only be reported as a count. Nothing
+ *  the system SAYS gets stronger — it just starts measuring what it already
+ *  counts with confidence. */
 export function deriveStatus(
   tally: BehaviorTally,
-  confidence: Confidence,
+  assessment: ConfidenceAssessment,
   previous?: FindingStatus,
 ): FindingStatus {
   // Once an experiment is under way the lifecycle is driven by measurement,
@@ -150,10 +172,14 @@ export function deriveStatus(
     return previous;
   }
 
+  // Enough of it, and spread across the history rather than bunched into one
+  // bad fortnight. Consistency stays because it is the one factor that speaks
+  // to whether there is a standing habit here at all — a burst that never
+  // recurred is not something to spend a ten-trade window on.
   const confirmable =
     tally.occurrences   >= CONFIRM_MIN_OCCURRENCES &&
     tally.opportunities >= CONFIRM_MIN_OPPORTUNITIES &&
-    confidence !== 'low' && confidence !== 'unknown';
+    assessment.factors.consistency.passes;
   if (confirmable) return 'confirmed';
 
   const investigable =
@@ -322,7 +348,7 @@ export function buildFinding(
   const contrast   = contrastOf(tally);
   const trigger    = analyzeTriggers(tally, contexts)[0] ?? null;
   const assessment = assessConfidence({ tally, trigger, extraFamilies: opts.extraFamilies });
-  const status     = deriveStatus(tally, assessment.level, opts.previousStatus);
+  const status     = deriveStatus(tally, assessment, opts.previousStatus);
   const cost       = costPerOccurrence(tally, opts.rByTradeId);
 
   // Frequency × harm × how much we trust it. A behaviour that is common but
