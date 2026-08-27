@@ -123,33 +123,21 @@ export interface Statistical {
   last_7d?:      { n: number; wr: number; r: number; trend: 'up' | 'down' | 'flat' };
 }
 
-export interface Behavioral {
-  recurring_mistakes?:  string[];
-  emotional_triggers?:  string[];
-  strengths?:           string[];
-  discipline?: {
-    score_100:    number;
-    rate_7d:      number;
-    top_violated: string;
-  };
-  watch_flags?:         string[];
-}
-
-export interface UserProfileRow {
-  clerk_id:               string;
-  updated_at:             string;
-  schema_version:         number;
-  analyzer_version:       number;
-
-  statistical:            Statistical;
-  behavioral:             Behavioral;
-  narrative_summary:      string;
-  profile_token_count:    number;
-
-  last_analyzed_at:       string;
-  last_trade_included_id: string | null;
-  last_note_included_id:  string | null;
-}
+// The rolling profile that was designed here and never built.
+//
+// `Behavioral` and `UserProfileRow` described a user_profile row written by a
+// background agent: extracted patterns, a discipline score, a narrative bio.
+// Nothing in the app ever wrote one — the writer had no caller outside its own
+// tests — so the daily insight's <user_profile> block shipped those two fields
+// empty every night under a contract that said they were filled.
+//
+// Both were built for real elsewhere in the meantime: the behaviour layer owns
+// recurring mistakes, discipline and strengths and hands them over in its own
+// block, and the trader's own words reach the prompt as
+// <trader_self_description>. Keeping a second, empty home for the same claims
+// is what the two-stack rule in docs/ai-architecture.md exists to prevent, so
+// the types went with the reader. `Statistical` above stays — it is computed
+// from the journal on every run and is the whole of what that block now sends.
 
 // ── 5. processing_jobs ──────────────────────────────────────────────────────
 export interface ProcessingJobRow {
@@ -287,7 +275,6 @@ export const T = {
   trades:            'intelligence_trades',
   notebookEntries:   'notebook_entries',
   notebookChunks:    'notebook_chunks',
-  userProfile:       'user_profile',
   processingJobs:    'processing_jobs',
   aiUsageLog:        'ai_usage_log',
   rateLimits:        'rate_limits',

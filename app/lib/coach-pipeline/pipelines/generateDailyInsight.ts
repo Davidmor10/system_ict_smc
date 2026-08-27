@@ -4,7 +4,8 @@
 // Given a user + a date, it:
 //   1. Checks the kill switch.
 //   2. Refuses to re-generate an existing (clerkId, date, kind) insight.
-//   3. Loads context: profile, today's trades, today's signals, past_writing
+//   3. Loads context: whole-history stats, today's trades, today's signals,
+//      past_writing
 //      block from RAG retrieval.
 //   4. Decides provider (Claude vs Gemini fallback) based on the user's
 //      monthly spend + the system-wide daily budget.
@@ -18,7 +19,6 @@
 import { createHash } from 'crypto';
 
 import type { DailyInsightRow, FallbackReason, InsightKind, Provider, Statistical, TradeRow } from '../types';
-import { getUserProfile } from '../db/profile';
 import { listTradesForDate, listRecentTrades, listLateLoggedTrades } from '../db/trades';
 import { getInsightForDate, insertInsight, listRecentInsights } from '../db/insights';
 import { loadDayPlan, loadRuleBreaches } from '../db/collections';
@@ -134,8 +134,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   if (existing) return { status: 'exists', row: existing };
 
   // 3. Load context in parallel where possible.
-  const [profile, todayTrades, traderProfile] = await Promise.all([
-    getUserProfile(cid),
+  const [todayTrades, traderProfile] = await Promise.all([
     listTradesForDate(cid, inputs.date),
     // What the trader wrote about themselves. Never throws — an absent bio
     // shortens the prompt, it does not fail the night's run.
@@ -164,22 +163,24 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     });
   }
 
-  // The rolling profile is written by a background agent. Until it has run at
-  // least once — which for every new user is "not yet" — profile.statistical
-  // is empty, and the model would be asked to coach on a single day's trades
-  // with no idea who this trader is. Compute the numbers ourselves from real
-  // history: deterministic, free, and no number in it was invented.
-  let statisticalFallback: Statistical | undefined;
-  if (!profile || !profile.statistical || typeof profile.statistical.n !== 'number' || profile.statistical.n === 0) {
-    try {
-      const history = await listRecentTrades(cid, 200);
-      if (history.length) statisticalFallback = computeStatistical(history, { today: inputs.date });
-    } catch (err) {
-      // A missing fallback degrades the insight; it must never kill the run.
-      logger.warn('statistical fallback failed — continuing without it', {
-        clerkId: cid, error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  // Who this trader is, in numbers. Computed here from their real history:
+  // deterministic, free, and no number in it was invented.
+  //
+  // This used to be a fallback. The block was supposed to be filled from a
+  // rolling profile kept by a background agent, and the agent was never
+  // built — nothing in the app ever wrote a user_profile row — so the
+  // fallback ran every night for every trader while the read that preceded it
+  // returned nothing, every time. What was the exception is the rule, and now
+  // says so.
+  let statistical: Statistical | undefined;
+  try {
+    const history = await listRecentTrades(cid, 200);
+    if (history.length) statistical = computeStatistical(history, { today: inputs.date });
+  } catch (err) {
+    // Missing numbers degrade the insight; they must never kill the run.
+    logger.warn('statistical block failed — continuing without it', {
+      clerkId: cid, error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // The plan against the execution, and how promptly the journal gets filled.
@@ -239,7 +240,6 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
 
   // 5. Build prompt.
   const userMessage = buildUserMessage({
-    profile,
     todayTrades,
     signals,
     pastWritingBlock: retrieval.block,
@@ -248,7 +248,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     logging: loggingHabit,
     rulesBroken,
     dayPlan: dayPlan ? { bias: dayPlan.bias, note: dayPlan.note } : null,
-    statisticalFallback,
+    statistical,
     behavior: behavior.block,
     traderProfile,
   });
@@ -410,14 +410,12 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   const flagVersion   = await flags.insightPromptVersion();
   const promptVersion = Math.max(flagVersion, DAILY_INSIGHT_PROMPT_VERSION);
   const contextSnapshot: Record<string, unknown> = {
-    profile_updated_at:   profile?.updated_at ?? null,
-    analyzer_version:     profile?.analyzer_version ?? null,
-    statistical_source:   statisticalFallback ? 'computed_fallback' : (profile ? 'rolling_profile' : 'none'),
+    statistical_source:   statistical ? 'computed' : 'none',
     // Whether the note was written knowing who this trader says they are. Two
     // insights that read differently for the same numbers are explained by
     // this flag more often than by anything else in the snapshot.
     trader_profile_used:  traderProfile.length > 0,
-    statistical_n:        statisticalFallback?.n ?? profile?.statistical?.n ?? 0,
+    statistical_n:        statistical?.n ?? 0,
     trade_ids:            todayTrades.map(t => t.id),
     today_signals:        signals,
     // Trades written down after the last note, for other days. Kept in the

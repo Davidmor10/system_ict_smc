@@ -6,7 +6,6 @@
 export * from './client';
 export * from './trades';
 export * from './notebook';
-export * from './profile';
 export * from './jobs';
 export * from './usage';
 export * from './insights';

@@ -42,7 +42,6 @@ import { T } from '../../../lib/coach-pipeline/types';
 import { israelToday } from '../../../lib/coach-pipeline/dates';
 import { normalizeRole } from '../../../lib/getUserRole';
 import { listTradesForDate } from '../../../lib/coach-pipeline/db/trades';
-import { getUserProfile } from '../../../lib/coach-pipeline/db/profile';
 import { logger } from '../../../lib/logger';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
 
@@ -204,10 +203,7 @@ export async function GET(req: NextRequest) {
 
     // Pre-flight context, so a boring result ("no trades today") is obvious
     // from the response rather than needing a second round of digging.
-    const [trades, profile] = await Promise.all([
-      listTradesForDate(userId, date),
-      getUserProfile(userId),
-    ]);
+    const trades = await listTradesForDate(userId, date);
 
     if (force) {
       await getClient()
@@ -229,7 +225,6 @@ export async function GET(req: NextRequest) {
         planTier,
         forced:            force,
         tradesFoundToday:  trades.length,
-        hasRollingProfile: !!profile,
       },
       result,
       // Plain-language read of what happened, so the next step is obvious.

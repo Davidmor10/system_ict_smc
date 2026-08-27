@@ -14,7 +14,7 @@
 // gets three additional constraints appended by its own wrapper.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { UserProfileRow, TradeRow, Statistical } from '../types';
+import type { TradeRow, Statistical } from '../types';
 import type { TodaySignals } from '../analyzers/todaySignals';
 import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
 
@@ -90,8 +90,15 @@ import { EMPTY_BLOCK, type BehaviorBlock } from '../pipelines/analyzeBehavior';
  *
  *  v2 — statistical fallback (profile-less users now get real numbers) and
  *       angle-bracket escaping in every interpolated block.
+ *
+ *  v11 — <user_profile> stops promising two fields that were never filled.
+ *        `behavioral` and `narrative_summary` were part of a rolling profile
+ *        whose writer was never built, so the block went out describing them
+ *        every night while shipping `{}` and `''`. Both exist for real
+ *        elsewhere — <behavior> and <trader_self_description> — and the
+ *        contract now names only what it actually sends.
  */
-export const DAILY_INSIGHT_PROMPT_VERSION = 10;
+export const DAILY_INSIGHT_PROMPT_VERSION = 11;
 
 export const SYSTEM_PROMPT = `You are Onyx — a trading coach who writes ONE short daily insight for a specific trader in their journaling app. The insight appears on their dashboard the next morning. You do not chat with them. You write once. That's it.
 
@@ -244,11 +251,10 @@ You will receive five blocks (the last may be absent). Read them all before
 writing a single word.
 
 <user_profile>
-  The rolling profile — a compressed snapshot of who this trader is right now.
-  Fields: statistical (deterministic numbers), behavioral (patterns extracted
-  by an earlier agent), narrative_summary (a 200-token bio).
+  Deterministic numbers over the trader's whole history, computed from their
+  journal. Nothing here was written by a model.
 
-  statistical field glossary — this is for YOUR comprehension only. Never
+  field glossary — this is for YOUR comprehension only. Never
   repeat a field name back to the trader; translate it (style rule 10):
     n           NUMBER OF TRADES, all time. Not days. Not sessions.
     wr          win rate, 0-1. 0.33 means 33%.
@@ -425,7 +431,6 @@ STRICT ADDITIONS FOR THIS RUN:
 // ── User message builder ────────────────────────────────────────────────────
 
 export interface DailyInsightInputs {
-  profile:          UserProfileRow | null;
   todayTrades:      readonly TradeRow[];
   signals:          TodaySignals;
   pastWritingBlock: string;              // JSON string from formatPastWritingBlock
@@ -446,11 +451,10 @@ export interface DailyInsightInputs {
   rulesBroken?:     ReadonlyArray<{ rule: string; count: number; lastDate: string }>;
   /** The direction they declared that morning, and the reason they gave. */
   dayPlan?:         { bias?: string; note?: string } | null;
-  /** Deterministic stats to use when the rolling profile has none yet.
-   *  Computed by analyzers/statistical.ts from the user's real trade history —
-   *  never invented, never a placeholder. Ignored when the profile already
-   *  carries a populated `statistical`. */
-  statisticalFallback?: Statistical;
+  /** Whole-history statistics, computed by analyzers/statistical.ts from the
+   *  trader's real trades — never invented, never a placeholder. Absent only
+   *  for a trader with no history to compute over. */
+  statistical?: Statistical;
 }
 
 /** JSON.stringify, with `<` and `>` neutralized.
@@ -523,26 +527,32 @@ function datedCompact(t: TradeRow): CompactTrade & { date: string } {
   return { date: t.date, ...compact(t) };
 }
 
-/** True when the profile's statistical blob has nothing usable in it — no
- *  row at all, or a row whose stats were never computed. */
-function statsAreEmpty(s: Statistical | undefined | null): boolean {
-  return !s || typeof s.n !== 'number' || s.n === 0;
-}
-
-function profileBlock(p: UserProfileRow | null, fallback?: Statistical): unknown {
-  // The rolling profile is built by a background agent that may not have run
-  // yet (brand-new user, or the refresh job hasn't fired). Rather than ship an
-  // empty <user_profile> — which makes the model either say nothing useful or
-  // guess — fall back to the deterministic computer over real trade history.
-  const statistical = statsAreEmpty(p?.statistical) ? (fallback ?? {}) : p!.statistical;
-  if (!p) {
-    return { statistical, behavioral: {}, narrative_summary: '' };
-  }
-  return {
-    statistical,
-    behavioral:        p.behavioral,
-    narrative_summary: p.narrative_summary,
-  };
+/** The numbers block.
+ *
+ *  IT USED TO CARRY THREE FIELDS AND TWO OF THEM WERE ALWAYS EMPTY
+ *
+ *  The design called for a rolling profile written by a background agent:
+ *  `statistical` numbers, `behavioral` patterns, and a `narrative_summary`
+ *  bio. The agent was never built. Nothing in the app ever wrote a row to
+ *  user_profile — the writer had no caller outside its own tests — so every
+ *  night, for every trader, the block went out with `behavioral: {}` and
+ *  `narrative_summary: ''`, under a data contract that told the model both
+ *  were populated. A named, empty section is an invitation to fill it, which
+ *  is the single failure the rest of these rules exist to prevent.
+ *
+ *  Both of them have since been built properly, elsewhere and separately:
+ *
+ *    behavioral        → the <behavior> block, produced by the behaviour
+ *                        layer — the primary difficulty, its statements and
+ *                        history, what is merely being watched, and what is
+ *                        currently going right.
+ *    narrative_summary → <trader_self_description>, what the trader wrote
+ *                        about themselves in settings, handed over as
+ *                        background and explicitly not as evidence.
+ *
+ *  What remains is what was always real: numbers computed from the journal. */
+function profileBlock(statistical?: Statistical): unknown {
+  return { statistical: statistical ?? {} };
 }
 
 /** Serialize the four tagged blocks in exactly the order the system prompt's
@@ -552,7 +562,7 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
   const trades = inputs.todayTrades.map(compact);
   return [
     '<user_profile>',
-    safeJson(profileBlock(inputs.profile, inputs.statisticalFallback)),
+    safeJson(profileBlock(inputs.statistical)),
     '</user_profile>',
     '',
     '<today>',

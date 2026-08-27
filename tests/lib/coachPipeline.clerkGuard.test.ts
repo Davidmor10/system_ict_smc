@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { requireClerkId } from '../../app/lib/coach-pipeline/db/client';
 import * as trades   from '../../app/lib/coach-pipeline/db/trades';
 import * as notebook from '../../app/lib/coach-pipeline/db/notebook';
-import * as profile  from '../../app/lib/coach-pipeline/db/profile';
 import * as jobs     from '../../app/lib/coach-pipeline/db/jobs';
 import * as usage    from '../../app/lib/coach-pipeline/db/usage';
 import * as insights from '../../app/lib/coach-pipeline/db/insights';
@@ -59,8 +58,6 @@ const scopedHelpers: Array<[string, (arg: string, ...rest: unknown[]) => Promise
   ['notebook.markEntryEmbedded',     (id) => notebook.markEntryEmbedded(id, 'x', 'hash')],
   ['notebook.replaceChunks',         (id) => notebook.replaceChunks(id, 'x', [])],
   ['notebook.searchChunks',          (id) => notebook.searchChunks(id, [0.1])],
-  ['profile.getUserProfile',         (id) => profile.getUserProfile(id)],
-  ['profile.getRefreshSignals',      (id) => profile.getRefreshSignals(id)],
   ['jobs.enqueueJob',                (id) => jobs.enqueueJob({ clerkId: id, jobType: 'daily_insight' })],
   ['jobs.listRecentJobs',            (id) => jobs.listRecentJobs(id)],
   ['usage.sumUserMonthlyCost',       (id) => usage.sumUserMonthlyCost(id, new Date())],
@@ -79,20 +76,4 @@ describe('DB helpers reject empty clerk_id', () => {
       await expect(call('   ')).rejects.toThrow(/clerk_id is required/);
     });
   }
-});
-
-// upsertUserProfile takes an input object — special-case it.
-describe('profile.upsertUserProfile rejects empty clerk_id', () => {
-  it('throws before hitting Supabase', async () => {
-    await expect(profile.upsertUserProfile('', {
-      statistical:       {},
-      behavioral:        {},
-      narrative_summary: '',
-      schema_version:    1,
-      analyzer_version:  1,
-      last_analyzed_at:  new Date(),
-      last_trade_included_id: null,
-      last_note_included_id:  null,
-    })).rejects.toThrow(/clerk_id is required/);
-  });
 });
