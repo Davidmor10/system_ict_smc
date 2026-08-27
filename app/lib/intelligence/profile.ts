@@ -7,11 +7,18 @@
 import type { FullAnalysis, GroupPerformance } from '../analytics';
 import { pairedExtremes } from '../analytics/extremes';
 import type { TradeEntry } from '../journal';
+import { meanFloor, ratioFloor, winRateMoved, type DecidedSplit } from './movement';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
 
 const SCHEMA_VERSION = 1;
 const MIN_SAMPLE = 3;
+// Floors, not the rule — see ./movement. These three used to BE the rule, and
+// at this journal's size a fixed floor is smaller than one trade: on a
+// thirty-trade history one more win moves the win rate by about two points,
+// so the profile reported a direction every time it was rebuilt. The label
+// feeds the edge score's stability factor, which is a fifth of a number the
+// trader reads as a measurement.
 const WIN_RATE_THRESHOLD = 3;   // percentage points
 const AVG_RR_THRESHOLD = 0.15;  // R
 const PROFIT_FACTOR_THRESHOLD = 0.2;
@@ -57,6 +64,34 @@ export function deriveTraderProfile(
   };
 
   const { winRate, avgRR, profitFactor, avgWinner, avgLoser } = analysis.performance;
+
+  // ── movement against the previous snapshot ───────────────────────────────
+  //
+  // Tested rather than thresholded, and against the counts the previous
+  // snapshot recorded. A profile written before those counts existed cannot be
+  // tested against, so it falls back to the fixed floors — the old behaviour,
+  // kept only for the runs it takes to write a snapshot that carries them.
+  const decided: DecidedSplit = { wins: analysis.performance.wins, losses: analysis.performance.losses };
+  const previousDecided = previousProfile?.winRate.decided ?? null;
+  const previousSample  = previousProfile?.avgRR.sample ?? null;
+  const sample = decided.wins + decided.losses;
+  const n = previousSample != null ? Math.min(sample, previousSample) : sample;
+
+  const winRateTrend = previousProfile
+    ? (previousDecided
+        ? (winRateMoved(decided, previousDecided)
+            ? computeTrend(winRate, previousProfile.winRate.current, WIN_RATE_THRESHOLD)
+            : 'flat')
+        : computeTrend(winRate, previousProfile.winRate.current, WIN_RATE_THRESHOLD))
+    : 'flat';
+  const avgRRTrend = computeTrend(
+    avgRR, previousProfile?.avgRR.current ?? null,
+    previousSample != null ? meanFloor(AVG_RR_THRESHOLD, n) : AVG_RR_THRESHOLD,
+  );
+  const profitFactorTrend = computeTrend(
+    profitFactor, previousProfile?.profitFactor.current ?? null,
+    previousSample != null ? ratioFloor(PROFIT_FACTOR_THRESHOLD, profitFactor, n) : PROFIT_FACTOR_THRESHOLD,
+  );
   const exitRatio = avgRR > 0 && avgLoser > 0 ? (avgWinner / avgLoser) / avgRR : null;
 
   const closed = trades.filter(t => t.result !== 'OPEN');
@@ -78,9 +113,9 @@ export function deriveTraderProfile(
     bestHour: analysis.time.bestHour,
     worstHour: analysis.time.worstHour,
     direction,
-    winRate: { current: winRate, trend: computeTrend(winRate, previousProfile?.winRate.current ?? null, WIN_RATE_THRESHOLD) },
-    avgRR: { current: avgRR, trend: computeTrend(avgRR, previousProfile?.avgRR.current ?? null, AVG_RR_THRESHOLD) },
-    profitFactor: { current: profitFactor, trend: computeTrend(profitFactor, previousProfile?.profitFactor.current ?? null, PROFIT_FACTOR_THRESHOLD) },
+    winRate: { current: winRate, trend: winRateTrend, sample, decided },
+    avgRR: { current: avgRR, trend: avgRRTrend, sample },
+    profitFactor: { current: profitFactor, trend: profitFactorTrend, sample },
     exitBehavior: { ratio: exitRatio, detail: analysis.exits },
     topConfirmations: analysis.confirmations.slice(0, MAX_CONFIRMATIONS),
     screenshotAvailability: {

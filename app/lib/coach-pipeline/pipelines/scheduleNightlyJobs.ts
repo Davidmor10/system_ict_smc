@@ -135,6 +135,25 @@ export async function scheduleNightlyJobs(
       scheduledAt,
     });
     if (row) enqueued += 1; else existing += 1;
+
+    // The descriptive stack's nightly pass. A second behind the insight, not
+    // a minute: on Hobby this cron drains its own queue inline for about
+    // forty-five seconds and never runs again that day, so anything not due
+    // inside that window waits a full day. One second is enough to put the
+    // note the trader actually reads ahead of a profile rebuild in the pick
+    // order, and small enough that the same drain still reaches it.
+    //
+    // Its own row rather than riding inside the insight, because the two fail
+    // independently: a model outage must not cost the deterministic refresh,
+    // and a slow refresh must not cost the note. The same unique index makes
+    // a second cron fire in one day a no-op for both.
+    const refresh = await enqueueJob({
+      clerkId:     u.clerkId,
+      jobType:     'profile_refresh',
+      targetDate,
+      scheduledAt: new Date(scheduledAt.getTime() + 1_000),
+    });
+    if (refresh) enqueued += 1; else existing += 1;
   }
 
   return {

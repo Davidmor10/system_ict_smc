@@ -117,7 +117,25 @@ function sampleOf(metric: GroupPerformance): number {
   return Math.max(metric.confidence?.sampleSize ?? 0, metric.trades ?? 0);
 }
 
-async function refreshIntelligence(supabase: SupabaseClient, userId: string, lang: 'he' | 'en'): Promise<RefreshResult> {
+/** Options for one refresh pass.
+ *
+ *  `phrase` is what separates the nightly run from a request. Phrasing a
+ *  hypothesis is the one model call in here, and it writes prose in a
+ *  particular language — the language of whoever asked. The nightly run has
+ *  nobody to ask, so it leaves the description empty and the next request,
+ *  which knows the language, writes it. Everything else in the refresh is
+ *  deterministic and belongs to the night. */
+interface RefreshOptions {
+  phrase?: boolean;
+}
+
+async function refreshIntelligence(
+  supabase: SupabaseClient,
+  userId: string,
+  lang: 'he' | 'en',
+  opts: RefreshOptions = {},
+): Promise<RefreshResult> {
+  const phrase = opts.phrase ?? true;
   const nowISO = new Date().toISOString();
   const trades = await repo.getRecentTrades(supabase, userId);
   const analysis = runFullAnalysis(trades);
@@ -152,7 +170,7 @@ async function refreshIntelligence(supabase: SupabaseClient, userId: string, lan
   // Only re-phrase when the identity actually changed (description cleared by
   // deriveHypothesis) — a continuing hypothesis keeps its cached text, same
   // discipline as pattern_memory's ai_title caching below.
-  if (hypothesis.description === null && hypothesis.status !== 'insufficient_data' && hypothesis.status !== 'invalidated') {
+  if (phrase && hypothesis.description === null && hypothesis.status !== 'insufficient_data' && hypothesis.status !== 'invalidated') {
     const phrasing = await generateHypothesisPhrasing(
       { status: hypothesis.status, confidenceScore: hypothesis.confidenceScore, supportingMetrics: hypothesis.supportingMetrics },
       lang,
@@ -235,6 +253,34 @@ export async function buildTraderProfile(userId: string, lang: 'he' | 'en' = DEF
 }
 
 export const updateTraderProfile = buildTraderProfile;
+
+/** The nightly pass over the descriptive stack.
+ *
+ *  WHY THIS EXISTS
+ *
+ *  The whole of lib/intelligence — the trader profile, pattern memory, the
+ *  hypothesis, the edge and learning scores, the known facts — is written by
+ *  `refreshIntelligence`, and of the entry points that reach it exactly one
+ *  was wired into the app: the weekly report route. Everything this stack
+ *  stores updated only when a trader opened one panel, and only when that
+ *  week's trade count had changed since the last time they did.
+ *
+ *  Which made every claim it stores about time untrue. A pattern is marked
+ *  `weakening` relative to the previous stored row, so "weakening" meant
+ *  "weaker than the last time you opened the report" — a fortnight or a day,
+ *  with nothing to say which. The edge score blends 70/30 against its own
+ *  previous value so it moves gradually, a design that assumes the updates
+ *  are regular. The learning score compares the first half of the score
+ *  history against the second, and the points in that history were page
+ *  visits.
+ *
+ *  Run nightly, the same numbers mean "since yesterday" for everyone, which
+ *  is the thing they were always presented as meaning. */
+export async function refreshIntelligenceNightly(userId: string): Promise<{ patternRows: number }> {
+  if (!isSupabaseConfigured()) return { patternRows: 0 };
+  const result = await refreshIntelligence(getClient(), userId, DEFAULT_LANG, { phrase: false });
+  return { patternRows: result.patternRows.length };
+}
 
 // ── detectPatterns / updatePatternMemory ────────────────────────────────────
 

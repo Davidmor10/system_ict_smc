@@ -11,10 +11,21 @@ import type { ConfidenceLevel, ExitBehavior, GroupPerformance, PatternKind } fro
 
 export type Trend = 'up' | 'down' | 'flat';
 
-/** A scalar tracked over time against its previous stored value. */
+/** A scalar tracked over time against its previous stored value.
+ *
+ *  `sample` and `decided` are what make the NEXT comparison testable. A rate
+ *  cannot be tested on its own — 60% against 50% is either a coin or a habit
+ *  depending entirely on how many trades are behind each — so the snapshot
+ *  carries the counts it was computed from, and the run after it reads them
+ *  back. Optional because profiles written before they existed have neither;
+ *  a comparison against one of those falls back to the fixed floor. */
 export interface TrendValue {
   current: number;
   trend: Trend;
+  /** Decided trades behind `current`. */
+  sample?: number;
+  /** The win/loss split behind `current`, on metrics that have one. */
+  decided?: { wins: number; losses: number };
 }
 
 export interface DirectionEdge {

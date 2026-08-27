@@ -118,3 +118,45 @@ describe('deriveTraderProfile', () => {
     expect(profile.screenshotAvailability.pct).toBe(50);
   });
 });
+
+// ── movement against the previous snapshot ──────────────────────────────────
+//
+// The profile's three trends used to be fixed thresholds — three points of win
+// rate, 0.15R, 0.2 of profit factor. On a journal this size a fixed threshold
+// is smaller than one trade, so the profile reported a direction every time it
+// was rebuilt, and the edge score reads those labels as its stability factor.
+
+describe('deriveTraderProfile trends', () => {
+  const profileOf = (wins: number, losses: number, previous: TraderProfile | null) => {
+    const trades = winsAndLosses('ES', 'nyam', wins, losses);
+    return deriveTraderProfile(runFullAnalysis(trades), trades, previous);
+  };
+
+  it('carries the counts forward so the next comparison can be tested', () => {
+    const p = profileOf(6, 4, null);
+    expect(p.winRate.decided).toEqual({ wins: 6, losses: 4 });
+    expect(p.winRate.sample).toBe(10);
+    expect(p.avgRR.sample).toBe(10);
+  });
+
+  it('has no trend on a first snapshot', () => {
+    expect(profileOf(6, 4, null).winRate.trend).toBe('flat');
+  });
+
+  it('does not call one trade of difference a direction', () => {
+    const before = profileOf(5, 5, null);
+    expect(profileOf(6, 4, before).winRate.trend).toBe('flat');
+  });
+
+  it('calls a real move a direction once the sample can carry it', () => {
+    const before = profileOf(6, 14, null);
+    expect(profileOf(16, 4, before).winRate.trend).toBe('up');
+  });
+
+  it('falls back to the fixed floor against a snapshot written without counts', () => {
+    // A profile stored before the counts existed. It can still be compared
+    // against — just not tested — and the old behaviour is what it gets.
+    const legacy = { ...profileOf(5, 5, null), winRate: { current: 50, trend: 'flat' as const } };
+    expect(profileOf(6, 4, legacy).winRate.trend).toBe('up');
+  });
+});

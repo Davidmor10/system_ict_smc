@@ -12,6 +12,7 @@ import { getClient } from '../db/client';
 import { flags } from '../db/flags';
 import { generateDailyInsight, type PlanTier } from './generateDailyInsight';
 import { embedEntry } from './embedEntry';
+import { refreshIntelligenceNightly } from '../../intelligence/service';
 import { normalizeRole } from '../../getUserRole';
 import { isOwnerEmail } from '../auth/owners';
 import { israelToday, israelYesterday } from '../dates';
@@ -130,13 +131,34 @@ async function runOne(job: ProcessingJobRow): Promise<
       };
     }
 
-    // profile_refresh has no runner yet — mark as skipped rather than failed
-    // so it doesn't consume retry budget.
+    if (job.job_type === 'profile_refresh') {
+      // The descriptive stack — trader profile, pattern memory, hypothesis,
+      // edge and learning scores. It had no runner, and the only path that
+      // reached it in the whole app was a trader opening the weekly report
+      // panel, so every "since last time" claim it stores meant "since you
+      // last looked". Run here, they mean "since yesterday".
+      //
+      // No model call: the one piece of prose this stack produces is left for
+      // a request that knows which language to write it in.
+      const out = await refreshIntelligenceNightly(job.clerk_id);
+      return {
+        kind: 'success',
+        summary: {
+          jobId: job.id, jobType: job.job_type, clerkId: job.clerk_id,
+          status: 'success', reason: `${out.patternRows} patterns`,
+          latencyMs: Date.now() - started,
+        },
+      };
+    }
+
+    // Every job type has a runner. Anything reaching here is a row written by
+    // a version that knew a type this one does not — skipped rather than
+    // failed, so it does not burn retry budget on our behalf.
     return {
       kind: 'success',
       summary: {
         jobId: job.id, jobType: job.job_type, clerkId: job.clerk_id,
-        status: 'skipped', reason: 'no_runner_yet', latencyMs: Date.now() - started,
+        status: 'skipped', reason: 'unknown_job_type', latencyMs: Date.now() - started,
       },
     };
   } catch (err) {

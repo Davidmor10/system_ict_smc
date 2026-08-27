@@ -24,10 +24,30 @@ function average(nums: number[]): number {
   return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
 }
 
-/** Decided trades each side of a best-vs-worst spread needs before the gap
-    between them means anything. Matches the medium-confidence floor used
-    everywhere else in the analytics layer. */
+/** Decided trades a group needs before the score is allowed to read anything
+    into it. Matches the medium-confidence floor used everywhere else in the
+    analytics layer. */
 export const MIN_SPECIALIZATION_SAMPLE = 10;
+/** Same floor, named for the other factor that needed it. */
+export const MIN_CONFIRMATION_SAMPLE = MIN_SPECIALIZATION_SAMPLE;
+
+/** Average win rate across the trader's main models, over the models with a
+    sample worth averaging.
+ *
+ *  The floor was missing here while its neighbour below carried one, and the
+ *  reasoning written there applies word for word: a win rate over three trades
+ *  is a coin, and averaging three of them produces a confident-looking number
+ *  out of nine trades. This factor is weighted more heavily than either
+ *  specialization factor, so it was the largest unguarded input to a score the
+ *  trader reads as a measurement of their edge.
+ *
+ *  Neutral 50 when nothing qualifies — the same posture as specialization: a
+ *  trader with thin data should score neither high nor low on a question their
+ *  data cannot answer. */
+function confirmationQualityScore(groups: Array<{ winRate: number; confidence: { sampleSize: number } }>): number {
+  const eligible = groups.filter(g => g.confidence.sampleSize >= MIN_CONFIRMATION_SAMPLE);
+  return eligible.length > 0 ? average(eligible.map(g => g.winRate)) : 50;
+}
 
 /** The gap between a trader's best and worst group, or a neutral 50 when the
     two groups are too small for the gap to mean anything. */
@@ -66,9 +86,7 @@ export function computeEdgeScore(
   const trendScore = (t: TraderProfile['winRate']['trend']) => (t === 'up' ? 100 : t === 'flat' ? 70 : 40);
   const stability = average([trendScore(profile.winRate.trend), trendScore(profile.avgRR.trend), trendScore(profile.profitFactor.trend)]);
 
-  const confirmationQuality = profile.topConfirmations.length > 0
-    ? average(profile.topConfirmations.map(c => c.winRate))
-    : 50;
+  const confirmationQuality = confirmationQualityScore(profile.topConfirmations);
 
   // Specialization is the spread between the trader's best and worst group —
   // and the spread between the max and min of several small samples is

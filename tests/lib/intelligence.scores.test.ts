@@ -83,3 +83,39 @@ describe('computeLearningScore', () => {
     expect(score).toBeLessThanOrEqual(100);
   });
 });
+
+// ── the factor that had no floor ────────────────────────────────────────────
+//
+// `specializationScore` refuses to read a spread between two small groups, and
+// says why in the file. The factor next to it averaged the win rates of the
+// trader's main models with no floor at all — and it is weighted more heavily
+// than either specialization factor, so it was the largest unguarded input to
+// a number the trader reads as a measurement of their edge.
+
+function model(winRate: number, sampleSize: number) {
+  return {
+    key: 'FVG', label: 'FVG', trades: sampleSize, wins: 0, losses: 0, winRate,
+    totalPnl: 0, avgRR: 1, avgWinner: 100, avgLoser: 50, profitFactor: 2,
+    confidence: { level: 'low' as ConfidenceLevel, sampleSize },
+  };
+}
+
+describe('edge score — confirmation quality', () => {
+  it('ignores a model too small to have a win rate worth averaging', () => {
+    const thin  = computeEdgeScore(profile({ topConfirmations: [model(100, 3)] }), [], null);
+    const none  = computeEdgeScore(profile({ topConfirmations: [] }), [], null);
+    expect(thin).toBe(none);
+  });
+
+  it('counts a model once its sample can carry the claim', () => {
+    const real = computeEdgeScore(profile({ topConfirmations: [model(100, 20)] }), [], null);
+    const none = computeEdgeScore(profile({ topConfirmations: [] }), [], null);
+    expect(real).toBeGreaterThan(none);
+  });
+
+  it('averages only the models that qualify', () => {
+    const mixed = computeEdgeScore(profile({ topConfirmations: [model(100, 20), model(0, 2)] }), [], null);
+    const alone = computeEdgeScore(profile({ topConfirmations: [model(100, 20)] }), [], null);
+    expect(mixed).toBe(alone);
+  });
+});
