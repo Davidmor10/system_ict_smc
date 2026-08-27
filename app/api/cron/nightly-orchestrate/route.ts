@@ -16,8 +16,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from 'next/server';
-import { scheduleNightlyJobs, enumerateEligibleUsers } from '../../../lib/coach-pipeline/pipelines/scheduleNightlyJobs';
-import { reconcileTrades } from '../../../lib/coach-pipeline/mirror/reconcile';
+import { scheduleNightlyJobs } from '../../../lib/coach-pipeline/pipelines/scheduleNightlyJobs';
+import { reconcileTrades, tradersToReconcile } from '../../../lib/coach-pipeline/mirror/reconcile';
 import { processJobBatch, type BatchResult } from '../../../lib/coach-pipeline/pipelines/processJobBatch';
 import { assertCronAuth } from '../../../lib/coach-pipeline/auth/guards';
 import { getClient } from '../../../lib/coach-pipeline/db/client';
@@ -110,9 +110,11 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
 
 /** Reconcile every eligible trader's journal against the mirror.
  *
- *  Bounded by the same budget as everything else in this handler: a pass over
- *  a consistent journal is two reads and no writes, so the cost is small and
- *  flat, but it is per-user and this cron has sixty seconds for everything.
+ *  Runs over every trader with rows on either side of the mirror, which is a
+ *  wider set than the nightly job list on purpose — see tradersToReconcile.
+ *  A pass over a consistent journal is two reads and no writes, so the cost is
+ *  small and flat, but it is per-user and this cron has sixty seconds for
+ *  everything.
  *  Never throws — a reconciliation failure must not cost the insights, which
  *  are the thing the trader actually sees.
  *
@@ -121,9 +123,13 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
 async function reconcileAll(): Promise<{ repairedMissing: number; repairedGhosts: number; orphans: number }> {
   let repairedMissing = 0, repairedGhosts = 0, orphans = 0;
   try {
-    const users = await enumerateEligibleUsers();
-    for (const u of users) {
-      const r = await reconcileTrades(u.clerkId);
+    // NOT the nightly eligible-user list. That one is built from
+    // intelligence_trades, which is the table this pass repairs — so a trader
+    // whose trades never reached the mirror would never be on it, and the
+    // pass would be blind to the exact case it exists for.
+    const users = await tradersToReconcile();
+    for (const clerkId of users) {
+      const r = await reconcileTrades(clerkId);
       repairedMissing += r.missing;
       repairedGhosts  += r.ghosts;
       orphans         += r.orphans;

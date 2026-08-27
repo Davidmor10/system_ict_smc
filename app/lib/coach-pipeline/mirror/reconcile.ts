@@ -91,6 +91,39 @@ export function diff(
   return { toMirror, toTombstone, orphanIds };
 }
 
+/** Every trader with rows on EITHER side of the mirror.
+ *
+ *  The reconciler used to be handed the nightly run's eligible-user list,
+ *  which is built from intelligence_trades — the very table it exists to
+ *  repair. A trader whose trades never reached the mirror at all therefore had
+ *  no rows there, was not on the list, and was never reconciled: the pass was
+ *  blind to precisely the worst case it was written for.
+ *
+ *  Found on a live database. Ten journal rows belonged to a clerk_id with no
+ *  presence in the mirror and no profile — an account somebody had deleted —
+ *  and a reconciliation that ran cleanly reported nothing missing, because it
+ *  never knew that trader existed.
+ *
+ *  So the list comes from both tables. A trader in one and not the other is
+ *  the entire point of the exercise. */
+export async function tradersToReconcile(): Promise<string[]> {
+  const seen = new Set<string>();
+  for (const table of ['journal_trades', T.trades] as const) {
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await getClient()
+        .from(table)
+        .select('clerk_id')
+        .order('clerk_id')
+        .range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ clerk_id: string | null }>;
+      for (const r of rows) if (r.clerk_id) seen.add(r.clerk_id);
+      if (rows.length < PAGE) break;
+    }
+  }
+  return [...seen];
+}
+
 /** Page size for the journal read. Large enough that an ordinary journal is
  *  one round trip, small enough not to hold a whole history in memory at once
  *  when a heavy account eventually turns up. */
