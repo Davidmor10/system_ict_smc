@@ -28,6 +28,8 @@ export function analyzePerformance(trades: TradeEntry[]): PerformanceSummary {
   return {
     totalTrades: trades.length,
     closedTrades: closed.length,
+    wins: overall.wins,
+    losses: overall.losses,
     winRate: overall.winRate,
     totalPnl: overall.totalPnl,
     avgRR: overall.avgRR,

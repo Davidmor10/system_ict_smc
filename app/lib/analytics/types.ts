@@ -47,6 +47,11 @@ export interface PeriodPnl {
 export interface PerformanceSummary {
   totalTrades: number;
   closedTrades: number;
+  /** The decided split behind `winRate`. Carried because a rate on its own
+      cannot be tested: comparing one period's win rate against another's
+      needs the counts, not the percentage. See intelligence/periods. */
+  wins: number;
+  losses: number;
   winRate: number;
   totalPnl: number;
   avgRR: number;

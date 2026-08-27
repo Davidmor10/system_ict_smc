@@ -17,6 +17,7 @@ import { todayISO, type TradeEntry } from '../journal';
 import { SESS } from '../sessions';
 import { logger } from '../logger';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
+import { decidedCounts } from '../calc/decided';
 import { generateHypothesisPhrasing, generatePatternPhrasing, metricsEvidence } from '../ai/insightPhrasing';
 import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
@@ -284,8 +285,11 @@ export async function comparePeriods(userId: string): Promise<PeriodComparison |
   const windows = computeTradeWindows(trades, thisWeekStart);
 
   const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
-  const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
-  const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
+  // Decided, not merely closed. The floor is named for decided trades and the
+  // comparison it gates is a win/loss test — counting break-evens toward it
+  // let a week of six decided trades and three scratches pass as nine.
+  const prevClosed = decidedCounts(windows.prevWeekTrades).decided;
+  const baselineClosed = decidedCounts(windows.baselineTrades).decided;
   const prevAnalysis = prevClosed >= MIN_TRADES_FOR_COMPARISON ? runFullAnalysis(windows.prevWeekTrades) : null;
   const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
 
@@ -330,15 +334,20 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   const result = await refreshIntelligence(supabase, userId, lang);
 
   const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
-  const prevClosed = windows.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
-  const baselineClosed = windows.baselineTrades.filter(t => t.result !== 'OPEN').length;
+  // Decided, not merely closed. The floor is named for decided trades and the
+  // comparison it gates is a win/loss test — counting break-evens toward it
+  // let a week of six decided trades and three scratches pass as nine.
+  const prevClosed = decidedCounts(windows.prevWeekTrades).decided;
+  const baselineClosed = decidedCounts(windows.baselineTrades).decided;
   const prevAnalysis = prevClosed >= MIN_TRADES_FOR_COMPARISON ? runFullAnalysis(windows.prevWeekTrades) : null;
   const baselineAnalysis = baselineClosed >= MIN_BASELINE_TRADES ? runFullAnalysis(windows.baselineTrades) : null;
   const comparison = computePeriodComparison(thisAnalysis, prevAnalysis, baselineAnalysis);
 
   const rootCause = diagnoseRootCause(
     comparison, result.profile, previousProfileRecord?.profile ?? null,
-    { thisWeek: closedThisWeek.length, prevWeek: prevClosed },
+    // Both sides decided, matching the floor's own definition — the mechanism
+    // is a claim about wins and losses, and a scratch is neither.
+    { thisWeek: decidedCounts(closedThisWeek).decided, prevWeek: prevClosed },
   );
 
   const priorReports = await repo.getRecentWeeklyReports(supabase, userId, MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1);
