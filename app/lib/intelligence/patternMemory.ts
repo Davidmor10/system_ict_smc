@@ -8,15 +8,43 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ConfidenceLevel, PatternCandidate } from '../analytics';
+import { pointFloor } from './movement';
 import type { PatternMemoryRow, PatternStatus } from './types';
 
 const HISTORY_CAP = 12;
-const STRENGTHEN_THRESHOLD = 3; // percentage points, matches the pp thresholds used elsewhere
-const WEAKEN_THRESHOLD = -3;
-/** No cron in this app — a page visit is the only trigger. One quiet run
-    between visits shouldn't flap a real pattern to "disappeared" and back;
-    require two consecutive misses. */
+/** The floor, not the rule — see `statusFloor`. One constant now, applied
+    symmetrically: a move up and a move down are the same size of move. */
+const STATUS_THRESHOLD = 3; // percentage points
+/** One quiet run shouldn't flap a real pattern to "disappeared" and back;
+    require two consecutive misses. This mattered more when a page visit was
+    the only trigger and two misses could be weeks apart; with the nightly
+    refresh it is two nights. */
 const MISSES_BEFORE_DISAPPEARED = 2;
+
+/** How far a pattern's gap must move between runs before the move is a change
+ *  of state rather than the last trade.
+ *
+ *  THE FIXED THRESHOLD WAS SMALLER THAN ONE TRADE
+ *
+ *  Three percentage points is a reasonable bar between two runs weeks apart,
+ *  and that is what these runs used to be: nothing scheduled ever refreshed
+ *  this stack, so it only ran when a trader opened the weekly report. Once it
+ *  runs nightly, three points is less than a single result — a slice of
+ *  fifteen trades moves about seven — and a pattern would read 'strengthening'
+ *  the morning after a win and 'weakening' the morning after a loss, for as
+ *  long as the trader kept trading.
+ *
+ *  That is not a harmless label. The status is quoted to the coach in the
+ *  facts block, downstream surfaces filter on active/strengthening, and every
+ *  flip writes a row into the pattern's own history — so the history meant to
+ *  show whether an edge is holding would fill with the noise of individual
+ *  trades.
+ *
+ *  Measured against the smaller of the two samples, because that is the one
+ *  the comparison rests on. */
+function statusFloor(fixed: number, sampleNow: number, sampleBefore: number): number {
+  return pointFloor(Math.abs(fixed), Math.min(sampleNow, sampleBefore));
+}
 
 const TIER_RANK: Record<ConfidenceLevel, number> = { low: 0, medium: 1, high: 2 };
 
@@ -121,6 +149,7 @@ export function diffPatternMemory(
     const tierNow = TIER_RANK[c.confidence.level];
     const tierBefore = TIER_RANK[existing.currentConfidenceLevel];
     const signFlipped = (c.delta > 0 && existing.delta < 0) || (c.delta < 0 && existing.delta > 0);
+    const floor = statusFloor(STATUS_THRESHOLD, c.confidence.sampleSize, existing.currentSampleSize);
 
     let status: PatternStatus;
     if (!c.significant) {
@@ -131,9 +160,12 @@ export function diffPatternMemory(
       status = c.confidence.level === 'low' ? 'insufficient_data' : 'weakening';
     } else if (signFlipped) {
       status = 'weakening';
-    } else if (deltaVsBaseline >= STRENGTHEN_THRESHOLD || tierNow > tierBefore) {
+    } else if (deltaVsBaseline >= floor || tierNow > tierBefore) {
+      // A confidence tier that actually changed is a change in what the
+      // sample can support, not a wobble in the rate, and moves the status on
+      // its own.
       status = 'strengthening';
-    } else if (deltaVsBaseline <= WEAKEN_THRESHOLD || tierNow < tierBefore) {
+    } else if (deltaVsBaseline <= -floor || tierNow < tierBefore) {
       status = 'weakening';
     } else {
       status = statusForCandidate(c);

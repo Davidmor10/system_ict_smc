@@ -85,6 +85,15 @@ export function meanFloor(fixed: number, n: number): number {
   return Math.max(fixed, n > 0 ? 1 / n : Infinity);
 }
 
+/** The same, for a rate expressed in percentage POINTS rather than as a
+ *  fraction: one trade in a slice of n moves it by 100/n.
+ *
+ *  A slice of fifteen trades moves nearly seven points on a single result, so
+ *  a fixed three-point floor over a rate is not a floor at all. */
+export function pointFloor(fixed: number, n: number): number {
+  return Math.max(fixed, n > 0 ? 100 / n : Infinity);
+}
+
 /** The same, for a ratio: one trade moves it by roughly its own size over n.
  *  A non-finite ratio (no losses at all) has no per-trade size to measure, so
  *  the fixed floor stands and `computeTrend` decides on the infinity itself. */

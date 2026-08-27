@@ -191,3 +191,53 @@ describe('significance gate', () => {
     expect(later.toUpsert[0].status).toBe('weakening');
   });
 });
+
+// ── one trade is not a change of state ──────────────────────────────────────
+//
+// The threshold between runs was a fixed three percentage points. That was a
+// reasonable bar while runs were weeks apart — nothing scheduled refreshed
+// this stack, so it only ran when a trader opened the weekly report. Run
+// nightly, three points is less than a single trade: a slice of twenty moves
+// five points on one result, a slice of fifteen nearly seven. The status would
+// have read 'strengthening' the morning after a win and 'weakening' the
+// morning after a loss, indefinitely — quoted to the coach in the facts block
+// and written into the pattern's own history every time it flipped.
+
+describe('status floor scales with the slice', () => {
+  const stored = [storedRow({ delta: 10, currentSampleSize: 20 })];
+
+  it('holds steady on a move one trade could account for', () => {
+    // Twenty trades: one result is worth five points, so four is noise.
+    const result = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 14, 'medium', 20)], stored, NOW);
+    expect(statusOf(result, 'ES_edge')).toBe('active');
+  });
+
+  it('moves once the change outgrows one trade', () => {
+    const result = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 16, 'medium', 20)], stored, NOW);
+    expect(statusOf(result, 'ES_edge')).toBe('strengthening');
+  });
+
+  it('applies the same size of move downward', () => {
+    expect(statusOf(diffPatternMemory(CLERK_ID, [candidate('ES_edge', 6, 'medium', 20)], stored, NOW), 'ES_edge')).toBe('active');
+    expect(statusOf(diffPatternMemory(CLERK_ID, [candidate('ES_edge', 4, 'medium', 20)], stored, NOW), 'ES_edge')).toBe('weakening');
+  });
+
+  it('asks for a bigger move from a smaller slice', () => {
+    // Ten trades a side: one result is worth ten points, and a six-point move
+    // that would count on a slice of twenty does not count here.
+    const small = [storedRow({ delta: 10, currentSampleSize: 10 })];
+    expect(statusOf(diffPatternMemory(CLERK_ID, [candidate('ES_edge', 16, 'medium', 10)], small, NOW), 'ES_edge')).toBe('active');
+    expect(statusOf(diffPatternMemory(CLERK_ID, [candidate('ES_edge', 21, 'medium', 10)], small, NOW), 'ES_edge')).toBe('strengthening');
+  });
+
+  it('still moves on a real change of confidence tier', () => {
+    // Not a wobble in the rate — a change in what the sample can support.
+    const result = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 11, 'high', 40)], stored, NOW);
+    expect(statusOf(result, 'ES_edge')).toBe('strengthening');
+  });
+
+  it('still demotes a pattern that stops surviving the correction', () => {
+    const result = diffPatternMemory(CLERK_ID, [candidate('ES_edge', 11, 'medium', 20, 60, false)], stored, NOW);
+    expect(statusOf(result, 'ES_edge')).toBe('weakening');
+  });
+});
