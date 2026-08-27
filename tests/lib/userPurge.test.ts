@@ -9,30 +9,57 @@
 // Found by tracing ten journal rows belonging to a clerk_id with no profile:
 // an account somebody deleted, whose journal was still sitting there.
 //
-// These tests are about the list and the order, which are the two things a
-// reviewer cannot check by reading the handler.
+// THE LIST IS READ FROM THE SCHEMA, NOT WRITTEN DOWN HERE
+//
+// A hand-maintained copy of "every table holding user data" is wrong the day
+// someone adds a table and does not think about deletion — which is exactly
+// the day it matters, and exactly the mistake being fixed. So the migrations
+// are the source: every `create table` carrying a clerk_id column must appear
+// in the purge, and a new one fails this test the moment it is added.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { __testing } from '../../app/api/webhooks/clerk/route';
 
 const TABLES = __testing.USER_TABLES as readonly string[];
 
-/** Every table in the schema that carries a clerk_id column. Kept here as a
- *  literal so adding a user-scoped table to the database and forgetting to
- *  purge it fails a test rather than leaking quietly. */
-const CLERK_SCOPED = [
-  'ai_insight_history', 'ai_usage_log', 'behavior_finding_events', 'behavior_findings',
-  'coach_chats', 'coach_generation_fallback', 'daily_insights', 'intelligence_trades',
-  'journal_trades', 'notebook_chunks', 'notebook_entries', 'pattern_memory',
-  'processing_jobs', 'profiles', 'rate_limits', 'rule_violations', 'setups',
-  'trader_hypotheses', 'trader_profiles', 'trades', 'trading_rules',
-  'user_collections', 'user_preferences', 'user_profile', 'weekly_ai_reports',
-];
+/** Every table the migrations create, split by whether it belongs to a
+ *  trader. A table with a clerk_id column holds somebody's data by
+ *  definition; one without it is system state. */
+function tablesFromSchema(): { scoped: string[]; system: string[] } {
+  const root = join(__dirname, '..', '..');
+  const scoped: string[] = [];
+  const system: string[] = [];
+  for (const f of readdirSync(root).filter(n => n.startsWith('supabase-migration') && n.endsWith('.sql'))) {
+    const sql = readFileSync(join(root, f), 'utf8');
+    const re = /create table (?:if not exists )?([a-z_]+)\s*\(([\s\S]*?)\n\)\s*;/gi;
+    for (let m = re.exec(sql); m; m = re.exec(sql)) {
+      const [, name, body] = m;
+      (/\bclerk_id\b/.test(body) ? scoped : system).push(name);
+    }
+  }
+  return { scoped: [...new Set(scoped)], system: [...new Set(system)].filter(t => !scoped.includes(t)) };
+}
 
 describe('the purge list', () => {
-  it('covers every table keyed to a trader', () => {
-    const missing = CLERK_SCOPED.filter(t => !TABLES.includes(t));
-    expect(missing, `not purged: ${missing.join(', ')}`).toEqual([]);
+  const { scoped, system } = tablesFromSchema();
+
+  it('reads a real schema', () => {
+    // A regex that matched nothing would make every assertion below vacuous.
+    expect(scoped.length).toBeGreaterThan(15);
+  });
+
+  it('covers every table in the schema that carries a clerk_id', () => {
+    const missing = scoped.filter(t => !TABLES.includes(t));
+    expect(missing, `holds user data and is never purged: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('leaves system tables alone', () => {
+    // Feature flags and provider state are not anyone's data, and purging a
+    // shared table on one account's deletion would take the product down.
+    const wrongly = system.filter(t => TABLES.includes(t));
+    expect(wrongly, `not user data: ${wrongly.join(', ')}`).toEqual([]);
   });
 
   it('names no table twice', () => {
@@ -46,10 +73,14 @@ describe('the purge list', () => {
     expect(TABLES).toContain('intelligence_trades');
   });
 
-  it('purges what the AI wrote about them, not only what they wrote', () => {
+  it('purges what the system wrote about them, not only what they wrote', () => {
     for (const t of ['daily_insights', 'behavior_findings', 'trader_profiles', 'coach_chats']) {
       expect(TABLES, t).toContain(t);
     }
+  });
+
+  it('purges the profile itself', () => {
+    expect(TABLES).toContain('profiles');
   });
 });
 
@@ -57,16 +88,16 @@ describe('the purge order', () => {
   const before = (a: string, b: string) => TABLES.indexOf(a) < TABLES.indexOf(b);
 
   it('deletes children before their parents', () => {
-    // A cascade only fires when the parent goes. Deleting the parent first
-    // works; deleting it last leaves the child orphaned if the run stops.
+    // A cascade only fires when the parent goes, so an interrupted run that
+    // took the parent first is fine — one that took it last strands the child.
     expect(before('notebook_chunks', 'notebook_entries')).toBe(true);
     expect(before('behavior_finding_events', 'behavior_findings')).toBe(true);
     expect(before('rule_violations', 'trading_rules')).toBe(true);
   });
 
   it('deletes the profile last', () => {
-    // THE MARKER. While the profile exists the purge is unfinished, so an
-    // interrupted run leaves something the retry can recognise.
+    // THE MARKER. While the profile exists the purge is unfinished, which is
+    // what a retry recognises.
     expect(TABLES[TABLES.length - 1]).toBe('profiles');
   });
 });
