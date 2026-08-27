@@ -31,9 +31,48 @@ import type { TriggerFinding } from './contingency';
 /** Opportunities the experiment runs for. Ten is short enough to stay in the
  *  trader's attention and long enough that two lucky trades don't decide it. */
 export const EXPERIMENT_WINDOW = 10;
-/** The target must fall by at least this much, in rate points, on both
- *  baselines. Below it we are reading noise. */
-export const IMPROVEMENT_THRESHOLD = 0.2;
+/** How far the target must fall, as a share of where it started.
+ *
+ *  THIS WAS A FIXED NUMBER OF RATE POINTS, AND THAT MADE IT UNREACHABLE
+ *
+ *  Twenty points is a fine bar for a habit that shows up on 40% of
+ *  opportunities and an impossible one for a habit at 18%: the rate would have
+ *  to fall to minus two. Measured on a live journal, two of the three
+ *  behaviours ready to be worked on could not have been judged `improved` by
+ *  any window, however perfectly the trader traded. Ten clean trades in a row
+ *  would have returned "no measurable change".
+ *
+ *  Halving is a strong claim at any starting point, which is what makes it the
+ *  right shape for a bar. A behaviour on 25% of opportunities has to reach
+ *  12.5%; one on 18% has to reach 9%. */
+export const IMPROVEMENT_RATIO = 0.5;
+
+/** …and it must move by at least one occurrence's worth of the window.
+ *
+ *  Halving alone would let noise pass on a rare behaviour: at 4% of
+ *  opportunities, "halved" is a difference no ten-trade window can resolve.
+ *  Expressed against the window rather than as a constant, because what counts
+ *  as a real move depends entirely on how many chances there were to see it. */
+function occurrenceWorth(windowTrades: number): number {
+  return windowTrades > 0 ? 1 / windowTrades : 1;
+}
+
+/** Can a window of this length say anything about a rate this low?
+ *
+ *  Below one expected occurrence, a clean window is not evidence of anything —
+ *  the trader was never likely to meet the situation at all, so "it did not
+ *  happen" is the ordinary outcome rather than an improvement. A behaviour
+ *  this rare is left alone until it is common enough to be measured. */
+export function measurableIn(rate: number, windowTrades: number = EXPERIMENT_WINDOW): boolean {
+  return rate >= occurrenceWorth(windowTrades);
+}
+
+/** Did the rate fall far enough, against one baseline. */
+export function improvedAgainst(before: number, after: number, windowTrades: number): boolean {
+  if (before <= 0) return false;
+  return after <= before * IMPROVEMENT_RATIO
+      && before - after >= occurrenceWorth(windowTrades);
+}
 /** A guardrail counts as broken at this much deterioration. Looser than the
  *  target threshold on purpose: we are watching for damage, not for drift. */
 export const GUARDRAIL_TOLERANCE = 0.3;
@@ -200,8 +239,8 @@ export function measureExperiment(input: MeasureInput): ExperimentResult {
   }));
   const broken = readings.filter(r => r.degraded).map(r => r.kind);
 
-  const historicalImproved = input.before.historicalRate - input.afterRate >= IMPROVEMENT_THRESHOLD;
-  const rollingImproved    = input.before.rollingRate    - input.afterRate >= IMPROVEMENT_THRESHOLD;
+  const historicalImproved = improvedAgainst(input.before.historicalRate, input.afterRate, window);
+  const rollingImproved    = improvedAgainst(input.before.rollingRate,    input.afterRate, window);
 
   const base: Omit<ExperimentResult, 'verdict'> = {
     targetBefore: input.before.rollingRate,

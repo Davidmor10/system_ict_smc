@@ -39,7 +39,7 @@ import type { BehaviorKind } from './behaviors';
 import type { BehaviorFinding, Baselines, FindingStatus } from './finding';
 import {
   designExperiment, measureExperiment,
-  EXPERIMENT_WINDOW, IMPROVEMENT_THRESHOLD,
+  EXPERIMENT_WINDOW, IMPROVEMENT_RATIO,
   type Experiment, type ExperimentResult, type GuardrailKind,
 } from './experiment';
 import { pairGuardrails, type GuardrailReadings } from './guardrails';
@@ -51,10 +51,18 @@ import type { Confidence, EvidenceFamily } from './evidence';
  *  consciously watching. */
 export const RECHECK_WINDOW = 10;
 
-/** How far the rate may climb back before `improved` is called a relapse.
- *  Matched to the threshold that declared the improvement, so a finding cannot
- *  be improved and relapsed on the same number. */
-export const RELAPSE_TOLERANCE = IMPROVEMENT_THRESHOLD;
+/** Has the rate climbed back above the bar that declared the improvement?
+ *
+ *  Matched to that bar deliberately, so a finding cannot be improved and
+ *  relapsed on the same number. The bar is a share of where the behaviour
+ *  started, not a fixed number of rate points — see IMPROVEMENT_RATIO — so
+ *  the relapse test has to be the same shape or a habit at 18% would relapse
+ *  the moment it was declared improved. */
+export function hasRelapsed(stored: StoredFinding, rollingNow: number): boolean {
+  const before = stored.experimentResult?.targetBefore;
+  if (before == null || before <= 0) return false;
+  return rollingNow > before * IMPROVEMENT_RATIO;
+}
 
 /** The state of an experiment at the moment it began. Everything needed to
  *  measure it later, and nothing that could be recomputed differently between
@@ -292,7 +300,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   if (stored.status === 'improved' && stored.experimentBaseline) {
     const b = stored.experimentBaseline;
     const since = fresh.opportunities - b.opportunitiesAtStart - EXPERIMENT_WINDOW;
-    const relapsed = fresh.baselines.rollingRate - (stored.experimentResult?.targetAfter ?? 0) > RELAPSE_TOLERANCE;
+    const relapsed = hasRelapsed(stored, fresh.baselines.rollingRate);
 
     if (relapsed) {
       return {
@@ -354,7 +362,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // ── resolved, and it came back ────────────────────────────────────────────
   if (stored.status === 'resolved') {
     const grew = fresh.occurrences > stored.occurrences;
-    const back = grew && fresh.baselines.rollingRate - (stored.experimentResult?.targetAfter ?? 0) > RELAPSE_TOLERANCE;
+    const back = grew && hasRelapsed(stored, fresh.baselines.rollingRate);
     if (back) {
       return {
         record: { ...base, status: 'confirmed', statusSince: now, relapses: stored.relapses + 1,

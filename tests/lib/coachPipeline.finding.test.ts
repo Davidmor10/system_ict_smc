@@ -12,7 +12,7 @@ import { detectBehaviors } from '../../app/lib/coach-pipeline/behavior/behaviors
 import { buildContexts } from '../../app/lib/coach-pipeline/behavior/context';
 import {
   designExperiment, measureExperiment, guardrailDegraded,
-  EXPERIMENT_WINDOW, IMPROVEMENT_THRESHOLD,
+  EXPERIMENT_WINDOW, IMPROVEMENT_RATIO,
 } from '../../app/lib/coach-pipeline/behavior/experiment';
 import type { TradeRow } from '../../app/lib/coach-pipeline/types';
 
@@ -420,8 +420,10 @@ describe('measureExperiment', () => {
   });
 
   it('calls a small move unchanged', () => {
+    // Short of halving. The bar is a share of where the behaviour started,
+    // so "a bit better" reads as noise at any starting point.
     const r = measureExperiment({
-      before, afterRate: 0.6 - IMPROVEMENT_THRESHOLD / 2, afterN: EXPERIMENT_WINDOW, guardrails: clean,
+      before, afterRate: 0.6 * IMPROVEMENT_RATIO + 0.05, afterN: EXPERIMENT_WINDOW, guardrails: clean,
     });
     expect(r.verdict).toBe('unchanged');
   });
@@ -429,8 +431,11 @@ describe('measureExperiment', () => {
   // A good fortnight and a changed habit look identical on the rolling number
   // alone. Requiring both baselines is what separates them.
   it('is not fooled by a lucky window when the long record disagrees', () => {
+    // Fifteen per cent across the whole history, a bad fortnight at sixty, and
+    // a window that came in at ten — which is roughly where this trader always
+    // was. The rolling number celebrates; the long record says nothing moved.
     const r = measureExperiment({
-      before: { historicalRate: 0.25, historicalN: 40, rollingRate: 0.6, rollingN: 20 },
+      before: { historicalRate: 0.15, historicalN: 40, rollingRate: 0.6, rollingN: 20 },
       afterRate: 0.1, afterN: EXPERIMENT_WINDOW, guardrails: clean,
     });
     expect(r.rollingImproved).toBe(true);

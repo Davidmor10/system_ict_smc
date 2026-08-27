@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   reconcile, familiesFor, watchedGuardrails,
-  RECHECK_WINDOW, RELAPSE_TOLERANCE,
+  RECHECK_WINDOW,
   type StoredFinding, type ReconcileInput,
 } from '../../app/lib/coach-pipeline/behavior/memory';
 import { computeGuardrails, pairGuardrails } from '../../app/lib/coach-pipeline/behavior/guardrails';
@@ -268,7 +268,8 @@ describe('improved → resolved, or back again', () => {
       stored: improved,
       fresh: fresh({
         occurrences: 16, opportunities: 36,
-        baselines: baselines({ rollingRate: 0.1 + RELAPSE_TOLERANCE + 0.05 }),
+        // Back above the bar the improvement was judged on.
+        baselines: baselines({ rollingRate: 0.5 }),
       }),
     }));
     expect(record.status).toBe('confirmed');

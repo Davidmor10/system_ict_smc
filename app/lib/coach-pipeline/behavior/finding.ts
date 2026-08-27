@@ -24,6 +24,7 @@
 import { BEHAVIOR_LABELS, type BehaviorKind, type BehaviorTally } from './behaviors';
 import { DIMENSION_LABELS, type ContextDimension, type TradeContext } from './context';
 import { analyzeTriggers, type TriggerFinding } from './contingency';
+import { measurableIn } from './experiment';
 import {
   assessConfidence, explanationTier,
   CONFIRM_MIN_OCCURRENCES, CONFIRM_MIN_OPPORTUNITIES,
@@ -172,14 +173,23 @@ export function deriveStatus(
     return previous;
   }
 
-  // Enough of it, and spread across the history rather than bunched into one
-  // bad fortnight. Consistency stays because it is the one factor that speaks
-  // to whether there is a standing habit here at all — a burst that never
-  // recurred is not something to spend a ten-trade window on.
+  // Enough of it, spread across the history rather than bunched into one bad
+  // fortnight, and common enough that ten opportunities could show it moving.
+  //
+  // Consistency speaks to whether there is a standing habit here at all — a
+  // burst that never recurred is not worth a window. Measurability speaks to
+  // whether the window could answer: below one expected occurrence in it, a
+  // clean run is the ordinary outcome and proves nothing.
+  //
+  // The rarity test lives HERE rather than at the point the window opens, and
+  // that placement is load-bearing. A behaviour left `confirmed` but unable to
+  // open anything would hold the single primary slot, never produce a result,
+  // and never release it — the deadlock again, wearing a new hat.
   const confirmable =
     tally.occurrences   >= CONFIRM_MIN_OCCURRENCES &&
     tally.opportunities >= CONFIRM_MIN_OPPORTUNITIES &&
-    assessment.factors.consistency.passes;
+    assessment.factors.consistency.passes &&
+    measurableIn(tally.rate);
   if (confirmable) return 'confirmed';
 
   const investigable =
