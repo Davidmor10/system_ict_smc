@@ -74,6 +74,20 @@ export interface ExperimentBaseline {
    *  edited or reordered in between. */
   occurrencesAtStart:   number;
   opportunitiesAtStart: number;
+  /** How many trades the history held when the window opened.
+   *
+   *  The verdict counts the window as a difference of cumulative counts, which
+   *  is exact. Everything else used to re-derive the window by filtering on
+   *  `date >= the day it opened` — a different set, and a different answer:
+   *  trades logged earlier on the opening day fall inside the date filter and
+   *  inside `opportunitiesAtStart`, so they were counted twice, and a trade
+   *  logged late under an older date was counted by the verdict and by nothing
+   *  else. Sliced from here instead, every reading is over the same trades the
+   *  verdict is about.
+   *
+   *  Optional: findings whose window opened before this field existed have no
+   *  value for it, and their callers fall back to the date filter. */
+  tradesAtStart?:       number;
   guardrails: GuardrailReadings;
 }
 
@@ -132,6 +146,9 @@ export interface ReconcileInput {
   /** True when this is the one behaviour being worked on. Only the primary
    *  gets an experiment — a trader running four experiments is running none. */
   isPrimary: boolean;
+  /** Trades in the history this run analysed. Snapshotted if a window opens,
+   *  so the window can later be sliced by position rather than by date. */
+  tradeCount?: number;
   now: string;
 }
 
@@ -387,6 +404,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
         before: fresh.baselines,
         occurrencesAtStart:   fresh.occurrences,
         opportunitiesAtStart: fresh.opportunities,
+        tradesAtStart:        input.tradeCount,
         guardrails: input.guardrailsTrailing,
       },
       experimentResult: null,
@@ -419,6 +437,26 @@ export function reconcile(input: ReconcileInput): Reconciled {
  *  it when its window closed, and that is the transition that set the field.
  *  Derived rather than stored, so no column has to exist for the queue to
  *  work. */
+/** How far into its window a running experiment is — the count on screen.
+ *
+ *  The same subtraction the verdict makes, so the trader watches the number
+ *  that decides rather than a second one that resembles it. `opportunitiesNow`
+ *  must come from the same detection pass the verdict uses.
+ *
+ *  Null when nothing is running. Clamped to the window: the count is judged
+ *  the moment it reaches the end, so "11 of 10" is never a thing to show. */
+export function windowProgress(
+  stored: StoredFinding,
+  opportunitiesNow: number,
+): { done: number; of: number } | null {
+  if (!stored.experiment || !stored.experimentBaseline || stored.experimentResult) return null;
+  const done = opportunitiesNow - stored.experimentBaseline.opportunitiesAtStart;
+  return {
+    done: Math.max(0, Math.min(done, stored.experiment.windowTrades)),
+    of:   stored.experiment.windowTrades,
+  };
+}
+
 export function measuredAt(
   stored: Iterable<StoredFinding>,
 ): Map<BehaviorKind, string> {

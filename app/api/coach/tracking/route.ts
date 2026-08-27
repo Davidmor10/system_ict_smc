@@ -16,10 +16,9 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBehavior';
-import { listRecentTrades } from '../../../lib/coach-pipeline/db/trades';
-import { detectBehaviors, BEHAVIOR_LABELS, type BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
+import { BEHAVIOR_LABELS, type BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import { loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
-import type { StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
+import { windowProgress, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -67,27 +66,32 @@ export async function GET() {
   try {
     // persist:false — reading the dashboard must never advance the trader's
     // behavioural state. The nightly run is the only thing allowed to write.
-    const [{ block }, stored, trades] = await Promise.all([
+    const [{ block, snapshot }, stored] = await Promise.all([
       analyzeBehavior(userId, { persist: false }),
       loadFindings(userId).catch(() => new Map<BehaviorKind, StoredFinding>()),
-      listRecentTrades(userId, 200).catch(() => []),
     ]);
 
     let active: TrackingActive | null = null;
     const running = [...stored.values()].find(f => f.experiment && f.experimentStartedAt && !f.experimentResult);
     if (running?.experiment && running.experimentStartedAt) {
       // Opportunities since the window opened — the count the trader watches.
-      // Recomputed from the trades rather than stored, so it cannot drift out
-      // of step with the journal it describes.
-      const since = running.experimentStartedAt.slice(0, 10);
-      const inWindow = trades.filter(t => !t.deleted_at && t.date >= since);
-      const tally = detectBehaviors(inWindow).find(t => t.kind === running.kind);
+      //
+      // It is the SAME subtraction the verdict makes, taken from the same
+      // detection pass, because a progress bar that disagrees with the thing
+      // it is a progress bar for is worse than no progress bar. This used to
+      // re-count the window from `date >= the day it opened`, over its own
+      // shorter read of the journal: on the opening day it started at 1 or 2
+      // of 10 while the engine was still at zero, and a trade logged late
+      // under an older date moved the engine and not the bar — the trader
+      // watching 8 of 10 on a window that had already been judged.
+      const fresh = snapshot.find(s => s.kind === running.kind);
+      const progress = fresh ? windowProgress(running, fresh.opportunities) : null;
       active = {
         kind: running.kind,
         label: BEHAVIOR_LABELS[running.kind],
         what: running.experiment.instruction,
-        done: Math.min(tally?.opportunities ?? 0, running.experiment.windowTrades),
-        of: running.experiment.windowTrades,
+        done: progress?.done ?? 0,
+        of: progress?.of ?? running.experiment.windowTrades,
         startedAt: running.experimentStartedAt,
       };
     }

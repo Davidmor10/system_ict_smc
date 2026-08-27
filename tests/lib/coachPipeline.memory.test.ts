@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  reconcile, familiesFor, watchedGuardrails,
+  reconcile, familiesFor, watchedGuardrails, windowProgress,
   RECHECK_WINDOW,
   type StoredFinding, type ReconcileInput,
 } from '../../app/lib/coach-pipeline/behavior/memory';
@@ -433,5 +433,51 @@ describe('guardrail readings', () => {
   it('reports no watched guardrails when no experiment is running', () => {
     expect(watchedGuardrails(null)).toEqual([]);
     expect(watchedGuardrails(step().record)).toEqual([]);
+  });
+});
+
+// ── the count on screen is the count that decides ───────────────────────────
+//
+// The verdict counts the window as a difference of cumulative counts. The
+// progress bar used to re-derive it by filtering the journal on `date >= the
+// day the window opened` — a different set, over a shorter read of the
+// journal, and therefore a different number in exactly the place the whole
+// surface exists to show.
+
+describe('windowProgress', () => {
+  /** A finding with a window open at 16 opportunities and 60 trades. */
+  function running(): StoredFinding {
+    const { record } = step({
+      stored: step({ fresh: fresh({ status: 'confirmed' }), isPrimary: true, now: T0 }).record,
+      fresh: fresh({ status: 'confirmed' }),
+      isPrimary: true, tradeCount: 60,
+    });
+    return record;
+  }
+
+  it('opens at zero, whatever was already logged that day', () => {
+    const r = running();
+    expect(r.experiment).not.toBeNull();
+    expect(r.experimentBaseline!.opportunitiesAtStart).toBe(16);
+    expect(r.experimentBaseline!.tradesAtStart).toBe(60);
+    expect(windowProgress(r, 16)).toEqual({ done: 0, of: EXPERIMENT_WINDOW });
+  });
+
+  it('counts the same opportunities the verdict counts', () => {
+    expect(windowProgress(running(), 20)!.done).toBe(4);
+  });
+
+  it('a trade logged late under an older date moves the count', () => {
+    // The date filter missed these; the subtraction cannot.
+    expect(windowProgress(running(), 24)!.done).toBe(8);
+  });
+
+  it('never shows more than the window it is judged at', () => {
+    expect(windowProgress(running(), 40)!.done).toBe(EXPERIMENT_WINDOW);
+  });
+
+  it('shows nothing when no window is open', () => {
+    const idle = step({ fresh: fresh({ status: 'confirmed' }) }).record;
+    expect(windowProgress(idle, 20)).toBeNull();
   });
 });

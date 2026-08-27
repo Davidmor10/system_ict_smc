@@ -167,13 +167,22 @@ export async function analyzeBehavior(
 
     for (const f of findings) {
       const prior = stored.get(f.kind) ?? null;
+      // The trades since the window opened, sliced by position — the same
+      // trades the verdict is computed over. Filtering on `date >= the day it
+      // opened` re-derived a different set: it swept in whatever was already
+      // logged earlier that day, and missed anything logged late under an
+      // older date. Windows opened before `tradesAtStart` existed have no
+      // position to slice from, so they keep the date filter.
+      const start = prior?.experimentBaseline?.tradesAtStart;
       const since = prior?.experimentStartedAt?.slice(0, 10);
-      const guardrailsNow = computeGuardrails(
-        since ? chronological.filter(t => t.date >= since) : chronological.slice(-ROLLING_WINDOW),
-      );
+      const windowTrades =
+        start != null ? chronological.slice(start)
+        : since       ? chronological.filter(t => t.date >= since)
+        : chronological.slice(-ROLLING_WINDOW);
+      const guardrailsNow = computeGuardrails(windowTrades);
       const { record, transition, measured } = reconcile({
         stored: prior, fresh: f, guardrailsNow, guardrailsTrailing,
-        isPrimary: primary?.kind === f.kind, now,
+        isPrimary: primary?.kind === f.kind, tradeCount: chronological.length, now,
       });
 
       if (primary?.kind === f.kind) {
