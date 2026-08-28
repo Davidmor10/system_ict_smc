@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ConfidenceLevel, PatternCandidate } from '../analytics';
-import { pointFloor } from './movement';
+import { pointFloor } from '../stats/movement';
 import type { PatternMemoryRow, PatternStatus } from './types';
 
 const HISTORY_CAP = 12;

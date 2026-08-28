@@ -17,28 +17,31 @@ const perf = (partial: Partial<RulePerformance> = {}): RulePerformance => ({
   sampleSize: 0,
   confidence: { level: 'low', sampleSize: 0 },
   hasEnough: false,
+  // Whether the GAP between the two averages is bigger than one trade could
+  // account for — the flag every sentence built on the pair has to read.
+  differenceIsReal: false,
   ...partial,
 });
 
 describe('ruleImpact', () => {
   it('is "unknown" until the followed/violated comparison clears the sample gate', () => {
     expect(ruleImpact(perf()).level).toBe('unknown');
-    expect(ruleImpact(perf({ hasEnough: false, followedAvgR: 2, violatedAvgR: 0.2 })).level).toBe('unknown');
+    expect(ruleImpact(perf({ hasEnough: false, differenceIsReal: false, followedAvgR: 2, violatedAvgR: 0.2 })).level).toBe('unknown');
   });
 
   it('grades the R delta into high / medium / low', () => {
-    expect(ruleImpact(perf({ hasEnough: true, followedAvgR: 2.0, violatedAvgR: 0.3 })).level).toBe('high');   // delta 1.7
-    expect(ruleImpact(perf({ hasEnough: true, followedAvgR: 1.0, violatedAvgR: 0.3 })).level).toBe('medium'); // delta 0.7
-    expect(ruleImpact(perf({ hasEnough: true, followedAvgR: 0.5, violatedAvgR: 0.4 })).level).toBe('low');    // delta 0.1
+    expect(ruleImpact(perf({ hasEnough: true, differenceIsReal: true, followedAvgR: 2.0, violatedAvgR: 0.3 })).level).toBe('high');   // delta 1.7
+    expect(ruleImpact(perf({ hasEnough: true, differenceIsReal: true, followedAvgR: 1.0, violatedAvgR: 0.3 })).level).toBe('medium'); // delta 0.7
+    expect(ruleImpact(perf({ hasEnough: true, differenceIsReal: true, followedAvgR: 0.5, violatedAvgR: 0.4 })).level).toBe('low');    // delta 0.1
   });
 
   it('never returns "high" impact on a small sample even with a huge delta', () => {
-    expect(ruleImpact(perf({ hasEnough: false, followedAvgR: 3, violatedAvgR: -1 })).level).toBe('unknown');
+    expect(ruleImpact(perf({ hasEnough: false, differenceIsReal: false, followedAvgR: 3, violatedAvgR: -1 })).level).toBe('unknown');
   });
 
   it('carries the exact Hebrew labels the Rules page expects', () => {
     expect(ruleImpact(perf()).label).toBe('לא ידוע');
-    expect(ruleImpact(perf({ hasEnough: true, followedAvgR: 2.0, violatedAvgR: 0.3 })).label).toBe('השפעה גבוהה');
+    expect(ruleImpact(perf({ hasEnough: true, differenceIsReal: true, followedAvgR: 2.0, violatedAvgR: 0.3 })).label).toBe('השפעה גבוהה');
   });
 });
 
@@ -77,25 +80,58 @@ describe('ruleInsight', () => {
     expect(r.basis).toBe('insufficient');
   });
 
-  it('flags violations clustering right after a loss, even when a delta or adherence signal also qualifies', () => {
-    // Every violation date is preceded by a LOSS on the last trading day before it.
-    const trades = [
-      makeTrade({ id: 1, dateISO: '2026-07-01', time: '10:00', result: 'LOSS' }),
-      makeTrade({ id: 2, dateISO: '2026-07-03', time: '10:00', result: 'LOSS' }),
-      makeTrade({ id: 3, dateISO: '2026-07-05', time: '10:00', result: 'LOSS' }),
-    ];
-    const violationDates = ['2026-07-02', '2026-07-04', '2026-07-06'];
-    // Also qualifies for the "delta" branch — after_loss must still win (checked first).
-    const p = perf({ hasEnough: true, followedAvgR: 2, violatedAvgR: 0, followedTrades: 20, violatedTrades: 3 });
-    const r = ruleInsight(rule(), p, violationDates, trades);
-    expect(r.basis).toBe('after_loss');
+  // It used to fire on three violations where two followed a loss, and then
+  // explain the mechanism: "the loss probably shakes your discipline". Two of
+  // three is what a coin does, and no number here can show what shook anyone.
+  it('says nothing about losses when the clustering is what any day would do', () => {
+    // Half the days follow a loss, and so do half the violations. Nothing.
+    const trades = ['01', '02', '03', '04', '05', '06', '07', '08'].map((d, i) =>
+      makeTrade({ id: i + 1, dateISO: `2026-07-${d}`, time: '10:00', result: i % 2 === 0 ? 'LOSS' : 'WIN' }));
+    const violationDates = ['2026-07-02', '2026-07-04', '2026-07-06', '2026-07-08', '2026-07-03'];
+    const r = ruleInsight(rule(), perf(), violationDates, trades);
+    expect(r.basis).not.toBe('after_loss');
   });
 
-  it('names a strong positive R delta when adherence/after-loss do not apply', () => {
-    const p = perf({ hasEnough: true, followedAvgR: 2.2, violatedAvgR: 0.1, followedTrades: 8, violatedTrades: 8 });
+  it('names the clustering when it is far enough from what other days do', () => {
+    // Twenty days: the ten that follow a loss carry nine of the ten breaches.
+    const trades = Array.from({ length: 20 }, (_, i) =>
+      makeTrade({
+        id: i + 1,
+        dateISO: `2026-07-${String(i + 1).padStart(2, '0')}`,
+        time: '10:00',
+        result: i % 2 === 0 ? 'LOSS' : 'WIN',
+      }));
+    // Days 2,4,…,20 are the ones preceded by a loss.
+    const afterLossDays = Array.from({ length: 10 }, (_, i) => `2026-07-${String((i + 1) * 2).padStart(2, '0')}`);
+    const violationDates = [...afterLossDays.slice(0, 9), '2026-07-03'];
+    const r = ruleInsight(rule(), perf(), violationDates, trades);
+    expect(r.basis).toBe('after_loss');
+    // States the association and the counts behind it, and explains nothing.
+    expect(r.text).toContain('9');
+    expect(r.text).not.toContain('משמעת');
+  });
+
+  it('needs more than a handful of breaches before it looks at all', () => {
+    const trades = Array.from({ length: 8 }, (_, i) =>
+      makeTrade({ id: i + 1, dateISO: `2026-07-0${i + 1}`, time: '10:00', result: 'LOSS' }));
+    const r = ruleInsight(rule(), perf(), ['2026-07-02', '2026-07-04', '2026-07-06'], trades);
+    expect(r.basis).not.toBe('after_loss');
+  });
+
+  it('reports the two averages, and never that keeping the rule improves them', () => {
+    const p = perf({ hasEnough: true, differenceIsReal: true, followedAvgR: 2.2, violatedAvgR: 0.1, followedTrades: 8, violatedTrades: 8, sampleSize: 16 });
     const r = ruleInsight(rule(), p, [], []);
     expect(r.basis).toBe('delta');
-    expect(r.text).toContain('R');
+    expect(r.text).toContain('2.2');
+    expect(r.text).toContain('0.1');
+    expect(r.text).toContain('16');
+    // "improves" is a cause. The journal measured two averages.
+    expect(r.text).not.toContain('משפרת');
+  });
+
+  it('says nothing about the gap when one trade could account for it', () => {
+    const p = perf({ hasEnough: true, differenceIsReal: false, followedAvgR: 2.2, violatedAvgR: 0.1, followedTrades: 8, violatedTrades: 8 });
+    expect(ruleInsight(rule(), p, [], []).basis).not.toBe('delta');
   });
 
   it('names high adherence as a strong habit when there is no strong delta signal', () => {

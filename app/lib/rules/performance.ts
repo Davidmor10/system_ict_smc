@@ -14,10 +14,23 @@ import { confidenceFor } from '../analytics';
 import type { Confidence } from '../analytics/types';
 import type { Rule, RuleCheck, RuleCheckStatus } from './types';
 import { checkRule, type RuleCheckContext } from './engine';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
+import { meanFloor } from '../stats/movement';
 
 /** Each side needs at least this many decided (WIN/LOSS) trades before the
-    comparison is shown — below it there's nothing honest to compare. */
-export const MIN_PER_SIDE = 3;
+    comparison is shown.
+
+    It was three. Three against three is a comparison of two coins, and it was
+    put on screen beside a confidence label as though the label rescued it. The
+    floor is the one the rest of the app already uses for a claim about a
+    trader — see lib/stats/evidence, which exists so this number lives in one
+    place instead of being chosen locally. */
+export const MIN_PER_SIDE = MIN_DECIDED_FOR_CLAIM;
+
+/** How much of a gap in average R is worth calling a gap, before the sample is
+    taken into account. Raised to what one trade could account for on the
+    thinner side — see `differenceIsReal`. */
+const R_GAP_FLOOR = 0.15;
 
 export interface RulePerformance {
   followedTrades: number;
@@ -30,6 +43,14 @@ export interface RulePerformance {
   confidence: Confidence;
   /** True only when BOTH sides clear MIN_PER_SIDE — the gate for showing the compare. */
   hasEnough: boolean;
+  /** True when the two averages are further apart than one trade on the
+   *  thinner side could account for.
+   *
+   *  Separate from `hasEnough` on purpose, and this is the whole distinction:
+   *  `hasEnough` says the two numbers are worth SHOWING side by side, and this
+   *  says the gap between them is worth SAYING something about. Everything
+   *  that turns the pair into a sentence has to read this one. */
+  differenceIsReal: boolean;
 }
 
 function statusForTrade(
@@ -72,13 +93,25 @@ export function computeRulePerformance(
 
   const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
   const sampleSize = followedR.length + violatedR.length;
+  const followedAvgR = avg(followedR);
+  const violatedAvgR = avg(violatedR);
+  const hasEnough = followedR.length >= MIN_PER_SIDE && violatedR.length >= MIN_PER_SIDE;
+
+  // The gap has to outgrow one trade on the thinner side. A mean over eight
+  // trades moves by an eighth of a trade's R for every trade in it, so a gap
+  // smaller than that is the last trade, not the rule.
+  const thinner = Math.min(followedR.length, violatedR.length);
+  const differenceIsReal = hasEnough && followedAvgR != null && violatedAvgR != null
+    && Math.abs(followedAvgR - violatedAvgR) > meanFloor(R_GAP_FLOOR, thinner);
+
   return {
     followedTrades,
     violatedTrades,
-    followedAvgR: avg(followedR),
-    violatedAvgR: avg(violatedR),
+    followedAvgR,
+    violatedAvgR,
     sampleSize,
     confidence: confidenceFor(sampleSize),
-    hasEnough: followedR.length >= MIN_PER_SIDE && violatedR.length >= MIN_PER_SIDE,
+    hasEnough,
+    differenceIsReal,
   };
 }

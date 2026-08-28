@@ -13,6 +13,12 @@ import type { TradeEntry } from '../journal';
 import { ruleTitle, type Rule } from './types';
 import type { RuleCheck } from './types';
 import { checkRule } from './engine';
+import { pointFloor } from '../stats/movement';
+
+/** The smallest week-over-week move in compliance worth calling a direction,
+ *  before the sample is taken into account. Raised to whatever one rule-day is
+ *  worth on the thinner of the two weeks — see `weekTrendOf`. */
+const WEEK_TREND_FLOOR = 3;
 
 export type DayRuleStatus = 'followed' | 'violated' | 'no_data';
 
@@ -32,7 +38,9 @@ export interface RuleStatsResult {
   today: PeriodCompliance;
   week: PeriodCompliance;
   month: PeriodCompliance;
-  /** week.rate − previousWeek.rate (percentage points), or null if either is unknown. */
+  /** week.rate − previousWeek.rate in percentage points, or null when there is
+   *  no direction to report — either week unknown, or a move small enough that
+   *  one rule-day explains it. */
   weekTrend: number | null;
   /** Consecutive active days back from today with zero violations. */
   streak: number;
@@ -52,8 +60,17 @@ function daysRange(todayISO: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => isoMinusDays(todayISO, count - 1 - i));
 }
 
-/** A manual report for one (rule, day), carrying its evidence line. */
-interface Reported { status: 'followed' | 'violated'; evidence: string }
+/** A manual report for one (rule, day), carrying its evidence line and when it
+ *  was made. */
+interface Reported { status: 'followed' | 'violated'; evidence: string; at: number }
+
+/** A day-level violation as the trade form and the rules page store it. */
+export interface StoredViolation {
+  ruleId: string;
+  date:   string;
+  /** When it was written. Absent on rows predating the sync stamp. */
+  updatedAt?: number;
+}
 
 /** One rule's status on one day, with the evidence behind it. Automatic rules are
     judged from that day's trades (any violation makes the day a violation);
@@ -76,16 +93,40 @@ function ruleDayStatus(rule: Rule, dayTrades: TradeEntry[], reported: Reported |
 }
 
 /** Shared lookup tables both the period rollup and the per-rule history need. */
-function buildContext(trades: TradeEntry[], userChecks: RuleCheck[], legacyViolations: { ruleId: string; date: string }[]) {
+function buildContext(trades: TradeEntry[], userChecks: RuleCheck[], legacyViolations: StoredViolation[]) {
   const byDay = new Map<string, TradeEntry[]>();
   for (const t of trades) { const a = byDay.get(t.dateISO); if (a) a.push(t); else byDay.set(t.dateISO, [t]); }
 
-  // Legacy day-violations first, then newer user checks override them.
+  // THE NEWEST REPORT WINS, NOT THE ONE FROM A PARTICULAR SOURCE.
+  //
+  // Two things write a (rule, day) verdict: the trade form, when the trader
+  // ticks which rules a trade broke, and the rules page, when they press
+  // kept/broken on a rule card. This used to apply the violations first and
+  // the rule-page checks second, so the ordering was by SOURCE — and a "kept"
+  // pressed in the morning silently overrode a breach the trader recorded
+  // against an actual trade that afternoon. The compliance rate then said the
+  // rule was kept on a day the trader had told it otherwise.
+  //
+  // Ordered by when each was written instead. On an exact tie the violation
+  // wins: a recorded breach is something the trader observed, and "kept" is
+  // the absence of an observation.
   const reported = new Map<string, Reported>();
-  for (const v of legacyViolations) reported.set(`${v.ruleId}:${v.date}`, { status: 'violated', evidence: 'דווח ידנית כהופר' });
+  const put = (key: string, next: Reported) => {
+    const cur = reported.get(key);
+    const newer = !cur || next.at > cur.at;
+    const tieToViolation = cur != null && next.at === cur.at && next.status === 'violated';
+    if (newer || tieToViolation) reported.set(key, next);
+  };
+  for (const v of legacyViolations) {
+    put(`${v.ruleId}:${v.date}`, { status: 'violated', evidence: 'דווח ידנית כהופר', at: v.updatedAt ?? 0 });
+  }
   for (const c of userChecks) {
     if (c.date && (c.status === 'followed' || c.status === 'violated')) {
-      reported.set(`${c.ruleId}:${c.date}`, { status: c.status, evidence: c.evidence || '' });
+      put(`${c.ruleId}:${c.date}`, {
+        status: c.status,
+        evidence: c.evidence || '',
+        at: c.updatedAt ?? c.detectedAt ?? 0,
+      });
     }
   }
   return { byDay, reported };
@@ -112,7 +153,7 @@ export function computeRuleHistory(
   trades: TradeEntry[],
   userChecks: RuleCheck[],
   todayISO: string,
-  legacyViolations: { ruleId: string; date: string }[] = [],
+  legacyViolations: StoredViolation[] = [],
   lookbackDays = 90,
 ): RuleHistory {
   const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
@@ -139,12 +180,28 @@ export function computeRuleHistory(
   return { lastFollowed, lastViolated, streak, recentViolations, violationDates };
 }
 
+/** The week-over-week move, or null when it is not a move.
+ *
+ *  It was the raw difference of two rates, shown with an arrow and a colour. In
+ *  a week where five rule-days were evaluated, one violation moves the rate
+ *  twenty points — so the panel reported a direction, in green or red, off a
+ *  single broken rule. The floor is raised to what one rule-day is worth on the
+ *  thinner of the two weeks, which is the week the comparison rests on. */
+function weekTrendOf(week: PeriodCompliance, prevWeek: PeriodCompliance): number | null {
+  if (week.rate == null || prevWeek.rate == null) return null;
+  const delta = week.rate - prevWeek.rate;
+  const floor = pointFloor(WEEK_TREND_FLOOR, Math.min(week.evaluated, prevWeek.evaluated));
+  // Strictly greater: a move of exactly one rule-day's worth is a move one
+  // rule-day explains, which is the thing this floor exists to refuse.
+  return Math.abs(delta) > floor ? delta : null;
+}
+
 export function computeRuleStats(
   rules: Rule[],
   trades: TradeEntry[],
   userChecks: RuleCheck[],
   todayISO: string,
-  legacyViolations: { ruleId: string; date: string }[] = [],
+  legacyViolations: StoredViolation[] = [],
 ): RuleStatsResult {
   const active = rules.filter(r => r.isActive);
   const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
@@ -179,7 +236,7 @@ export function computeRuleStats(
   const week = period(daysRange(todayISO, 7));
   const prevWeek = period(daysRange(isoMinusDays(todayISO, 7), 7));
   const month = period(daysRange(todayISO, 30));
-  const weekTrend = week.rate != null && prevWeek.rate != null ? week.rate - prevWeek.rate : null;
+  const weekTrend = weekTrendOf(week, prevWeek);
 
   // Clean-day streak — consecutive active days (back from today) with no violations.
   let streak = 0;

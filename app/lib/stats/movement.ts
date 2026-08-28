@@ -1,16 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // When a number moving counts as a direction.
 //
-// Two places compare a metric against its own past: the weekly period
-// comparison (this week against last week) and the trader profile (this
-// snapshot against the previous one). Both used to answer with a fixed
+// Several places compare a measurement against another one: the weekly period
+// comparison (this week against last week), the trader profile (this snapshot
+// against the previous one), the discipline panel (this week's compliance
+// against last week's), a rule's average R when kept against when broken. They
+// used to answer with a fixed
 // threshold — three points of win rate, 0.15R, 0.2 of profit factor — and at a
 // real trader's volume a fixed threshold is smaller than one trade. Six wins
 // in ten against five in ten cleared it, and Fisher's exact test on that table
 // returns p = 1.00: nothing at all, reported as a trend.
 //
-// The rule lives here so the two callers cannot drift apart on it, and so
-// there is one place to read to find out what the product means by "up".
+// The rule lives here — beside fisher.ts and evidence.ts, the shared home both
+// analysis stacks already reach into — so the callers cannot drift apart on it,
+// and so there is one place to read to find out what the product means by
+// "up", "improves" or "better".
 //
 //   proportions (win rate)  — Fisher exact on the two win/loss splits,
 //                             corrected for the tests performed in the pass.
@@ -23,7 +27,7 @@
 // is actually resting on.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fisherExactTwoSided, bonferroni } from '../stats/fisher';
+import { fisherExactTwoSided, bonferroni } from './fisher';
 
 /** The decided split behind a win rate. A rate on its own cannot be tested. */
 export interface DecidedSplit {

@@ -7,7 +7,7 @@
 import type { FullAnalysis, GroupPerformance } from '../analytics';
 import { pairedExtremes } from '../analytics/extremes';
 import type { TradeEntry } from '../journal';
-import { meanFloor, ratioFloor, winRateMoved, type DecidedSplit } from './movement';
+import { meanFloor, ratioFloor, winRateMoved, type DecidedSplit } from '../stats/movement';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
 

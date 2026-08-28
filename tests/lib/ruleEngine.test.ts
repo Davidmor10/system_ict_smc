@@ -94,16 +94,25 @@ describe('manual check dedup (upsertCheck)', () => {
 describe('per-rule performance', () => {
   const rule = autoRule({ conditionType: 'allowed_symbols', conditionValue: { symbols: ['ES'] } });
 
+  const sides = (n: number, followedR = 2, violatedR = -1) => [
+    ...Array.from({ length: n }, (_, i) => makeTrade({ id: 100 + i, symbol: 'ES', result: 'WIN',  tradeR: followedR })),
+    ...Array.from({ length: n }, (_, i) => makeTrade({ id: 200 + i, symbol: 'NQ', result: 'LOSS', tradeR: violatedR })),
+  ];
+
   it('compares followed vs violated once both sides have enough decided trades', () => {
-    const trades = [
-      ...Array.from({ length: 3 }, (_, i) => makeTrade({ id: 100 + i, symbol: 'ES', result: 'WIN', tradeR: 2 })),
-      ...Array.from({ length: 3 }, (_, i) => makeTrade({ id: 200 + i, symbol: 'NQ', result: 'LOSS', tradeR: -1 })),
-    ];
-    const perf = computeRulePerformance(rule, trades);
+    const perf = computeRulePerformance(rule, sides(8));
     expect(perf.hasEnough).toBe(true);
-    expect(perf.sampleSize).toBe(6);
+    expect(perf.sampleSize).toBe(16);
     expect(perf.followedAvgR).toBeCloseTo(2);
     expect(perf.violatedAvgR).toBeCloseTo(-1);
+    expect(perf.differenceIsReal).toBe(true);
+  });
+
+  // Three against three is a comparison of two coins, and it was shown beside
+  // a confidence label as though the label rescued it. The floor is the one
+  // the rest of the app uses for any claim about a trader.
+  it('withholds the comparison at three trades a side', () => {
+    expect(computeRulePerformance(rule, sides(3)).hasEnough).toBe(false);
   });
 
   it('withholds the comparison when the sample is too small', () => {
@@ -112,5 +121,14 @@ describe('per-rule performance', () => {
       makeTrade({ symbol: 'NQ', result: 'LOSS', tradeR: -1 }),
     ]);
     expect(perf.hasEnough).toBe(false);
+    expect(perf.differenceIsReal).toBe(false);
+  });
+
+  it('shows the pair but calls no gap real when one trade could account for it', () => {
+    // Eight a side, so one trade is worth an eighth of an R. The two averages
+    // are 0.1 apart.
+    const perf = computeRulePerformance(rule, sides(8, 1.0, 0.9));
+    expect(perf.hasEnough).toBe(true);
+    expect(perf.differenceIsReal).toBe(false);
   });
 });

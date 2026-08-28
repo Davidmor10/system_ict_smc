@@ -1,5 +1,5 @@
 import type { FullAnalysis, GroupPerformance } from '../analytics';
-import { commonSample, meanFloor, ratioFloor, winRateMoved } from './movement';
+import { commonSample, meanFloor, ratioFloor, winRateMoved } from '../stats/movement';
 import { computeTrend } from './trend';
 import type { ConcentrationCheck, ConcentrationSlice, MetricComparison, PeriodComparison } from './types';
 

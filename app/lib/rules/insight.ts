@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeEntry } from '../journal';
+import { fisherExactTwoSided } from '../stats/fisher';
 import type { RulePerformance } from './performance';
 import type { Rule } from './types';
 import { ruleTitle } from './types';
@@ -44,7 +45,7 @@ const IMPACT_LABEL: Record<ImpactLevel, string> = {
 /** Always returns a tag — "unknown" (not hidden) until the comparison clears
     the same MIN_PER_SIDE gate the rest of the performance block uses. */
 export function ruleImpact(perf: RulePerformance): RuleImpact {
-  const level: ImpactLevel = !perf.hasEnough || perf.followedAvgR == null || perf.violatedAvgR == null
+  const level: ImpactLevel = !perf.differenceIsReal || perf.followedAvgR == null || perf.violatedAvgR == null
     ? 'unknown'
     : (() => {
         const delta = perf.followedAvgR! - perf.violatedAvgR!;
@@ -105,8 +106,30 @@ export interface RuleInsight {
   basis: 'after_loss' | 'delta' | 'adherence' | 'insufficient';
 }
 
-const AFTER_LOSS_MIN_VIOLATIONS = 3;
-const AFTER_LOSS_RATIO = 0.6;
+// ── the after-a-loss claim ──────────────────────────────────────────────────
+//
+// This used to fire on three violations where two of them followed a losing
+// trade, and it said: "most breaches of this rule happen right after a losing
+// trade — the loss probably shakes your discipline for a moment."
+//
+// Two separate problems, and the second is the serious one.
+//
+// It never compared against the BASE RATE. A trader who loses half their
+// trades has half their days following a loss, so two of three is the coin's
+// most likely result — the test was "does this happen often", when the only
+// question worth asking is "does this happen more often here than everywhere
+// else".
+//
+// And the second half of the sentence asserted a mechanism. The numbers can
+// show that breaches cluster after losses; nothing in them can show that the
+// loss is what shook the discipline, and the app's own output checker rejects
+// exactly that sentence as a hard violation when a model writes it. It should
+// not be hard-coded in Hebrew somewhere the checker cannot see.
+//
+// It is a proportion against a proportion now, which is what fisher.ts is for,
+// and it states the association without explaining it.
+const AFTER_LOSS_MIN_VIOLATIONS = 5;
+const AFTER_LOSS_ALPHA = 0.10;
 const STRONG_DELTA_R = 1.0;
 const HIGH_ADHERENCE_MIN_TOTAL = 10;
 const HIGH_ADHERENCE_MAX_VIOLATION_RATE = 0.15;
@@ -133,19 +156,46 @@ export function ruleInsight(rule: Rule, perf: RulePerformance, violationDates: s
     const closedSorted = [...trades]
       .filter(t => t.result === 'WIN' || t.result === 'LOSS')
       .sort((a, b) => (a.dateISO + a.time).localeCompare(b.dateISO + b.time));
-    let afterLoss = 0;
-    for (const d of violationDates) {
-      if (lastClosedBefore(closedSorted, d)?.result === 'LOSS') afterLoss++;
+
+    // The violation days, split by whether a loss came before them — against
+    // every OTHER trading day split the same way. Without the second half
+    // there is no comparison, only a count.
+    const violated = new Set(violationDates);
+    // Both sides of the comparison: every day the journal knows about, whether
+    // it carries a trade or only a violation. A day-level breach can sit on a
+    // date with no closed trade of its own, and leaving those out would empty
+    // the very column being tested.
+    const days = [...new Set([...closedSorted.map(t => t.dateISO), ...violationDates])];
+    let vAfterLoss = 0, vOther = 0, oAfterLoss = 0, oOther = 0;
+    for (const d of days) {
+      const afterLoss = lastClosedBefore(closedSorted, d)?.result === 'LOSS';
+      if (violated.has(d)) { if (afterLoss) vAfterLoss++; else vOther++; }
+      else                 { if (afterLoss) oAfterLoss++; else oOther++; }
     }
-    if (afterLoss / violationDates.length >= AFTER_LOSS_RATIO) {
-      return { text: 'רוב ההפרות של החוק הזה קורות מיד אחרי עסקה מפסידה — כנראה שההפסד מערער לך את המשמעת לרגע.', basis: 'after_loss' };
+
+    const p = fisherExactTwoSided(vAfterLoss, vOther, oAfterLoss, oOther);
+    const clusters = vAfterLoss + vOther > 0 && oAfterLoss + oOther > 0
+      && vAfterLoss / (vAfterLoss + vOther) > oAfterLoss / (oAfterLoss + oOther)
+      && p < AFTER_LOSS_ALPHA;
+    if (clusters) {
+      return {
+        text: `ההפרות של החוק הזה מרוכזות בימים שאחרי הפסד — ${vAfterLoss} מתוך ${vAfterLoss + vOther}, לעומת ${oAfterLoss} מתוך ${oAfterLoss + oOther} בימים האחרים.`,
+        basis: 'after_loss',
+      };
     }
   }
 
-  if (perf.hasEnough && perf.followedAvgR != null && perf.violatedAvgR != null) {
+  // Two numbers, not a mechanism. It used to read "keeping this rule IMPROVES
+  // your average R by XR — one of the most profitable habits you have", which
+  // asserts causation from an association, off three trades a side. What the
+  // journal can support is the pair of averages and the sample under them.
+  if (perf.differenceIsReal && perf.followedAvgR != null && perf.violatedAvgR != null) {
     const delta = perf.followedAvgR - perf.violatedAvgR;
     if (delta >= STRONG_DELTA_R) {
-      return { text: `שמירה על החוק הזה משפרת את ה-R הממוצע שלך בכ-${delta.toFixed(1)}R — אחד ההרגלים המשתלמים ביותר שיש לך.`, basis: 'delta' };
+      return {
+        text: `כשעמדת בחוק הזה ה-R הממוצע שלך היה ${perf.followedAvgR.toFixed(1)}, וכשלא — ${perf.violatedAvgR.toFixed(1)}. מבוסס על ${perf.sampleSize} עסקאות שנסגרו.`,
+        basis: 'delta',
+      };
     }
   }
 
@@ -199,13 +249,20 @@ export function dashboardRuleInsights(
   let bestDelta: { rule: Rule; delta: number } | null = null;
   for (const r of withData) {
     const p = perfByRuleId.get(r.id)!;
-    if (p.hasEnough && p.followedAvgR != null && p.violatedAvgR != null) {
+    if (p.differenceIsReal && p.followedAvgR != null && p.violatedAvgR != null) {
       const delta = p.followedAvgR - p.violatedAvgR;
       if (delta >= STRONG_DELTA_R && (!bestDelta || delta > bestDelta.delta)) bestDelta = { rule: r, delta };
     }
   }
+  // The widest gap of however many rules qualified — a maximum picked out of a
+  // set, which is the shape that produces a finding out of noise more reliably
+  // than anything else in this file. It is stated as the observation it is,
+  // with the sample under it, and never as "keeping this improves your R".
   if (bestDelta) {
-    insights.push(`שמירה על "${ruleTitle(bestDelta.rule)}" משפרת את ה-R הממוצע שלך בכ-${bestDelta.delta.toFixed(1)}.`);
+    const p = perfByRuleId.get(bestDelta.rule.id)!;
+    insights.push(
+      `בעסקאות שבהן עמדת ב"${ruleTitle(bestDelta.rule)}" ה-R הממוצע היה גבוה ב-${bestDelta.delta.toFixed(1)} מאשר בעסקאות שבהן לא — מתוך ${p.sampleSize} עסקאות שנסגרו.`,
+    );
   }
 
   if (catRates.length > 1) {
