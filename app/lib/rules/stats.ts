@@ -12,7 +12,7 @@
 import type { TradeEntry } from '../journal';
 import { ruleTitle, type Rule } from './types';
 import type { RuleCheck } from './types';
-import { checkRule } from './engine';
+import { checkRule, type RuleCheckContext } from './engine';
 import { pointFloor } from '../stats/movement';
 
 /** The smallest week-over-week move in compliance worth calling a direction,
@@ -75,11 +75,11 @@ export interface StoredViolation {
 /** One rule's status on one day, with the evidence behind it. Automatic rules are
     judged from that day's trades (any violation makes the day a violation);
     manual rules from the stored report. */
-function ruleDayDetail(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined): { status: DayRuleStatus; evidence: string } {
+function ruleDayDetail(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined, ctx: RuleCheckContext = {}): { status: DayRuleStatus; evidence: string } {
   if (rule.verificationMode === 'automatic' && rule.conditionType) {
     let followedEvidence = '';
     for (const t of dayTrades) {
-      const r = checkRule(rule, t, dayTrades);
+      const r = checkRule(rule, t, dayTrades, ctx);
       if (r.status === 'violated') return { status: 'violated', evidence: r.evidence };
       if (r.status === 'followed' && !followedEvidence) followedEvidence = r.evidence;
     }
@@ -88,8 +88,8 @@ function ruleDayDetail(rule: Rule, dayTrades: TradeEntry[], reported: Reported |
   return reported ? { status: reported.status, evidence: reported.evidence } : { status: 'no_data', evidence: '' };
 }
 
-function ruleDayStatus(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined): DayRuleStatus {
-  return ruleDayDetail(rule, dayTrades, reported).status;
+function ruleDayStatus(rule: Rule, dayTrades: TradeEntry[], reported: Reported | undefined, ctx: RuleCheckContext = {}): DayRuleStatus {
+  return ruleDayDetail(rule, dayTrades, reported, ctx).status;
 }
 
 /** Shared lookup tables both the period rollup and the per-rule history need. */
@@ -155,6 +155,7 @@ export function computeRuleHistory(
   todayISO: string,
   legacyViolations: StoredViolation[] = [],
   lookbackDays = 90,
+  ctx: RuleCheckContext = {},
 ): RuleHistory {
   const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
   let lastFollowed: string | null = null;
@@ -166,7 +167,7 @@ export function computeRuleHistory(
 
   for (let i = 0; i < lookbackDays; i++) {
     const date = isoMinusDays(todayISO, i);
-    const d = ruleDayDetail(rule, byDay.get(date) ?? [], reported.get(`${rule.id}:${date}`));
+    const d = ruleDayDetail(rule, byDay.get(date) ?? [], reported.get(`${rule.id}:${date}`), ctx);
     if (d.status === 'violated') {
       if (!lastViolated) lastViolated = date;
       if (recentViolations.length < 3) recentViolations.push({ date, evidence: d.evidence });
@@ -202,6 +203,7 @@ export function computeRuleStats(
   userChecks: RuleCheck[],
   todayISO: string,
   legacyViolations: StoredViolation[] = [],
+  ctx: RuleCheckContext = {},
 ): RuleStatsResult {
   const active = rules.filter(r => r.isActive);
   const { byDay, reported } = buildContext(trades, userChecks, legacyViolations);
@@ -212,7 +214,7 @@ export function computeRuleStats(
     for (const date of days) {
       const dt = byDay.get(date) ?? [];
       for (const rule of active) {
-        const st = ruleDayStatus(rule, dt, lookup(rule.id, date));
+        const st = ruleDayStatus(rule, dt, lookup(rule.id, date), ctx);
         if (st === 'followed') followed++;
         else if (st === 'violated') violated++;
       }
@@ -225,7 +227,7 @@ export function computeRuleStats(
     const dt = byDay.get(date) ?? [];
     let followed = 0, violated = 0;
     for (const rule of active) {
-      const st = ruleDayStatus(rule, dt, lookup(rule.id, date));
+      const st = ruleDayStatus(rule, dt, lookup(rule.id, date), ctx);
       if (st === 'followed') followed++;
       else if (st === 'violated') violated++;
     }
@@ -257,7 +259,7 @@ export function computeRuleStats(
   for (const date of daysRange(todayISO, 30)) {
     const dt = byDay.get(date) ?? [];
     for (const rule of active) {
-      if (ruleDayStatus(rule, dt, lookup(rule.id, date)) === 'violated') {
+      if (ruleDayStatus(rule, dt, lookup(rule.id, date), ctx) === 'violated') {
         brokenById.set(rule.id, (brokenById.get(rule.id) ?? 0) + 1);
       }
     }

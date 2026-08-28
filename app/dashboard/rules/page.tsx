@@ -8,7 +8,7 @@ import { hydrateList, commitList } from '../../lib/sync/collections';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { sessionLabel, activeSessions } from '../../lib/sessions';
 import { INSTRUMENT_KEYS } from '../../lib/instruments';
-import { AUTO_SUPPORTED } from '../../lib/rules/engine';
+import { AUTO_SUPPORTED, type RuleCheckContext } from '../../lib/rules/engine';
 import { computeRulePerformance, type RulePerformance } from '../../lib/rules/performance';
 import { computeRuleStats, computeRuleHistory, type RuleStatsResult, type RuleHistory } from '../../lib/rules/stats';
 import { ruleImpact, ruleConfidence, confidenceLabel, ruleInsight, dashboardRuleInsights } from '../../lib/rules/insight';
@@ -20,6 +20,9 @@ import {
 const STORAGE_KEY = 'onyx_trading_rules';
 const VIOLATIONS_KEY = 'onyx_rule_violations';
 const CHECKS_KEY = 'onyx_rule_checks';
+
+/** One row of /api/macro/journal — the fields the rule engine reads. */
+interface MacroRow { dateIsrael: string; timeIsrael: string; impact: string }
 
 /** Legacy day-level violation (kept so the What-If simulator keeps reading the
     same shape it always has). */
@@ -406,6 +409,7 @@ export default function RulesPage() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [userChecks, setUserChecks] = useState<RuleCheck[]>([]);
   const [trades, setTrades] = useState<TradeEntry[]>([]);
+  const [macro, setMacro] = useState<MacroRow[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [draft, setDraft] = useState<Rule>(emptyDraft());
@@ -432,7 +436,31 @@ export default function RulesPage() {
     hydrateList<Rule>('rules', STORAGE_KEY).then(setRules).catch(() => {});
     hydrateList<Violation>('violations', VIOLATIONS_KEY).then(setViolations).catch(() => {});
     hydrateList<RuleCheck>('rule_checks', CHECKS_KEY).then(setUserChecks).catch(() => {});
+
+    // The macro calendar, for the one rule type that needs it. A news rule was
+    // listed as un-checkable purely because nothing on this page ever fetched
+    // the events the engine has always known how to read.
+    //
+    // The feed covers three weeks. `coverage` is what keeps that honest: a
+    // trade outside the window is reported as unjudged rather than as a day
+    // clear of news, which is what "no matching event" would otherwise mean.
+    fetch('/api/macro/journal')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { events?: MacroRow[] } | null) => setMacro(Array.isArray(d?.events) ? d.events : []))
+      .catch(() => setMacro([]));
   }, []);
+
+  /** What the engine needs to judge a news rule, or an empty context when the
+   *  calendar never arrived — in which case the rule stays unjudged. */
+  const ruleCtx: RuleCheckContext = useMemo(() => {
+    const dated = macro.filter(e => typeof e.dateIsrael === 'string' && e.dateIsrael);
+    if (!dated.length) return {};
+    const dates = dated.map(e => e.dateIsrael).sort();
+    return {
+      macroEvents: dated.map(e => ({ date: e.dateIsrael, time: e.timeIsrael, impact: e.impact })),
+      macroCoverage: { from: dates[0], to: dates[dates.length - 1] },
+    };
+  }, [macro]);
 
   function persistRules(updated: Rule[]) { setRules(updated); void commitList<Rule>('rules', STORAGE_KEY, updated); }
   function persistViolations(updated: Violation[]) { setViolations(updated); void commitList<Violation>('violations', VIOLATIONS_KEY, updated); }
@@ -478,12 +506,12 @@ export default function RulesPage() {
 
   const today = todayISO();
   const activeRules = rules.filter(r => r.isActive);
-  const stats = useMemo(() => computeRuleStats(rules, trades, userChecks, today, violations), [rules, trades, userChecks, violations, today]);
+  const stats = useMemo(() => computeRuleStats(rules, trades, userChecks, today, violations, ruleCtx), [rules, trades, userChecks, violations, today, ruleCtx]);
 
   // Dashboard-wide insights — computed over every rule's own performance, not
   // just the currently-filtered list, so switching a filter chip never changes
   // what the sidebar says about the rule set as a whole.
-  const perfByRuleId = useMemo(() => new Map(rules.map(r => [r.id, computeRulePerformance(r, trades, userChecks)])), [rules, trades, userChecks]);
+  const perfByRuleId = useMemo(() => new Map(rules.map(r => [r.id, computeRulePerformance(r, trades, userChecks, ruleCtx)])), [rules, trades, userChecks, ruleCtx]);
   const dashboardInsights = useMemo(() => dashboardRuleInsights(rules, perfByRuleId, catLabel), [rules, perfByRuleId]);
 
   // Filter chips — only categories the trader actually uses.
@@ -745,8 +773,8 @@ export default function RulesPage() {
                     <RuleCard
                       key={rule.id}
                       rule={rule}
-                      perf={computeRulePerformance(rule, trades, userChecks)}
-                      history={computeRuleHistory(rule, trades, userChecks, today, violations)}
+                      perf={computeRulePerformance(rule, trades, userChecks, ruleCtx)}
+                      history={computeRuleHistory(rule, trades, userChecks, today, violations, 90, ruleCtx)}
                       trades={trades}
                       expanded={expandedId === rule.id}
                       todayReported={(() => { const c = userChecks.find(x => x.ruleId === rule.id && x.date === today); return c && c.status !== 'unknown' ? c.status : null; })()}

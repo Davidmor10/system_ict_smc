@@ -10,7 +10,7 @@ import { hydrateList, saveList } from '../../lib/sync/collections';
 import {
   DEFAULT_FILTER, DIRECTIONS, DIRECTION_HE, EMPTY_STATS, GRADES,
   PLAYBOOK_COLLECTION, PLAYBOOK_STORAGE_KEY, STATUSES, STATUS_HE,
-  emptySetup, normalizeSetup, renameCost, statsBySetupName, visibleSetups,
+  emptySetup, isMeasured, normalizeSetup, renameCost, statsBySetupName, visibleSetups,
   type ChecklistItem, type Grade, type Setup, type SetupDirection,
   type SetupFilter, type SetupStats, type SetupStatus, type SortKey,
 } from '../../lib/playbook';
@@ -145,6 +145,7 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
   onDelete: () => void;
   onRestore: () => void;
 }) {
+  const measured = isMeasured(stats);
   // Required conditions first. The card shows three of what may be ten, and the
   // three worth showing are the ones that gate the entry — otherwise the flag
   // set in the drawer would be a toggle nothing on screen ever reflects.
@@ -195,7 +196,13 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
 
       {/* Four numbers, all of them from the journal. An em-dash where there is
           nothing to show — a setup with no trades yet has no win rate, and
-          printing 0% would be a claim rather than a blank. */}
+          printing 0% would be a claim rather than a blank.
+
+          Below them, always, what the numbers rest on. A win rate over two
+          decided trades and one over forty were rendered identically, in the
+          same weight, with nothing to separate them; the trader compares two
+          cards side by side and the sample is the difference between a reading
+          and a coincidence. */}
       <div className="su-metrics">
         <div className="su-metric">
           <div className="su-metric-label">עסקאות</div>
@@ -228,6 +235,15 @@ function SetupCard({ setup, stats, trashed, confirming, onUse, onEdit, onPin, on
             {stats.trades === 0 ? '—' : money(stats.pnl)}
           </div>
         </div>
+      </div>
+
+      {/* What the two rate-like numbers above rest on. */}
+      <div className="su-basis" data-measured={measured}>
+        {stats.decided === 0
+          ? 'עוד אין עסקאות שהוכרעו בסטאפ הזה'
+          : measured
+            ? `מבוסס על ${stats.decided} עסקאות שהוכרעו`
+            : `${stats.decided} עסקאות שהוכרעו בלבד — עדיין מוקדם מכדי לקרוא לזה ביצועים`}
       </div>
 
       <div>

@@ -15,6 +15,13 @@ export interface RuleCheckContext {
   /** Available macro events (each with an Israel-time HH:mm + date + impact).
       Absent/empty → news rules return `unknown` (never guessed). */
   macroEvents?: { date?: string; time?: string; impact?: string }[];
+  /** The date range the calendar above actually covers, inclusive.
+   *
+   *  Without it a trade from outside the fetched window matches no event and
+   *  reads as `followed` — "you traded clear of the news" asserted about a day
+   *  nobody looked up. The calendar is fetched three weeks at a time; a trade
+   *  older than that is not a clean day, it is an unknown one. */
+  macroCoverage?: { from: string; to: string };
 }
 
 export interface RuleCheckResult {
@@ -32,6 +39,10 @@ const violated = (evidence: string): RuleCheckResult => ({ status: 'violated', e
 export const AUTO_SUPPORTED: ConditionType[] = [
   'max_trades_per_day', 'max_risk_per_trade', 'max_daily_loss', 'stop_after_losses',
   'allowed_hours', 'allowed_sessions', 'allowed_symbols', 'required_confirmations',
+  // The engine has always implemented this one; it was missing from the list,
+  // so the UI told the trader their news rule could not be checked
+  // automatically while the engine sat there able to check it.
+  'no_trade_around_news',
 ];
 
 function minutesOfTime(time: string | undefined): number | null {
@@ -136,6 +147,13 @@ export function checkRule(
     case 'no_trade_around_news': {
       const events = ctx.macroEvents ?? [];
       if (events.length === 0) return unknown('אין נתוני מאקרו זמינים לבדיקה');
+      // Only days the calendar reaches can be judged. Outside its window the
+      // absence of a matching event means nobody looked, not that the day was
+      // clear — and `followed` would be a claim about a day with no data.
+      const cover = ctx.macroCoverage;
+      if (!cover || trade.dateISO < cover.from || trade.dateISO > cover.to) {
+        return unknown('היום הזה מחוץ לטווח לוח המאקרו');
+      }
       const m = minutesOfTime(trade.time);
       if (m == null) return unknown('אין שעת כניסה לעסקה');
       const before = cv.beforeMin ?? 0, after = cv.afterMin ?? 0;

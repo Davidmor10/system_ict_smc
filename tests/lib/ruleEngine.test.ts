@@ -71,10 +71,46 @@ describe('rule engine — unknown when data is missing (never guess violated)', 
     expect(checkRule(rule, makeTrade({}), [makeTrade({})]).status).toBe('unknown');
   });
 
-  it('AUTO_SUPPORTED lists the auto-checkable conditions, excludes news', () => {
+  // The engine has always implemented the news condition. It was missing from
+  // this list, so the UI told the trader their news rule could not be checked
+  // automatically while the engine sat there able to check it.
+  it('AUTO_SUPPORTED lists every condition the engine can evaluate', () => {
     expect(AUTO_SUPPORTED).toContain('max_trades_per_day');
     expect(AUTO_SUPPORTED).toContain('required_confirmations');
-    expect(AUTO_SUPPORTED).not.toContain('no_trade_around_news');
+    expect(AUTO_SUPPORTED).toContain('no_trade_around_news');
+  });
+});
+
+// ── the news rule, once the calendar is handed over ─────────────────────────
+//
+// The feed covers about three weeks. Without a coverage window, a trade older
+// than that matched no event and came back `followed` — "you traded clear of
+// the news", asserted about a day nobody looked up.
+
+describe('no_trade_around_news', () => {
+  const news = autoRule({ conditionType: 'no_trade_around_news', conditionValue: { beforeMin: 15, afterMin: 15 } });
+  const events = [{ date: '2026-07-14', time: '15:30', impact: 'high' }];
+  const coverage = { from: '2026-07-01', to: '2026-07-21' };
+
+  it('is unknown when the calendar was never fetched', () => {
+    expect(checkRule(news, makeTrade({ dateISO: '2026-07-14', time: '15:35' }), []).status).toBe('unknown');
+  });
+
+  it('is unknown for a day outside the window the calendar covers', () => {
+    const old = makeTrade({ dateISO: '2026-05-04', time: '15:35' });
+    const r = checkRule(news, old, [old], { macroEvents: events, macroCoverage: coverage });
+    expect(r.status).toBe('unknown');
+    expect(r.evidence).toContain('מחוץ לטווח');
+  });
+
+  it('catches a trade taken inside the window around an event', () => {
+    const t = makeTrade({ dateISO: '2026-07-14', time: '15:35' });
+    expect(checkRule(news, t, [t], { macroEvents: events, macroCoverage: coverage }).status).toBe('violated');
+  });
+
+  it('passes a trade on a covered day with nothing near it', () => {
+    const t = makeTrade({ dateISO: '2026-07-14', time: '09:00' });
+    expect(checkRule(news, t, [t], { macroEvents: events, macroCoverage: coverage }).status).toBe('followed');
   });
 });
 

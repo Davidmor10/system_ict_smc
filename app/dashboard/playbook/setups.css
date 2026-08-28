@@ -714,3 +714,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* What the numbers above rest on. Quiet by default; the amber note is for a
+   setup whose figures are still too thin to read as performance. */
+.su-basis {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--white-30); padding: 8px 2px 0; text-align: center;
+}
+.su-basis[data-measured='false'] { color: #c8a24a; }

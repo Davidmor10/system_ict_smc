@@ -198,6 +198,40 @@ describe('visibleSetups', () => {
     expect(visibleSetups(all, stats, f({ sort: 'win' })).map(s => s.name)).toEqual(['A', 'B', 'C']);
   });
 
+  // The list is read top-down to decide what to trade, which makes its order a
+  // recommendation whether or not it is labelled one. Sorting compared the
+  // values alone, so one winning trade — 100%, +2R — sat above a setup with a
+  // long history and a real edge.
+  it('does not let one winning trade outrank a measured setup', () => {
+    const measured = statsBySetupName([
+      ...Array.from({ length: 8 }, () => T({ model: 'A', result: 'WIN',  tradeR: 1 })),
+      ...Array.from({ length: 5 }, () => T({ model: 'A', result: 'LOSS', tradeR: -1 })),
+      T({ model: 'B', result: 'WIN', tradeR: 3 }),   // one trade, 100%, +3R
+    ]);
+    expect(visibleSetups([a, b], measured, f({ sort: 'win' })).map(s => s.name)).toEqual(['A', 'B']);
+    expect(visibleSetups([a, b], measured, f({ sort: 'r'   })).map(s => s.name)).toEqual(['A', 'B']);
+  });
+
+  it('still lets the chosen sort decide the order among measured setups', () => {
+    const measured = statsBySetupName([
+      ...Array.from({ length: 6 }, () => T({ model: 'A', result: 'WIN',  tradeR: 1 })),
+      ...Array.from({ length: 6 }, () => T({ model: 'A', result: 'LOSS', tradeR: -1 })),
+      ...Array.from({ length: 9 }, () => T({ model: 'B', result: 'WIN',  tradeR: 1 })),
+      ...Array.from({ length: 3 }, () => T({ model: 'B', result: 'LOSS', tradeR: -1 })),
+    ]);
+    expect(visibleSetups([a, b], measured, f({ sort: 'win' })).map(s => s.name)).toEqual(['B', 'A']);
+  });
+
+  it('leaves the grade sort led by the grade, tiering only the tiebreak', () => {
+    const measured = statsBySetupName([
+      ...Array.from({ length: 8 }, () => T({ model: 'A', result: 'WIN', tradeR: 2 })),
+      ...Array.from({ length: 5 }, () => T({ model: 'A', result: 'LOSS', tradeR: -1 })),
+      T({ model: 'B', result: 'WIN', tradeR: 9 }),
+    ]);
+    // B is A+ and A is B — the grade still wins, thin numbers or not.
+    expect(visibleSetups([a, b], measured, f()).map(s => s.name)).toEqual(['B', 'A']);
+  });
+
   it('filters by asset, session and status independently', () => {
     expect(visibleSetups(all, stats, f({ asset: 'NQ' })).map(s => s.name)).toEqual(['B']);
     expect(visibleSetups(all, stats, f({ session: 'nyam' })).map(s => s.name)).toEqual(['A']);

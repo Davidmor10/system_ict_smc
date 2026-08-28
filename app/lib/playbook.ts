@@ -18,6 +18,7 @@
 
 import { rMultiple, tradePnL, type TradeEntry } from './journal';
 import { decidedCounts, winRatePercent } from './calc/decided';
+import { MIN_DECIDED_FOR_CLAIM } from './stats/evidence';
 import type { InstrumentKey } from './instruments';
 import type { SessionKey } from './sessions';
 
@@ -219,6 +220,22 @@ export function renameCost(stats: Map<string, SetupStats>, currentName: string):
   return stats.get(currentName.trim())?.trades ?? 0;
 }
 
+/** Decided trades a setup needs before its numbers are treated as a reading of
+ *  the setup rather than of the last few trades.
+ *
+ *  This is a sort key, not a gate: the numbers still show, with their sample
+ *  beside them. What it changes is ORDER. Sorting by win rate put a setup with
+ *  one winning trade at 100% above one with forty trades at 62%, and the
+ *  trader reads that list top-down to decide what to trade. The shared floor,
+ *  because "enough to be a claim about this trader" is one question with one
+ *  answer — see lib/stats/evidence. */
+export const MIN_DECIDED_FOR_RANK = MIN_DECIDED_FOR_CLAIM;
+
+/** True when the setup's numbers rest on enough decided trades to rank on. */
+export function isMeasured(stats: SetupStats): boolean {
+  return stats.decided >= MIN_DECIDED_FOR_RANK;
+}
+
 // ── Filtering + sorting ─────────────────────────────────────────────────────
 
 export type SortKey = 'grade' | 'win' | 'r' | 'trades';
@@ -267,10 +284,22 @@ export function visibleSetups(
   // rather than above them as a 0 would.
   const low = -Infinity;
 
+  // A number resting on one trade does not outrank a number resting on forty.
+  //
+  // Sorting by win rate or by R compared the values alone, so a single winning
+  // trade — 100%, +2R — sat at the top of the list above a setup with a long
+  // history and a real edge. The list is read top-down to decide what to
+  // trade, which makes its order a recommendation whether or not it is labelled
+  // one. Measured setups now rank as a block above unmeasured ones, and the
+  // chosen sort still decides the order inside each block.
+  const tier = (s: Setup) => (isMeasured(stat(s)) ? 1 : 0);
+  const byTier = (a: Setup, b: Setup) => tier(b) - tier(a);
+
   const by: Record<SortKey, (a: Setup, b: Setup) => number> = {
-    grade:  (a, b) => gradeRank(b.grade) - gradeRank(a.grade) || (stat(b).avgR ?? low) - (stat(a).avgR ?? low),
-    win:    (a, b) => (stat(b).winRate ?? low) - (stat(a).winRate ?? low),
-    r:      (a, b) => (stat(b).avgR ?? low) - (stat(a).avgR ?? low),
+    grade:  (a, b) => gradeRank(b.grade) - gradeRank(a.grade) || byTier(a, b) || (stat(b).avgR ?? low) - (stat(a).avgR ?? low),
+    win:    (a, b) => byTier(a, b) || (stat(b).winRate ?? low) - (stat(a).winRate ?? low),
+    r:      (a, b) => byTier(a, b) || (stat(b).avgR ?? low) - (stat(a).avgR ?? low),
+    // Trade count is its own sample measure — nothing to tier by.
     trades: (a, b) => stat(b).trades - stat(a).trades,
   };
 
