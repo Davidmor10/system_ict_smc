@@ -51,27 +51,28 @@ const body = (o: unknown) =>
 beforeEach(() => { role = 'free'; });
 
 describe('an account with no subscription is refused', () => {
-  const cases: Array<[string, () => Promise<Response>]> = [
-    ['GET  /api/journal',         () => journal.GET()],
-    ['POST /api/journal',         () => journal.POST(body({}))],
-    ['PUT  /api/journal',         () => journal.PUT(body([]))],
-    ['DELETE /api/journal/[id]',  () => journalItem.DELETE(new Request('http://x'), { params: Promise.resolve({ id: '1' }) })],
-    ['PATCH  /api/journal/[id]',  () => journalItem.PATCH(body({}), { params: Promise.resolve({ id: '1' }) })],
-    ['GET  /api/collections',     () => collections.GET(new Request('http://x/api/collections?kind=k'))],
-    ['PUT  /api/collections',     () => collections.PUT(body({}))],
-    ['GET  /api/preferences',     () => preferences.GET()],
-    ['PUT  /api/preferences',     () => preferences.PUT(body({}))],
-    ['GET  /api/macro',           () => macro.GET(new NextRequest('http://x/api/macro'))],
-    ['GET  /api/coach/readiness', () => readiness.GET()],
-    ['GET  /api/coach/daily-insight', () => dailyInsight.GET()],
+  const cases: Array<[string, () => Promise<Response>, string]> = [
+    ['GET  /api/journal',         () => journal.GET(), 'starter'],
+    ['POST /api/journal',         () => journal.POST(body({})), 'starter'],
+    ['PUT  /api/journal',         () => journal.PUT(body([])), 'starter'],
+    ['DELETE /api/journal/[id]',  () => journalItem.DELETE(new Request('http://x'), { params: Promise.resolve({ id: '1' }) }), 'starter'],
+    ['PATCH  /api/journal/[id]',  () => journalItem.PATCH(body({}), { params: Promise.resolve({ id: '1' }) }), 'starter'],
+    ['GET  /api/collections',     () => collections.GET(new Request('http://x/api/collections?kind=k')), 'starter'],
+    ['PUT  /api/collections',     () => collections.PUT(body({})), 'starter'],
+    ['GET  /api/preferences',     () => preferences.GET(), 'starter'],
+    ['PUT  /api/preferences',     () => preferences.PUT(body({})), 'starter'],
+    ['GET  /api/macro',           () => macro.GET(new NextRequest('http://x/api/macro')), 'starter'],
+    // Analysis starts at pro — starter buys the journal, not the AI.
+    ['GET  /api/coach/readiness', () => readiness.GET(), 'pro'],
+    ['GET  /api/coach/daily-insight', () => dailyInsight.GET(), 'pro'],
   ];
 
-  for (const [name, call] of cases) {
+  for (const [name, call, requiredPlan] of cases) {
     it(`${name} answers 403, not data`, async () => {
       const res = await call();
       expect(res.status).toBe(403);
       const json = await res.json();
-      expect(json.requiredPlan).toBe('starter');
+      expect(json.requiredPlan).toBe(requiredPlan);
     });
   }
 });
@@ -86,6 +87,43 @@ describe('a subscriber is let through the same gate', () => {
       () => preferences.GET(),
       () => macro.GET(new NextRequest('http://x/api/macro')),
     ]) {
+      expect((await call()).status).not.toBe(403);
+    }
+  });
+});
+
+// ── analysis starts at pro ──────────────────────────────────────────────────
+//
+// Starter buys the journal: the log, the notebook, the setups, the rules and
+// the statistics over what was written. It does not buy the AI, and the way
+// this is sold is not "compute it and hide it" — a starter account's trades
+// are never analysed at all, and the night the trader upgrades is the night
+// the system starts watching.
+
+describe('a starter account is refused the analysis', () => {
+  it('gets 403 from the AI routes it did not pay for', async () => {
+    role = 'starter';
+    for (const call of [() => readiness.GET(), () => dailyInsight.GET()]) {
+      const res = await call();
+      expect(res.status).toBe(403);
+      expect((await res.json()).requiredPlan).toBe('pro');
+    }
+  });
+
+  it('keeps everything the journal tier does include', async () => {
+    role = 'starter';
+    for (const call of [
+      () => journal.GET(),
+      () => collections.GET(new Request('http://x/api/collections?kind=k')),
+      () => macro.GET(new NextRequest('http://x/api/macro')),
+    ]) {
+      expect((await call()).status).not.toBe(403);
+    }
+  });
+
+  it('lets pro through the same AI routes', async () => {
+    role = 'pro';
+    for (const call of [() => readiness.GET(), () => dailyInsight.GET()]) {
       expect((await call()).status).not.toBe(403);
     }
   });

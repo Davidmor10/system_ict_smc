@@ -551,3 +551,7 @@
   .dp-app .dp-palette{position:static;max-width:none;margin-top:6px;}
 }
 
+
+/* The locked-analysis panel sits where the daily insight would, so a trader on
+   the journal tier sees what the AI tier is rather than an empty card. */
+.dp-app .dp-ai-locked-note{color:var(--dp-w60,rgba(255,255,255,.6));font-size:13px;line-height:1.55;margin:-4px 0 13px;}

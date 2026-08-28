@@ -22,7 +22,7 @@ export async function GET() {
   // Every plan is paid. A signed-in account without a subscription is
   // refused here as well as in the UI, so the route cannot be called
   // directly to work around the gate.
-  const denied = await requirePlanApi('starter', '/api/coach/readiness');
+  const denied = await requirePlanApi('pro', '/api/coach/readiness');
   if (denied) return denied;
 
   const { userId } = await auth();

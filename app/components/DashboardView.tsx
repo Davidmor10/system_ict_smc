@@ -61,9 +61,11 @@ const STR = {
     aiCta: 'לניתוח המלא →',
     aiWaitingT: 'ממתין ל־3 עסקאות ומעלה',
     aiWaitingBody: 'ברגע שתתעד 3 עסקאות ומעלה, המאמן ינתח את היומן שלך ויציג כאן את התובנה החזקה ביותר.',
-    aiLockedEyebrow: 'נעול במסלול חינמי',
-    aiLockedMsgPre: 'תובנות AI יומיות, מותאמות אישית — במסלול',
-    aiLockedMsgBold: 'PRO ומעלה', aiLockedCta: 'שדרוג ל־PRO →',
+    aiLockedEyebrow: 'הניתוח נעול במסלול שלך',
+    aiLockedMsgPre: 'תובנה יומית, מעקב אחרי הרגלים וזיהוי דפוסים — במסלול',
+    aiLockedMsgBold: 'PRO ומעלה',
+    aiLockedNote: 'המערכת מתחילה לנתח את העסקאות שלך מהלילה שבו תשדרג — לא לפני.',
+    aiLockedCta: 'שדרוג ל־PRO →',
     macroK: 'דוחות מאקרו · USD השפעה גבוהה', macroWeek: 'השבוע',
     macroToday: 'היום', macroEmpty: 'אין אירועים בעלי השפעה גבוהה השבוע', macroUnavailable: '…',
     macroNext: 'הבא',
@@ -100,9 +102,11 @@ const STR = {
     aiCta: 'Full analysis →',
     aiWaitingT: 'Waiting for 3+ trades',
     aiWaitingBody: 'Once you log 3 or more trades, the coach will surface its strongest insight here.',
-    aiLockedEyebrow: 'LOCKED ON FREE PLAN',
-    aiLockedMsgPre: 'Daily, personalized AI insights — on',
-    aiLockedMsgBold: 'PRO and above', aiLockedCta: 'Upgrade to PRO →',
+    aiLockedEyebrow: 'ANALYSIS LOCKED ON YOUR PLAN',
+    aiLockedMsgPre: 'A daily insight, habit tracking and pattern discovery — on',
+    aiLockedMsgBold: 'PRO and above',
+    aiLockedNote: 'Your trades start being analysed the night you upgrade — not before.',
+    aiLockedCta: 'Upgrade to PRO →',
     macroK: 'MACRO · USD HIGH-IMPACT', macroWeek: 'This week',
     macroToday: 'TODAY', macroEmpty: 'No high-impact events this week', macroUnavailable: '…',
     macroNext: 'NEXT',
@@ -239,8 +243,11 @@ export default function DashboardView() {
   const { lang } = useLanguage();
   const L = lang as Lang;
   const s = STR[L];
-  const { role } = usePlan();
-  const isFree = role === 'free';
+  const { role, canAccess } = usePlan();
+  // Analysis starts at pro. A starter account is not analysed at all — so the
+  // surfaces that would report an analysis show what they are instead of
+  // showing nothing, which reads as "the system has nothing to say about you".
+  const hasAi = canAccess('pro');
   const { user, isLoaded: userLoaded } = useUser();
   const firstName = userLoaded ? user?.firstName : undefined;
 
@@ -561,7 +568,7 @@ export default function DashboardView() {
       <div className="dp-bar">
         <div className="dp-bar-left">
           <button className={`dp-btn-edit${editMode ? ' on' : ''}`} onClick={toggleEdit}>{editMode ? s.editOn : s.edit}</button>
-          <span className={`dp-plan-badge${isFree ? ' free' : ''}`}>{role.toUpperCase()}</span>
+          <span className={`dp-plan-badge${role === 'free' ? ' free' : ''}`}>{role.toUpperCase()}</span>
         </div>
         <div className="dp-bar-right">
           <span className="dp-brand">{s.brand}</span>
@@ -608,7 +615,7 @@ export default function DashboardView() {
       {/* What is being counted right now. Renders nothing when nothing is —
           directly under the declaration, because both are the morning's
           standing commitments and neither is a number about yesterday. */}
-      <TrackingLine />
+      {hasAi && <TrackingLine />}
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">
@@ -643,20 +650,20 @@ export default function DashboardView() {
           then reads the coach responding to it. Above the stats it was
           commenting on figures the reader hadn't seen yet. */}
       <div className="dp-daily-insight-wrap dp-rise">
-        <DailyInsightCard />
+        {hasAi ? <DailyInsightCard /> : (
+          <div className="dp-ai-locked">
+            <div className="dp-ai-locked-eyebrow">{s.aiLockedEyebrow}</div>
+            <div className="dp-ai-locked-msg">{s.aiLockedMsgPre} <b>{s.aiLockedMsgBold}</b></div>
+            <div className="dp-ai-locked-note">{s.aiLockedNote}</div>
+            <Link href="/checkout" className="dp-ai-locked-cta">{s.aiLockedCta}</Link>
+          </div>
+        )}
       </div>
 
       {/* Body — side (AI + macro) + calendar */}
       <div className="dp-body">
         {/* Side: AI + Macro */}
         <div className="dp-col dp-side dp-rise">
-          {isFree ? (
-            <div className="dp-ai-locked">
-              <div className="dp-ai-locked-eyebrow">{s.aiLockedEyebrow}</div>
-              <div className="dp-ai-locked-msg">{s.aiLockedMsgPre} <b>{s.aiLockedMsgBold}</b></div>
-              <Link href="/checkout" className="dp-ai-locked-cta">{s.aiLockedCta}</Link>
-            </div>
-          ) : null}
           {/* The AI discovery panel that used to live here is gone. It was a
               second, weaker analysis of the same trades sitting under the
               daily insight card at the top of this page — and it carried its

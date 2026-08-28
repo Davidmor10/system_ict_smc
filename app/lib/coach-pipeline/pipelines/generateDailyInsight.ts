@@ -58,7 +58,7 @@ export type GenerateOutcome =
   | { status: 'ok';       row: DailyInsightRow; provider: Provider; fallbackReason?: FallbackReason; primaryError?: string }
   | { status: 'exists';   row: DailyInsightRow }                        // insight already exists for this user+day+kind
   | { status: 'disabled' }                                              // kill switch off
-  | { status: 'ineligible'; reason: 'free_plan' }                       // free tier gets no insight
+  | { status: 'ineligible'; reason: 'free_plan' | 'starter_plan' }      // analysis starts at pro
   | { status: 'failed';   reason: string }
   | { status: 'both_providers_down'; claudeError: string; geminiError: string };
 
@@ -119,9 +119,15 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   const cid  = requireClerkId(inputs.clerkId);
   const kind = inputs.kind ?? 'daily';
 
-  // 0. Free plan doesn't get insights (per pricing rollout).
-  if (inputs.planTier === 'free') {
-    return { status: 'ineligible', reason: 'free_plan' };
+  // 0. Analysis starts at pro.
+  //
+  //    Starter buys the journal — the log, the notebook, the setups, the
+  //    rules, the statistics over what was written. Not the AI. Checked here
+  //    as well as at enqueue time because this is the function that spends
+  //    money: a hand-inserted job, a replayed row or a future caller must not
+  //    be able to run a model on an account that did not buy one.
+  if (inputs.planTier === 'free' || inputs.planTier === 'starter') {
+    return { status: 'ineligible', reason: `${inputs.planTier}_plan` };
   }
 
   // 1. Kill switch.

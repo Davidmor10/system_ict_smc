@@ -132,6 +132,21 @@ async function runOne(job: ProcessingJobRow): Promise<
     }
 
     if (job.job_type === 'profile_refresh') {
+      // Analysis starts at pro, and this is checked here as well as at enqueue
+      // time for the same reason the insight checks it: this is a function
+      // that does work on someone's trades, and a hand-inserted or replayed
+      // row must not be able to run it for an account that did not buy it.
+      const plan = await fetchPlanTier(job.clerk_id);
+      if (plan === 'free' || plan === 'starter') {
+        return {
+          kind: 'success',
+          summary: {
+            jobId: job.id, jobType: job.job_type, clerkId: job.clerk_id,
+            status: 'skipped', reason: `${plan}_plan`, latencyMs: Date.now() - started,
+          },
+        };
+      }
+
       // The descriptive stack — trader profile, pattern memory, hypothesis,
       // edge and learning scores. It had no runner, and the only path that
       // reached it in the whole app was a trader opening the weekly report

@@ -39,6 +39,8 @@ const STR = {
     answerSend:   'שלח',
     answerSaved:  'נשמר. זה ייכנס לניתוח.',
     answerFailed: 'לא נשמר. נסה שוב.',
+    weakBadge:   'איכות נמוכה',
+    weakTitle:   'הפתק הזה לא עמד בסטנדרט הכתיבה של המערכת ולא השתפר בניסוח מחדש. המספרים שמאחוריו לא השתנו — הניסוח הוא מה שנחלש.',
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'היום';
       const d = new Date(`${dateIso}T12:00:00Z`);
@@ -68,6 +70,8 @@ const STR = {
     answerSend:   'Send',
     answerSaved:  'Saved. This goes into the analysis.',
     answerFailed: "Didn't save. Try again.",
+    weakBadge:   'LOW QUALITY',
+    weakTitle:   "This note did not meet the system's writing standard and the single rewrite did not improve it. The numbers behind it are unchanged — the wording is what fell short.",
     dateRel: (dateIso: string, today: string) => {
       if (dateIso === today) return 'Today';
       const d = new Date(`${dateIso}T12:00:00Z`);
@@ -215,6 +219,16 @@ export default function DailyInsightCard() {
   // ── Insight card ── */
   const isUnread = !insight.read_at;
 
+  // A note that failed the output check and did not come back better from its
+  // one rewrite is still published — a thin note carries more than silence.
+  // But it is published MARKED. The checker's hard rules are about how the
+  // note is WRITTEN, never about the numbers: generic coaching that would fit
+  // any trader, a cause asserted where only a correlation was measured, a
+  // behaviour named that the analysis never raised. All of those read
+  // perfectly well, which is exactly why an unmarked one is worse than a
+  // marked one.
+  const belowStandard = (insight.output_violations ?? []).some(v => v.severity === 'hard');
+
   return (
     <article className="di-card" dir={lang === 'he' ? 'rtl' : 'ltr'}>
       <header className="di-head">
@@ -224,6 +238,9 @@ export default function DailyInsightCard() {
           {isUnread && <span className="di-new-dot" aria-label={t.newBadge} title={t.newBadge} />}
         </span>
         <span className="di-head-right">
+          {belowStandard && (
+            <span className="di-weak-badge" title={t.weakTitle}>{t.weakBadge}</span>
+          )}
           {insight.fallback_used && (
             <span className="di-fast-badge" title={insight.fallback_reason ?? undefined}>
               {t.fastBadge}

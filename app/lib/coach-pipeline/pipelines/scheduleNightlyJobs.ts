@@ -16,11 +16,20 @@ import { isOwnerEmail } from '../auth/owners';
 import { israelYesterday, israelDayOfWeek, scheduleSlotFor } from '../dates';
 import { logger } from '../../logger';
 
-/** Cadence rule per plan tier — Step 5 §7 (Deluxe/Pro daily, Starter M-W-F). */
-function isEligibleToday(plan: Role, dow: number): boolean {
-  if (plan === 'deluxe' || plan === 'pro') return true;
-  if (plan === 'starter') return [0, 2, 4].includes(dow); // Sun/Tue/Thu
-  return false;                                            // free — no insights
+/** Who the pipeline runs for, and how often.
+ *
+ *  ANALYSIS STARTS AT PRO. Starter buys the journal — the log, the notebook,
+ *  the setups, the rules, the statistics over what was written. It does not
+ *  buy the AI, and the honest way to sell it that way is not to compute it and
+ *  hide it: a starter account's trades are never analysed at all. The night a
+ *  trader upgrades is the night the system starts watching, and everything it
+ *  says afterwards is about the trades it has actually seen.
+ *
+ *  Starter used to run on Sun/Tue/Thu, which meant paying for the cheapest
+ *  tier bought a thinner version of the same product. It now buys a different
+ *  product. */
+function isEligibleToday(plan: Role, _dow: number): boolean {
+  return plan === 'deluxe' || plan === 'pro';
 }
 
 interface EligibleUser {

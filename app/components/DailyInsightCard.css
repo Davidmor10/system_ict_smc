@@ -44,6 +44,21 @@
   background: rgba(230, 198, 101, 0.06);
   border-radius: 999px;
 }
+/* Same shape as the fast badge, in the muted red of the palette rather than
+   gold: this one is not a note about how the insight was produced, it is a
+   note about how well it came out. Deliberately quiet — it marks a weak
+   morning, it does not condemn it. */
+.di-weak-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono, monospace);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #c07878;
+  padding: 4px 8px;
+  border: 1px solid rgba(192, 120, 120, 0.30);
+  background: rgba(192, 120, 120, 0.07);
+  border-radius: 999px;
+  cursor: help;
+}
 .di-new-dot {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   background: #d4af37; box-shadow: 0 0 8px rgba(212, 175, 55, 0.7);

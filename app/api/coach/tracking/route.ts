@@ -49,7 +49,7 @@ export interface TrackingPast {
 }
 
 export async function GET() {
-  const denied = await requirePlanApi('starter', '/api/coach/tracking');
+  const denied = await requirePlanApi('pro', '/api/coach/tracking');
   if (denied) return denied;
 
   const { userId } = await auth();

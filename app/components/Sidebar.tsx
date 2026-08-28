@@ -36,7 +36,7 @@ const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolea
   { href: '/dashboard',              key: 'nav_workspace',    min: 'starter',   Icon: IconGrid     },
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter',   Icon: IconBook     },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter',   Icon: IconNotebook },
-  { href: '/dashboard/stats',        key: 'nav_stats',        min: 'deluxe', Icon: IconChart, child: true },
+  { href: '/dashboard/stats',        key: 'nav_stats',        min: 'starter',   Icon: IconChart, child: true },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconSparkles },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter',   Icon: IconPlaybook },

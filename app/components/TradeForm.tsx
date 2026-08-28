@@ -707,14 +707,19 @@ export default function TradeForm({
     form.emotionalState === '' ? 'מצב רגשי'      : null,
   ].filter((x): x is string => x !== null);
 
-  /** A new trade is complete or it is not saved.
+  /** A trade is complete or it is not saved. New or edited, same rule.
    *
-   *  An edit stays savable whatever is missing. Two reasons, and both matter:
-   *  trades logged before any of this was required must remain editable — they
-   *  are marked in the journal rather than held hostage — and a trade saved
-   *  while OPEN under the old flow has to be reachable in order to be closed.
-   *  Blocking the edit would strand exactly the rows that need finishing. */
-  const canSubmit = initial != null || missingRequired.length === 0;
+   *  The edit path used to be exempt, so that trades logged before any of this
+   *  was required stayed reachable. It also meant a complete trade could be
+   *  opened and saved back missing an answer, and every legacy row could stay
+   *  legacy forever — and an unanswered rule verdict does not make a trade look
+   *  clean, it drops the trade out of the measurement entirely.
+   *
+   *  Nothing is stranded by this: every missing field is on this form, so
+   *  opening an old trade is now how it gets finished. The exit price included
+   *  — a trade left OPEN under the old flow is closed by typing where it
+   *  closed. */
+  const canSubmit = missingRequired.length === 0;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1204,13 +1209,15 @@ export default function TradeForm({
         </div>
         {/* What is still missing, named. A disabled button with no reason is a
             dead end — the trader cannot tell whether the form is broken or
-            whether they are. Hidden while editing, where the rule does not
-            apply. */}
-        {!initial && missingRequired.length > 0 && (
+            whether they are. Shown while editing too, because that is where an
+            older trade gets finished. */}
+        {missingRequired.length > 0 && (
           <p className="font-mono text-[11px] text-[#d4af37]/75 pt-1 leading-relaxed">
             עוד חסר: {missingRequired.join(' · ')}
             <span className="block text-white/30 mt-0.5">
-              עסקה מתועדת אחרי שהיא נסגרה. לכל שאלה יש תשובה שמשמעותה &quot;לא קרה כלום&quot;.
+              {initial
+                ? 'העסקה הזאת נשמרה לפני שהשדות האלה היו חובה. בלעדיהם היא לא נספרת בניתוח.'
+                : 'עסקה מתועדת אחרי שהיא נסגרה. לכל שאלה יש תשובה שמשמעותה "לא קרה כלום".'}
             </span>
           </p>
         )}

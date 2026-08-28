@@ -82,12 +82,12 @@ export default function MobileNav() {
   const active = getActive(pathname);
 
   const tabs: { id: string; href: string; Icon: () => React.JSX.Element; label: string; min: Role }[] = [
-    { id: 'dashboard',     href: '/dashboard',              Icon: IconGrid,   label: t('nav_workspace'),    min: 'free'   },
-    { id: 'journal',       href: '/dashboard/journal',      Icon: IconBook,   label: t('nav_journal'),      min: 'free'   },
+    { id: 'dashboard',     href: '/dashboard',              Icon: IconGrid,   label: t('nav_workspace'),    min: 'starter' },
+    { id: 'journal',       href: '/dashboard/journal',      Icon: IconBook,   label: t('nav_journal'),      min: 'starter' },
     { id: 'ai-analytics',  href: '/dashboard/ai-analytics', Icon: IconChart,  label: t('nav_ai_analytics'), min: 'pro'    },
     { id: 'coach',         href: '/dashboard/coach',        Icon: IconChat,   label: t('nav_coach'),        min: 'deluxe' },
-    { id: 'playbook',      href: '/dashboard/playbook',     Icon: IconPlay,   label: t('nav_playbook'),     min: 'free'   },
-    { id: 'rules',         href: '/dashboard/rules',        Icon: IconShield, label: t('nav_rules'),        min: 'free'   },
+    { id: 'playbook',      href: '/dashboard/playbook',     Icon: IconPlay,   label: t('nav_playbook'),     min: 'starter' },
+    { id: 'rules',         href: '/dashboard/rules',        Icon: IconShield, label: t('nav_rules'),        min: 'starter' },
   ];
 
   return (

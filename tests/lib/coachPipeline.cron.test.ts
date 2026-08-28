@@ -147,7 +147,7 @@ describe('scheduleSlotFor', () => {
 
 const { isEligibleToday } = scheduleInternals;
 
-describe('isEligibleToday — plan tier cadence', () => {
+describe('isEligibleToday — analysis starts at pro', () => {
   it('free is never eligible', () => {
     for (let d = 0; d <= 6; d += 1) {
       expect(isEligibleToday('free', d)).toBe(false);
@@ -161,13 +161,13 @@ describe('isEligibleToday — plan tier cadence', () => {
     }
   });
 
-  it('starter is eligible only Sun/Tue/Thu (0/2/4)', () => {
-    expect(isEligibleToday('starter', 0)).toBe(true);   // Sun
-    expect(isEligibleToday('starter', 1)).toBe(false);  // Mon
-    expect(isEligibleToday('starter', 2)).toBe(true);   // Tue
-    expect(isEligibleToday('starter', 3)).toBe(false);  // Wed
-    expect(isEligibleToday('starter', 4)).toBe(true);   // Thu
-    expect(isEligibleToday('starter', 5)).toBe(false);  // Fri
-    expect(isEligibleToday('starter', 6)).toBe(false);  // Sat
+  // Starter buys the journal, not the AI. It used to run on Sun/Tue/Thu, which
+  // made the cheapest tier a thinner version of the same product rather than a
+  // different one — and it meant the system analysed trades belonging to
+  // someone who had not paid for the analysis, then hid the result.
+  it('starter is never eligible, on any day', () => {
+    for (let d = 0; d <= 6; d += 1) {
+      expect(isEligibleToday('starter', d)).toBe(false);
+    }
   });
 });

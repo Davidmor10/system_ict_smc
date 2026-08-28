@@ -211,6 +211,17 @@ export interface DailyInsightRow {
   read_at:               string | null;
   user_reaction:         UserReaction | null;
   reaction_at:           string | null;
+
+  /** What the output checker found in this note, stored whether or not the
+   *  rewrite fixed it.
+   *
+   *  A note is published even when a `hard` rule survives the single retry —
+   *  a thin note carries more for the trader than silence does. But it is
+   *  published MARKED: the card says the wording fell below standard, so a
+   *  weak morning is visible as a weak morning instead of reading exactly like
+   *  a good one. Optional because rows written before the column existed have
+   *  no value for it. */
+  output_violations?:    Array<{ rule: string; severity: 'hard' | 'soft'; detail: string }> | null;
 }
 
 // ── 9. feature_flags ────────────────────────────────────────────────────────
