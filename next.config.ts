@@ -2,7 +2,44 @@ import type { NextConfig } from "next";
 
 // Third-party origins the app actually talks to — keep this list in sync
 // with whichever providers get added later. Everything else is denied.
-const CLERK_ORIGINS = 'https://*.clerk.accounts.dev https://*.clerk.com';
+//
+// THE PUBLISHABLE KEY CARRIES THE HOST, SO READ IT RATHER THAN GUESS
+//
+// A development Clerk instance serves its frontend API from
+// `<something>.clerk.accounts.dev`, which the wildcard below covers. A
+// PRODUCTION instance serves it from the app's own domain — `clerk.example.com`
+// — which matches neither `*.clerk.accounts.dev` nor `*.clerk.com`. So the day
+// this deployment swaps its test keys for live ones, this CSP would have
+// blocked Clerk outright and every page would have failed to load its session.
+//
+// Clerk encodes that host inside the publishable key: `pk_test_` / `pk_live_`
+// followed by base64 of the host with a trailing `$`. Decoding it here means
+// the policy follows the key instead of being edited by hand on the one day
+// nobody would think to.
+function clerkFrontendApi(): string {
+  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
+  const encoded = key.replace(/^pk_(test|live)_/, '');
+  if (!encoded || encoded === key) return '';
+  try {
+    const host = Buffer.from(encoded, 'base64').toString('utf8').replace(/\$$/, '');
+    return /^[a-z0-9.-]+$/i.test(host) ? `https://${host}` : '';
+  } catch {
+    return '';
+  }
+}
+
+const CLERK_ORIGINS = [
+  'https://*.clerk.accounts.dev',
+  'https://*.clerk.com',
+  clerkFrontendApi(),
+].filter(Boolean).join(' ');
+
+// Clerk's bot protection on sign-up is Cloudflare Turnstile, which loads its
+// script and renders its widget in a frame from this origin. It was missing,
+// so every sign-up attempt showed "The CAPTCHA failed to load. This may be due
+// to an unsupported browser or a browser extension" — blaming the visitor's
+// browser for a header this app sends. Nobody could create an account.
+const TURNSTILE = 'https://challenges.cloudflare.com';
 const STRIPE_SCRIPT = 'https://js.stripe.com';
 const STRIPE_FRAME = 'https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com';
 const STRIPE_CONNECT = 'https://api.stripe.com';
@@ -19,15 +56,15 @@ const csp = [
   // Next.js/Clerk/Stripe.js all rely on inline bootstrap/hydration scripts;
   // a nonce-based CSP would be stricter but needs per-request middleware
   // wiring — worth doing later, not blocking this pass.
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${CLERK_ORIGINS} ${STRIPE_SCRIPT}`,
+  `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${CLERK_ORIGINS} ${TURNSTILE} ${STRIPE_SCRIPT}`,
   // React's inline style={{...}} props render as literal style="" attributes,
   // which CSP governs as inline styles — 'unsafe-inline' is required here or
   // most of the app's layout (built entirely on inline styles) breaks.
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: blob: https:`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${CLERK_ORIGINS} ${STRIPE_CONNECT} ${SUPABASE_CONNECT}`,
-  `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS} ${YOUTUBE_FRAME}`,
+  `connect-src 'self' ${CLERK_ORIGINS} ${TURNSTILE} ${STRIPE_CONNECT} ${SUPABASE_CONNECT}`,
+  `frame-src ${STRIPE_FRAME} ${CLERK_ORIGINS} ${TURNSTILE} ${YOUTUBE_FRAME}`,
   `frame-ancestors 'self'`,
   `object-src 'none'`,
   `base-uri 'self'`,
