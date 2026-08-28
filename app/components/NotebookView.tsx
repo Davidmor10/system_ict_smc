@@ -12,6 +12,7 @@ import {
   TEMPLATES_KIND, TEMPLATES_KEY, PREFS_KIND, PREFS_KEY,
   type NotebookFolder, type NotebookEntry, type FolderSwatch, type NotebookTemplate, type NotebookPrefs,
 } from '../lib/notebook/store';
+import { tradeStrip, dayStrip } from '../lib/notebook/strip';
 
 /* ══════════════════════════════════════════════════════════════════
    Emoji picker data + color palette
@@ -488,52 +489,25 @@ export default function NotebookView() {
   }, []);
 
   /* Stats strip data for the current entry — trade entries show that trade's
-     stats, daily entries aggregate all trades from that dateISO, others none. */
+     stats, daily entries aggregate all trades from that dateISO, others none.
+     The arithmetic lives in lib/notebook/strip so it can be tested; this only
+     decides which of the two the open entry calls for. */
   const stripStats = useMemo(() => {
     if (!currentEntry) return null;
-    // Trade entry
     if (currentEntry.tradeId != null) {
       const t = trades.find(x => x.id === currentEntry.tradeId);
-      if (!t) return null;
-      const pnl = tradePnL(t) ?? 0;
-      const isWin = t.result === 'WIN' || (t.result !== 'LOSS' && t.result !== 'BE' && pnl > 0);
-      const isLoss = t.result === 'LOSS' || (t.result !== 'WIN' && t.result !== 'BE' && pnl < 0);
-      return {
-        kind: 'trade' as const,
-        pnlNet: pnl,
-        pnlGross: pnl,
-        trades: 1,
-        wins: isWin ? 1 : 0,
-        losses: isLoss ? 1 : 0,
-        wr: isWin ? 100 : isLoss ? 0 : 50,
-        volume: t.contracts,
-        pf: isWin ? Infinity : isLoss ? 0 : null,
-        symbol: t.symbol,
-        direction: t.direction,
-      };
+      return t ? tradeStrip(t) : null;
     }
-    // Daily entry — aggregate the day
     if (currentEntry.folderId === 'daily' && currentEntry.dateISO) {
-      const day = trades.filter(x => x.dateISO === currentEntry.dateISO && x.result !== 'OPEN');
-      if (!day.length) return { kind: 'daily' as const, empty: true };
-      let pnlGross = 0, wins = 0, losses = 0, winsPnl = 0, lossesPnl = 0, volume = 0;
-      for (const t of day) {
-        const p = tradePnL(t) ?? 0;
-        pnlGross += p; volume += t.contracts;
-        if (t.result === 'WIN') { wins++; winsPnl += Math.abs(p); }
-        else if (t.result === 'LOSS') { losses++; lossesPnl += Math.abs(p); }
-      }
-      const decided = wins + losses;
-      return {
-        kind: 'daily' as const,
-        pnlNet: pnlGross, pnlGross, trades: day.length, wins, losses,
-        wr: decided ? Math.round((wins / decided) * 100) : 0,
-        volume,
-        pf: lossesPnl > 0 ? winsPnl / lossesPnl : (winsPnl > 0 ? Infinity : null),
-      };
+      return dayStrip(trades, currentEntry.dateISO);
     }
     return null;
   }, [currentEntry, trades]);
+
+  // Split once, so the JSX below reads a narrowed value instead of repeating
+  // the `'empty' in …` test at every field.
+  const strip     = stripStats && !('empty' in stripStats) ? stripStats : null;
+  const emptyDay  = stripStats != null && 'empty' in stripStats;
 
   /* Templates: apply into editor body (replace content, autosave) */
   const applyTemplate = useCallback((tpl: NotebookTemplate) => {
@@ -795,23 +769,23 @@ export default function NotebookView() {
                 </div>
 
                 {/* Stats strip — visible for trade + daily entries */}
-                {stripStats && !('empty' in stripStats && stripStats.empty) && (
+                {strip && (
                   <div className="nb-ed-strip">
                     <div className="nb-ed-net-block">
                       <span className="nb-ed-net-k">רווח סופי · Net P&amp;L</span>
-                      <span className={`nb-ed-net-v ${stripStats.pnlNet! > 0 ? '' : stripStats.pnlNet! < 0 ? 'loss' : 'flat'}`}>{stripStats.pnlNet === 0 ? '—' : fmtMoney(stripStats.pnlNet!)}</span>
+                      <span className={`nb-ed-net-v ${strip.pnlNet! > 0 ? '' : strip.pnlNet! < 0 ? 'loss' : 'flat'}`}>{strip.pnlNet === 0 ? '—' : fmtMoney(strip.pnlNet!)}</span>
                       <span className="nb-ed-strip-meta">
-                        {stripStats.kind === 'trade' ? `${stripStats.symbol} · ${stripStats.direction === 'LONG' ? 'לונג' : 'שורט'} · ${stripStats.volume} חוזים` : `${stripStats.trades} עסקאות · ${stripStats.volume} חוזים`}
+                        {strip.kind === 'trade' ? `${strip.symbol} · ${strip.direction === 'LONG' ? 'לונג' : 'שורט'} · ${strip.volume} חוזים` : `${strip.trades} עסקאות · ${strip.volume} חוזים`}
                       </span>
                       {/* Mini chart — arrow up for win, down for loss */}
                       <svg className="nb-ed-mini-chart" viewBox="0 0 200 26" preserveAspectRatio="none">
                         <defs>
                           <linearGradient id="nb-strip-grad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0" stopColor={stripStats.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity=".35" />
-                            <stop offset="1" stopColor={stripStats.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity="0" />
+                            <stop offset="0" stopColor={strip.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity=".35" />
+                            <stop offset="1" stopColor={strip.pnlNet! >= 0 ? '#5fd39e' : '#f0899e'} stopOpacity="0" />
                           </linearGradient>
                         </defs>
-                        {stripStats.pnlNet! >= 0 ? (
+                        {strip.pnlNet! >= 0 ? (
                           <>
                             <path d="M0,22 L40,20 L80,16 L120,12 L160,7 L200,3 L200,26 L0,26 Z" fill="url(#nb-strip-grad)" />
                             <path d="M0,22 L40,20 L80,16 L120,12 L160,7 L200,3" fill="none" stroke="#5fd39e" strokeWidth="1.8" strokeLinecap="round" />
@@ -827,16 +801,16 @@ export default function NotebookView() {
                       </svg>
                     </div>
                     <div className="nb-ed-stats-grid">
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">סה&quot;כ עסקאות</span><span className="nb-ed-stat-v">{stripStats.trades}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מנצחות</span><span className="nb-ed-stat-v bull">{stripStats.wins}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מפסידות</span><span className="nb-ed-stat-v bear">{stripStats.losses}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Win rate</span><span className="nb-ed-stat-v gold">{stripStats.wr}%</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">P&amp;L ברוטו</span><span className={`nb-ed-stat-v ${(stripStats.pnlGross ?? 0) > 0 ? 'bull' : (stripStats.pnlGross ?? 0) < 0 ? 'bear' : ''}`}>{stripStats.pnlGross === 0 ? '—' : fmtMoney(stripStats.pnlGross ?? 0)}</span></div>
-                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Profit factor</span><span className="nb-ed-stat-v gold">{stripStats.pf == null ? '—' : stripStats.pf === Infinity ? '∞' : stripStats.pf.toFixed(2)}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">סה&quot;כ עסקאות</span><span className="nb-ed-stat-v">{strip.trades}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מנצחות</span><span className="nb-ed-stat-v bull">{strip.wins}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">מפסידות</span><span className="nb-ed-stat-v bear">{strip.losses}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Win rate</span><span className="nb-ed-stat-v gold">{strip.wr == null ? '—' : `${strip.wr}%`}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">P&amp;L ברוטו</span><span className={`nb-ed-stat-v ${(strip.pnlGross ?? 0) > 0 ? 'bull' : (strip.pnlGross ?? 0) < 0 ? 'bear' : ''}`}>{strip.pnlGross === 0 ? '—' : fmtMoney(strip.pnlGross ?? 0)}</span></div>
+                      <div className="nb-ed-stat"><span className="nb-ed-stat-k">Profit factor</span><span className="nb-ed-stat-v gold">{strip.pf == null ? '—' : strip.pf === Infinity ? '∞' : strip.pf.toFixed(2)}</span></div>
                     </div>
                   </div>
                 )}
-                {stripStats && 'empty' in stripStats && stripStats.empty && (
+                {emptyDay && (
                   <div className="nb-ed-strip" style={{ display: 'flex', justifyContent: 'center', padding: '14px 22px' }}>
                     <span className="nb-ed-strip-meta">אין עסקאות ליום זה — הרשומה עדיין תישמר ותהיה נגישה ל־AI Coach</span>
                   </div>
