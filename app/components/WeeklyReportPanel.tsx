@@ -16,7 +16,7 @@ import { useEffect, useState, useMemo } from 'react';
 import InsightText from './InsightText';
 import TypingDots from './TypingDots';
 import { readInsightCache, writeInsightCache } from '../lib/ai/insightCache';
-import { MIN_TRADES_FOR_WEEKLY } from '../lib/intelligence/weeklyRules';
+import { weeklyEmptyState } from '../lib/intelligence/weeklyEmpty';
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; }
@@ -67,9 +67,11 @@ function ConfChip({ level, size = 'md' }: { level: string; size?: 'sm' | 'md' })
  *  follow — and they waited for a report that was never going to appear. */
 
 export default function WeeklyReportPanel({
-  hasEnoughData, isoWeekKey, todayISO, fingerprint,
+  hasEnoughData, isoWeekKey, todayISO, fingerprint, closedThisWeek,
 }: {
   hasEnoughData: boolean;
+  /** Closed trades in the current week. Drives which empty state is shown. */
+  closedThisWeek: number;
   isoWeekKey: (dateISO: string) => string;
   todayISO: () => string;
   /** Identifies the trades this week's narrative was written about. A report
@@ -131,7 +133,7 @@ export default function WeeklyReportPanel({
 
   return (
     <div dir="rtl" className="flex flex-col gap-6">
-      <CurrentReport loading={loading} report={report} thisWeek={thisWeek} />
+      <CurrentReport loading={loading} report={report} thisWeek={thisWeek} closedThisWeek={closedThisWeek} />
       {past.length > 0 && (
         <HistorySection
           entries={past}
@@ -151,11 +153,14 @@ export default function WeeklyReportPanel({
 /* ── Current-week card ────────────────────────────────────────────────── */
 
 function CurrentReport({
-  loading, report, thisWeek,
+  loading, report, thisWeek, closedThisWeek,
 }: {
   loading: boolean;
   report: WeeklyReport | null;
   thisWeek: string;
+  /** Closed trades in the current week — what decides which of the three
+   *  empty states the trader sees when there is no report. */
+  closedThisWeek: number;
 }) {
   if (loading) {
     return (
@@ -165,13 +170,36 @@ function CurrentReport({
     );
   }
   if (!report) {
+    // Three states, three different things to say. A week with nothing in it
+    // is not a failure to feed the machine — see lib/intelligence/weeklyEmpty.
+    const empty = weeklyEmptyState(closedThisWeek, new Date().getDay());
+    const good  = empty.kind === 'none';
     return (
-      <div className="rounded-[16px] border border-[#1c1c1e] bg-[#0a0a0b] p-8 text-center">
-        <div className="font-mono text-[11px] font-bold tracking-[0.14em] uppercase text-[#d4af37]/60 mb-2">אין עדיין דוח</div>
-        <div className="text-[15px] text-white/55">
-          הדוח נכתב על <b className="text-white/80">השבוע הנוכחי בלבד</b> — מיום שני ועד היום — ונדרשות בו לפחות {MIN_TRADES_FOR_WEEKLY} עסקאות שנסגרו.
-          עסקאות משבועות קודמים לא נספרות כאן, גם אם יש לך הרבה כאלה ביומן.
+      <div
+        className="rounded-[16px] border p-8 sm:p-10 text-center flex flex-col items-center gap-4"
+        style={{
+          background: 'linear-gradient(180deg, #0b0b0d 0%, #050506 100%)',
+          borderColor: good ? 'rgba(74,124,89,0.28)' : '#1c1c1e',
+        }}
+      >
+        <div
+          className="font-mono text-[11px] font-bold tracking-[0.22em] uppercase"
+          style={{ color: good ? '#7fae8c' : 'rgba(212,175,55,0.6)' }}
+        >
+          {empty.kind === 'thin' ? 'עוד לא מספיק לדוח' : 'שבוע ללא עסקאות'}
         </div>
+        <h3
+          style={{ fontFamily: 'var(--serif)' }}
+          className="m-0 text-[26px] max-[880px]:text-[21px] font-bold text-white leading-tight"
+        >
+          {empty.title}
+        </h3>
+        <p className="m-0 text-[15px] leading-relaxed text-white/60" style={{ maxWidth: '54ch' }}>
+          {empty.body}
+        </p>
+        <p className="m-0 font-mono text-[11px] leading-relaxed text-white/30" style={{ maxWidth: '54ch' }}>
+          {empty.note}
+        </p>
       </div>
     );
   }

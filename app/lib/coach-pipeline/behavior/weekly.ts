@@ -85,8 +85,23 @@ export interface WeeklyBehaviorReview {
   }>;
   /** Every tracked behaviour, and which way it is going against itself. */
   movement: Movement[];
-  /** Questions asked and not yet answered. */
-  openQuestions: Array<{ kind: BehaviorKind; label: string; question: string }>;
+  /** How many questions are open and unanswered.
+   *
+   *  THE COUNT, NOT THE QUESTIONS.
+   *
+   *  This used to carry the question text, and the panel printed every one of
+   *  them. The daily insight asks the SAME sentences — that is where the
+   *  trader answers them, in the box under the note — so the weekly review
+   *  repeated, word for word, three questions already sitting on another
+   *  screen. Read a fortnight in a row, near-identical lines like "…happened 7
+   *  times and it is still unclear when. What made you decide that way?" stop
+   *  being a question and become wallpaper.
+   *
+   *  It is also not this panel's job. This one answers "what moved" about
+   *  emotion and discipline; asking belongs to the daily note. The count stays
+   *  only because `quiet` needs to know an experiment is waiting on an answer
+   *  before it calls a week empty. Nothing renders it. */
+  openQuestionCount: number;
   /** Tracked, but the evidence cannot yet support saying anything. */
   stillUnclear: Array<{ kind: BehaviorKind; label: string; occurrences: number; opportunities: number }>;
   /** The one thing for next week, or null. */
@@ -178,9 +193,8 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyBehaviorRevie
       delta: round2(f.baselines.rollingRate - f.baselines.historicalRate),
     }));
 
-  const openQuestions = [...input.stored.entries()]
-    .filter(([, s]) => s.question && !s.traderAnswer)
-    .map(([kind, s]) => ({ kind, label: labelOf(kind), question: s.question! }));
+  const openQuestionCount = [...input.stored.values()]
+    .filter(s => s.question && !s.traderAnswer).length;
 
   const stillUnclear = input.findings
     .filter(f => f.status === 'detected' || f.status === 'investigating')
@@ -202,11 +216,11 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyBehaviorRevie
     improved.length === 0 &&
     relapsed.length === 0 &&
     underTest.length === 0 &&
-    openQuestions.length === 0 &&
+    openQuestionCount === 0 &&
     movement.every(m => m.direction === 'steady');
 
   return {
     from: input.from, to: input.to,
-    improved, relapsed, underTest, movement, openQuestions, stillUnclear, focus, quiet,
+    improved, relapsed, underTest, movement, openQuestionCount, stillUnclear, focus, quiet,
   };
 }

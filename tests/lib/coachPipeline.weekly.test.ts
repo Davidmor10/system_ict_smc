@@ -171,13 +171,26 @@ describe('movement — you against you', () => {
 });
 
 describe('questions and focus', () => {
-  it('lists only unanswered questions', () => {
+  // The review used to carry the question TEXT and the panel printed every
+  // one. The daily insight asks the same sentences — that is where they get
+  // answered — so this screen repeated three near-identical lines already
+  // sitting on another one. The count survives only because a week with an
+  // unanswered question is not a quiet week.
+  it('counts the unanswered questions and carries none of their text', () => {
     const s = new Map<BehaviorKind, StoredFinding>([
       ['rule_violation',    stored('rule_violation',    { question: 'מה קרה?' })],
       ['discretionary_exit', stored('discretionary_exit', { question: 'ומה שם?', traderAnswer: 'עניתי' })],
     ]);
     const r = buildWeeklyReview(input({ findings: [finding('rule_violation')], stored: s }));
-    expect(r.openQuestions.map(q => q.kind)).toEqual(['rule_violation']);
+    expect(r.openQuestionCount).toBe(1);
+    expect(JSON.stringify(r)).not.toContain('מה קרה?');
+  });
+
+  it('does not call a week quiet while a question is waiting', () => {
+    const s = new Map<BehaviorKind, StoredFinding>([
+      ['rule_violation', stored('rule_violation', { question: 'מה קרה?' })],
+    ]);
+    expect(buildWeeklyReview(input({ findings: [], stored: s })).quiet).toBe(false);
   });
 
   it('names next week\'s focus from the primary', () => {

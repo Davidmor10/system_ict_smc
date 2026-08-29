@@ -25,16 +25,28 @@ describe('the weekly threshold', () => {
   });
 
   it('is the number the empty state shows, rather than a retyped one', () => {
-    const src = readFileSync('app/components/WeeklyReportPanel.tsx', 'utf8');
-    expect(src).toContain('{MIN_TRADES_FOR_WEEKLY}');
+    // The empty state moved out of the panel into its own module when it grew
+    // from one message into three. The guarantee is unchanged: it reads the
+    // threshold, it does not retype it.
+    const src = readFileSync('app/lib/intelligence/weeklyEmpty.ts', 'utf8');
+    expect(src).toContain("import { MIN_TRADES_FOR_WEEKLY } from './weeklyRules'");
+    expect(src).toContain('${MIN_TRADES_FOR_WEEKLY}');
+    expect(src).not.toMatch(/const MIN_TRADES_FOR_WEEKLY\s*=\s*\d/);
     expect(src).not.toContain('לפחות 3 עסקאות');
   });
 
   it('tells the reader the window is this week only', () => {
     // The half traders miss: a full journal counts for nothing here, because
     // the report compares this week against the last one.
-    const src = readFileSync('app/components/WeeklyReportPanel.tsx', 'utf8');
+    const src = readFileSync('app/lib/intelligence/weeklyEmpty.ts', 'utf8');
     expect(src).toContain('השבוע הנוכחי בלבד');
+  });
+
+  // A week the trader deliberately sat out is not a failure to feed the
+  // machine, and the panel must not read like one.
+  it('does not tell a trader who took nothing that they are missing trades', () => {
+    const src = readFileSync('app/lib/intelligence/weeklyEmpty.ts', 'utf8');
+    expect(src).toContain('לא סחרת השבוע');
   });
 });
 

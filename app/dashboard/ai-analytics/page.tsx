@@ -228,10 +228,20 @@ const TONE: Record<BandTone, { rail: string; label: string }> = {
   none: { rail: '#3f3f46', label: 'rgba(255,255,255,0.42)' },
 };
 
-function QuestionBand({ n, question, body, answer, tone = 'none', muted }: {
+function QuestionBand({ n, question, body, answer, tone = 'none', muted, caveat }: {
   n: string; question: string; body: string; answer?: string; tone?: BandTone; muted?: boolean;
+  /** The one-line qualifier on a section that is NOT a finding — "for
+   *  orientation only", "a tool, not an analysis". */
+  caveat?: string;
 }) {
-  const accent = muted ? '#52525b' : '#d4af37';
+  // The marker stays gold on every band. It used to go grey on the muted ones,
+  // which read as a different system rather than as a quieter part of this
+  // one — and the heading under it shrank to a size that read as a caption.
+  //
+  // These sections are not questions, they are the titles of a group: the
+  // breakdowns, and the simulator. So they are titled like a section and the
+  // qualifier that keeps them honest sits under the title as its own chip,
+  // where it says "this is not a finding" without shrinking the title to say it.
   const t = TONE[tone];
   return (
     <section className="border-t border-[#1c1c1e]" style={{ padding: 'clamp(46px,4.5vw,74px) 0 clamp(6px,1vw,14px)' }}>
@@ -240,15 +250,28 @@ function QuestionBand({ n, question, body, answer, tone = 'none', muted }: {
             its "04 / 12". Inline beside the question it landed after the
             question mark in RTL and read as a stray character left behind
             rather than as a label. */}
-        <div className="font-mono text-xs font-bold tracking-[0.28em] mb-4" style={{ color: accent }} dir="ltr">
+        <div className="font-mono text-xs font-bold tracking-[0.28em] mb-4" style={{ color: '#d4af37' }} dir="ltr">
           {n}
         </div>
         <h2
-          className="font-serif font-bold leading-tight"
-          style={{ fontSize: muted ? 'clamp(20px,2vw,26px)' : 'clamp(28px,3vw,40px)', color: muted ? 'rgba(255,255,255,0.62)' : '#fff' }}
+          className="font-serif font-bold leading-tight m-0"
+          style={{ fontSize: muted ? 'clamp(26px,2.7vw,36px)' : 'clamp(28px,3vw,40px)', color: '#fff' }}
         >
           {question}
         </h2>
+        {caveat && (
+          <div className="mt-3.5">
+            <span
+              className="inline-flex items-center font-mono font-bold uppercase"
+              style={{
+                fontSize: 10.5, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)',
+                border: '1px solid #2a2a2d', borderRadius: 999, padding: '5px 12px',
+              }}
+            >
+              {caveat}
+            </span>
+          </div>
+        )}
 
         {/* The answer is built to look like a DIFFERENT KIND OF THING.
             
@@ -336,6 +359,15 @@ export default function AiAnalyticsPage() {
   // their caches expire when the trades change and not merely at midnight.
   const fingerprint = useMemo(() => tradesFingerprint(trades), [trades]);
   const hasEnoughData = trades.filter(t => t.result !== 'OPEN').length >= 3;
+
+  // Closed trades in the CURRENT week — not the history. The weekly report is
+  // written about this week alone, so this is the number that decides what its
+  // panel says when there is no report: a week that has not started, a week
+  // the trader deliberately sat out, or a week still short of the floor.
+  const closedThisWeek = useMemo(() => {
+    const week = isoWeekKey(todayISO());
+    return trades.filter(t => t.result !== 'OPEN' && isoWeekKey(t.dateISO) === week).length;
+  }, [trades]);
 
   // The depth layer, now that runFullAnalysis carries it. Read here rather
   // than recomputed so this page and the coach cannot disagree about what a
@@ -929,12 +961,12 @@ export default function AiAnalyticsPage() {
           index={6} total={12} eyebrow="AI · Weekly Review" title="סיכום השבוע"
           description="השבוע הנוכחי משתי זוויות: מה עשו המספרים, ומה עשית אתה. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
         >
-          <WeeklyTabs hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
+          <WeeklyTabs hasEnoughData={hasEnoughData} closedThisWeek={closedThisWeek} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
 
         <QuestionBand
-          n="D" question="להתמצאות בלבד"
+          n="D" question="הפילוח של היומן" caveat="להתמצאות בלבד"
           body="פילוחים, לא ממצאים. הם מראים איפה העסקאות שלך יושבות — לא מה עובד. אף אחד מהם לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה בלבד, לא סיבה לשנות משהו."
           muted
         />
@@ -1103,7 +1135,7 @@ export default function AiAnalyticsPage() {
 
 
         <QuestionBand
-          n="E" question="כלי"
+          n="E" question="סימולטור תרחישים" caveat="כלי, לא ניתוח"
           body="לא ניתוח אלא שאלה שאתה שואל: מה היו המספרים אילו סיננת תנאי מסוים."
           muted
         />

@@ -23,8 +23,11 @@ const TABS = [
 
 type TabKey = typeof TABS[number]['key'];
 
-export default function WeeklyTabs({ hasEnoughData, isoWeekKey, todayISO, fingerprint }: {
+export default function WeeklyTabs({ hasEnoughData, isoWeekKey, todayISO, fingerprint, closedThisWeek }: {
   hasEnoughData: boolean;
+  /** Closed trades in the current week — the results panel needs it to know
+   *  which empty state to show when there is no report. */
+  closedThisWeek: number;
   isoWeekKey: (dateISO: string) => string;
   todayISO: () => string;
   fingerprint: string;
@@ -56,7 +59,7 @@ export default function WeeklyTabs({ hasEnoughData, isoWeekKey, todayISO, finger
           week, and a panel that loads only when its tab is opened is one fewer
           request for a reader who never opens it. */}
       {tab === 'results'
-        ? <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
+        ? <WeeklyReportPanel hasEnoughData={hasEnoughData} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} closedThisWeek={closedThisWeek} />
         : <WeeklyBehaviorReview />}
     </div>
   );

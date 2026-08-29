@@ -14,6 +14,15 @@ import { useEffect, useState } from 'react';
 // this panel — a review that always finds something to report is a review
 // nobody reads by the third week, and the standing state ("you still do this,
 // it is still unclear") is exactly what feels like content while being none.
+//
+// IT DOES NOT ASK ANYTHING.
+//
+// It used to print every open question, verbatim — the same sentences the
+// daily insight asks, on the screen where the trader actually answers them.
+// Three near-identical lines ("…happened 7 times and it is still unclear when.
+// What made you decide that way?"), a fortnight running, on a panel about
+// something else. Asking belongs to the daily note. This one reports what
+// moved in how the trader traded, and stops there.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface Movement {
@@ -27,7 +36,7 @@ interface Review {
   relapsed:  Array<{ kind: string; label: string; times: number }>;
   underTest: Array<{ kind: string; label: string; instruction: string; done: number; of: number }>;
   movement:  Movement[];
-  openQuestions: Array<{ kind: string; label: string; question: string }>;
+  openQuestionCount: number;
   stillUnclear:  Array<{ kind: string; label: string; occurrences: number; opportunities: number }>;
   focus: { kind: string; label: string; status: string } | null;
   quiet: boolean;
@@ -105,13 +114,6 @@ export default function WeeklyBehaviorReview() {
               {m.label}: {pct(m.historicalRate)} לאורך ההיסטוריה → {pct(m.rollingRate)} ב-20 האחרונות
             </p>
           ))}
-        </div>
-      )}
-
-      {data.openQuestions.length > 0 && (
-        <div className="wbr-block">
-          <h4>עוד לא ענית</h4>
-          {data.openQuestions.map(q => <p key={q.kind}>{q.question}</p>)}
         </div>
       )}
 
