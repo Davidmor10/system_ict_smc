@@ -228,39 +228,54 @@ const TONE: Record<BandTone, { rail: string; label: string }> = {
   none: { rail: '#3f3f46', label: 'rgba(255,255,255,0.42)' },
 };
 
-function QuestionBand({ n, question, body, answer, tone = 'none', muted, caveat }: {
-  n: string; question: string; body: string; answer?: string; tone?: BandTone; muted?: boolean;
-  /** The one-line qualifier on a section that is NOT a finding — "for
+/** A PART of the page, not another feature in the stack.
+ *
+ *  These were rendered as a marker letter ("D") over a heading, and nobody
+ *  read them as divisions — the letter meant nothing on its own and the muted
+ *  ones shrank to the size of a caption, so two whole parts of the page had no
+ *  title a reader could see. The page is five parts and the reader should be
+ *  able to say which one they are in without scrolling back.
+ *
+ *  So: a numbered rule across the page, the part number stated in words, the
+ *  title at full size in every case, and — where the part is not a finding —
+ *  the qualifier as its own chip under the title instead of as a smaller,
+ *  greyer heading. */
+function PartBand({ part, total, title, body, answer, tone = 'none', caveat }: {
+  part: number; total: number; title: string; body: string;
+  answer?: string; tone?: BandTone;
+  /** The one-line qualifier on a part that is NOT a finding — "for
    *  orientation only", "a tool, not an analysis". */
   caveat?: string;
 }) {
-  // The marker stays gold on every band. It used to go grey on the muted ones,
-  // which read as a different system rather than as a quieter part of this
-  // one — and the heading under it shrank to a size that read as a caption.
-  //
-  // These sections are not questions, they are the titles of a group: the
-  // breakdowns, and the simulator. So they are titled like a section and the
-  // qualifier that keeps them honest sits under the title as its own chip,
-  // where it says "this is not a finding" without shrinking the title to say it.
   const t = TONE[tone];
   return (
-    <section className="border-t border-[#1c1c1e]" style={{ padding: 'clamp(46px,4.5vw,74px) 0 clamp(6px,1vw,14px)' }}>
+    <section style={{ padding: 'clamp(64px,6vw,104px) 0 clamp(6px,1vw,14px)' }}>
       <Reveal className="text-right">
-        {/* The marker goes on its own line, exactly where every section puts
-            its "04 / 12". Inline beside the question it landed after the
-            question mark in RTL and read as a stray character left behind
-            rather than as a label. */}
-        <div className="font-mono text-xs font-bold tracking-[0.28em] mb-4" style={{ color: '#d4af37' }} dir="ltr">
-          {n}
+        {/* The rule carries the number, so the division is visible before a
+            single word is read. */}
+        <div className="flex items-center gap-4 mb-7">
+          <span
+            className="font-mono font-bold shrink-0"
+            style={{
+              fontSize: 11, letterSpacing: '0.22em', color: '#d4af37',
+              border: '1px solid rgba(212,175,55,0.4)', borderRadius: 999, padding: '6px 14px',
+              background: 'rgba(212,175,55,0.06)',
+            }}
+          >
+            חלק {part} מתוך {total}
+          </span>
+          <span className="h-px flex-1" style={{ background: 'linear-gradient(to left, rgba(212,175,55,0.35), #1c1c1e)' }} />
         </div>
+
         <h2
           className="font-serif font-bold leading-tight m-0"
-          style={{ fontSize: muted ? 'clamp(26px,2.7vw,36px)' : 'clamp(28px,3vw,40px)', color: '#fff' }}
+          style={{ fontSize: 'clamp(30px,3.2vw,44px)', color: '#fff' }}
         >
-          {question}
+          {title}
         </h2>
+
         {caveat && (
-          <div className="mt-3.5">
+          <div className="mt-4">
             <span
               className="inline-flex items-center font-mono font-bold uppercase"
               style={{
@@ -738,8 +753,8 @@ export default function AiAnalyticsPage() {
         </section>
 
 
-        <QuestionBand
-          n="A" question="האם אני רווחי — ולמה?" answer={bandAnswers.a} tone={bandAnswers.aTone}
+        <PartBand
+          part={1} total={5} title="האם אני רווחי — ולמה?" answer={bandAnswers.a} tone={bandAnswers.aTone}
           body="המספר לבדו לא אומר מה לתקן. הפירוק כן: אותה תוחלת יכולה להיווצר משתי דרכים הפוכות: הרבה עסקאות רווחיות קטנות, או מעט עסקאות רווחיות גדולות. כל אחת מהן דורשת תיקון אחר לגמרי."
         />
 
@@ -789,8 +804,8 @@ export default function AiAnalyticsPage() {
         </NumberedSection>
 
 
-        <QuestionBand
-          n="B" question="האם אני עושה מה שאמרתי שאעשה?" answer={bandAnswers.b} tone={bandAnswers.bTone}
+        <PartBand
+          part={2} total={5} title="האם אני עושה מה שאמרתי שאעשה?" answer={bandAnswers.b} tone={bandAnswers.bTone}
           body="החלק שנמצא במאה אחוז בשליטתך ולא דורש שום דעה על השוק. מכאן מגיע רוב השיפור של סוחר — לא ממציאת יתרון חדש."
         />
 
@@ -901,8 +916,8 @@ export default function AiAnalyticsPage() {
         </NumberedSection>
 
 
-        <QuestionBand
-          n="C" question="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c} tone={bandAnswers.cTone}
+        <PartBand
+          part={3} total={5} title="האם יש משהו אמיתי בהיסטוריה שלי?" answer={bandAnswers.c} tone={bandAnswers.cTone}
           body="רק ממצאים שהחזיקו אחרי שלקחנו בחשבון כמה צירופים נבדקו. לרוב התשובה תהיה שאין — וזו תשובה טובה, כי היא מונעת ממך לבנות אמונה על מקריות."
         />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
@@ -965,10 +980,9 @@ export default function AiAnalyticsPage() {
         </NumberedSection>
 
 
-        <QuestionBand
-          n="D" question="הפילוח של היומן" caveat="להתמצאות בלבד"
-          body="פילוחים, לא ממצאים. הם מראים איפה העסקאות שלך יושבות — לא מה עובד. אף אחד מהם לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה בלבד, לא סיבה לשנות משהו."
-          muted
+        <PartBand
+          part={4} total={5} title="איפה העסקאות שלי יושבות" caveat="לא ממצאים"
+          body="חתכים של היומן לפי מכשיר, סשן, שעה וכיוון. הם מראים איפה אתה סוחר — לא מה עובד. אף חתך כאן לא נבדק מול מקריות, ולכן פער יפה באחד מהם הוא כיוון למחשבה, לא סיבה לשנות משהו." 
         />
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
@@ -1134,10 +1148,9 @@ export default function AiAnalyticsPage() {
         </NumberedSection>
 
 
-        <QuestionBand
-          n="E" question="סימולטור תרחישים" caveat="כלי, לא ניתוח"
-          body="לא ניתוח אלא שאלה שאתה שואל: מה היו המספרים אילו סיננת תנאי מסוים."
-          muted
+        <PartBand
+          part={5} total={5} title="סימולטור תרחישים" caveat="כלי, לא ניתוח"
+          body="לא ניתוח אלא שאלה שאתה שואל: מה היו המספרים אילו סיננת תנאי מסוים." 
         />
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection

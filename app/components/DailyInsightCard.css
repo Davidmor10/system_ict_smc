@@ -248,6 +248,28 @@
 .wbr-eyebrow { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(212, 175, 55, 0.75); }
 .wbr-quiet { margin: 0; font-size: 13.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.5); }
 
+/* The verdict block — whether there IS a conclusion this week. It leads the
+   panel, because the alternative is a reader inferring the answer from what is
+   missing, and what was missing looked exactly like something withheld. */
+.wbr-verdict {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 16px 18px; border-radius: 12px;
+  background: #0d0d0f; border: 1px solid #1c1c1e;
+  border-inline-start: 2px solid rgba(255, 255, 255, 0.18);
+}
+.wbr-verdict h3 {
+  margin: 0; font-family: var(--serif, Georgia, serif);
+  font-size: 19px; font-weight: 700; color: #fff; line-height: 1.3;
+}
+.wbr-verdict p {
+  margin: 0; font-size: 13.5px; line-height: 1.65;
+  color: rgba(255, 255, 255, 0.55); text-wrap: pretty;
+}
+.wbr-verdict[data-kind='findings']   { border-inline-start-color: #d4af37; }
+.wbr-verdict[data-kind='collecting'] { border-inline-start-color: #7fae8c; }
+.wbr-verdict[data-kind='quiet']      { border-inline-start-color: #2a2a2d; }
+.wbr-verdict[data-kind='none']       { border-inline-start-color: #2a2a2d; }
+
 .wbr-block { display: flex; flex-direction: column; gap: 6px; }
 .wbr-block h4 {
   margin: 0; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;

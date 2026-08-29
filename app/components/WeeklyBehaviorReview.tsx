@@ -2,6 +2,7 @@
 
 import './DailyInsightCard.css';
 import { useEffect, useState } from 'react';
+import { summarizeWeeklyReview } from '../lib/weeklyReviewSummary';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WeeklyBehaviorReview — did anything about how you trade actually move.
@@ -56,9 +57,17 @@ export default function WeeklyBehaviorReview() {
     return () => { cancelled = true; };
   }, []);
 
-  if (!data) return null;
-
-  const moving = data.movement.filter(m => m.direction !== 'steady');
+  // Never nothing. A panel that renders blank on a week with no findings lets
+  // the reader assume there is a conclusion being withheld — and on a normal
+  // week what it DID render was a progress bar, which reads exactly like one.
+  const moving = data ? data.movement.filter(m => m.direction !== 'steady') : [];
+  const summary = summarizeWeeklyReview(data ? {
+    improved:  data.improved.length,
+    relapsed:  data.relapsed.length,
+    underTest: data.underTest.length,
+    moving:    moving.length,
+    unclear:   data.stillUnclear.length,
+  } : null);
 
   return (
     <section className="wbr" aria-label="הסקירה השבועית של ההתנהגות">
@@ -66,13 +75,14 @@ export default function WeeklyBehaviorReview() {
         <span className="wbr-eyebrow">מה זז השבוע</span>
       </header>
 
-      {data.quiet && (
-        <p className="wbr-quiet">
-          שבוע שקט. שום דפוס לא השתפר, לא חזר ולא נבדק — וזו תשובה, לא היעדר תשובה.
-        </p>
-      )}
+      {/* The verdict, before anything else on the panel: is there a conclusion
+          this week, or is this a measurement still running. */}
+      <div className="wbr-verdict" data-kind={summary.kind}>
+        <h3>{summary.title}</h3>
+        <p>{summary.detail}</p>
+      </div>
 
-      {data.improved.length > 0 && (
+      {data && data.improved.length > 0 && (
         <div className="wbr-block" data-tone="good">
           <h4>השתפר</h4>
           {data.improved.map(i => <p key={i.kind}>{i.label}</p>)}
@@ -82,7 +92,7 @@ export default function WeeklyBehaviorReview() {
       {/* Kept ahead of everything except an improvement. "This is the second
           time" is the most useful sentence the system has, and a review that
           only looked forward would lose it. */}
-      {data.relapsed.length > 0 && (
+      {data && data.relapsed.length > 0 && (
         <div className="wbr-block" data-tone="bad">
           <h4>חזר</h4>
           {data.relapsed.map(r => (
@@ -91,7 +101,7 @@ export default function WeeklyBehaviorReview() {
         </div>
       )}
 
-      {data.underTest.length > 0 && (
+      {data && data.underTest.length > 0 && (
         <div className="wbr-block">
           <h4>בבדיקה</h4>
           {data.underTest.map(t => (
@@ -117,7 +127,7 @@ export default function WeeklyBehaviorReview() {
         </div>
       )}
 
-      {data.stillUnclear.length > 0 && (
+      {data && data.stillUnclear.length > 0 && (
         <div className="wbr-block" data-tone="muted">
           <h4>עדיין לא ברור</h4>
           {data.stillUnclear.map(u => (
@@ -126,7 +136,7 @@ export default function WeeklyBehaviorReview() {
         </div>
       )}
 
-      {data.focus && (
+      {data?.focus && (
         <div className="wbr-focus">
           <span className="wbr-eyebrow">לשבוע הבא</span>
           <p>{data.focus.label}</p>

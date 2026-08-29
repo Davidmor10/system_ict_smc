@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   BIAS_META, countdownTo, humanizeMinutes, isNewYorkOpen, nextMacro,
-  planStorageKey, readDeclaredBias, ruleOfTheDay, writeBiasNote, writeDeclaredBias,
+  clearDeclaredBias, planStorageKey, readDeclaredBias, ruleOfTheDay, writeBiasNote, writeDeclaredBias,
   type MacroLike,
 } from '../../app/lib/entryGate';
 import type { Rule } from '../../app/lib/rules/types';
@@ -47,20 +47,72 @@ describe('the plan record this screen shares with the dashboard', () => {
 
   it('round-trips a declaration', () => {
     writeDeclaredBias('bull', '', AT);
-    expect(readDeclaredBias(AT)).toEqual({ bias: 'bull', at: AT.getTime(), note: '' });
+    expect(readDeclaredBias(AT)).toEqual({
+      bias: 'bull', at: AT.getTime(), note: '', history: [{ bias: 'bull', at: AT.getTime() }],
+    });
   });
 
   it('carries the reason, and keeps the stamp when only the reason changes', () => {
     // The timestamp answers "how early did they make the call". Typing a
     // sentence an hour later is not making the call again.
     writeDeclaredBias('bear', 'סוויפ של הגבוה של אסיה', AT);
-    expect(readDeclaredBias(AT)).toEqual({ bias: 'bear', at: AT.getTime(), note: 'סוויפ של הגבוה של אסיה' });
+    expect(readDeclaredBias(AT)).toMatchObject({ bias: 'bear', at: AT.getTime(), note: 'סוויפ של הגבוה של אסיה' });
 
     writeBiasNote('שיניתי דעה אחרי הפתיחה', AT);
     const after = readDeclaredBias(AT);
     expect(after?.note).toBe('שיניתי דעה אחרי הפתיחה');
     expect(after?.bias).toBe('bear');
     expect(after?.at).toBe(AT.getTime());
+  });
+
+  // A trader who opens bullish and turns bearish at noon has not corrected a
+  // mistake, they have changed their read — and a trade taken at ten was
+  // graded against the direction that stood at ten, not the one that came
+  // later. Keeping only the latest threw the first half of the day away.
+  it('keeps every change of mind, with the hour of each', () => {
+    const morning = new Date(2026, 7, 21, 9, 5, 0);
+    const noon    = new Date(2026, 7, 21, 13, 42, 0);
+    writeDeclaredBias('bull', '', morning);
+    writeDeclaredBias('bear', '', noon);
+
+    const d = readDeclaredBias(noon)!;
+    expect(d.bias).toBe('bear');
+    expect(d.history).toEqual([
+      { bias: 'bull', at: morning.getTime() },
+      { bias: 'bear', at: noon.getTime() },
+    ]);
+  });
+
+  it('does not record re-saving the same direction as a change', () => {
+    const morning = new Date(2026, 7, 21, 9, 5, 0);
+    writeDeclaredBias('bull', '', morning);
+    writeDeclaredBias('bull', '', new Date(2026, 7, 21, 10, 0, 0));
+    expect(readDeclaredBias(AT)!.history).toHaveLength(1);
+  });
+
+  it('reads a day recorded before the history existed as one declaration', () => {
+    localStorage.setItem(
+      planStorageKey(AT),
+      JSON.stringify({ bias: 'bear', biasAt: AT.getTime() }),
+    );
+    expect(readDeclaredBias(AT)!.history).toEqual([{ bias: 'bear', at: AT.getTime() }]);
+  });
+
+  // Withdrawing is not the same as declaring 'neutral'. Neutral is a read —
+  // "I looked and I have no view" — and it grades trades against itself. This
+  // is the trader saying they never made the call.
+  it('withdrawing leaves nothing for the trade form to align against', () => {
+    writeDeclaredBias('bull', '', AT);
+    clearDeclaredBias(AT);
+    expect(readDeclaredBias(AT)).toBeNull();
+    const doc = JSON.parse(localStorage.getItem(planStorageKey(AT))!);
+    expect(doc.biasHistory).toBeUndefined();
+  });
+
+  it('withdrawing keeps the rest of the plan', () => {
+    localStorage.setItem(planStorageKey(AT), JSON.stringify({ notes: 'לחכות לסוויפ', bias: 'bull', biasAt: 1 }));
+    clearDeclaredBias(AT);
+    expect(JSON.parse(localStorage.getItem(planStorageKey(AT))!).notes).toBe('לחכות לסוויפ');
   });
 
   it('will not write a reason onto a day with no declaration', () => {

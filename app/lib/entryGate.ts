@@ -38,14 +38,50 @@ export function planStorageKey(now: Date = new Date()): string {
   return `onyx_dash_planobj_${planDayKey(now)}`;
 }
 
+/** One declaration, and the moment it was made. */
+export interface BiasEntry {
+  bias: BiasChoice;
+  at:   number;
+}
+
 export interface DeclaredBias {
   bias: BiasChoice;
   at: number | null;
+  /** Every direction declared today, oldest first — including this one.
+   *
+   *  A trader who opens bullish and turns bearish at noon has not corrected a
+   *  mistake, they have changed their read, and both halves are true of the
+   *  day. Keeping only the latest threw the first half away: a trade taken at
+   *  ten was graded against a direction declared at one, and nothing on the
+   *  screen could tell the trader that had happened.
+   *
+   *  Absent on days recorded before this existed, so callers treat an empty
+   *  history as "one declaration, the one in `bias`". */
+  history: BiasEntry[];
   /** Why this direction, in the trader's own words. Optional, and short by
    *  design: the value of writing it is that tomorrow it can be read back
    *  against what actually happened. A reason nobody can reconstruct is a
    *  declaration with no way to learn from it. */
   note: string;
+}
+
+/** The day's declarations, tolerant of a record written before they were kept.
+ *
+ *  A day with no stored history is not a day with no declarations — it is a
+ *  day from before the history existed, and its single declaration is the one
+ *  in `bias`. Rebuilding it from that is what keeps yesterday's records
+ *  readable instead of blank. */
+function readHistory(raw: unknown, bias: BiasChoice, at: number | null): BiasEntry[] {
+  const rows = Array.isArray(raw) ? raw : [];
+  const out: BiasEntry[] = [];
+  for (const r of rows) {
+    const e = r as { bias?: unknown; at?: unknown };
+    if (typeof e?.bias === 'string' && e.bias in BIAS_META && typeof e.at === 'number') {
+      out.push({ bias: e.bias as BiasChoice, at: e.at });
+    }
+  }
+  if (out.length) return out.sort((a, b) => a.at - b.at);
+  return at != null ? [{ bias, at }] : [];
 }
 
 /** What the trader declared today, or null. */
@@ -54,14 +90,16 @@ export function readDeclaredBias(now: Date = new Date()): DeclaredBias | null {
   try {
     const raw = window.localStorage.getItem(planStorageKey(now));
     if (!raw) return null;
-    const o = JSON.parse(raw) as { bias?: string; biasAt?: number; biasNote?: string };
+    const o = JSON.parse(raw) as { bias?: string; biasAt?: number; biasNote?: string; biasHistory?: unknown };
     if (!o || typeof o !== 'object') return null;
     const bias = o.bias as BiasChoice;
     if (!bias || !(bias in BIAS_META)) return null;
+    const at = typeof o.biasAt === 'number' ? o.biasAt : null;
     return {
       bias,
-      at: typeof o.biasAt === 'number' ? o.biasAt : null,
+      at,
       note: typeof o.biasNote === 'string' ? o.biasNote : '',
+      history: readHistory(o.biasHistory, bias, at),
     };
   } catch {
     return null;
@@ -95,13 +133,46 @@ export function writeDeclaredBias(bias: BiasChoice, note = '', now: Date = new D
         }
       } catch { /* unreadable plan — overwritten below rather than lost twice */ }
 
+      // Appended, never replaced. Re-declaring the SAME direction is not a
+      // change and does not earn a second entry — the trader pressing save
+      // twice has not changed their mind.
+      const history = readHistory(doc.biasHistory, bias, typeof doc.biasAt === 'number' ? doc.biasAt : null);
+      const last = history[history.length - 1];
+      const next = last?.bias === bias ? history : [...history, { bias, at }];
+
       doc.bias = bias;
       doc.biasAt = at;
       doc.biasNote = note;
+      doc.biasHistory = next;
       window.localStorage.setItem(key, JSON.stringify(doc));
+      return { bias, at, note, history: next };
     } catch { /* private mode, quota — the in-page state still updates */ }
   }
-  return { bias, at, note };
+  return { bias, at, note, history: [{ bias, at }] };
+}
+
+/** Withdraw today's declaration entirely.
+ *
+ *  Not the same as declaring 'neutral'. Neutral is a read — "I looked and I
+ *  have no view" — and it grades trades against itself. This is the trader
+ *  saying they never made the call, and it must leave nothing behind for the
+ *  trade form to align against. The history goes with it: a withdrawn
+ *  declaration is not a change of mind to be kept, it is a record that should
+ *  not have existed. */
+export function clearDeclaredBias(now: Date = new Date()): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = planStorageKey(now);
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    const doc = parsed as Record<string, unknown>;
+    delete doc.bias;
+    delete doc.biasAt;
+    delete doc.biasHistory;
+    window.localStorage.setItem(key, JSON.stringify(doc));
+  } catch { /* unreadable or unwritable — the in-page state still updates */ }
 }
 
 /** Update only the reason, keeping the direction and the moment it was
