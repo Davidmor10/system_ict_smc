@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { mergeById, active, needsPush, newerDoc, type Syncable } from './merge';
+import { owner, readOwned, writeOwned } from './owned';
 
 const PENDING_KEY = 'onyx_sync_pending';
 
@@ -54,13 +55,22 @@ async function pushCollection(kind: string, data: unknown): Promise<void> {
   if (!(await put(kind, data))) queue(kind, data);
 }
 
+// Every local read and write goes through the owner envelope — see ./owned.
+// A cache belonging to another account reads as empty, so it is never merged
+// with the cloud and never pushed into the account now signed in. That is the
+// whole of the fix for one trader's journal landing in another's database.
 function readLocalArray<T>(localKey: string): T[] {
   if (typeof window === 'undefined') return [];
-  try { const raw = window.localStorage.getItem(localKey); const v = raw ? JSON.parse(raw) : []; return Array.isArray(v) ? v : []; }
-  catch { return []; }
+  const v = readOwned<T[]>(localKey);
+  return Array.isArray(v) ? v : [];
 }
 function writeLocal(localKey: string, value: unknown): void {
-  try { window.localStorage.setItem(localKey, JSON.stringify(value)); } catch { /* quota — non-fatal */ }
+  writeOwned(localKey, value);
+}
+
+/** Nothing local is trusted, merged or pushed while nobody is signed in. */
+function signedOut(): boolean {
+  return owner() === null;
 }
 
 async function fetchCloud(kind: string): Promise<unknown> {
@@ -79,6 +89,7 @@ async function fetchCloud(kind: string): Promise<unknown> {
     back to both local and (if it changed) the cloud. Full store — including
     tombstones — is kept in localStorage under `localKey`. */
 export async function hydrateList<T extends Syncable>(kind: string, localKey: string): Promise<T[]> {
+  if (signedOut()) return [];
   const local = readLocalArray<T>(localKey);
   void flushPending();
   const cloudRaw = await fetchCloud(kind);
@@ -134,10 +145,11 @@ export async function commitList<T extends Syncable>(kind: string, localKey: str
 
 function readLocalDoc<T>(localKey: string): (T & { updatedAt?: number }) | null {
   if (typeof window === 'undefined') return null;
-  try { const raw = window.localStorage.getItem(localKey); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  return readOwned<T & { updatedAt?: number }>(localKey);
 }
 
 export async function hydrateDoc<T extends { updatedAt?: number }>(kind: string, localKey: string): Promise<T | null> {
+  if (signedOut()) return null;
   const local = readLocalDoc<T>(localKey);
   void flushPending();
   const cloudRaw = await fetchCloud(kind);
@@ -182,7 +194,7 @@ let dashTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced push of the current dashboard snapshot (coalesces keystrokes). */
 export function pushDashboard(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || signedOut()) return;
   if (dashTimer) clearTimeout(dashTimer);
   dashTimer = setTimeout(() => {
     const doc = { keys: snapshotDashboard(), updatedAt: Date.now() };
@@ -195,7 +207,7 @@ export function pushDashboard(): void {
     its keys into localStorage and return true (caller should re-read). If local
     is newer, push it up. */
 export async function hydrateDashboard(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || signedOut()) return false;
   const shadow = readLocalDoc<{ keys?: Record<string, string> }>(DASH_DOC_KEY);
   void flushPending();
   const cloudRaw = await fetchCloud('dashboard');

@@ -56,7 +56,15 @@ function stubFetch(cloudTrades: unknown[]) {
   return puts;
 }
 
-beforeEach(() => { store.clear(); vi.restoreAllMocks(); });
+// Local storage is scoped to the signed-in account — a cache with no owner is
+// nobody's and is neither read nor pushed (see lib/sync/owned). The suite runs
+// as one signed-in trader.
+const OWNER = 'user_test';
+beforeEach(() => {
+  store.clear();
+  store.set('onyx_local_owner', OWNER);
+  vi.restoreAllMocks();
+});
 
 describe('the delete ledger', () => {
   it('records a delete, and survives the trash being emptied', async () => {

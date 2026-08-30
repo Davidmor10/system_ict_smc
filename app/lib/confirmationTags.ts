@@ -27,6 +27,7 @@
 
 import type { Syncable } from './sync/merge';
 import { hydrateList, commitList } from './sync/collections';
+import { readOwned, writeOwned } from './sync/owned';
 
 /** The tags the app ships with. Kept in the code rather than seeded into every
  *  trader's catalogue: shipping them as rows would make them deletable per
@@ -131,12 +132,12 @@ export function chipList(custom: CustomConfirmation[]): string[] {
 export async function loadConfirmations(): Promise<CustomConfirmation[]> {
   if (typeof window === 'undefined') return [];
 
-  const alreadyMigrated = window.localStorage.getItem(CONFIRMATIONS_KEY) !== null;
+  // Written through the owner envelope, like every other local write — a
+  // migration that stored a bare array would produce a cache belonging to
+  // nobody, which the sync layer correctly ignores. See lib/sync/owned.
+  const alreadyMigrated = readOwned<CustomConfirmation[]>(CONFIRMATIONS_KEY) !== null;
   if (!alreadyMigrated) {
-    const rows = migrateLegacy(readLegacy());
-    try {
-      window.localStorage.setItem(CONFIRMATIONS_KEY, JSON.stringify(rows));
-    } catch { /* quota — hydrate will still merge from the cloud */ }
+    writeOwned(CONFIRMATIONS_KEY, migrateLegacy(readLegacy()));
   }
 
   try {
@@ -144,13 +145,8 @@ export async function loadConfirmations(): Promise<CustomConfirmation[]> {
   } catch {
     // Offline or the endpoint is down. The chips are a convenience; falling
     // back to whatever is on the device keeps the form usable.
-    try {
-      const raw = window.localStorage.getItem(CONFIRMATIONS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? (parsed as CustomConfirmation[]).filter(c => !c.deleted) : [];
-    } catch {
-      return [];
-    }
+    const parsed = readOwned<CustomConfirmation[]>(CONFIRMATIONS_KEY);
+    return Array.isArray(parsed) ? parsed.filter(c => !c.deleted) : [];
   }
 }
 

@@ -20,6 +20,7 @@ import { mergeById, active, type Syncable } from './sync/merge';
 import type { ManagementEvent } from './trade/management';
 import { computeBiasAlignment } from './dailyBias';
 import { decidedCounts, winRatePercent } from './calc/decided';
+import { owner, readOwned, writeOwned } from './sync/owned';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -142,10 +143,8 @@ const TRASH_KEY = 'onyx_journal_trash';
 export function loadTrash(): DeletedTradeEntry[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(TRASH_KEY);
-    if (!raw) return [];
-    const items: DeletedTradeEntry[] = JSON.parse(raw);
-    return items;
+    const items = readOwned<DeletedTradeEntry[]>(TRASH_KEY);
+    return Array.isArray(items) ? items : [];
   } catch {
     return [];
   }
@@ -154,7 +153,7 @@ export function loadTrash(): DeletedTradeEntry[] {
 export function saveTrash(items: DeletedTradeEntry[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(TRASH_KEY, JSON.stringify(items));
+    writeOwned(TRASH_KEY, items);
   } catch { /* non-fatal */ }
 }
 
@@ -180,9 +179,7 @@ export interface DeletedIdRecord { id: number; at: string }
 export function loadDeletedIds(): DeletedIdRecord[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(DELETED_IDS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed = readOwned<unknown>(DELETED_IDS_KEY);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((r): r is DeletedIdRecord =>
       !!r && typeof r.id === 'number' && Number.isFinite(r.id) && typeof r.at === 'string');
@@ -194,7 +191,7 @@ export function loadDeletedIds(): DeletedIdRecord[] {
 function saveDeletedIds(records: DeletedIdRecord[]): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(records.slice(0, MAX_DELETED_IDS)));
+    writeOwned(DELETED_IDS_KEY, records.slice(0, MAX_DELETED_IDS));
   } catch { /* non-fatal */ }
 }
 
@@ -448,6 +445,10 @@ let cloudSyncInFlight = false;
 function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean; deletedIds?: number[] }): void {
   const deletedIds = opts.deletedIds ?? [];
   if (typeof window === 'undefined' || cloudSyncInFlight) return;
+  // Nobody signed in, nothing to attribute the push to. Every read above this
+  // already returns empty in that state; this is the second lock on the door
+  // that actually writes to somebody's account.
+  if (owner() === null) return;
   if (trades.length === 0 && deletedIds.length === 0) return;
   if (opts.throttle) {
     const last = Number(window.localStorage.getItem(CLOUD_SYNC_KEY) ?? 0);
@@ -470,9 +471,7 @@ function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean; dele
 export function loadTrades(): TradeEntry[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(JOURNAL_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed = readOwned<unknown>(JOURNAL_KEY);
     if (!Array.isArray(parsed)) return [];
     const trades = parsed.map(migrateTrade).filter((t): t is TradeEntry => t !== null);
     pushTradesToCloud(trades, { throttle: true });
@@ -494,8 +493,7 @@ function tradeSig(t: TradeEntry): string {
 function stampChanged(trades: TradeEntry[]): TradeEntry[] {
   const prev = new Map<number, string>();
   try {
-    const raw = window.localStorage.getItem(JOURNAL_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
+    const arr = readOwned<TradeEntry[]>(JOURNAL_KEY) ?? [];
     if (Array.isArray(arr)) for (const t of arr) prev.set(t.id, tradeSig(t));
   } catch { /* ignore */ }
   const now = Date.now();
@@ -509,7 +507,7 @@ export function saveTrades(trades: TradeEntry[]): void {
   if (typeof window === 'undefined') return;
   const stamped = stampChanged(trades);
   try {
-    window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(stamped));
+    writeOwned(JOURNAL_KEY, stamped);
   } catch {
     /* storage unavailable / quota — non-fatal */
   }
@@ -519,7 +517,7 @@ export function saveTrades(trades: TradeEntry[]): void {
 /** Writes trades to localStorage WITHOUT re-stamping — used by hydration, whose
     trades already carry the authoritative updatedAt from the merge. */
 function writeTradesLocal(trades: TradeEntry[]): void {
-  try { window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(trades)); } catch { /* non-fatal */ }
+  writeOwned(JOURNAL_KEY, trades);
 }
 
 /** Cross-device hydration: pull every trade from Supabase, merge with the local

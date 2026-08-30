@@ -14,7 +14,8 @@ vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async 
 import { loadConfirmations, CONFIRMATIONS_KEY, LEGACY_CONFIRMATIONS_KEY } from '../../app/lib/confirmationTags';
 
 describe('migration through the real load path', () => {
-  beforeEach(() => store.clear());
+  // Local storage is scoped to the signed-in account — see lib/sync/owned.
+  beforeEach(() => { store.clear(); store.set('onyx_local_owner', 'user_test'); });
 
   it('lifts the device-only list into the synced key on first run', async () => {
     store.set(LEGACY_CONFIRMATIONS_KEY, JSON.stringify(['IFVG 1M', 'IFVG 1m', 'SMT', 'Silver Bullet']));
@@ -32,9 +33,20 @@ describe('migration through the real load path', () => {
 
   it('does not re-run the migration once the new key exists', async () => {
     store.set(LEGACY_CONFIRMATIONS_KEY, JSON.stringify(['Ghost']));
-    store.set(CONFIRMATIONS_KEY, JSON.stringify([]));
+    // Stored the way the app stores it: owned by the signed-in account.
+    store.set(CONFIRMATIONS_KEY, JSON.stringify({ o: 'user_test', v: [] }));
     const out = await loadConfirmations();
     expect(out.map(c => c.tag)).not.toContain('Ghost');
+  });
+
+  // A catalogue left by another account is not this account's catalogue, so
+  // the migration runs as though the key were absent — the cache is nobody's
+  // until it is claimed by a write.
+  it('ignores a catalogue belonging to a different account', async () => {
+    store.set(LEGACY_CONFIRMATIONS_KEY, JSON.stringify(['Silver Bullet']));
+    store.set(CONFIRMATIONS_KEY, JSON.stringify({ o: 'user_someone_else', v: [{ id: 'Theirs', tag: 'Theirs' }] }));
+    const out = await loadConfirmations();
+    expect(out.map(c => c.tag)).not.toContain('Theirs');
   });
 
   it('survives a corrupt legacy value', async () => {
