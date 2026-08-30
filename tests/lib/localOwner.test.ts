@@ -11,7 +11,7 @@
 // localStorage, and checks both halves.
 
 import { describe, expect, it, beforeEach } from 'vitest';
-import { localOwnerScript, LOCAL_OWNER_KEY, DEVICE_KEYS } from '../../app/lib/localOwner';
+import { localOwnerScript, LOCAL_OWNER_KEY, DEVICE_KEYS, CACHE_EPOCH, CACHE_EPOCH_KEY } from '../../app/lib/localOwner';
 
 const store = new Map<string, string>();
 const localStorage = {
@@ -97,11 +97,50 @@ describe('localOwnerScript', () => {
     expect(store.get('some_other_app')).toBe('x');
   });
 
-  it('does nothing at all when nobody is signed in', () => {
+  it('leaves a signed-out browser alone once the epoch is stamped', () => {
+    run(null);               // stamps the epoch on an empty browser
     seedJournal();
     run(null);
     expect(store.get('onyx_journal')).toBe('[{"id":1}]');
     expect(store.get(LOCAL_OWNER_KEY)).toBeUndefined();
+  });
+
+  // The epoch is how the operator says "the cloud is right, the devices are
+  // not" — the one thing a browser cannot work out for itself. It has to fire
+  // signed out too: a stale cache on a signed-out browser is still what gets
+  // pushed back up the moment somebody signs in.
+  it('empties the cache once on an epoch change, signed in or not', () => {
+    seedJournal();
+    run(null);
+    expect(store.get('onyx_journal')).toBeUndefined();
+    expect(store.get('fractal_engine_journal')).toBeUndefined();
+    expect(store.get(CACHE_EPOCH_KEY)).toBe(String(CACHE_EPOCH));
+  });
+
+  it('runs the epoch wipe exactly once, not on every load', () => {
+    run(DAVID);              // stamps epoch + owner
+    seedJournal();
+    run(DAVID);
+    expect(store.get('onyx_journal')).toBe('[{"id":1}]');
+  });
+
+  // Without this the wipe would leave the previous account's stamp behind, and
+  // that account's next load would look like a returning owner over a cache it
+  // no longer has — harmless today, but the stamp must never outlive the data
+  // it describes. That drift is what broke the previous attempt at this fix.
+  it('drops the owner stamp along with the data it described', () => {
+    run(DAVID);
+    store.delete(CACHE_EPOCH_KEY);   // as if the epoch had been bumped
+    seedJournal();
+    run(null);
+    expect(store.get(LOCAL_OWNER_KEY)).toBeUndefined();
+    expect(store.get('onyx_journal')).toBeUndefined();
+  });
+
+  it('keeps device preferences through an epoch wipe', () => {
+    seedJournal();
+    run(null);
+    for (const k of DEVICE_KEYS) expect(store.get(k)).toBeDefined();
   });
 
   it('survives a localStorage that throws', () => {
