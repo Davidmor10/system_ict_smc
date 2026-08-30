@@ -78,7 +78,39 @@ export async function getUserContext(): Promise<UserContext> {
       .eq('clerk_id', userId)
       .maybeSingle();
 
-    if (error || !data) return { role: 'free', isOwner: false };
+    if (error) return { role: 'free', isOwner: false };
+
+    // NO ROW: the account exists in Clerk and nowhere else. Create it.
+    //
+    // The row was only ever written by the `user.created` webhook, which makes
+    // a best-effort delivery from a third party the single point of failure
+    // for whether an account exists at all. When it does not fire — a wrong
+    // signing secret, a webhook pointed at the wrong instance, a delivery lost
+    // — the trader signs in successfully and lands on a permanent "no plan"
+    // screen, because there is nothing to read a plan from. Granting them one
+    // by email is impossible too: the row the grant would update is the row
+    // that was never written.
+    //
+    // Seen exactly that way: a tester signed up, the grant matched zero rows,
+    // and nothing on any screen said why.
+    //
+    // So the read path heals it. Free tier, which is what a signed-in account
+    // with no subscription is anyway, so this grants nothing — it only makes
+    // the account addressable. The webhook stays the fast path; this is the
+    // floor under it. `ignoreDuplicates` keeps a race with the webhook, or
+    // with a second tab, from overwriting a role that was just set.
+    if (!data) {
+      try {
+        const email = (await currentUser())?.primaryEmailAddress?.emailAddress ?? null;
+        await supabase
+          .from('profiles')
+          .upsert({ clerk_id: userId, email, role: 'free' }, { onConflict: 'clerk_id', ignoreDuplicates: true });
+      } catch {
+        // A failed heal costs nothing this request did not already lack.
+      }
+      return { role: 'free', isOwner: false };
+    }
+
     return { role: normalizeRole(data.role), isOwner: false };
   } catch {
     return { role: 'free', isOwner: false };
