@@ -8,6 +8,7 @@
 
 import { mergeById, active, needsPush, newerDoc, type Syncable } from './merge';
 import { owner, readOwned, writeOwned } from './owned';
+import { ownedFetch } from './ownedFetch';
 
 const PENDING_KEY = 'onyx_sync_pending';
 
@@ -26,7 +27,7 @@ function queue(kind: string, data: unknown): void {
 
 async function put(kind: string, data: unknown): Promise<boolean> {
   try {
-    const res = await fetch('/api/collections', {
+    const res = await ownedFetch('/api/collections', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kind, data }),
@@ -75,7 +76,7 @@ function signedOut(): boolean {
 
 async function fetchCloud(kind: string): Promise<unknown> {
   try {
-    const res = await fetch(`/api/collections?kind=${encodeURIComponent(kind)}`);
+    const res = await ownedFetch(`/api/collections?kind=${encodeURIComponent(kind)}`);
     if (!res.ok) return undefined;
     const data = await res.json().catch(() => ({}));
     return data?.collections?.[kind];

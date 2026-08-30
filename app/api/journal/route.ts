@@ -7,6 +7,7 @@ import { checkRateLimit } from '../../lib/rateLimit';
 import { logger } from '../../lib/logger';
 import { mirrorTradeDeleted, mirrorTrades } from '../../lib/coach-pipeline/mirror/journalToIntelligence';
 import { requirePlanApi } from '../../lib/withRoleCheck';
+import { ownerMismatch } from '../../lib/sync/ownerHeader';
 import { rowToTrade, tradeToRow, type TradeRow } from '../../lib/journalRow';
 import type { TradeEntry } from '../../lib/journal';
 
@@ -93,7 +94,7 @@ async function tombstoneTrades(
 }
 
 /** GET /api/journal — returns all trades (active + trash) for the current user. */
-export async function GET() {
+export async function GET(req?: Request) {
   // Every plan is paid. A signed-in account without a subscription is
   // refused here as well as in the UI, so the route cannot be called
   // directly to work around the gate.
@@ -104,6 +105,13 @@ export async function GET() {
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal GET' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise read the wrong
+  // account's trades and cache them as its own. See lib/sync/ownerHeader.
+  if (req && ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/journal GET', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`journal:get:${userId}`, 60, 60_000);
@@ -140,6 +148,13 @@ export async function POST(req: Request) {
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal POST' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise read or write
+  // the wrong account's rows with every check passing. See lib/sync/ownerHeader.
+  if (ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/journal POST', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`journal:post:${userId}`, 60, 60_000);
@@ -192,6 +207,13 @@ export async function PUT(req: Request) {
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal PUT' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise read or write
+  // the wrong account's rows with every check passing. See lib/sync/ownerHeader.
+  if (ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/journal PUT', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`journal:put:${userId}`, 10, 60_000);

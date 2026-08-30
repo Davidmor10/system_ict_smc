@@ -6,10 +6,11 @@ import { checkRateLimit } from '../../../lib/rateLimit';
 import { logger } from '../../../lib/logger';
 import { mirrorTradeDeleted } from '../../../lib/coach-pipeline/mirror/journalToIntelligence';
 import { requirePlanApi } from '../../../lib/withRoleCheck';
+import { ownerMismatch } from '../../../lib/sync/ownerHeader';
 
 /** DELETE /api/journal/[id] — soft-delete (sets deleted_at). */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   // Every plan is paid. A signed-in account without a subscription is
@@ -21,6 +22,13 @@ export async function DELETE(
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/journal/[id] DELETE' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise delete out of
+  // the wrong account's journal. See lib/sync/ownerHeader.
+  if (ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/journal/[id] DELETE', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`journal:delete:${userId}`, 60, 60_000);

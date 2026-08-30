@@ -8,6 +8,7 @@ import { logger } from '../../lib/logger';
 import { syncNotebook, type SyncNotebookResult } from '../../lib/coach-pipeline/pipelines/syncNotebook';
 import type { ClientNotebookEntry } from '../../lib/coach-pipeline/mirror/notebookToIntelligence';
 import { requirePlanApi } from '../../lib/withRoleCheck';
+import { ownerMismatch } from '../../lib/sync/ownerHeader';
 
 // Must match ENTRIES_KIND in app/lib/notebook/store.ts. Not imported from
 // there: that module is client-side and pulls in the whole notebook store.
@@ -42,6 +43,13 @@ export async function GET(req: Request) {
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/collections GET' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise read or write
+  // the wrong account's rows with every check passing. See lib/sync/ownerHeader.
+  if (ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/collections GET', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`collections:get:${userId}`, 60, 60_000);
@@ -85,6 +93,13 @@ export async function PUT(req: Request) {
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/collections PUT' });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A tab whose session changed underneath it would otherwise read or write
+  // the wrong account's rows with every check passing. See lib/sync/ownerHeader.
+  if (ownerMismatch(req.headers, userId)) {
+    logSecurityEvent('owner_mismatch', { route: '/api/collections PUT', userId });
+    return NextResponse.json({ error: 'Session changed — reload the page' }, { status: 409 });
   }
 
   const limited = checkRateLimit(`collections:put:${userId}`, 120, 60_000);

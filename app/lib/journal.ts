@@ -21,6 +21,7 @@ import type { ManagementEvent } from './trade/management';
 import { computeBiasAlignment } from './dailyBias';
 import { decidedCounts, winRatePercent } from './calc/decided';
 import { owner, readOwned, writeOwned } from './sync/owned';
+import { ownedFetch } from './sync/ownedFetch';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
 
@@ -208,7 +209,7 @@ function forgetDeleted(id: number): void {
     storage stays the source of truth regardless of whether this succeeds. */
 function syncTrashStateToCloud(id: number, method: 'DELETE' | 'PATCH'): void {
   if (typeof window === 'undefined') return;
-  fetch(`/api/journal/${id}`, { method }).catch(() => {});
+  ownedFetch(`/api/journal/${id}`, { method }).catch(() => {});
 }
 
 export function softDelete(trades: TradeEntry[], id: number): {
@@ -455,7 +456,7 @@ function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean; dele
     if (Date.now() - last < CLOUD_SYNC_MIN_INTERVAL_MS) return;
   }
   cloudSyncInFlight = true;
-  fetch('/api/journal', {
+  ownedFetch('/api/journal', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(deletedIds.length > 0 ? { trades, deletedIds } : { trades }),
@@ -531,7 +532,7 @@ export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
   const local = loadTrades();
   let cloud: (TradeEntry & { deletedAt?: string | null })[];
   try {
-    const res = await fetch('/api/journal');
+    const res = await ownedFetch('/api/journal');
     if (!res.ok) return local;
     const data = await res.json().catch(() => ({}));
     cloud = Array.isArray(data?.trades) ? data.trades : [];
