@@ -49,11 +49,10 @@ var id=${id},P=${prefixes},K=${keep},k='${LOCAL_OWNER_KEY}';
 if(!id)return;
 var cur=localStorage.getItem(k);
 if(cur===id)return;
-if(cur!==null){
 var d=[],i,n;
 for(i=0;i<localStorage.length;i++){n=localStorage.key(i);
-if(n&&K.indexOf(n)<0&&P.some(function(p){return n.indexOf(p)===0;}))d.push(n);}
-for(i=0;i<d.length;i++)localStorage.removeItem(d[i]);}
+if(n&&n!==k&&K.indexOf(n)<0&&P.some(function(p){return n.indexOf(p)===0;}))d.push(n);}
+for(i=0;i<d.length;i++)localStorage.removeItem(d[i]);
 localStorage.setItem(k,id);
 }catch(e){}})();`;
 }

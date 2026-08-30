@@ -41,25 +41,39 @@ function seedJournal() {
 beforeEach(() => { store.clear(); });
 
 describe('localOwnerScript', () => {
-  it('claims an unowned cache without clearing it', () => {
-    // First sign-in on a fresh browser: the data is already this user's.
+  // The first version CLAIMED an unstamped cache, reasoning that a fresh
+  // browser is looking at its own data. That reasoning fails on exactly the
+  // browser this bug was found on: every cache in existence on the day the fix
+  // ships is unstamped, so whoever signs in first would claim a journal that
+  // may not be theirs — the same leak, at the moment of the fix.
+  it('clears an unstamped cache instead of guessing whose it is', () => {
     seedJournal();
     run(DAVID);
-    expect(store.get('onyx_journal')).toBe('[{"id":1}]');
+    expect(store.get('onyx_journal')).toBeUndefined();
+    expect(store.get('onyx_playbook')).toBeUndefined();
+    expect(store.get(LOCAL_OWNER_KEY)).toBe(DAVID);
+  });
+
+  it('costs nothing to clear — the cloud is the source of truth', () => {
+    // Documented as a test so the trade-off is not re-argued later: a cleared
+    // cache re-hydrates on the next read; an unknown owner does not.
+    seedJournal();
+    run(DAVID);
     expect(store.get(LOCAL_OWNER_KEY)).toBe(DAVID);
   });
 
   it('leaves the cache alone when the same account returns', () => {
-    seedJournal();
-    run(DAVID);
+    run(DAVID);              // claim first, on an empty browser
+    seedJournal();           // then the account fills it
     run(DAVID);
     expect(store.get('onyx_playbook')).toBe('[{"id":"a"}]');
+    expect(store.get('onyx_journal')).toBe('[{"id":1}]');
   });
 
   // The bug itself.
   it('empties the cache when a different account signs in', () => {
-    seedJournal();
     run(DAVID);
+    seedJournal();
     run(ITAY);
     expect(store.get('onyx_journal')).toBeUndefined();
     expect(store.get('onyx_playbook')).toBeUndefined();
@@ -69,16 +83,16 @@ describe('localOwnerScript', () => {
   });
 
   it('keeps device preferences across a handover', () => {
-    seedJournal();
     run(DAVID);
+    seedJournal();
     run(ITAY);
     for (const k of DEVICE_KEYS) expect(store.get(k)).toBeDefined();
   });
 
   it('never touches keys belonging to other apps on the origin', () => {
     store.set('some_other_app', 'x');
-    seedJournal();
     run(DAVID);
+    seedJournal();
     run(ITAY);
     expect(store.get('some_other_app')).toBe('x');
   });

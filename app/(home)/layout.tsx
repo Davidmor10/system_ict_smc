@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server';
 import { MarketingLangProvider } from '../(marketing)/components/LangProvider';
 import MarketingNav from '../(marketing)/components/MarketingNav';
 import MarketingFooter from '../(marketing)/components/MarketingFooter';
-import { localOwnerScript } from '../lib/localOwner';
 
 // "/" has its own layout — and its own route group — for one reason.
 //
@@ -26,15 +25,11 @@ export default async function HomeLayout({ children }: { children: React.ReactNo
   // Decided on the server, not from useAuth() in the bar: Clerk resolves
   // `isSignedIn` a beat after hydration, so a client-side check would paint the
   // duplicate header and then yank it away.
-  const userId = CLERK_ENABLED ? (await auth()).userId : null;
-  const signedIn = !!userId;
+  const signedIn = CLERK_ENABLED ? !!(await auth()).userId : false;
 
   return (
     <MarketingLangProvider>
       <script dangerouslySetInnerHTML={{ __html: antiFlash }} />
-      {/* The member home reads the cached journal too, so the handover check
-          belongs here as well as on the dashboard — see lib/localOwner. */}
-      <script dangerouslySetInnerHTML={{ __html: localOwnerScript(userId) }} />
       <MarketingNav signedIn={signedIn} />
       <main className="min-h-screen" style={{ background: 'var(--bg)', color: '#fff' }}>
         {children}

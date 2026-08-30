@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { auth } from "@clerk/nextjs/server";
 import { Geist, Geist_Mono, Playfair_Display, Frank_Ruhl_Libre, Heebo } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { clerkAppearance } from "./lib/clerkAppearance";
 import { LanguageProvider } from "./hooks/useLanguage";
+import { localOwnerScript } from "./lib/localOwner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -47,7 +49,7 @@ export const viewport = {
   viewportFit: 'cover' as const,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -56,9 +58,23 @@ export default function RootLayout({
   // app renders normally (no auth), so adding Clerk never breaks the workspace.
   const clerkEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+  // Whose local cache is this. Read here, in the ROOT layout, so no route can
+  // be added that reads localStorage without the check having run first —
+  // putting it on the two layouts that happen to need it today is how the
+  // third one ships without it. See lib/localOwner.
+  let userId: string | null = null;
+  if (process.env.CLERK_SECRET_KEY) {
+    try { userId = (await auth()).userId; } catch { userId = null; }
+  }
+
   return (
     <html lang="he" dir="rtl" data-lang="he" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${frankRuhl.variable} ${heebo.variable} antialiased`}>
       <body className="flex flex-col bg-[#050505]">
+        {/* Before hydration, before any component reads the cache. React
+            effects run children-first, so an effect here would already be too
+            late — a component reading localStorage on mount would have read
+            the previous account's journal. */}
+        <script dangerouslySetInnerHTML={{ __html: localOwnerScript(userId) }} />
         {/* One language context for the whole app, so the Header toggle and the
             Sidebar toggle drive the same state across every route. */}
         <LanguageProvider>
