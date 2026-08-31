@@ -95,6 +95,18 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
+      // Every /api response is per-account JSON built from the caller's own
+      // session. Next labels these `public, max-age=0, must-revalidate`,
+      // which does not leak on its own — a shared cache must revalidate
+      // before serving — but `public` is an explicit licence for one to STORE
+      // the body. A corporate proxy, an ISP cache or a future CDN rule is
+      // then one configuration change away from handing one trader's journal
+      // to another, which is the exact failure this codebase has already had
+      // once. `private, no-store` withdraws the licence.
+      {
+        source: '/api/:path*',
+        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+      },
       {
         source: '/(.*)',
         headers: [
