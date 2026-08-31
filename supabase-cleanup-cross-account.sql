@@ -1,49 +1,65 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- One-off cleanup: rows written into the WRONG account by the localStorage
--- leak (see app/lib/localOwner.ts and app/lib/sync/owned.ts).
+-- Rows written into the WRONG account by the localStorage leak.
 --
--- The leak copied one account's journal into another's rows. The code fix
--- stops it happening again; it cannot un-write what was already written,
--- because on the device that data now legitimately belongs to the account
--- that received it.
+-- The code fix stops it happening again. It cannot un-write what was already
+-- written, so the copied rows have to be removed by hand.
 --
--- ORDER MATTERS. Run this ONLY after the fix is deployed, and tell me when it
--- has run so I can bump CACHE_EPOCH and deploy again. Skipping that last step
--- means every browser still holding the copied journal restores it into the
--- cloud on the next load — which is what happened the first time.
+-- This script FINDS the affected accounts rather than being told which they
+-- are. That matters: every account signed into an un-fixed browser was
+-- poisoned, including test accounts created along the way, and a cleanup
+-- keyed to one id you happen to remember leaves the rest behind.
 --
--- Replace the id below with the account whose rows are to be emptied.
--- Nothing here touches any other account.
+-- ORDER MATTERS. Run this only after the fix is deployed, then say it has run
+-- so the cache epoch can be bumped and deployed. Without that last step, a
+-- browser still holding the copied journal restores it on the next load.
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- ── 1. LOOK FIRST. Run this alone and read the counts before going further.
-select 'journal_trades'      as t, count(*) from journal_trades      where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii'
-union all
-select 'intelligence_trades' as t, count(*) from intelligence_trades where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii'
-union all
-select 'user_collections'    as t, count(*) from user_collections    where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii'
-union all
-select 'notebook_entries'    as t, count(*) from notebook_entries    where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
+-- ── 1. WHO HAS WHAT. Run this first and read it.
+--
+-- Two accounts whose trade ids are the same set are not a coincidence: the ids
+-- are creation timestamps in milliseconds, so an identical list means one
+-- journal, copied. `fingerprint` is that list, hashed — equal fingerprints are
+-- the same journal.
+select
+  t.clerk_id,
+  p.email,
+  count(*)                                            as trades,
+  min(t.date_iso)                                     as first_day,
+  max(t.date_iso)                                     as last_day,
+  md5(string_agg(t.id::text, ',' order by t.id))      as fingerprint
+from journal_trades t
+left join profiles p on p.clerk_id = t.clerk_id
+where t.deleted_at is null
+group by t.clerk_id, p.email
+order by fingerprint, trades desc;
 
--- ── 2. Only if the counts above are the copied rows and nothing the account
---       actually created itself. This is a hard delete and does not undo.
+-- Any fingerprint appearing on more than one row is the leak. Decide which
+-- clerk_id is the RIGHTFUL owner — normally the account whose email actually
+-- traded them — and clean every OTHER account sharing that fingerprint.
+
+-- ── 2. THE CLEANUP. Put the ids to empty in the list below.
+--
+-- Read it twice before running. This is a hard delete and does not undo. It
+-- must not contain the rightful owner's id.
 begin;
 
-delete from journal_trades      where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
-delete from intelligence_trades where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
-delete from user_collections    where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
-delete from notebook_entries    where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
-
--- Derived analysis built on the copied trades. Harmless if the tables are
--- already empty for this account.
-delete from behavior_findings   where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
+with victims(clerk_id) as (
+  values
+    ('PUT_THE_WRONG_ACCOUNT_ID_HERE')
+    -- , ('AND_ANOTHER_IF_STEP_1_FOUND_ONE')
+)
+, d1 as (delete from journal_trades      where clerk_id in (select clerk_id from victims) returning 1)
+, d2 as (delete from intelligence_trades where clerk_id in (select clerk_id from victims) returning 1)
+, d3 as (delete from user_collections    where clerk_id in (select clerk_id from victims) returning 1)
+, d4 as (delete from notebook_entries    where clerk_id in (select clerk_id from victims) returning 1)
+, d5 as (delete from behavior_findings   where clerk_id in (select clerk_id from victims) returning 1)
+select
+  (select count(*) from d1) as journal_trades_deleted,
+  (select count(*) from d2) as intelligence_trades_deleted,
+  (select count(*) from d3) as collections_deleted,
+  (select count(*) from d4) as notebook_deleted,
+  (select count(*) from d5) as findings_deleted;
 
 commit;
 
--- ── 3. Confirm it is empty, then tell me. The epoch bump is the last step and
---       it is mine to make.
-select 'journal_trades'      as t, count(*) from journal_trades      where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii'
-union all
-select 'intelligence_trades' as t, count(*) from intelligence_trades where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii'
-union all
-select 'user_collections'    as t, count(*) from user_collections    where clerk_id = 'user_3IdiEuQI5Q7iQuLZKTno37P20Ii';
+-- ── 3. Confirm. Re-run step 1: every remaining fingerprint should be unique.

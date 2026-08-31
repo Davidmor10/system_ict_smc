@@ -1,4 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
+import { readOwned, writeOwned } from '../sync/owned';
 // Cache keys for AI text that DESCRIBES trades.
 //
 // The panels cache their generated text so a page visit does not re-fire the
@@ -53,9 +54,7 @@ interface Envelope<T> { fingerprint: string; value: T; updatedAt: string }
 export function readInsightCache<T>(key: string, fingerprint: string): Envelope<T> | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Envelope<T>;
+    const parsed = readOwned<Envelope<T>>(key);
     if (!parsed || typeof parsed !== 'object') return null;
     if (parsed.fingerprint !== fingerprint) return null;
     return parsed;
@@ -73,6 +72,6 @@ export function writeInsightCache<T>(key: string, prefix: string, fingerprint: s
       const existing = window.localStorage.key(i);
       if (existing && existing !== key && existing.startsWith(prefix)) window.localStorage.removeItem(existing);
     }
-    window.localStorage.setItem(key, JSON.stringify({ fingerprint, value, updatedAt } satisfies Envelope<T>));
+    writeOwned(key, { fingerprint, value, updatedAt } satisfies Envelope<T>);
   } catch { /* storage unavailable or full — the panel just re-generates next time */ }
 }

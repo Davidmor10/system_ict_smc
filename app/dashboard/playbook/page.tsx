@@ -1,4 +1,5 @@
 'use client';
+import { readOwned } from '../../lib/sync/owned';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -335,8 +336,7 @@ export default function PlaybookPage() {
     // afterwards is what makes the bin correct across devices.
     const readStore = (): Setup[] => {
       try {
-        const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
+        const parsed = readOwned<unknown[]>(PLAYBOOK_STORAGE_KEY) ?? [];
         return Array.isArray(parsed)
           ? parsed.map(normalizeSetup).filter((s): s is Setup => s !== null)
           : [];

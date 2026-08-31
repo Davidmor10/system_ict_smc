@@ -14,12 +14,16 @@ const PENDING_KEY = 'onyx_sync_pending';
 
 type Pending = Record<string, unknown>; // kind → last data (last-write-wins per kind)
 
+// The queue holds writes that failed and will be retried. Owned like every
+// other cache, and for a sharper reason than most: a write queued by one
+// account and flushed after another has signed in would be sent up under the
+// new session. That is this leak with a delay on it.
 function readPending(): Pending {
   if (typeof window === 'undefined') return {};
-  try { return JSON.parse(window.localStorage.getItem(PENDING_KEY) || '{}') as Pending; } catch { return {}; }
+  return readOwned<Pending>(PENDING_KEY) ?? {};
 }
 function writePending(p: Pending): void {
-  try { window.localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch { /* quota — non-fatal */ }
+  writeOwned(PENDING_KEY, p);
 }
 function queue(kind: string, data: unknown): void {
   const p = readPending(); p[kind] = data; writePending(p);
@@ -178,17 +182,38 @@ const DASH_PREFIXES = ['onyx_dash_', 'onyx_focus_'];
 const DASH_EXACT = ['onyx_user_name'];
 const DASH_EXCLUDE = new Set([DASH_DOC_KEY]);
 
+/** The dashboard keys, as raw strings.
+ *
+ *  Raw is deliberate — these keys hold several different shapes and the
+ *  snapshot is format-agnostic. But raw is also how a value belonging to
+ *  ANOTHER account would be swept up and pushed into this one, which is the
+ *  leak this whole layer exists to stop. So each value is checked for the
+ *  owner envelope before it is included: a foreign one is skipped, and a
+ *  plain unenveloped value (a device preference, an old record) is kept. */
 function snapshotDashboard(): Record<string, string> {
+  const me = owner();
   const out: Record<string, string> = {};
   for (let i = 0; i < window.localStorage.length; i++) {
     const k = window.localStorage.key(i);
     if (!k || DASH_EXCLUDE.has(k) || k.startsWith('onyx_ai_')) continue;
-    if (DASH_EXACT.includes(k) || DASH_PREFIXES.some(p => k.startsWith(p))) {
-      const v = window.localStorage.getItem(k);
-      if (v != null) out[k] = v;
-    }
+    if (!(DASH_EXACT.includes(k) || DASH_PREFIXES.some(p => k.startsWith(p)))) continue;
+    const v = window.localStorage.getItem(k);
+    if (v == null) continue;
+    if (!belongsToOther(v, me)) out[k] = v;
   }
   return out;
+}
+
+/** True when the raw string is an owner envelope stamped for someone else. */
+function belongsToOther(raw: string, me: string | null): boolean {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    const o = (parsed as { o?: unknown }).o;
+    return typeof o === 'string' && 'v' in (parsed as object) && o !== me;
+  } catch {
+    return false;   // not JSON at all — a plain device value
+  }
 }
 
 let dashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -217,7 +242,11 @@ export async function hydrateDashboard(): Promise<boolean> {
   const localTs = shadow?.updatedAt ?? 0;
   const cloudTs = cloud?.updatedAt ?? 0;
   if (cloud?.keys && cloudTs > localTs) {
+    // Restored as raw strings, which is safe in both directions: a value that
+    // carries an owner envelope keeps it, so a poisoned cloud doc lands as
+    // somebody else's and every reader ignores it rather than displaying it.
     for (const [k, v] of Object.entries(cloud.keys)) {
+      if (belongsToOther(v, owner())) continue;
       try { window.localStorage.setItem(k, v); } catch { /* quota */ }
     }
     writeLocal(DASH_DOC_KEY, cloud);

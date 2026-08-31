@@ -1,4 +1,5 @@
 'use client';
+import { readOwned, writeOwned } from '../lib/sync/owned';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -44,9 +45,7 @@ interface PlaybookSetup { id: string; name: string; deleted?: boolean; status?: 
 function loadPlaybookSetups(): PlaybookSetup[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(PLAYBOOK_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed = readOwned<PlaybookSetup[]>(PLAYBOOK_STORAGE_KEY);
     if (!Array.isArray(parsed)) return [];
     // The playbook store keeps soft-delete tombstones for cross-device sync —
     // never offer a deleted setup in the picker.
@@ -108,9 +107,8 @@ function loadLastUsed(): LastUsed {
   const fallback: LastUsed = { symbol: 'ES', model: '', confirmations: [] };
   if (typeof window === 'undefined') return fallback;
   try {
-    const raw = window.localStorage.getItem(LAST_USED_KEY);
-    if (!raw) return fallback;
-    const o = JSON.parse(raw) as Partial<LastUsed>;
+    const o = readOwned<Partial<LastUsed>>(LAST_USED_KEY);
+    if (!o) return fallback;
     return {
       symbol: INSTRUMENT_KEYS.includes(o.symbol as InstrumentKey) ? (o.symbol as InstrumentKey) : fallback.symbol,
       model: typeof o.model === 'string' ? o.model : '',
@@ -125,7 +123,7 @@ function loadLastUsed(): LastUsed {
 
 function saveLastUsed(v: LastUsed): void {
   if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(LAST_USED_KEY, JSON.stringify(v)); } catch { /* quota — non-fatal */ }
+  writeOwned(LAST_USED_KEY, v);
 }
 
 /** The quick tags on the "advanced the stop" branch. */

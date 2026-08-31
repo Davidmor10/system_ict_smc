@@ -1,4 +1,5 @@
 import type { Bias, BiasAlignment, Direction } from './journal';
+import { readOwned } from './sync/owned';
 
 const PLAN_BIAS_MAP: Record<string, Bias> = { bull: 'BULLISH', bear: 'BEARISH', neutral: 'INDECISIVE' };
 
@@ -23,9 +24,7 @@ function todayKey() {
 export function getTodaysDeclaredBias(): Bias | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem('onyx_dash_planobj_' + todayKey());
-    if (!raw) return null;
-    const o = JSON.parse(raw);
+    const o = readOwned<{ bias?: string }>('onyx_dash_planobj_' + todayKey());
     if (!o?.bias) return null;
     return PLAN_BIAS_MAP[o.bias] ?? null;
   } catch {

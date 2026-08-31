@@ -1,4 +1,5 @@
 'use client';
+import { readOwned, writeOwned } from '../lib/sync/owned';
 
 import './dp.css';
 import { useEffect, useMemo, useState, useCallback } from 'react';
@@ -285,8 +286,10 @@ export default function DashboardView() {
   /* ── Local hydrate + cloud reconcile ─────────────────────────── */
   useEffect(() => {
     // widgets + unit prefs
-    try { const w = localStorage.getItem(WIDGETS_KEY); if (w) { const arr = JSON.parse(w); if (Array.isArray(arr) && arr.length) setWidgets(arr); } } catch {}
-    try { const u = localStorage.getItem(UNIT_KEY) as Unit | null; if (u && ['dollar','percent','r','ticks','points'].includes(u)) setUnit(u); } catch {}
+    const w = readOwned<string[]>(WIDGETS_KEY);
+    if (Array.isArray(w) && w.length) setWidgets(w as typeof widgets);
+    const u = readOwned<Unit>(UNIT_KEY);
+    if (u && ['dollar','percent','r','ticks','points'].includes(u)) setUnit(u);
     // trades
     setTrades(loadTrades());
     initSyncListeners();
@@ -294,8 +297,8 @@ export default function DashboardView() {
   }, []);
 
   /* ── Persist widgets + unit ──────────────────────────────────── */
-  useEffect(() => { try { localStorage.setItem(WIDGETS_KEY, JSON.stringify(widgets)); } catch {} }, [widgets]);
-  useEffect(() => { try { localStorage.setItem(UNIT_KEY, unit); } catch {} }, [unit]);
+  useEffect(() => { writeOwned(WIDGETS_KEY, widgets); }, [widgets]);
+  useEffect(() => { writeOwned(UNIT_KEY, unit); }, [unit]);
 
   /* ── Macro fetch ─────────────────────────────────────────────── */
   useEffect(() => {

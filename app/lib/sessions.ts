@@ -1,4 +1,5 @@
 import { hourFloatInZone } from './time/zone';
+import { readOwned } from './sync/owned';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trading sessions.
@@ -110,9 +111,7 @@ export function normalizeSessions(raw: unknown): SessionDef[] {
 export function sessionTable(): SessionDef[] {
   if (typeof window === 'undefined') return DEFAULT_SESSIONS;
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SESSIONS;
-    const doc = JSON.parse(raw) as { sessions?: unknown };
+    const doc = readOwned<{ sessions?: unknown }>(SETTINGS_KEY);
     if (!doc?.sessions) return DEFAULT_SESSIONS;
     return normalizeSessions(doc.sessions);
   } catch {

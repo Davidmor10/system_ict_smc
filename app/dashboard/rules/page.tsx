@@ -1,4 +1,5 @@
 'use client';
+import { readOwned, writeOwned } from '../../lib/sync/owned';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -421,16 +422,19 @@ export default function RulesPage() {
   function emptyDraftReset() { setDraft(emptyDraft()); setShowAdvanced(false); setFormError(''); }
 
   useEffect(() => {
-    const r = localStorage.getItem(STORAGE_KEY);
-    if (r) try { setRules((JSON.parse(r) as Rule[]).filter(x => !x.deleted)); } catch { /* ignore */ }
-    const v = localStorage.getItem(VIOLATIONS_KEY);
-    if (v) try {
-      const migrated = ensureVioIds(JSON.parse(v));
-      localStorage.setItem(VIOLATIONS_KEY, JSON.stringify(migrated));
+    // Through the owner envelope, like every local read — the cache is stored
+    // as {o, v} and parsing it raw yields an object where a list is expected,
+    // which reads as "no rules" on a screen that has them. See lib/sync/owned.
+    const r = readOwned<Rule[]>(STORAGE_KEY);
+    if (Array.isArray(r)) setRules(r.filter(x => !x.deleted));
+    const v = readOwned<unknown>(VIOLATIONS_KEY);
+    if (Array.isArray(v)) try {
+      const migrated = ensureVioIds(v);
+      writeOwned(VIOLATIONS_KEY, migrated);
       setViolations(migrated.filter(x => !x.deleted));
     } catch { /* ignore */ }
-    const c = localStorage.getItem(CHECKS_KEY);
-    if (c) try { setUserChecks((JSON.parse(c) as RuleCheck[]).filter(x => !x.deleted)); } catch { /* ignore */ }
+    const c = readOwned<RuleCheck[]>(CHECKS_KEY);
+    if (Array.isArray(c)) setUserChecks(c.filter(x => !x.deleted));
 
     setTrades(loadTrades());
     hydrateList<Rule>('rules', STORAGE_KEY).then(setRules).catch(() => {});

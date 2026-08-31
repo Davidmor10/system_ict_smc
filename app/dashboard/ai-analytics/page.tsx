@@ -1,4 +1,5 @@
 'use client';
+import { readOwned } from '../../lib/sync/owned';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadTrades, todayISO } from '../../lib/journal';
@@ -365,8 +366,13 @@ export default function AiAnalyticsPage() {
   useEffect(() => {
     setTrades(loadTrades());
     // Rules + their per-day violations power the "חוקים" what-if scenarios.
-    try { const r = localStorage.getItem('onyx_trading_rules'); if (r) setRules((JSON.parse(r) as { id: string; text: string; deleted?: boolean }[]).filter(x => !x.deleted)); } catch { /* ignore */ }
-    try { const v = localStorage.getItem('onyx_rule_violations'); if (v) setViolations((JSON.parse(v) as { ruleId: string; date: string; deleted?: boolean }[]).filter(x => !x.deleted)); } catch { /* ignore */ }
+    // Through the owner envelope — see lib/sync/owned. Read raw, these came
+    // back as an object rather than a list, and the analysis silently ran with
+    // no rules at all.
+    const r = readOwned<{ id: string; text: string; deleted?: boolean }[]>('onyx_trading_rules');
+    if (Array.isArray(r)) setRules(r.filter(x => !x.deleted));
+    const v = readOwned<{ ruleId: string; date: string; deleted?: boolean }[]>('onyx_rule_violations');
+    if (Array.isArray(v)) setViolations(v.filter(x => !x.deleted));
   }, []);
 
   const analysis = useMemo(() => runFullAnalysis(trades), [trades]);

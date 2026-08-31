@@ -63,7 +63,8 @@ describe('tradesFingerprint', () => {
 });
 
 describe('readInsightCache / writeInsightCache', () => {
-  beforeEach(() => store.clear());
+  // Local storage is scoped to the signed-in account — see lib/sync/owned.
+  beforeEach(() => { store.clear(); store.set('onyx_local_owner', 'user_test'); });
 
   it('returns text written about the same trades', () => {
     writeInsightCache('onyx_ai_insights_v3_2026-08-23', 'onyx_ai_insights_v3_', tradesFingerprint(three), ['ok'], '12:15');

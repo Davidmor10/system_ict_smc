@@ -35,7 +35,16 @@ const localStorage = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).window = { localStorage };
 
-beforeEach(() => { store.clear(); });
+// Local storage is scoped to the signed-in account — see lib/sync/owned.
+beforeEach(() => { store.clear(); store.set('onyx_local_owner', 'user_test'); });
+
+// The plan record is stored under the signed-in account — see lib/sync/owned.
+// These two helpers keep that contract in one place rather than open-coding
+// the envelope in every test that seeds or inspects a plan.
+const seedPlan = (key: string, doc: unknown) =>
+  localStorage.setItem(key, JSON.stringify({ o: 'user_test', v: doc }));
+const readPlan = (key: string) =>
+  JSON.parse(localStorage.getItem(key)!).v;
 
 describe('the plan record this screen shares with the dashboard', () => {
   it('keys by the LOCAL date, matching dailyBias.ts', () => {
@@ -91,10 +100,7 @@ describe('the plan record this screen shares with the dashboard', () => {
   });
 
   it('reads a day recorded before the history existed as one declaration', () => {
-    localStorage.setItem(
-      planStorageKey(AT),
-      JSON.stringify({ bias: 'bear', biasAt: AT.getTime() }),
-    );
+    seedPlan(planStorageKey(AT), { bias: 'bear', biasAt: AT.getTime() });
     expect(readDeclaredBias(AT)!.history).toEqual([{ bias: 'bear', at: AT.getTime() }]);
   });
 
@@ -105,14 +111,14 @@ describe('the plan record this screen shares with the dashboard', () => {
     writeDeclaredBias('bull', '', AT);
     clearDeclaredBias(AT);
     expect(readDeclaredBias(AT)).toBeNull();
-    const doc = JSON.parse(localStorage.getItem(planStorageKey(AT))!);
+    const doc = readPlan(planStorageKey(AT));
     expect(doc.biasHistory).toBeUndefined();
   });
 
   it('withdrawing keeps the rest of the plan', () => {
-    localStorage.setItem(planStorageKey(AT), JSON.stringify({ notes: 'לחכות לסוויפ', bias: 'bull', biasAt: 1 }));
+    seedPlan(planStorageKey(AT), { notes: 'לחכות לסוויפ', bias: 'bull', biasAt: 1 });
     clearDeclaredBias(AT);
-    expect(JSON.parse(localStorage.getItem(planStorageKey(AT))!).notes).toBe('לחכות לסוויפ');
+    expect(readPlan(planStorageKey(AT)).notes).toBe('לחכות לסוויפ');
   });
 
   it('will not write a reason onto a day with no declaration', () => {
@@ -121,12 +127,9 @@ describe('the plan record this screen shares with the dashboard', () => {
   });
 
   it('keeps every other field of the plan', () => {
-    localStorage.setItem(
-      planStorageKey(AT),
-      JSON.stringify({ notes: 'לחכות לסוויפ של אסיה', target: 3, bias: 'bear' }),
-    );
+    seedPlan(planStorageKey(AT), { notes: 'לחכות לסוויפ של אסיה', target: 3, bias: 'bear' });
     writeDeclaredBias('bull', '', AT);
-    const doc = JSON.parse(localStorage.getItem(planStorageKey(AT))!);
+    const doc = readPlan(planStorageKey(AT));
     expect(doc.notes).toBe('לחכות לסוויפ של אסיה');
     expect(doc.target).toBe(3);
     expect(doc.bias).toBe('bull');

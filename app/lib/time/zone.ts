@@ -17,6 +17,8 @@
  *  from there: that module calls `resolveZone` below to migrate an old doc, and
  *  importing back would make the two files a cycle. The same pattern the
  *  collections route already uses for the notebook kind. */
+import { readOwned } from '../sync/owned';
+
 const SETTINGS_KEY = 'onyx_user_settings_v1';
 
 /** The default, and the fallback for anything unrecognised. */
@@ -109,9 +111,7 @@ export function resolveZone(stored: string | undefined | null): string {
 export function activeZone(): string {
   if (typeof window === 'undefined') return DEFAULT_TIMEZONE;
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_TIMEZONE;
-    const doc = JSON.parse(raw) as { timezone?: string; timezoneLabel?: string };
+    const doc = readOwned<{ timezone?: string; timezoneLabel?: string }>(SETTINGS_KEY);
     const id = doc?.timezone ?? doc?.timezoneLabel;
     const resolved = resolveZone(id);
     return isValidZone(resolved) ? resolved : DEFAULT_TIMEZONE;

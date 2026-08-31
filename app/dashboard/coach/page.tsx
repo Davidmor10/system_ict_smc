@@ -1,4 +1,5 @@
 'use client';
+import { readOwned, writeOwned } from '../../lib/sync/owned';
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -26,7 +27,10 @@ const REASON_MESSAGE: Record<string, string> = {
   ai_unavailable: 'לא הצלחתי להגיע ל-AI כרגע. נסה שוב עוד רגע.',
 };
 
-const PIN_STORE = 'onyx.coach.pinned';
+// Underscore, not a dot: the cache wipe matches on the `onyx_` prefix, and
+// the dotted key it used to have slipped past every one of them — pinned
+// coach insights, derived from one trader's journal, outliving a handover.
+const PIN_STORE = 'onyx_coach_pinned';
 
 /** Reveal easing shared by the entrance animations (fast-in, slow-out). */
 const EASE_REVEAL: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -64,8 +68,8 @@ export default function CoachPage() {
   // Pins live on the device (no server column) — cheap, instant, survives reload.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PIN_STORE);
-      if (raw) setPinnedIds(JSON.parse(raw));
+      const raw = readOwned<string[]>(PIN_STORE);
+      if (Array.isArray(raw)) setPinnedIds(raw);
     } catch { /* ignore corrupt store */ }
     if (typeof window !== 'undefined' && window.innerWidth < 1024) setSidebarOpen(false);
   }, []);
@@ -76,7 +80,7 @@ export default function CoachPage() {
 
   function persistPins(next: string[]) {
     setPinnedIds(next);
-    try { localStorage.setItem(PIN_STORE, JSON.stringify(next)); } catch { /* ignore */ }
+    writeOwned(PIN_STORE, next);
   }
 
   function togglePin(id: string, e: React.MouseEvent) {

@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Rule } from './rules/types';
+import { readOwned, writeOwned } from './sync/owned';
 
 export type BiasChoice = 'bull' | 'bear' | 'neutral';
 
@@ -88,9 +89,7 @@ function readHistory(raw: unknown, bias: BiasChoice, at: number | null): BiasEnt
 export function readDeclaredBias(now: Date = new Date()): DeclaredBias | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(planStorageKey(now));
-    if (!raw) return null;
-    const o = JSON.parse(raw) as { bias?: string; biasAt?: number; biasNote?: string; biasHistory?: unknown };
+    const o = readOwned<{ bias?: string; biasAt?: number; biasNote?: string; biasHistory?: unknown }>(planStorageKey(now));
     if (!o || typeof o !== 'object') return null;
     const bias = o.bias as BiasChoice;
     if (!bias || !(bias in BIAS_META)) return null;
@@ -124,12 +123,9 @@ export function writeDeclaredBias(bias: BiasChoice, note = '', now: Date = new D
       // nothing left to preserve, so we start a fresh object and write.
       let doc: Record<string, unknown> = {};
       try {
-        const raw = window.localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw) as unknown;
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            doc = parsed as Record<string, unknown>;
-          }
+        const parsed = readOwned<unknown>(key);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          doc = parsed as Record<string, unknown>;
         }
       } catch { /* unreadable plan — overwritten below rather than lost twice */ }
 
@@ -144,7 +140,7 @@ export function writeDeclaredBias(bias: BiasChoice, note = '', now: Date = new D
       doc.biasAt = at;
       doc.biasNote = note;
       doc.biasHistory = next;
-      window.localStorage.setItem(key, JSON.stringify(doc));
+      writeOwned(key, doc);
       return { bias, at, note, history: next };
     } catch { /* private mode, quota — the in-page state still updates */ }
   }
@@ -163,15 +159,13 @@ export function clearDeclaredBias(now: Date = new Date()): void {
   if (typeof window === 'undefined') return;
   try {
     const key = planStorageKey(now);
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = readOwned<unknown>(key);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     const doc = parsed as Record<string, unknown>;
     delete doc.bias;
     delete doc.biasAt;
     delete doc.biasHistory;
-    window.localStorage.setItem(key, JSON.stringify(doc));
+    writeOwned(key, doc);
   } catch { /* unreadable or unwritable — the in-page state still updates */ }
 }
 
@@ -183,14 +177,12 @@ export function writeBiasNote(note: string, now: Date = new Date()): void {
   if (typeof window === 'undefined') return;
   try {
     const key = planStorageKey(now);
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = readOwned<unknown>(key);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     const doc = parsed as Record<string, unknown>;
     if (!doc.bias) return;
     doc.biasNote = note;
-    window.localStorage.setItem(key, JSON.stringify(doc));
+    writeOwned(key, doc);
   } catch { /* unreadable or unwritable — the in-page state still updates */ }
 }
 
