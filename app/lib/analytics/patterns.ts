@@ -1,4 +1,5 @@
 import type { TradeEntry, Direction } from '../journal';
+import { UNSPECIFIED_MODEL } from '../journal';
 import { INSTRUMENT_KEYS } from '../instruments';
 import { SESS } from '../sessions';
 import { computeGroupPerformance, normSession } from './metrics';
@@ -115,7 +116,18 @@ export function discoverPatternRun(
   // id the run no longer produces is orphaned, keeping its old sample size on
   // record forever. A test caught it. The redundant pair is cheap; the orphan
   // is not.
-  const modelsSeen = new Set(trades.map(t => t.model).filter(Boolean));
+  // UNSPECIFIED_MODEL is excluded, and `filter(Boolean)` does not do it — the
+  // sentinel is the truthy string 'לא צוין'. Left in, it produced a `model_לא
+  // צוין` slice plus an instrument and an hour combination for it, each
+  // labelled with the sentinel and each able to surface as a finding. That is
+  // a setup the trader never chose, reported to them as their own — the same
+  // failure `setup` had when it defaulted to REVERSAL.
+  //
+  // whatif and confirmations already exclude it; this was the third consumer
+  // and the only one that did not.
+  const modelsSeen = new Set(
+    trades.map(t => t.model).filter((m): m is string => !!m && m !== UNSPECIFIED_MODEL),
+  );
   const hoursSeen  = new Set<number>();
   for (const t of trades) {
     const h = hourOf(t);

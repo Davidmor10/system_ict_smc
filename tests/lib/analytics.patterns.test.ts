@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { discoverPatterns } from '../../app/lib/analytics/patterns';
+import { UNSPECIFIED_MODEL } from '../../app/lib/journal';
 import { makeTrade } from '../helpers/trade';
 
 describe('discoverPatterns — bias alignment / setup / weekday dimensions', () => {
@@ -131,5 +132,38 @@ describe('discoverPatterns — the multiple-comparisons correction', () => {
     const london = discoverPatterns(trades).find(c => c.subject.session === 'london' && c.kind === 'session_vs_overall');
     expect(london).toBeDefined();
     expect(london!.pValue).toBeLessThan(1e-5);
+  });
+});
+
+
+// "לא צוין" is the sentinel `model` carries when the trader never named a
+// setup. `filter(Boolean)` does not remove it — it is a truthy string — so it
+// became a slice of its own, plus an instrument and an hour combination, each
+// labelled with the sentinel and each able to surface as a finding. A setup
+// the trader never chose, reported to them as their own. Same failure `setup`
+// had when it defaulted to REVERSAL.
+describe('discoverPatterns — the unnamed setup', () => {
+  const untagged = () => [
+    ...Array.from({ length: 8 }, () => makeTrade({ model: UNSPECIFIED_MODEL, result: 'WIN' })),
+    ...Array.from({ length: 8 }, () => makeTrade({ model: 'Silver Bullet', result: 'LOSS' })),
+  ];
+
+  it('never builds a slice out of the sentinel', () => {
+    const ids = discoverPatterns(untagged()).map(c => c.id);
+    expect(ids.some(id => id.includes(UNSPECIFIED_MODEL))).toBe(false);
+  });
+
+  it('does not label a finding with it either', () => {
+    for (const c of discoverPatterns(untagged())) {
+      expect(c.subject.confirmation).not.toBe(UNSPECIFIED_MODEL);
+      expect(c.metric.label).not.toContain(UNSPECIFIED_MODEL);
+    }
+  });
+
+  // The setups the trader DID name still get their slice — the exclusion is
+  // of the sentinel, not of the dimension.
+  it('still discovers the setups that were named', () => {
+    const ids = discoverPatterns(untagged()).map(c => c.id);
+    expect(ids).toContain('model_Silver Bullet');
   });
 });
