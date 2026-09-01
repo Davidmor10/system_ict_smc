@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { getUserContext } from '../../lib/getUserRole';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import LocalCacheReport from '../../components/LocalCacheReport';
 
@@ -48,6 +49,15 @@ export default async function DiagnosticsPage() {
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? null;
   const counts = userId ? await cloudCounts(userId) : {};
+  const { isOwner } = await getUserContext();
+
+  // Deleting an account is reachable from Clerk's own profile dialog, and the
+  // purge that follows runs only if Clerk can reach the webhook. When the
+  // signing secret is absent the account disappears and everything the trader
+  // wrote stays in the database forever — silently, because nothing fails.
+  // The code cannot configure the endpoint; it can refuse to hide that it
+  // isn't. Owner-only: it is an operational fact, not a trader's business.
+  const deletionWired = !!process.env.CLERK_WEBHOOK_SIGNING_SECRET;
 
   return (
     <div dir="rtl" className="h-full overflow-y-auto px-6 py-8 max-w-3xl mx-auto">
@@ -76,10 +86,24 @@ export default async function DiagnosticsPage() {
         </dl>
       </section>
 
-      <section>
+      <section className="mb-8">
         <h2 className="text-base font-medium text-[#e3c768] mb-3">מה יש בדפדפן הזה</h2>
         <LocalCacheReport serverUserId={userId ?? null} />
       </section>
+
+      {isOwner && (
+        <section>
+          <h2 className="text-base font-medium text-[#e3c768] mb-3">תפעול</h2>
+          <dl className="rounded-lg border border-[#2a2a2d] bg-[#0d0d0f] divide-y divide-[#1c1c1e]">
+            <Row label="מחיקת חשבון מחוברת" value={deletionWired ? 'כן' : 'לא'} />
+          </dl>
+          <p className={`text-xs mt-2 ${deletionWired ? 'text-[#7fae8c]' : 'text-[#c07878]'}`}>
+            {deletionWired
+              ? 'סוד החתימה מוגדר. מחיקת חשבון ב־Clerk תפעיל את הניקוי המלא.'
+              : 'סוד החתימה חסר. מחיקת חשבון ב־Clerk תמחק את ההתחברות ותשאיר את כל הנתונים בבסיס הנתונים, בלי שגיאה בשום מקום.'}
+          </p>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,0 +1,125 @@
+/* Shared by /privacy and /terms. Two documents that must be read carefully,
+   so the treatment is a document's, not a landing page's: one narrow column,
+   generous leading, and nothing competing with the text. */
+
+.lg-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 88px 24px 120px;
+}
+
+.lg-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold, #d4af37);
+  margin-bottom: 14px;
+}
+
+.lg-title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+
+.lg-updated {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0 0 10px;
+}
+
+.lg-lede {
+  font-size: 17px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.62);
+  margin: 0 0 40px;
+  max-width: 62ch;
+}
+
+.lg-note {
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: rgba(212, 175, 55, 0.05);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin: 0 0 44px;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.72);
+}
+.lg-note b { color: var(--gold-soft, #e3c768); font-weight: 700; }
+
+.lg-sec { border-top: 1px solid #1c1c1e; padding-top: 26px; margin-top: 34px; }
+.lg-sec:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+.lg-h {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 12px;
+}
+
+.lg-wrap p {
+  font-size: 15.5px;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.62);
+  margin: 0 0 14px;
+  max-width: 66ch;
+}
+.lg-wrap p:last-child { margin-bottom: 0; }
+.lg-wrap strong { color: rgba(255, 255, 255, 0.9); font-weight: 600; }
+
+.lg-list { margin: 0 0 14px; padding-inline-start: 20px; }
+.lg-list li {
+  font-size: 15.5px;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.62);
+  margin-bottom: 9px;
+  max-width: 64ch;
+}
+.lg-list li b { color: rgba(255, 255, 255, 0.9); font-weight: 600; }
+
+/* Who receives data, and what for. A table because the mapping is the point. */
+.lg-table-wrap { overflow-x: auto; margin: 0 0 14px; }
+.lg-table {
+  width: 100%;
+  min-width: 460px;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+.lg-table th,
+.lg-table td {
+  text-align: start;
+  padding: 11px 14px;
+  border-bottom: 1px solid #1c1c1e;
+  vertical-align: top;
+  line-height: 1.65;
+}
+.lg-table th {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  border-bottom-color: #2a2a2d;
+}
+.lg-table td { color: rgba(255, 255, 255, 0.62); }
+.lg-table td:first-child { color: rgba(255, 255, 255, 0.9); font-weight: 600; white-space: nowrap; }
+
+.lg-contact {
+  margin-top: 44px;
+  border-top: 1px solid #1c1c1e;
+  padding-top: 26px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.lg-contact a { color: var(--gold, #d4af37); text-decoration: none; }
+.lg-contact a:hover { text-decoration: underline; }
