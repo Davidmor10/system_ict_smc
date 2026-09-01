@@ -53,57 +53,26 @@ describe('checkTrade — weak slice (evidence-gated)', () => {
   });
 });
 
-describe('checkTrade — the day\'s direction', () => {
-  it('flags a counter-bias trade', () => {
-    const w = checkTrade(pending({ biasAlignment: 'COUNTER', declarationState: 'before' }), [makeTrade()], TODAY);
+describe('checkTrade — counter bias', () => {
+  it('flags a trade against the direction recorded on it', () => {
+    const w = checkTrade(pending({ biasAlignment: 'COUNTER' }), [makeTrade()], TODAY);
     expect(w.some(x => x.id === 'counter_bias')).toBe(true);
   });
 
   it('says nothing for an aligned trade with no other issues', () => {
-    const w = checkTrade(pending({ biasAlignment: 'ALIGNED', declarationState: 'before' }), [makeTrade({ result: 'WIN' })], TODAY);
+    const w = checkTrade(pending({ biasAlignment: 'ALIGNED' }), [makeTrade({ result: 'WIN' })], TODAY);
     expect(w).toHaveLength(0);
   });
 
-  // The gap this closes. The guardian spoke only when a trade went AGAINST a
-  // declared direction, so it was silent on the days nothing was declared —
-  // the days with no plan to go against, and the ones where friction is worth
-  // most.
-  it('speaks when no direction was declared for the day', () => {
-    const w = checkTrade(pending({ declarationState: 'none' }), [makeTrade({ result: 'WIN' })], TODAY);
-    expect(w.some(x => x.id === 'no_bias_declared')).toBe(true);
-  });
-
-  it('separates a direction declared after the trade from one declared before', () => {
-    const w = checkTrade(pending({ declarationState: 'after' }), [makeTrade({ result: 'WIN' })], TODAY);
-    expect(w.some(x => x.id === 'bias_declared_late')).toBe(true);
-    expect(w.some(x => x.id === 'no_bias_declared')).toBe(false);
-  });
-
-  // One statement about the day's direction, never two.
-  it('does not stack the missing-direction note onto a counter-bias trade', () => {
-    const w = checkTrade(pending({ biasAlignment: 'COUNTER', declarationState: 'before' }), [makeTrade()], TODAY);
-    expect(w.filter(x => ['counter_bias', 'no_bias_declared', 'bias_declared_late'].includes(x.id))).toHaveLength(1);
-  });
-
-  // Neither note is a verdict: the trade may still be right, and the guardian
-  // never says otherwise.
-  it('keeps both notes at the lowest severity', () => {
-    const none = checkTrade(pending({ declarationState: 'none' }), [makeTrade({ result: 'WIN' })], TODAY);
-    const late = checkTrade(pending({ declarationState: 'after' }), [makeTrade({ result: 'WIN' })], TODAY);
-    expect(none.find(x => x.id === 'no_bias_declared')!.severity).toBe('info');
-    expect(late.find(x => x.id === 'bias_declared_late')!.severity).toBe('info');
+  // No direction recorded is not a warning. The two notes that used to be
+  // here existed because the direction lived on the dashboard, where it could
+  // be forgotten in the morning or written in at night. It is a field on the
+  // form now, in front of the trader as they log the trade.
+  it('says nothing when no direction was recorded', () => {
+    const w = checkTrade(pending({ biasAlignment: undefined }), [makeTrade({ result: 'WIN' })], TODAY);
+    expect(w).toHaveLength(0);
   });
 });
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Bias alignment
-//
-// The live symptom: every trade the trader logged, long and short alike, came
-// back marked "aligned with today's bias". The cause was the same one that has
-// produced every other silent failure here — an absent answer read as a
-// positive one.
-// ═══════════════════════════════════════════════════════════════════════════
-
 describe('computeBiasAlignment', () => {
   it('answers nothing when no direction was declared', () => {
     expect(computeBiasAlignment(null, 'LONG')).toBeNull();

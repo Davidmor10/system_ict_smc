@@ -18,10 +18,7 @@ import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } fr
 import { clockInZone } from '../lib/time/zone';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { confidenceLevelFor } from '../lib/analytics/confidence';
-import {
-  getDeclaredBiasForDate, getDeclarationForDate, getTodaysDeclaredBias,
-  computeBiasAlignment, declarationPrecededTrade,
-} from '../lib/dailyBias';
+import { computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
 import { checkTrade, type GuardianWarning } from '../lib/guardian/checkTrade';
@@ -181,7 +178,7 @@ function empty(): FormState {
     target: '',
     exits: singleLeg('1'),
     followedRules: '',
-    dayBias: getTodaysDeclaredBias() ?? '',   // `empty()` is always today; see setDate
+    dayBias: '',
     stopMoved: '',
     stopNote: '',
     brokenRules: [],
@@ -450,23 +447,6 @@ export default function TradeForm({
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  /** Changing the day re-reads the direction declared FOR THAT DAY.
-   *
-   *  The field means "the direction the trader had committed to when this
-   *  trade was taken", so it belongs to the trade's date and not to today.
-   *  Seeded once at mount, it kept whatever today's declaration was: a trade
-   *  moved back to Sunday was graded against Tuesday's direction, and the
-   *  wrong alignment went into the database looking exactly like a right one.
-   *
-   *  Done here rather than in an effect on `form.date` deliberately — an
-   *  effect also fires when an existing trade is opened for editing, and would
-   *  overwrite the direction that trade was actually saved with. */
-  function setDate(dateISO: string) {
-    setForm(prev => (
-      prev.date === dateISO ? prev : { ...prev, date: dateISO, dayBias: getDeclaredBiasForDate(dateISO) ?? '' }
-    ));
-  }
-
   /** Position size, with the single exit leg kept in step with it.
    *
    *  While there is only one leg it means "I closed the whole thing here", so
@@ -626,32 +606,9 @@ export default function TradeForm({
   const entryHour: number | null = parseHour(form.time);
   const autoSession: SessionKey | null = entryHour !== null ? sessionForHour(entryHour) : getActiveSessionKey();
 
-  /** Was there a direction committed to for this day BEFORE this trade.
-   *
-   *  Three states, and the middle one is why this exists:
-   *
-   *    'before'  declared, and timestamped earlier than the trade — a plan
-   *    'after'   declared, but only afterwards — hindsight, not a plan
-   *    'none'    never declared for this day
-   *
-   *  Only 'before' earns an alignment. A direction written down at 23:00 after
-   *  a losing session grades every trade of that day as having followed it,
-   *  and once stored the two are indistinguishable — so the coach would say
-   *  "your trades followed the direction you set" about a day that had no
-   *  direction while it was being traded. */
-  const declaration = useMemo(() => getDeclarationForDate(form.date), [form.date]);
-  const declarationState: 'before' | 'after' | 'none' =
-    !declaration ? 'none'
-    : declarationPrecededTrade(declaration.at, form.date, form.time) ? 'before'
-    : 'after';
-
-  // Graded only against a direction that existed before the trade did. A value
-  // typed into the field below without a declaration behind it is the trader
-  // recalling their view, which is worth recording on the trade and is not
-  // evidence of a plan — so it is stored, and it is not graded.
-  const alignment = declarationState === 'before'
-    ? computeBiasAlignment(form.dayBias || null, form.direction)
-    : null;
+  // From the field on this form and nowhere else. `null` means "no directional
+  // view recorded", which is a real state and not alignment.
+  const alignment = computeBiasAlignment(form.dayBias || null, form.direction);
 
   /** Builds the trade record and runs the save animation flow. Called either
       directly (no warnings) or after the trader dismisses the guardian panel. */
@@ -771,12 +728,7 @@ export default function TradeForm({
     // Discipline guardian — surface any evidence-backed concern before saving.
     // Never blocks: if warnings exist, show them and let the trader decide.
     const warnings = checkTrade(
-      {
-        symbol: form.symbol, direction: form.direction, session: autoSession,
-        emotionalState: form.emotionalState || undefined,
-        biasAlignment: alignment ?? undefined,
-        declarationState,
-      },
+      { symbol: form.symbol, direction: form.direction, session: autoSession, emotionalState: form.emotionalState || undefined, biasAlignment: alignment ?? undefined },
       trades,
       todayISO(),
     );
@@ -841,7 +793,7 @@ export default function TradeForm({
               form. */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="תאריך">
-              <input type="date" value={form.date} onChange={e => setDate(e.target.value)} className={inputCls} required />
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
             </Field>
             <Field label="שעת כניסה">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
@@ -1090,10 +1042,11 @@ export default function TradeForm({
             </div>
           </Field>
 
-          {/* Pre-filled from the direction declared on the entry gate, so for a
-              trader who declares one this costs zero taps. Left blank it is
-              simply not asked of the trade — which is a real answer and not
-              the same as "aligned". */}
+          {/* The only place the day's direction is recorded. It used to be
+              declared on the dashboard as well and pre-filled from there,
+              which meant two records for one day that could disagree. Left
+              blank it is simply not asked of the trade — a real answer, and
+              not the same as "aligned". */}
           <Field label="הכיוון שלך להיום (אופציונלי)">
             <div className="flex gap-1.5">
               {([
@@ -1111,13 +1064,11 @@ export default function TradeForm({
               ))}
             </div>
             <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
-              {alignment === 'ALIGNED' ? 'העסקה הזו עם הכיוון שהצהרת לפניה.'
-                : alignment === 'COUNTER' ? 'העסקה הזו נגד הכיוון שהצהרת לפניה.'
-                : declarationState === 'after'
-                  ? 'הכיוון לַיום הזה נקבע אחרי שעת העסקה, ולכן היא לא נמדדת מולו. נשמר, לא נספר.'
-                  : form.dayBias === ''
-                    ? 'בלי כיוון מוצהר, העסקה לא נספרת כמיושרת ולא כמנוגדת — היא פשוט לא נשאלת.'
-                    : 'לא הוצהר כיוון ליום הזה לפני העסקה, אז זה נשמר כתיעוד ולא כתוכנית.'}
+              {form.dayBias === ''
+                ? 'בלי כיוון מוצהר, העסקה לא נספרת כמיושרת ולא כמנוגדת — היא פשוט לא נשאלת.'
+                : alignment === 'ALIGNED' ? 'העסקה הזו עם הכיוון שהגדרת.'
+                : alignment === 'COUNTER' ? 'העסקה הזו נגד הכיוון שהגדרת.'
+                : 'ללא כיוון אין למה להשוות, וזו תשובה תקפה.'}
             </p>
           </Field>
         </Group>

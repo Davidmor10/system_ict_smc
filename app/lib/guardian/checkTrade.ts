@@ -30,15 +30,6 @@ export interface PendingTrade {
   session: string | null;
   emotionalState?: string;
   biasAlignment?: BiasAlignment;
-  /** Whether a direction for this day existed BEFORE the trade.
-   *
-   *  'before' is the only one that makes biasAlignment meaningful. The other
-   *  two are why this field exists at all: the guardian used to speak only
-   *  when a trade went AGAINST a declared direction, which meant it was
-   *  completely silent on the days nothing was declared — the days with no
-   *  plan to go against. The one moment friction is worth most was the one
-   *  moment there was none. */
-  declarationState?: 'before' | 'after' | 'none';
 }
 
 export type WarningSeverity = 'high' | 'caution' | 'info';
@@ -101,27 +92,16 @@ export function checkTrade(pending: PendingTrade, trades: TradeEntry[], todayISO
     }
   }
 
-  // ── The day's direction ───────────────────────────────────────────────────
+  // ── Counter-bias (concrete: it's against the direction on this trade) ────
   //
-  // Three outcomes, and only the first was ever reported. A trade against a
-  // declared direction is a decision the trader can defend; a trade on a day
-  // with no direction at all is not a decision they ever made, and it is the
-  // more common one. Neither is stated as a verdict — both name a fact and
-  // stop, because the trade may still be right.
+  // Nothing is said when no direction was recorded. There were two more notes
+  // here — one for a missing declaration and one for a late one — and both
+  // existed because the direction lived on the dashboard, where it could be
+  // forgotten in the morning or written in at night. It is a field on this
+  // form now, in front of the trader as they log the trade, so a note telling
+  // them it is empty is telling them what they can already see.
   if (pending.biasAlignment === 'COUNTER') {
-    warnings.push({ id: 'counter_bias', severity: 'info', text: 'העסקה הזו נגד הביאס שהצהרת היום.' });
-  } else if (pending.declarationState === 'after') {
-    warnings.push({
-      id: 'bias_declared_late',
-      severity: 'info',
-      text: 'הכיוון ליום הזה נקבע אחרי שעת העסקה, ולכן העסקה לא נמדדת מולו.',
-    });
-  } else if (pending.declarationState === 'none') {
-    warnings.push({
-      id: 'no_bias_declared',
-      severity: 'info',
-      text: 'לא הצהרת כיוון ליום הזה. העסקה תיספר, אבל לא מול שום תוכנית.',
-    });
+    warnings.push({ id: 'counter_bias', severity: 'info', text: 'העסקה הזו נגד הביאס שרשמת לעסקה.' });
   }
 
   return warnings.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);

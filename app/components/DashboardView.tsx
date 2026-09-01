@@ -8,7 +8,6 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
-import DashboardBias from './DashboardBias';
 import TrackingLine from './TrackingLine';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
@@ -608,12 +607,11 @@ export default function DashboardView() {
         <div className="dp-clock"><span className="dp-clock-k">{clockLabel}</span><span className="dp-clock-v dp-num">{clockStr}</span></div>
       </div>
 
-      {/* Row 2.5 — today's declared direction, and why.
-          Placed after the greeting and before the numbers on purpose: it is
-          the first decision of the day, and everything below it is yesterday's
-          outcome. A direction chosen underneath a green P&L is not the same
-          call as one chosen above it. */}
-      <DashboardBias />
+      {/* The daily direction used to be declared here, and is not any more.
+          One place asks for it now — the field on the trade itself — because
+          two places that could each hold a direction for the same day is a
+          disagreement waiting to be shipped, and the trade is the one that
+          knows which day it belongs to. */}
 
       {/* What is being counted right now. Renders nothing when nothing is —
           directly under the declaration, because both are the morning's
