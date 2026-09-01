@@ -648,7 +648,10 @@ export default function TradeForm({
       // with rather than being reset to OPEN.
       result: derivedResult !== 'OPEN' ? derivedResult : (initial?.result ?? 'OPEN'),
       session: autoSession ?? 'NONE',
-      bias: form.dayBias || 'INDECISIVE',
+      // Blank means the question went unanswered, and is stored that way.
+      // Defaulting it to INDECISIVE made the chip come back selected on a
+      // trade the trader never touched it on.
+      bias: form.dayBias || undefined,
       model: form.model || UNSPECIFIED_MODEL,
       notes: form.notes,
       screenshots: form.screenshots.length ? form.screenshots : undefined,

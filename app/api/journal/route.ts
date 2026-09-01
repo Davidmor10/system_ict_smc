@@ -38,6 +38,16 @@ function isMissingPatchColumn(error: { code?: string; message?: string } | null)
   return error.code === 'PGRST204' || PATCH_COLUMNS.some(column => message.includes(column));
 }
 
+/** A null `bias` rejected by a database that has not run
+ *  `supabase-migration-bias-nullable.sql` yet.
+ *
+ *  23502 is Postgres's not-null violation. Checked alongside the column name
+ *  because PostgREST does not always forward the SQLSTATE. */
+function isBiasNotNull(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === '23502' && (error.message ?? '').includes('bias');
+}
+
 /** Upsert that survives a database still missing the patch columns. Tries the
  *  full row first — the normal path, one round trip — and only on a
  *  missing-column error retries without them. */
@@ -46,6 +56,20 @@ export async function upsertTrades(
   rows: TradeRow[],
 ): Promise<{ error: { message: string } | null }> {
   const attempt = await supabase.from('journal_trades').upsert(rows, { onConflict: 'clerk_id,id' });
+
+  // A blank direction is stored as null so that "not answered" is a state the
+  // journal can hold. On a database still carrying `bias not null default
+  // 'INDECISIVE'` that write is rejected, so it falls back to the old value
+  // rather than failing the save. The trade is what matters; the distinction
+  // between blank and "no view" is what the migration buys back.
+  if (isBiasNotNull(attempt.error)) {
+    logger.warn('journal upsert retried with a default bias — run supabase-migration-bias-nullable.sql', {
+      error: attempt.error?.message,
+    });
+    const filled = rows.map(row => (row.bias == null ? { ...row, bias: 'INDECISIVE' } : row));
+    return supabase.from('journal_trades').upsert(filled, { onConflict: 'clerk_id,id' });
+  }
+
   if (!isMissingPatchColumn(attempt.error)) return attempt;
 
   logger.warn('journal upsert retried without the stop-note columns — run supabase-migration-stop-note.sql', {

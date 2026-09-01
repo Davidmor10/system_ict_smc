@@ -36,7 +36,7 @@ export const tradeEntrySchema = z.object({
   stop: z.number().finite(),
   target: z.number().finite(),
   session: z.string().max(50),
-  bias: z.enum(['BULLISH', 'BEARISH', 'INDECISIVE']),
+  bias: z.enum(['BULLISH', 'BEARISH', 'INDECISIVE']).optional(),
   model: z.string().max(200),
   result: z.enum(['OPEN', 'WIN', 'LOSS', 'BE']),
   notes: z.string().max(MAX_TEXT),

@@ -70,7 +70,17 @@ export interface TradeEntry {
   stop: number;
   target: number;
   session: string;
-  bias: Bias;
+  /** The direction the trader had for the day, as recorded ON THIS TRADE.
+   *
+   *  Optional, and that is load-bearing. It used to be required and defaulted
+   *  to INDECISIVE whenever the field was left blank — so a trader who never
+   *  answered was stored as having answered "no directional view", and on
+   *  reopening the trade that chip came back SELECTED. An answer they never
+   *  gave, shown back to them as theirs.
+   *
+   *  Same failure as `setup` defaulting to REVERSAL, directly below, and as
+   *  followedRules defaulting to true. Absent is its own answer. */
+  bias?: Bias;
   /** ICT setup model — enables per-model performance analytics. */
   model: IctModel;
   result: TradeResult;
@@ -310,7 +320,11 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   const contracts = Number(r.contracts);
   const contractsVal = Number.isFinite(contracts) && contracts > 0 ? contracts : 1;
   const direction: Direction = r.direction === 'SHORT' ? 'SHORT' : 'LONG';
-  const bias: Bias        = (r.bias as Bias) ?? 'INDECISIVE';
+  // Absent stays absent — see the field's own note above. Also validated
+  // rather than cast: a row carrying something that is not one of the three
+  // is not evidence of a direction either.
+  const bias: Bias | undefined =
+    r.bias === 'BULLISH' || r.bias === 'BEARISH' || r.bias === 'INDECISIVE' ? r.bias : undefined;
 
   // Absent stays absent.
   //
@@ -335,7 +349,7 @@ export function migrateTrade(raw: unknown): TradeEntry | null {
   // different things depending on whether it had just been saved or just been
   // loaded. Both are now null, which is what "no direction was declared"
   // actually is.
-  const alignment = computeBiasAlignment(bias, direction);
+  const alignment = computeBiasAlignment(bias ?? null, direction);
 
   const risk = Math.abs(entry - stop);
   const dir  = direction === 'LONG' ? 1 : -1;

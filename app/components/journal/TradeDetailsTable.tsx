@@ -343,7 +343,12 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
           {/* 3 — the context the trade was taken in. */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             <Chip text={`סשן · ${sessionLabel(t.session)}`} color={GOLD} />
-            <Chip text={`ביאס יומי · ${BIAS_HE[t.bias] ?? t.bias}`} color={t.bias === 'BULLISH' ? BULL : t.bias === 'BEARISH' ? BEAR : 'rgba(255,255,255,.5)'} />
+            {/* "לא נרשם" rather than a direction, when none was recorded —
+                the same treatment the setup chip beside it already gets. */}
+            <Chip
+              text={`ביאס יומי · ${t.bias ? (BIAS_HE[t.bias] ?? t.bias) : 'לא נרשם'}`}
+              color={t.bias === 'BULLISH' ? BULL : t.bias === 'BEARISH' ? BEAR : t.bias ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.3)'}
+            />
             <Chip text={`סטאפ · ${setup || 'לא נרשם'}`} color={setup ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.3)'} />
             <Chip text={`×${t.contracts || 1} חוזים`} color="rgba(255,255,255,.6)" />
           </div>

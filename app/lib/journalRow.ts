@@ -27,7 +27,9 @@ export type TradeRow = {
   stop_price: number;
   target: number;
   session: string;
-  bias: string;
+  /** Null once the column allows it — see supabase-migration-bias-nullable.sql.
+   *  Older rows still carry 'INDECISIVE' where the field was left blank. */
+  bias: string | null;
   model: string;
   result: string;
   notes: string;
@@ -65,7 +67,9 @@ export function rowToTrade(row: TradeRow): TradeEntry & { deletedAt: string | nu
     stop: row.stop_price,
     target: row.target,
     session: row.session,
-    bias: row.bias as Bias,
+    // Absent stays absent. A row written before the column allowed null may
+    // still hold 'INDECISIVE'; that is a real answer and is kept as one.
+    bias: row.bias ? (row.bias as Bias) : undefined,
     model: row.model,
     result: row.result as TradeResult,
     notes: row.notes,
@@ -105,7 +109,7 @@ export function tradeToRow(clerkId: string, trade: TradeEntry): TradeRow {
     stop_price: trade.stop,
     target: trade.target,
     session: trade.session,
-    bias: trade.bias,
+    bias: trade.bias ?? null,
     model: trade.model,
     result: trade.result,
     notes: trade.notes,

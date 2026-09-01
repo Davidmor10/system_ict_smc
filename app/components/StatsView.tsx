@@ -755,7 +755,7 @@ export default function StatsView() {
                         </td>
                         <td data-soft style={{ color: 'rgba(255,255,255,0.45)' }}>{t.session}</td>
                         <td data-soft style={{ color: t.bias === 'BULLISH' ? 'rgba(110,168,127,0.85)' : t.bias === 'BEARISH' ? 'rgba(192,93,93,0.85)' : 'rgba(255,255,255,0.4)' }}>
-                          {BIAS_HE[t.bias] ?? t.bias}
+                          {t.bias ? (BIAS_HE[t.bias] ?? t.bias) : '—'}
                         </td>
                         {/* Three states, three renderings. "לא נשאל" is not a
                             failure and must never be painted like one. */}

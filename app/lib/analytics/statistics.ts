@@ -405,7 +405,8 @@ export interface RecentTrade {
   realizedR: number | null;
   pnl: number | null;
   session: string;
-  bias: string;
+  /** Absent when the trader never recorded a direction for the day. */
+  bias?: string;
   /** True, false, or null for never answered — all three are rendered. */
   followedRules: boolean | null;
 }
