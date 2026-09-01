@@ -1,6 +1,6 @@
 import type { Bias, BiasAlignment, Direction } from './journal';
 import { readOwned } from './sync/owned';
-import { todayISOInZone } from './time/zone';
+import { clockInZone, todayISOInZone } from './time/zone';
 
 const PLAN_BIAS_MAP: Record<string, Bias> = { bull: 'BULLISH', bear: 'BEARISH', neutral: 'INDECISIVE' };
 
@@ -37,6 +37,49 @@ export function getDeclaredBiasForDate(dateISO: string): Bias | null {
   } catch {
     return null;
   }
+}
+
+/** The declaration for a day, with the moment it was made.
+ *
+ *  `at` is null when the record predates the timestamp, or holds something
+ *  that is not a number. Callers must treat that as "cannot verify when" —
+ *  see `declarationPrecededTrade`. */
+export function getDeclarationForDate(dateISO: string): { bias: Bias; at: number | null } | null {
+  if (typeof window === 'undefined') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  try {
+    const o = readOwned<{ bias?: string; biasAt?: unknown }>('onyx_dash_planobj_' + dateISO);
+    if (!o?.bias) return null;
+    const bias = PLAN_BIAS_MAP[o.bias];
+    if (!bias) return null;
+    return { bias, at: typeof o.biasAt === 'number' ? o.biasAt : null };
+  } catch {
+    return null;
+  }
+}
+
+/** Was the direction committed to BEFORE the trade was taken.
+ *
+ *  A direction written down after the trade closed is not a plan the trade
+ *  can be measured against — it is the trade explaining itself. Both readings
+ *  look identical once stored, so without this the coach could say "your
+ *  trades followed the direction you set" about a day whose direction was set
+ *  at 23:00, after a losing session. That sentence would be false, on a screen
+ *  whose whole value is that it is not.
+ *
+ *  Compared as WALL CLOCK in the trader's own zone on both sides — the
+ *  declaration instant converted into that zone, the trade's date and time
+ *  already in it. No offset arithmetic, so nothing to get wrong twice a year.
+ *
+ *  Unverifiable (`at` null) returns false: a claim that cannot be checked is
+ *  not made. */
+export function declarationPrecededTrade(at: number | null, tradeDateISO: string, tradeTime: string): boolean {
+  if (at === null || !Number.isFinite(at)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDateISO) || !/^\d{2}:\d{2}$/.test(tradeTime)) return false;
+  const when = new Date(at);
+  const declaredOn = todayISOInZone(undefined, when);
+  if (declaredOn !== tradeDateISO) return declaredOn < tradeDateISO;
+  return clockInZone(undefined, when) <= tradeTime;
 }
 
 /** The direction declared for today. */

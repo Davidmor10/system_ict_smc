@@ -1,7 +1,7 @@
 'use client';
 import { readOwned, writeOwned } from '../lib/sync/owned';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { TradeEntry, Direction, TradeResult, EmotionalState, Bias } from '../lib/journal';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
@@ -18,7 +18,10 @@ import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } fr
 import { clockInZone } from '../lib/time/zone';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { confidenceLevelFor } from '../lib/analytics/confidence';
-import { getDeclaredBiasForDate, getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
+import {
+  getDeclaredBiasForDate, getDeclarationForDate, getTodaysDeclaredBias,
+  computeBiasAlignment, declarationPrecededTrade,
+} from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
 import { checkTrade, type GuardianWarning } from '../lib/guardian/checkTrade';
@@ -622,9 +625,33 @@ export default function TradeForm({
 
   const entryHour: number | null = parseHour(form.time);
   const autoSession: SessionKey | null = entryHour !== null ? sessionForHour(entryHour) : getActiveSessionKey();
-  // From the field on this form, not from a plan somewhere else. `null` means
-  // "no directional view declared", which is a real state and not alignment.
-  const alignment = computeBiasAlignment(form.dayBias || null, form.direction);
+
+  /** Was there a direction committed to for this day BEFORE this trade.
+   *
+   *  Three states, and the middle one is why this exists:
+   *
+   *    'before'  declared, and timestamped earlier than the trade — a plan
+   *    'after'   declared, but only afterwards — hindsight, not a plan
+   *    'none'    never declared for this day
+   *
+   *  Only 'before' earns an alignment. A direction written down at 23:00 after
+   *  a losing session grades every trade of that day as having followed it,
+   *  and once stored the two are indistinguishable — so the coach would say
+   *  "your trades followed the direction you set" about a day that had no
+   *  direction while it was being traded. */
+  const declaration = useMemo(() => getDeclarationForDate(form.date), [form.date]);
+  const declarationState: 'before' | 'after' | 'none' =
+    !declaration ? 'none'
+    : declarationPrecededTrade(declaration.at, form.date, form.time) ? 'before'
+    : 'after';
+
+  // Graded only against a direction that existed before the trade did. A value
+  // typed into the field below without a declaration behind it is the trader
+  // recalling their view, which is worth recording on the trade and is not
+  // evidence of a plan — so it is stored, and it is not graded.
+  const alignment = declarationState === 'before'
+    ? computeBiasAlignment(form.dayBias || null, form.direction)
+    : null;
 
   /** Builds the trade record and runs the save animation flow. Called either
       directly (no warnings) or after the trader dismisses the guardian panel. */
@@ -744,7 +771,12 @@ export default function TradeForm({
     // Discipline guardian — surface any evidence-backed concern before saving.
     // Never blocks: if warnings exist, show them and let the trader decide.
     const warnings = checkTrade(
-      { symbol: form.symbol, direction: form.direction, session: autoSession, emotionalState: form.emotionalState || undefined, biasAlignment: alignment ?? undefined },
+      {
+        symbol: form.symbol, direction: form.direction, session: autoSession,
+        emotionalState: form.emotionalState || undefined,
+        biasAlignment: alignment ?? undefined,
+        declarationState,
+      },
       trades,
       todayISO(),
     );
@@ -1079,11 +1111,13 @@ export default function TradeForm({
               ))}
             </div>
             <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
-              {form.dayBias === ''
-                ? 'בלי כיוון מוצהר, העסקה לא נספרת כמיושרת ולא כמנוגדת — היא פשוט לא נשאלת.'
-                : alignment === 'ALIGNED' ? 'העסקה הזו עם הכיוון שהגדרת.'
-                : alignment === 'COUNTER' ? 'העסקה הזו נגד הכיוון שהגדרת.'
-                : 'ללא כיוון אין למה להשוות, וזו תשובה תקפה.'}
+              {alignment === 'ALIGNED' ? 'העסקה הזו עם הכיוון שהצהרת לפניה.'
+                : alignment === 'COUNTER' ? 'העסקה הזו נגד הכיוון שהצהרת לפניה.'
+                : declarationState === 'after'
+                  ? 'הכיוון לַיום הזה נקבע אחרי שעת העסקה, ולכן היא לא נמדדת מולו. נשמר, לא נספר.'
+                  : form.dayBias === ''
+                    ? 'בלי כיוון מוצהר, העסקה לא נספרת כמיושרת ולא כמנוגדת — היא פשוט לא נשאלת.'
+                    : 'לא הוצהר כיוון ליום הזה לפני העסקה, אז זה נשמר כתיעוד ולא כתוכנית.'}
             </p>
           </Field>
         </Group>
