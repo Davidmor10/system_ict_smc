@@ -614,8 +614,8 @@ export default function DashboardView() {
           knows which day it belongs to. */}
 
       {/* What is being counted right now. Renders nothing when nothing is —
-          directly under the declaration, because both are the morning's
-          standing commitments and neither is a number about yesterday. */}
+          above the numbers, because it is a standing commitment rather than a
+          figure about yesterday. */}
       {hasAi && <TrackingLine />}
 
       {/* Row 3 — sessions + unit toggle */}

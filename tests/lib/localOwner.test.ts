@@ -26,12 +26,8 @@ const localStorage = {
 function run(userId: string | null): void {
   // `window` too: the script publishes this document's identity there, which
   // is the one value a tab cannot get from shared storage. See lib/sync/owned.
-  const win: Record<string, unknown> = {};
-  new Function('localStorage', 'window', localOwnerScript(userId))(localStorage, win);
-  lastDocumentOwner = win.__ONYX_OWNER__ as string;
+  new Function('localStorage', 'window', localOwnerScript(userId))(localStorage, {});
 }
-
-let lastDocumentOwner: string | undefined;
 
 const DAVID = 'user_david';
 const ITAY  = 'user_itay';

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import EvidenceList from './EvidenceList';
 
-/** What the trader is currently being counted on — one line, under the bias.
+/** What the trader is currently being counted on — one line, above the numbers.
  *
  *  The behaviour layer has designed and judged these windows since it shipped,
  *  and nothing ever showed one. A measurement nobody can see does not change
