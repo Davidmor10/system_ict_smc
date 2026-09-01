@@ -26,7 +26,11 @@ const localStorage = {
   setItem: (k: string, v: string) => { store.set(k, String(v)); },
   removeItem: (k: string) => { store.delete(k); },
 };
-vi.stubGlobal('window', { localStorage, addEventListener: () => {} });
+// The document is rendered for an account; the browser is signed in as one.
+// They are different things — see lib/sync/owned — so a test that seeds only
+// the shared stamp is describing a tab that has gone stale.
+const win = { localStorage, addEventListener: () => {}, __ONYX_OWNER__: '' };
+vi.stubGlobal('window', win);
 vi.stubGlobal('localStorage', localStorage);
 
 const { owner, readOwned, writeOwned } = await import('../../app/lib/sync/owned');
@@ -34,12 +38,16 @@ const { LOCAL_OWNER_KEY } = await import('../../app/lib/localOwner');
 
 const DAVID = 'user_david';
 const ITAY  = 'user_itay';
+/** Sign in the way a real load does: the browser stamp AND the document this
+ *  tab was rendered for move together. They come apart only when a second
+ *  window signs in, which tests/lib/twoWindows.test.ts covers. */
 const signIn = (id: string | null) => {
+  win.__ONYX_OWNER__ = id ?? '';
   if (id === null) store.delete(LOCAL_OWNER_KEY);
   else store.set(LOCAL_OWNER_KEY, id);
 };
 
-beforeEach(() => { store.clear(); });
+beforeEach(() => { store.clear(); win.__ONYX_OWNER__ = ''; });
 
 describe('owner', () => {
   it('is null when nobody is signed in', () => {

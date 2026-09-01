@@ -53,7 +53,17 @@ export const CACHE_EPOCH_KEY = 'onyx_cache_epoch';
  *
  *  Costs one re-hydration per device. That is all it costs, because
  *  localStorage is a cache and the cloud is the source of truth. */
-export const CACHE_EPOCH = 2;
+export const CACHE_EPOCH = 3;
+
+// EPOCH 3 — the two-window flaw.
+//
+// While `owner()` read the shared localStorage stamp, a window left open by
+// one account adopted the next account's identity and re-stamped what it held
+// accordingly. So there are caches on real devices right now carrying one
+// trader's journal under another trader's id. They are not corrupt and they
+// are not foreign: to the fixed code they look like a perfectly valid cache
+// belonging to the account that is signed in, which is exactly why no rule
+// can spot them. They have to be thrown away, and only a bump does that.
 
 /** Prefixes of every key this app writes. */
 export const APP_KEY_PREFIXES = ['onyx_', 'fractal_'] as const;
@@ -81,6 +91,11 @@ export function localOwnerScript(userId: string | null): string {
   // in.
   return `(function(){try{
 var id=${id},P=${prefixes},K=${keep},k='${LOCAL_OWNER_KEY}',ek='${CACHE_EPOCH_KEY}',E='${CACHE_EPOCH}';
+// This document's own identity, fixed for the life of the tab. Everything
+// else on this line is shared with every other window on the origin — the
+// cookie and localStorage both are — so this is the only value that can tell
+// a tab whether the session changed underneath it. See lib/sync/owned.
+window.__ONYX_OWNER__=id;
 function wipe(){var d=[],i,n;
 for(i=0;i<localStorage.length;i++){n=localStorage.key(i);
 if(n&&n!==k&&n!==ek&&K.indexOf(n)<0&&P.some(function(p){return n.indexOf(p)===0;}))d.push(n);}

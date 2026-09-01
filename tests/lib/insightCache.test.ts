@@ -20,7 +20,10 @@ const localStorage = {
   clear: () => { store.clear(); },
 };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-(globalThis as any).window = { localStorage };
+// The document is rendered for an account; the browser is signed in as one.
+// They are different things — see lib/sync/owned — so a test that seeds only
+// the shared stamp is describing a tab that has gone stale.
+(globalThis as any).window = { localStorage, __ONYX_OWNER__: 'user_test' };
 
 const { readInsightCache, tradesFingerprint, writeInsightCache } = await import('../../app/lib/ai/insightCache');
 type TradeEntry = import('../../app/lib/journal').TradeEntry;

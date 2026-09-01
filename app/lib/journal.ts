@@ -20,7 +20,7 @@ import { mergeById, active, type Syncable } from './sync/merge';
 import type { ManagementEvent } from './trade/management';
 import { computeBiasAlignment } from './dailyBias';
 import { decidedCounts, winRatePercent } from './calc/decided';
-import { owner, readOwned, writeOwned } from './sync/owned';
+import { owner, readOwned, writeOwned, stale } from './sync/owned';
 import { ownedFetch } from './sync/ownedFetch';
 
 export type Bias = 'BULLISH' | 'BEARISH' | 'INDECISIVE';
@@ -449,7 +449,8 @@ function pushTradesToCloud(trades: TradeEntry[], opts: { throttle: boolean; dele
   // Nobody signed in, nothing to attribute the push to. Every read above this
   // already returns empty in that state; this is the second lock on the door
   // that actually writes to somebody's account.
-  if (owner() === null) return;
+  // Nothing leaves a tab whose session changed underneath it. See sync/owned.
+  if (owner() === null || stale()) return;
   if (trades.length === 0 && deletedIds.length === 0) return;
   if (opts.throttle) {
     const last = Number(window.localStorage.getItem(CLOUD_SYNC_KEY) ?? 0);
@@ -529,6 +530,9 @@ function writeTradesLocal(trades: TradeEntry[]): void {
     loadTrades() only ever read localStorage; nothing pulled the cloud down. */
 export async function hydrateTradesFromCloud(): Promise<TradeEntry[]> {
   if (typeof window === 'undefined') return [];
+  // A tab the session changed under holds the previous account's journal and
+  // authenticates as the new one. It merges nothing and pushes nothing.
+  if (stale()) return [];
   const local = loadTrades();
   let cloud: (TradeEntry & { deletedAt?: string | null })[];
   try {

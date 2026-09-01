@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { mergeById, active, needsPush, newerDoc, type Syncable } from './merge';
-import { owner, readOwned, writeOwned } from './owned';
+import { owner, readOwned, writeOwned, stale } from './owned';
 import { ownedFetch } from './ownedFetch';
 
 const PENDING_KEY = 'onyx_sync_pending';
@@ -73,9 +73,11 @@ function writeLocal(localKey: string, value: unknown): void {
   writeOwned(localKey, value);
 }
 
-/** Nothing local is trusted, merged or pushed while nobody is signed in. */
+/** Nothing local is trusted, merged or pushed while nobody is signed in — or
+ *  while this tab is stale, meaning the browser signed into a different
+ *  account after this document was rendered. See ./owned. */
 function signedOut(): boolean {
-  return owner() === null;
+  return owner() === null || stale();
 }
 
 async function fetchCloud(kind: string): Promise<unknown> {

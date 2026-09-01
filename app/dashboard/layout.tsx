@@ -1,4 +1,5 @@
 import Sidebar from '../components/Sidebar';
+import StaleSessionNotice from '../components/StaleSessionNotice';
 import SplashIntro from '../components/SplashIntro';
 import MobileNav from '../components/MobileNav';
 import MobileHeader from '../components/MobileHeader';
@@ -22,6 +23,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           the dashboard gets the opening; someone who arrived through the
           landing page does not get it twice. */}
       <SplashIntro scope={splashScope} />
+      {/* Says so when this tab's session changed in another window, instead
+          of letting it empty silently. */}
+      <StaleSessionNotice />
       {/* Renders nothing; keeps the layout at the size it was designed for. */}
       <ViewportScale />
       <div className="onyx-layout h-screen flex overflow-hidden bg-black text-[#c0c0c0]">

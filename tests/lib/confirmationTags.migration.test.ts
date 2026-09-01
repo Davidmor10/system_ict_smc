@@ -6,7 +6,10 @@ const localStorageStub = {
   setItem: (k: string, v: string) => { store.set(k, v); },
   removeItem: (k: string) => { store.delete(k); },
 };
-vi.stubGlobal('window', { localStorage: localStorageStub, addEventListener: () => {} });
+// The document is rendered for an account; the browser is signed in as one.
+// They are different things — see lib/sync/owned — so a test that seeds only
+// the shared stamp is describing a tab that has gone stale.
+vi.stubGlobal('window', { localStorage: localStorageStub, addEventListener: () => {}, __ONYX_OWNER__: 'user_test' });
 vi.stubGlobal('localStorage', localStorageStub);
 // No cloud: hydrateList must keep local as-is and seed upward.
 vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
