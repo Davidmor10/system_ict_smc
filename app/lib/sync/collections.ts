@@ -176,8 +176,29 @@ export async function saveDoc<T extends object>(kind: string, localKey: string, 
 // ── Dashboard state (name, reminders, today's plan/focus) as one doc ─────────
 // These live across many localStorage keys (some per-date). Rather than sync
 // each, we snapshot the relevant keys as raw strings into a single 'dashboard'
-// doc and reconcile newest-wins. Raw-string values are format-agnostic, so no
-// per-key parsing. Regenerable AI caches (onyx_ai_*) are deliberately excluded.
+// doc. Raw-string values are format-agnostic, so no per-key parsing.
+// Regenerable AI caches (onyx_ai_*) are deliberately excluded.
+//
+// EVERY KEY CARRIES ITS OWN TIMESTAMP, AND THAT IS THE WHOLE DESIGN.
+//
+// The document used to hold one `updatedAt` for all of it, and the newer
+// document won outright. So each device pushed its own view of the world
+// wholesale, and the cloud copy was only ever as complete as whichever device
+// wrote last:
+//
+//   phone     writes today's plan at 07:00 and pushes.
+//   laptop    has never seen it. It writes a reminder at 09:00, snapshots the
+//             keys IT has — which do not include the plan — and pushes.
+//   cloud     now holds the laptop's document. The plan is gone from it.
+//
+// The phone still has the plan on disk, so the next push from the phone puts
+// it back and the loss is invisible. Until the phone's cache is cleared —
+// which the epoch bump does to every device at once — and then it hydrates
+// from a cloud copy that never had it.
+//
+// Merging per key removes the race entirely: a key is only ever overwritten by
+// a NEWER version of that same key, so two devices editing two different
+// things cannot destroy each other's work no matter who pushes last.
 
 const DASH_DOC_KEY = 'onyx_dash_doc';
 const DASH_PREFIXES = ['onyx_dash_', 'onyx_focus_'];
@@ -218,6 +239,66 @@ function belongsToOther(raw: string, me: string | null): boolean {
   }
 }
 
+/** One key's value and when it last changed. `v: null` is a tombstone — the
+ *  key was removed here, which has to travel or a cleared note comes back on
+ *  the next merge. */
+interface DashEntry { v: string | null; at: number }
+interface DashDoc { keys: Record<string, DashEntry>; updatedAt: number }
+
+/** Reads either shape.
+ *
+ *  Documents written before per-key stamps are `{ keys: { k: "value" } }` with
+ *  a single `updatedAt`. Every key in one is stamped with that timestamp,
+ *  which is exactly what it means: this is when this device last knew all of
+ *  these to be true. From then on each key moves on its own. */
+function normalizeDoc(raw: unknown): DashDoc {
+  const empty: DashDoc = { keys: {}, updatedAt: 0 };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return empty;
+  const d = raw as { keys?: unknown; updatedAt?: unknown };
+  const at = typeof d.updatedAt === 'number' ? d.updatedAt : 0;
+  if (!d.keys || typeof d.keys !== 'object' || Array.isArray(d.keys)) return { keys: {}, updatedAt: at };
+
+  const keys: Record<string, DashEntry> = {};
+  for (const [k, v] of Object.entries(d.keys as Record<string, unknown>)) {
+    if (typeof v === 'string') { keys[k] = { v, at }; continue; }          // old shape
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const e = v as { v?: unknown; at?: unknown };
+      const value = typeof e.v === 'string' ? e.v : e.v === null ? null : undefined;
+      if (value !== undefined) keys[k] = { v: value, at: typeof e.at === 'number' ? e.at : at };
+    }
+  }
+  return { keys, updatedAt: at };
+}
+
+/** Newest wins, one key at a time. */
+function mergeDocs(a: DashDoc, b: DashDoc): DashDoc {
+  const keys: Record<string, DashEntry> = {};
+  for (const k of new Set([...Object.keys(a.keys), ...Object.keys(b.keys)])) {
+    const x = a.keys[k], y = b.keys[k];
+    keys[k] = !x ? y : !y ? x : (y.at > x.at ? y : x);
+  }
+  return { keys, updatedAt: Math.max(a.updatedAt, b.updatedAt) };
+}
+
+/** The current device state as a stamped document: a key whose value has not
+ *  changed keeps the timestamp it already had, so an untouched key never wins
+ *  a merge it should lose. */
+function stampSnapshot(prev: DashDoc, now: number): DashDoc {
+  const live = snapshotDashboard();
+  const keys: Record<string, DashEntry> = {};
+  for (const [k, v] of Object.entries(live)) {
+    const before = prev.keys[k];
+    keys[k] = before && before.v === v ? before : { v, at: now };
+  }
+  // Present before and gone now — recorded as removed rather than dropped, or
+  // the other device's copy would resurrect it on the next merge.
+  for (const [k, e] of Object.entries(prev.keys)) {
+    if (k in live) continue;
+    keys[k] = e.v === null ? e : { v: null, at: now };
+  }
+  return { keys, updatedAt: now };
+}
+
 let dashTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced push of the current dashboard snapshot (coalesces keystrokes). */
@@ -225,37 +306,52 @@ export function pushDashboard(): void {
   if (typeof window === 'undefined' || signedOut()) return;
   if (dashTimer) clearTimeout(dashTimer);
   dashTimer = setTimeout(() => {
-    const doc = { keys: snapshotDashboard(), updatedAt: Date.now() };
+    const doc = stampSnapshot(normalizeDoc(readLocalDoc(DASH_DOC_KEY)), Date.now());
     writeLocal(DASH_DOC_KEY, doc);
     void pushCollection('dashboard', doc);
   }, 800);
 }
 
-/** Pull the cloud dashboard doc; if it's newer than the local snapshot, apply
-    its keys into localStorage and return true (caller should re-read). If local
-    is newer, push it up. */
+/** Reconcile the cloud dashboard document with this device's, one key at a
+    time, apply the winners to localStorage, and push the result back when the
+    merge produced anything the cloud did not have. Returns true when
+    localStorage changed, so the caller knows to re-read. */
 export async function hydrateDashboard(): Promise<boolean> {
   if (typeof window === 'undefined' || signedOut()) return false;
-  const shadow = readLocalDoc<{ keys?: Record<string, string> }>(DASH_DOC_KEY);
+  const now = Date.now();
+  // Stamped first: keys this device changed since its last push would
+  // otherwise carry the old document's timestamps into the merge and lose to
+  // a cloud copy that never saw them.
+  const local = stampSnapshot(normalizeDoc(readLocalDoc(DASH_DOC_KEY)), now);
   void flushPending();
-  const cloudRaw = await fetchCloud('dashboard');
-  const cloud = (cloudRaw && typeof cloudRaw === 'object' && !Array.isArray(cloudRaw))
-    ? cloudRaw as { keys?: Record<string, string>; updatedAt?: number } : null;
-  const localTs = shadow?.updatedAt ?? 0;
-  const cloudTs = cloud?.updatedAt ?? 0;
-  if (cloud?.keys && cloudTs > localTs) {
-    // Restored as raw strings, which is safe in both directions: a value that
-    // carries an owner envelope keeps it, so a poisoned cloud doc lands as
-    // somebody else's and every reader ignores it rather than displaying it.
-    for (const [k, v] of Object.entries(cloud.keys)) {
-      if (belongsToOther(v, owner())) continue;
-      try { window.localStorage.setItem(k, v); } catch { /* quota */ }
-    }
-    writeLocal(DASH_DOC_KEY, cloud);
-    return true;
+  const cloud = normalizeDoc(await fetchCloud('dashboard'));
+  const merged = mergeDocs(local, cloud);
+
+  let changed = false;
+  for (const [k, e] of Object.entries(merged.keys)) {
+    const current = window.localStorage.getItem(k);
+    try {
+      if (e.v === null) {
+        if (current !== null) { window.localStorage.removeItem(k); changed = true; }
+      } else if (current !== e.v) {
+        // A value carrying somebody else's owner envelope is not applied. It
+        // stays in the document — removing it here would tombstone another
+        // account's key — but it never reaches this device's storage.
+        if (belongsToOther(e.v, owner())) continue;
+        window.localStorage.setItem(k, e.v);
+        changed = true;
+      }
+    } catch { /* quota, private mode — the rest of the merge still applies */ }
   }
-  if (shadow && localTs > cloudTs) void pushCollection('dashboard', shadow);
-  return false;
+
+  writeLocal(DASH_DOC_KEY, merged);
+  // Only when this device contributed something. An unchanged merge means the
+  // cloud already had everything, and pushing it back would be a write per
+  // page load on every device.
+  if (JSON.stringify(merged.keys) !== JSON.stringify(cloud.keys)) {
+    void pushCollection('dashboard', merged);
+  }
+  return changed;
 }
 
 let listenersBound = false;
