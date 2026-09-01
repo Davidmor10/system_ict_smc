@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradeEntry } from '../lib/journal';
 import { tradePnL, todayISO } from '../lib/journal';
 
@@ -55,6 +55,20 @@ function buildWeeks(year: number, month: number, trades: TradeEntry[]): (DayCell
   return weeks;
 }
 
+/** The month of the most recent trade, or null when there are none.
+ *
+ *  Compared as `YYYY-MM` strings, which sort correctly and avoid building a
+ *  Date per trade only to throw it away. */
+export function latestTradeMonth(trades: TradeEntry[]): { year: number; month: number } | null {
+  let best = '';
+  for (const t of trades) {
+    const ym = t.dateISO.slice(0, 7);
+    if (ym.length === 7 && ym > best) best = ym;
+  }
+  if (!best) return null;
+  return { year: Number(best.slice(0, 4)), month: Number(best.slice(5, 7)) - 1 };
+}
+
 export default function JournalCalendar({
   trades,
   selectedDate,
@@ -68,6 +82,34 @@ export default function JournalCalendar({
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
 
+  // Open on the month the trader last traded in, not on today's.
+  //
+  // Opening on today is right on most days and badly wrong on the rest: on the
+  // 1st of a month, or for anyone back from a break, the journal opened on an
+  // empty grid over a full account. It reads as "my trades are gone" — the
+  // worst possible sentence for this screen to imply, and it implied it while
+  // the header two lines above was counting all 33 of them.
+  //
+  // Deferred to an effect because the trades arrive from the cloud after the
+  // first render, so the initial state is computed over an empty list. `moved`
+  // makes this a one-time correction: once the trader has used the arrows, the
+  // month is theirs and nothing moves it again.
+  const moved = useRef(false);
+  const settled = useRef(false);
+  useEffect(() => {
+    if (moved.current || settled.current || trades.length === 0) return;
+    settled.current = true;
+    const latest = latestTradeMonth(trades);
+    if (!latest) return;
+    // Only ever backwards. A trade dated in the future must not drag the
+    // journal away from the month the trader is actually working in.
+    if (latest.year > now.getFullYear()) return;
+    if (latest.year === now.getFullYear() && latest.month >= now.getMonth()) return;
+    setYear(latest.year);
+    setMonth(latest.month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades]);
+
   const weeks = useMemo(() => buildWeeks(year, month, trades), [year, month, trades]);
   const today = todayISO();
 
@@ -80,10 +122,27 @@ export default function JournalCalendar({
 
   // « moves forward in time, » moves back — RTL reading order.
   function goForward() {
+    moved.current = true;
     if (month === 11) { setYear(y => y + 1); setMonth(0); } else { setMonth(m => m + 1); }
   }
   function goBack() {
+    moved.current = true;
     if (month === 0) { setYear(y => y - 1); setMonth(11); } else { setMonth(m => m - 1); }
+  }
+
+  /** Where the trades are, when this month has none. Says so rather than
+   *  leaving an empty grid to be read as a missing journal. */
+  const elsewhere = useMemo(() => {
+    if (monthTrades.length > 0 || trades.length === 0) return null;
+    const latest = latestTradeMonth(trades);
+    if (!latest || (latest.year === year && latest.month === month)) return null;
+    return latest;
+  }, [monthTrades.length, trades, year, month]);
+
+  function goTo(target: { year: number; month: number }) {
+    moved.current = true;
+    setYear(target.year);
+    setMonth(target.month);
   }
 
   return (
@@ -129,6 +188,21 @@ export default function JournalCalendar({
       </div>
 
       {/* Weekday header */}
+      {/* An empty grid over a full journal has to explain itself. */}
+      {elsewhere && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#2a2a2d] bg-[#0d0d0f] px-4 py-3 text-sm text-[#8a8a8a]">
+          <span>
+            אין עסקאות ב{MONTH_NAMES[month]} {year}. העסקאות האחרונות שלך מ{MONTH_NAMES[elsewhere.month]} {elsewhere.year}.
+          </span>
+          <button
+            onClick={() => goTo(elsewhere)}
+            className="rounded-full border border-[#d4af37]/40 bg-[#d4af37]/[0.08] px-4 py-1 font-medium text-[#d4af37] transition-colors hover:bg-[#d4af37]/[0.16]"
+          >
+            הצג אותן
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-8 gap-2 mb-2">
         {WEEKDAY_LABELS.map(label => (
           <div key={label} className="text-center text-xs font-semibold text-white/40 py-1">{label}</div>
