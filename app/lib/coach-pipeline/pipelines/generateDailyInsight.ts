@@ -21,7 +21,7 @@ import { createHash } from 'crypto';
 import type { DailyInsightRow, FallbackReason, InsightKind, Provider, Statistical, TradeRow } from '../types';
 import { listTradesForDate, listRecentTrades, listLateLoggedTrades } from '../db/trades';
 import { getInsightForDate, insertInsight, listRecentInsights } from '../db/insights';
-import { loadDayPlan, loadRuleBreaches } from '../db/collections';
+import { loadRuleBreaches } from '../db/collections';
 import { rankRuleBreaches, type RuleBreach } from '../analyzers/rulesBroken';
 import { computeLoggingHabit, computePlanExecution } from '../analyzers/planExecution';
 import { logUsage, sumUserMonthlyCost, sumSystemCostSince } from '../db/usage';
@@ -209,16 +209,11 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   // the ticks and the sentence were being stored and never opened. Neither can
   // fail the run: a missing block is a shorter note.
   let rulesBroken: RuleBreach[] = [];
-  let dayPlan: Awaited<ReturnType<typeof loadDayPlan>> = null;
   try {
-    const [{ rules, breaches }, plan] = await Promise.all([
-      loadRuleBreaches(cid),
-      loadDayPlan(cid, inputs.date),
-    ]);
+    const { rules, breaches } = await loadRuleBreaches(cid);
     rulesBroken = rankRuleBreaches(rules, breaches, inputs.date);
-    dayPlan = plan;
   } catch (err) {
-    logger.warn('rules/day-plan lookup failed — continuing without them', {
+    logger.warn('rule breaches lookup failed — continuing without them', {
       clerkId: cid, error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -253,7 +248,6 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     planExecution,
     logging: loggingHabit,
     rulesBroken,
-    dayPlan: dayPlan ? { bias: dayPlan.bias, note: dayPlan.note } : null,
     statistical,
     behavior: behavior.block,
     traderProfile,
@@ -431,7 +425,6 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
     rules_broken:         rulesBroken,
     plan_execution:       planExecution,
     logging_habit:        loggingHabit,
-    day_plan_present:     !!(dayPlan?.bias || dayPlan?.note),
     retrieval_query_text: retrieval.queryText,
     retrieval_skipped:    retrieval.skipped,
     retrieval_error:      retrieval.error ?? null,

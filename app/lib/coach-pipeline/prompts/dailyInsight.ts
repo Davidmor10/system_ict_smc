@@ -353,20 +353,6 @@ writing a single word.
   standing problem from an old one. OMITTED when they have ticked nothing.
 </rules_broken>
 
-<day_plan>
-  The direction the trader declared that morning and the reason they wrote for
-  it, before the session. MAY BE ABSENT.
-
-  This is the only record of what they expected, and the day's trades are the
-  record of what happened. Where the two disagree, say so plainly and without a
-  verdict — "you wrote you were waiting for a sweep of the high; the two trades
-  were both longs into the open" is an observation the trader can use. Do NOT
-  praise a reason for being right or fault it for being wrong; a correct read
-  that lost and a wrong read that won are both normal, and treating the outcome
-  as the score of the plan is the single most damaging habit this journal can
-  teach.
-</day_plan>
-
 <past_writing>
   Up to 5 excerpts the trader wrote in their notebook, retrieved because they
   are semantically related to today's context. Each: { date, snippet, kind }.
@@ -450,7 +436,6 @@ export interface DailyInsightInputs {
   /** Which of the trader's own rules they ticked as broken, by name. */
   rulesBroken?:     ReadonlyArray<{ rule: string; count: number; lastDate: string }>;
   /** The direction they declared that morning, and the reason they gave. */
-  dayPlan?:         { bias?: string; note?: string } | null;
   /** Whole-history statistics, computed by analyzers/statistical.ts from the
    *  trader's real trades — never invented, never a placeholder. Absent only
    *  for a trader with no history to compute over. */
@@ -581,9 +566,6 @@ export function buildUserMessage(inputs: DailyInsightInputs): string {
       : []),
     ...(inputs.rulesBroken?.length
       ? ['', '<rules_broken>', safeJson(inputs.rulesBroken), '</rules_broken>']
-      : []),
-    ...(inputs.dayPlan && (inputs.dayPlan.bias || inputs.dayPlan.note)
-      ? ['', '<day_plan>', safeJson(inputs.dayPlan), '</day_plan>']
       : []),
     // Omitted when there is nothing late — an empty list here reads as a
     // prompt to comment on the absence, and there is nothing to say about it.

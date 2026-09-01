@@ -500,22 +500,6 @@ describe('buildUserMessage — the trader\'s own material', () => {
     expect(buildUserMessage({ ...base, rulesBroken: [] })).not.toContain('<rules_broken>');
   });
 
-  it('carries the morning plan, and drops it when there is neither direction nor reason', () => {
-    const withPlan = buildUserMessage({ ...base, dayPlan: { bias: 'bear', note: 'סוויפ של הגבוה של אסיה' } });
-    expect(withPlan).toContain('<day_plan>');
-    expect(withPlan).toContain('סוויפ של הגבוה של אסיה');
-
-    expect(buildUserMessage({ ...base, dayPlan: null })).not.toContain('<day_plan>');
-    expect(buildUserMessage({ ...base, dayPlan: {} })).not.toContain('<day_plan>');
-  });
-
-  it('tells the model the plan is not scored by the outcome', () => {
-    // A correct read that lost and a wrong read that won are both normal.
-    // Treating the result as the plan's grade is the worst habit this journal
-    // could teach, so the contract forbids it in as many words.
-    expect(SYSTEM_PROMPT).toContain('praise a reason for being right');
-    expect(SYSTEM_PROMPT).toContain('never which');
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

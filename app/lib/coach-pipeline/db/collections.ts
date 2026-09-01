@@ -19,8 +19,6 @@ import { logger } from '../../logger';
 
 export interface StoredRule { id: string; title?: string; text?: string; deleted?: boolean }
 export interface StoredBreach { id?: string; ruleId: string; date: string; deleted?: boolean }
-export interface StoredDayPlan { id: string; bias?: string; note?: string; at?: number; deleted?: boolean }
-
 async function readCollection(clerkId: string, kind: string): Promise<unknown[]> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
@@ -66,20 +64,3 @@ export async function loadRuleBreaches(clerkId: string): Promise<{
   }
 }
 
-/** The direction the trader declared for a given day, and why.
- *
- *  The reason is the half that matters here. A direction on its own is already
- *  on every trade of that day; the sentence behind it — "sweep of Asia's high,
- *  daily gap still open" — is the only record of what they were thinking
- *  before the session, and it is the one thing in the journal that can be read
- *  back against what the market actually did. */
-export async function loadDayPlan(clerkId: string, dateIso: string): Promise<StoredDayPlan | null> {
-  try {
-    const rows = await readCollection(clerkId, 'dayplans');
-    const found = (rows as StoredDayPlan[]).find(p => p && !p.deleted && p.id === dateIso);
-    return found ?? null;
-  } catch (err) {
-    logger.warn('day plan unavailable', { clerkId, error: err instanceof Error ? err.message : String(err) });
-    return null;
-  }
-}
