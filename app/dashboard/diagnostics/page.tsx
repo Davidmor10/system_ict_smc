@@ -23,6 +23,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { getUserContext } from '../../lib/getUserRole';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../lib/supabase/server';
 import LocalCacheReport from '../../components/LocalCacheReport';
+import { hasHebrew } from '../../lib/text/direction';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,10 +110,14 @@ export default async function DiagnosticsPage() {
 }
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  const rtl = hasHebrew(value);
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <dt className="text-sm text-[#8a8a8a]">{label}</dt>
-      <dd className={`text-sm text-[#d8d8d8] ${mono ? 'font-mono text-xs' : ''} break-all text-left`} dir="ltr">
+      <dd
+        className={`text-sm text-[#d8d8d8] ${mono && !rtl ? 'font-mono text-xs' : ''} break-all ${rtl ? 'text-right' : 'text-left'}`}
+        dir={rtl ? 'rtl' : 'ltr'}
+      >
         {value}
       </dd>
     </div>

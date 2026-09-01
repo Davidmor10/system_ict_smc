@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { LOCAL_OWNER_KEY, CACHE_EPOCH_KEY, CACHE_EPOCH } from '../lib/localOwner';
+import { hasHebrew } from '../lib/text/direction';
 
 interface CacheEntry { key: string; owner: string | null; items: number | null }
 
@@ -99,10 +100,16 @@ export default function LocalCacheReport({ serverUserId }: { serverUserId: strin
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const rtl = hasHebrew(value);
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <dt className="text-sm text-[#8a8a8a]">{label}</dt>
-      <dd className="text-xs font-mono text-[#d8d8d8] break-all text-left" dir="ltr">{value}</dd>
+      <dd
+        className={`text-xs text-[#d8d8d8] break-all ${rtl ? 'text-right' : 'font-mono text-left'}`}
+        dir={rtl ? 'rtl' : 'ltr'}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
