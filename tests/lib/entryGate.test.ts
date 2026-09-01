@@ -50,11 +50,35 @@ const readPlan = (key: string) =>
   JSON.parse(localStorage.getItem(key)!).v;
 
 describe('the plan record this screen shares with the dashboard', () => {
-  it('keys by the LOCAL date, matching dailyBias.ts', () => {
-    // Late evening in Israel is already "tomorrow" in UTC. If this key were
-    // built from toISOString() the bias would vanish mid-session.
-    expect(planStorageKey(new Date(2026, 7, 21, 23, 30))).toBe('onyx_dash_planobj_2026-08-21');
-    expect(planStorageKey(new Date(2026, 0, 3, 0, 5))).toBe('onyx_dash_planobj_2026-01-03');
+  // The key is built in the TRADER'S CONFIGURED ZONE — the same clock the
+  // trade's own date comes from (journal.todayISO). Three clocks were in play
+  // here historically and each fixed the previous one's failure:
+  //
+  //   UTC       the key rolled over at 21:00 or 22:00 Israel time, so the
+  //             morning's direction vanished during the New York PM session
+  //   browser   right only while the browser and the settings agree; a laptop
+  //             on UTC, or a trip, wrote the direction under one date while
+  //             the trade looked for it under another
+  //   settings  what it is now, and what the trade date already used
+  //
+  // The suite runs on UTC, so these instants fall on a different day in
+  // Asia/Jerusalem — which is the point being asserted.
+  it('keys by the date in the trader\'s zone, matching dailyBias.ts', () => {
+    // 23:30 UTC on the 21st is already 02:30 on the 22nd in Israel.
+    expect(planStorageKey(new Date(Date.UTC(2026, 7, 21, 23, 30)))).toBe('onyx_dash_planobj_2026-08-22');
+    // Mid-afternoon UTC is the same day everywhere that matters here.
+    expect(planStorageKey(new Date(Date.UTC(2026, 7, 21, 12, 0)))).toBe('onyx_dash_planobj_2026-08-21');
+    expect(planStorageKey(new Date(Date.UTC(2026, 0, 3, 9, 5)))).toBe('onyx_dash_planobj_2026-01-03');
+  });
+
+  // The whole point of one clock: the module that WRITES the record and the
+  // module that READS it must build the same string for the same instant.
+  it('agrees with the reader in dailyBias for the same instant', async () => {
+    const { getDeclaredBiasForDate } = await import('../../app/lib/dailyBias');
+    const at = new Date(Date.UTC(2026, 7, 21, 23, 30));   // the 22nd in Israel
+    writeDeclaredBias('bear', '', at);
+    const dayInZone = planStorageKey(at).replace('onyx_dash_planobj_', '');
+    expect(getDeclaredBiasForDate(dayInZone)).toBe('BEARISH');
   });
 
   it('round-trips a declaration', () => {

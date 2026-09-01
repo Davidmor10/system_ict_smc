@@ -168,8 +168,19 @@ export function availableScenarios(trades: TradeEntry[]): WhatIfScenario[] {
   }
 
   // Only bias-aligned — only if some trades were logged against the day's bias.
+  //
+  // The predicate is `=== 'ALIGNED'`, not `!== 'COUNTER'`. A trade taken on a
+  // day with no declared direction has no alignment at all, and the negative
+  // form swept every one of those in as though it had been aligned. On a
+  // trader who declares sporadically that is most of the journal, so the
+  // scenario reported the return of "only trading with my bias" while actually
+  // measuring "everything except the days I admitted going against it" — a
+  // flattering number, shown as a simulation result.
+  //
+  // Same rule as computeBiasAlignment itself, and as followedRules: an absent
+  // answer is not a positive one.
   if (has(t => t.biasAlignment === 'COUNTER')) {
-    scenarios.push({ id: 'biasAligned', kind: 'onlyBiasAligned', value: '', predicate: t => t.biasAlignment !== 'COUNTER' });
+    scenarios.push({ id: 'biasAligned', kind: 'onlyBiasAligned', value: '', predicate: t => t.biasAlignment === 'ALIGNED' });
   }
 
   // Only trades carrying a given confirmation tag — if some do and some don't.

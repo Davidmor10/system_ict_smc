@@ -146,3 +146,40 @@ describe('ruleScenarios', () => {
     expect(ruleScenarios(trades, rules)).toHaveLength(0);
   });
 });
+
+// A trade taken on a day with no declared direction has NO alignment. The
+// predicate used to be `!== 'COUNTER'`, which swept every one of those in as
+// though it had been aligned — so "only trading with my bias" actually
+// measured "everything except the days I admitted going against it". On a
+// trader who declares sporadically that is most of the journal, and the
+// flattering number was presented as a simulation result.
+describe('the only-bias-aligned scenario', () => {
+  const withAlignment = () => [
+    makeTrade({ biasAlignment: 'ALIGNED', result: 'WIN' }),
+    makeTrade({ biasAlignment: 'ALIGNED', result: 'WIN' }),
+    makeTrade({ biasAlignment: 'COUNTER', result: 'LOSS' }),
+    makeTrade({ biasAlignment: undefined, result: 'LOSS' }),   // never declared
+  ];
+
+  it('keeps only the trades actually aligned with a declared direction', () => {
+    const scenario = availableScenarios(withAlignment()).find(s => s.kind === 'onlyBiasAligned');
+    expect(scenario).toBeDefined();
+    const kept = withAlignment().filter(scenario!.predicate);
+    expect(kept).toHaveLength(2);
+    expect(kept.every(t => t.biasAlignment === 'ALIGNED')).toBe(true);
+  });
+
+  it('does not count a trade with no declaration as aligned', () => {
+    const scenario = availableScenarios(withAlignment()).find(s => s.kind === 'onlyBiasAligned');
+    expect(scenario!.predicate(makeTrade({ biasAlignment: undefined }))).toBe(false);
+  });
+
+  // Nothing to simulate when the trader never went against their own call.
+  it('is not offered when no trade was taken against the declared direction', () => {
+    const trades = [
+      makeTrade({ biasAlignment: 'ALIGNED', result: 'WIN' }),
+      makeTrade({ biasAlignment: undefined, result: 'LOSS' }),
+    ];
+    expect(availableScenarios(trades).find(s => s.kind === 'onlyBiasAligned')).toBeUndefined();
+  });
+});

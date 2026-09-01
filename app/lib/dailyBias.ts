@@ -1,35 +1,48 @@
 import type { Bias, BiasAlignment, Direction } from './journal';
 import { readOwned } from './sync/owned';
+import { todayISOInZone } from './time/zone';
 
 const PLAN_BIAS_MAP: Record<string, Bias> = { bull: 'BULLISH', bear: 'BEARISH', neutral: 'INDECISIVE' };
 
-/** The day, in the trader's timezone.
+/** A day key, in the trader's configured zone.
  *
- *  This used to be `toISOString().slice(0, 10)`, which is UTC. Israel is two
- *  or three hours ahead, so from 21:00 or 22:00 local the key rolled to
- *  tomorrow and the bias the trader declared that morning silently stopped
- *  being found — during the New York PM session, which is when they were most
- *  likely to be trading. */
-function todayKey() {
-  // Local, not UTC — and computed here rather than imported from journal.ts,
-  // which now imports this module for computeBiasAlignment. The cycle would
-  // resolve at runtime (both are called from inside functions) and would be a
-  // trap for whoever next moves a call to module scope.
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+ *  Must produce byte-for-byte what entryGate.planDayKey produces — one writes
+ *  the record and the other reads it. Both now resolve through
+ *  todayISOInZone, which is also where the trade's own date comes from, so
+ *  all three agree on what day it is.
+ *
+ *  This was UTC once: Israel is two or three hours ahead, so from 21:00 the
+ *  key rolled to tomorrow and the morning's direction stopped being found —
+ *  during the New York PM session, which is exactly when it was needed. The
+ *  fix for that used the BROWSER's zone, which is right only while the browser
+ *  and the settings agree. */
+function dayKey(at: Date = new Date()): string {
+  return todayISOInZone(undefined, at);
 }
 
-/** Reads the bias the trader declared for today in the dashboard's daily plan — the same
- * value shown in the hero's bias card. Returns null if no plan was saved today. */
-export function getTodaysDeclaredBias(): Bias | null {
+/** The direction the trader declared for a GIVEN DAY, `YYYY-MM-DD`.
+ *
+ *  Takes the day rather than assuming today, because the trade form does not
+ *  only log trades that happened today. Logging Sunday's trades on Tuesday
+ *  read Tuesday's declaration and graded Sunday's trades against a direction
+ *  chosen two days after they were closed — a wrong alignment written into the
+ *  database, indistinguishable afterwards from a real one. */
+export function getDeclaredBiasForDate(dateISO: string): Bias | null {
   if (typeof window === 'undefined') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
   try {
-    const o = readOwned<{ bias?: string }>('onyx_dash_planobj_' + todayKey());
+    const o = readOwned<{ bias?: string }>('onyx_dash_planobj_' + dateISO);
     if (!o?.bias) return null;
     return PLAN_BIAS_MAP[o.bias] ?? null;
   } catch {
     return null;
   }
+}
+
+/** The direction declared for today. */
+export function getTodaysDeclaredBias(): Bias | null {
+  if (typeof window === 'undefined') return null;
+  return getDeclaredBiasForDate(dayKey());
 }
 
 /** Is this trade with or against the direction the trader declared for the day.

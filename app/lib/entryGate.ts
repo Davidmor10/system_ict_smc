@@ -7,13 +7,14 @@
 //
 // The bias helpers are the one exception: they touch localStorage, and they
 // deliberately read and write the SAME record the dashboard's daily plan uses
-// (`onyx_dash_planobj_<local date>`), so a direction declared here is the one
+// (`onyx_dash_planobj_<date in the trader's zone>`), so a direction declared here is the one
 // `getTodaysDeclaredBias()` finds when the trade form opens. Writing a second
 // store would have been easier and would have quietly split the truth in two.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Rule } from './rules/types';
 import { readOwned, writeOwned } from './sync/owned';
+import { todayISOInZone } from './time/zone';
 
 export type BiasChoice = 'bull' | 'bear' | 'neutral';
 
@@ -32,7 +33,14 @@ const p2 = (n: number) => String(n).padStart(2, '0');
  *  declared here cannot be found by the trade form. If that ever moves, both
  *  files move together. */
 export function planDayKey(now: Date = new Date()): string {
-  return `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
+  // The trader's configured zone, which is the same clock the trade's own date
+  // comes from (journal.todayISO → todayISOInZone). It used to be the
+  // BROWSER's zone, and the two are not the same clock: a laptop set to UTC, a
+  // trip, or a trader whose market is not their timezone wrote the direction
+  // under one date while the trade looked for it under another. It was then
+  // simply not found — no error, no empty state, just a day that silently had
+  // no bias.
+  return todayISOInZone(undefined, now);
 }
 
 export function planStorageKey(now: Date = new Date()): string {

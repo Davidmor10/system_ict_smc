@@ -18,7 +18,7 @@ import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } fr
 import { clockInZone } from '../lib/time/zone';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { confidenceLevelFor } from '../lib/analytics/confidence';
-import { getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
+import { getDeclaredBiasForDate, getTodaysDeclaredBias, computeBiasAlignment } from '../lib/dailyBias';
 import ScreenshotUpload from './ScreenshotUpload';
 import TypingDots from './TypingDots';
 import { checkTrade, type GuardianWarning } from '../lib/guardian/checkTrade';
@@ -178,7 +178,7 @@ function empty(): FormState {
     target: '',
     exits: singleLeg('1'),
     followedRules: '',
-    dayBias: getTodaysDeclaredBias() ?? '',
+    dayBias: getTodaysDeclaredBias() ?? '',   // `empty()` is always today; see setDate
     stopMoved: '',
     stopNote: '',
     brokenRules: [],
@@ -445,6 +445,23 @@ export default function TradeForm({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  /** Changing the day re-reads the direction declared FOR THAT DAY.
+   *
+   *  The field means "the direction the trader had committed to when this
+   *  trade was taken", so it belongs to the trade's date and not to today.
+   *  Seeded once at mount, it kept whatever today's declaration was: a trade
+   *  moved back to Sunday was graded against Tuesday's direction, and the
+   *  wrong alignment went into the database looking exactly like a right one.
+   *
+   *  Done here rather than in an effect on `form.date` deliberately — an
+   *  effect also fires when an existing trade is opened for editing, and would
+   *  overwrite the direction that trade was actually saved with. */
+  function setDate(dateISO: string) {
+    setForm(prev => (
+      prev.date === dateISO ? prev : { ...prev, date: dateISO, dayBias: getDeclaredBiasForDate(dateISO) ?? '' }
+    ));
   }
 
   /** Position size, with the single exit leg kept in step with it.
@@ -792,7 +809,7 @@ export default function TradeForm({
               form. */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="תאריך">
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
+              <input type="date" value={form.date} onChange={e => setDate(e.target.value)} className={inputCls} required />
             </Field>
             <Field label="שעת כניסה">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
