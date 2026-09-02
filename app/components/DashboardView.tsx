@@ -12,7 +12,9 @@ import TrackingLine from './TrackingLine';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
-import { initSyncListeners } from '../lib/sync/collections';
+import { hydrateDoc, initSyncListeners } from '../lib/sync/collections';
+import { DEFAULT_SETTINGS, SETTINGS_KEY, SETTINGS_KIND, withDefaults } from '../lib/settings/types';
+import type { UserSettings } from '../lib/settings/types';
 import { activeSessions, getActiveSessionIdx } from '../lib/sessions';
 import { INSTRUMENTS, pointValue } from '../lib/instruments';
 
@@ -24,7 +26,13 @@ type Unit = 'dollar' | 'percent' | 'r' | 'ticks' | 'points';
 type WidgetKey = 'balance' | 'pnl' | 'pf' | 'win' | 'expectancy' | 'avgrr' | 'streak' | 'maxdd' | 'longshort' | 'bestday' | 'tradesday' | 'avgwl';
 
 const DEFAULT_WIDGETS: WidgetKey[] = ['balance', 'pnl', 'pf', 'win', 'expectancy', 'avgrr', 'streak', 'maxdd', 'longshort'];
-const ACCOUNT_START_DEFAULT = 25000;
+// Only the value used until the settings document arrives. The dashboard used
+// to KEEP it: the account balance card, and every percentage derived from it,
+// were computed against 25,000 no matter what the trader had configured. The
+// stats page read the real number from the same document all along, so the two
+// screens reported different balances for the same account — 25,242.50 against
+// 50,242.50 — with nothing on either to say which was wrong.
+const ACCOUNT_START_FALLBACK = DEFAULT_SETTINGS.accountStartUsd;
 const WIDGETS_KEY = 'onyx_dash2_widgets';
 const UNIT_KEY = 'onyx_dash2_unit';
 
@@ -264,6 +272,7 @@ export default function DashboardView() {
   const [macro, setMacro]       = useState<MacroEventLite[] | null>(null);
   const [macroToday, setMacroToday] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<WidgetKey | null>(null);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
 
   /* ── Clock ───────────────────────────────────────────────────── */
   // The zone from settings, not a hardcoded Israel. This is the clock the
@@ -293,6 +302,11 @@ export default function DashboardView() {
     setTrades(loadTrades());
     initSyncListeners();
     hydrateTradesFromCloud().then(merged => { if (merged) setTrades(merged); }).catch(() => {});
+    // The configured starting balance, from the same document the stats page
+    // reads. Without this the two screens disagree about the account.
+    hydrateDoc<UserSettings>(SETTINGS_KIND, SETTINGS_KEY)
+      .then(doc => { if (doc) setSettings(withDefaults(doc)); })
+      .catch(() => { /* the fallback is fine until it arrives */ });
   }, []);
 
   /* ── Persist widgets + unit ──────────────────────────────────── */
@@ -326,9 +340,10 @@ export default function DashboardView() {
     }
     return n > 0 ? sum / n : 100;
   }, [trades]);
-  const fmtCtx = { accountStart: ACCOUNT_START_DEFAULT, avgRisk, ...cctx };
+  const accountStart = settings.accountStartUsd || ACCOUNT_START_FALLBACK;
+  const fmtCtx = { accountStart, avgRisk, ...cctx };
 
-  const accountBalance = ACCOUNT_START_DEFAULT + stats.pnl;
+  const accountBalance = accountStart + stats.pnl;
 
   /* ── Calendar data ───────────────────────────────────────────── */
   const calendar = useMemo(() => {
