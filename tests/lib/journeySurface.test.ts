@@ -20,7 +20,7 @@ const read = (...p: string[]) => readFileSync(app(...p), 'utf8');
 
 const ROUTE   = read('api', 'coach', 'journey', 'route.ts');
 const VIEW    = read('components', 'ProgressView.tsx');
-const STRIP   = read('components', 'ProgressStrip.tsx');
+const STATE   = read('components', 'CurrentState.tsx');
 const DASH    = read('components', 'DashboardView.tsx');
 const ANALYTICS = read('dashboard', 'ai-analytics', 'page.tsx');
 const SERVICE = read('lib', 'intelligence', 'service.ts');
@@ -33,43 +33,120 @@ describe('the route is read-only', () => {
     expect(ROUTE).not.toContain('persist: true');
   });
 
-  it('reads the stored scores instead of refreshing them', () => {
-    expect(ROUTE).toContain('getScoreHistory');
+  it('never refreshes the intelligence as a side effect of a page load', () => {
     expect(ROUTE).not.toContain('refreshIntelligence');
   });
 
   // Every reader of the intelligence module refreshes as a side effect of
   // being asked; this accessor exists precisely so a screen does not have to.
-  it('has a read-only accessor to call', () => {
+  it('has a read-only accessor for the scores, even though nothing shows them', () => {
     expect(SERVICE).toContain('export async function getScoreHistory');
     const body = SERVICE.slice(SERVICE.indexOf('export async function getScoreHistory'));
     expect(body.slice(0, 400)).not.toContain('saveTraderProfile');
   });
 });
 
-describe('the strip and the page cannot disagree', () => {
+// ── the score that was pulled ───────────────────────────────────────────────
+//
+// It could not say which habit moved, only that a number had. The engine
+// still runs; the surface is gone. These guard against it coming back by
+// accident rather than by decision.
+
+describe('the learning score does not reach a browser', () => {
+  it('is not in the payload', () => {
+    expect(ROUTE).not.toContain('learningTrajectory');
+    expect(ROUTE).not.toContain('trajectory');
+  });
+
+  it('is not rendered by either surface', () => {
+    for (const src of [VIEW, STATE]) {
+      expect(src).not.toContain('ציון למידה');
+      expect(src).not.toContain('trajectory');
+    }
+  });
+
+  // Pulled from the UI, kept in the engine — the distinction the request made.
+  it('is still computed nightly', () => {
+    expect(SERVICE).toContain('computeLearningScore');
+  });
+});
+
+describe('no factor is scored 50 because it could not be measured', () => {
+  const SCORES = read('lib', 'intelligence', 'scores.ts');
+
+  it('returns null and a reason per factor instead', () => {
+    expect(SCORES).toContain('missing?: string');
+    expect(SCORES).toContain('score: number | null');
+  });
+
+  it('redistributes the weight of what it could not read', () => {
+    expect(SCORES).toContain('effectiveWeight');
+    expect(SCORES).toContain('MIN_MEASURED_WEIGHT');
+  });
+
+  // The learning score reading a placeholder's replacement as improvement was
+  // the actual harm; it cannot happen if there are no placeholders.
+  it('has no neutral fallback left in the factor readings', () => {
+    const body = SCORES.slice(SCORES.indexOf('const raw: Record<EdgeFactorKey'), SCORES.indexOf('const keys = Object.keys'));
+    expect(body).not.toMatch(/:\s*50\b/);
+    expect(body).not.toMatch(/\?\?\s*50\b/);
+  });
+});
+
+describe('the state panel and the history page cannot disagree', () => {
   it('both read the same endpoint', () => {
-    expect(STRIP).toContain('/api/coach/journey');
+    expect(STATE).toContain('/api/coach/journey');
     expect(VIEW).toContain('/api/coach/journey');
   });
 
   // The counts are computed once, server-side, from one list of findings.
   it('does not recount findings in either surface', () => {
     expect(ROUTE).toContain('countJourney');
-    expect(STRIP).not.toContain('countJourney');
+    expect(STATE).not.toContain('countJourney');
     expect(VIEW).not.toContain('countJourney');
   });
 
   it('is what the dashboard renders', () => {
-    expect(DASH).toContain('<ProgressStrip />');
+    expect(DASH).toContain('<CurrentState />');
     expect(DASH).not.toContain('TrackingLine');
+    expect(DASH).not.toContain('ProgressStrip');
+  });
+});
+
+// ── what the state panel is not allowed to be ───────────────────────────────
+//
+// The request that produced it named three shapes to avoid, and each is a
+// thing a dashboard panel drifts into on its own.
+
+describe('the state panel makes one claim, not a scoreboard', () => {
+  it('shows no score assembled from weights', () => {
+    expect(STATE).not.toContain('edgeScore');
+    expect(STATE).not.toContain('learningScore');
+  });
+
+  // A red dot cannot be argued with; "5 out of 22 opportunities" can. The
+  // emoji only — the file's own comment explains why they are absent, and a
+  // test that trips on the explanation is testing the wrong thing.
+  it('has no traffic-light verdicts', () => {
+    for (const light of ['🟢', '🟡', '🔴']) expect(STATE).not.toContain(light);
+  });
+
+  // Trade data can establish where a behaviour concentrates, never why —
+  // docs/ai-architecture.md makes that a rule, not a preference.
+  it('says out loud what it does not know', () => {
+    expect(STATE).toContain('unknownLine');
+    expect(STATE).toContain('לא ממצא לטובתך ולא לרעתך');
+  });
+
+  it('carries the counterweight, so it is not only a problem finder', () => {
+    expect(STATE).toContain('כבר השתנו והחזיקו');
   });
 });
 
 describe('a relapse is never counted as a success', () => {
-  it('is a field of its own on the strip, not folded into the changed count', () => {
-    expect(STRIP).toContain('counts.relapsed');
-    expect(STRIP).toContain('counts.changed');
+  it('is a field of its own on the panel, not folded into the changed count', () => {
+    expect(STATE).toContain('counts.relapsed');
+    expect(STATE).toContain('counts.changed');
   });
 
   it('is stated on the page for a behaviour that came back', () => {
@@ -93,16 +170,14 @@ describe('the behaviour review moved rather than being copied', () => {
   });
 });
 
-describe('an unmeasurable score is said, not drawn', () => {
-  // The engine returns a neutral 50 when it cannot compare. Drawn on an axis
-  // that is a flat line at the midpoint — months of standing still shown to a
-  // trader who has simply never been measured.
-  it('branches on `known` before rendering a number', () => {
-    expect(VIEW).toContain('t.known');
-    expect(VIEW).toContain('עוד אין מספיק היסטוריה');
+describe('the history page stays a history', () => {
+  it('keeps the lifecycle, the evolution axis and the process log', () => {
+    expect(VIEW).toContain('STATUS_ORDER');
+    expect(VIEW).toContain('ציר ההתפתחות');
+    expect(VIEW).toContain('יומן התהליך');
   });
 
-  it('hides the score on the strip too while it is unknown', () => {
-    expect(STRIP).toContain('trajectory.known');
+  it('states plainly that it gives no recommendation', () => {
+    expect(VIEW).toContain('אין כאן ציון ואין המלצה');
   });
 });

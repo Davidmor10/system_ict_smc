@@ -86,7 +86,7 @@
 
 /* ── hero ────────────────────────────────────────────────────────── */
 .jr-hero {
-  padding: clamp(40px, 5vw, 64px) clamp(20px, 4vw, 48px) 0;
+  padding: clamp(28px, 3.4vw, 44px) clamp(20px, 4vw, 48px) 0;
   max-width: 1120px; margin: 0 auto;
 }
 .jr-eyebrow {
@@ -97,7 +97,7 @@
 .jr-h1 {
   margin: 14px 0 0;
   font-family: var(--jr-serif); font-weight: 800; color: #fff;
-  font-size: clamp(2rem, 4.6vw, 3.2rem); line-height: 1.04; letter-spacing: -0.01em;
+  font-size: clamp(1.8rem, 3.4vw, 2.5rem); line-height: 1.06; letter-spacing: -0.01em;
   text-shadow: 0 0 60px rgba(212, 175, 55, 0.3);
   text-wrap: balance;
 }
@@ -110,7 +110,7 @@
    page it counts, so the number is a way in rather than a verdict. */
 .jr-counts {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
-  margin-top: 28px;
+  margin-top: 22px;
 }
 @media (max-width: 620px) { .jr-counts { grid-template-columns: 1fr; } }
 .jr-count {
@@ -152,6 +152,12 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
 }
 .jr-panel + .jr-panel { margin-top: 12px; }
 
+.jr-panel-k {
+  font-family: var(--jr-num);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--jr-w42); margin-bottom: 16px;
+}
+
 .jr-note {
   margin: 14px 0 0; font-size: 12.5px; line-height: 1.75; color: var(--jr-w34); text-wrap: pretty;
 }
@@ -179,31 +185,38 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
   animation: jr-fill 700ms var(--jr-ease) both;
 }
 
-/* ── the lifecycle stepper ───────────────────────────────────────── */
+/* ── the lifecycle stepper ───────────────────────────────────────────────────
+   Drawn at 10px in grey in the first version — the strongest idea in the
+   product rendered as the faintest thing on its own screen. A trader cannot
+   be moved through a process whose shape they cannot read. */
 .jr-steps {
   display: flex; align-items: center; gap: 0; flex-wrap: wrap;
-  margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--jr-rule);
+  margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--jr-rule);
 }
-.jr-step { display: flex; align-items: center; gap: 8px; }
+.jr-step { display: flex; align-items: center; gap: 9px; }
 .jr-step-dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 9px; height: 9px; border-radius: 50%;
   background: var(--jr-w24); flex-shrink: 0;
+  transition: background 300ms var(--jr-ease);
 }
-.jr-step[data-state="done"] .jr-step-dot { background: var(--jr-bull); }
+.jr-step[data-state="done"] .jr-step-dot { background: var(--jr-bull-t); }
 .jr-step[data-state="here"] .jr-step-dot {
-  background: var(--jr-gold); box-shadow: 0 0 10px rgba(212, 175, 55, 0.8);
-  width: 9px; height: 9px;
+  background: var(--jr-gold); box-shadow: 0 0 12px rgba(212, 175, 55, 0.85);
+  width: 13px; height: 13px;
 }
 .jr-step-k {
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
-  color: var(--jr-w24); white-space: nowrap;
+  font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--jr-w34); white-space: nowrap;
 }
-.jr-step[data-state="done"] .jr-step-k { color: var(--jr-w50); }
-.jr-step[data-state="here"] .jr-step-k { color: var(--jr-gold); }
+.jr-step[data-state="done"] .jr-step-k { color: var(--jr-w62); }
+.jr-step[data-state="here"] .jr-step-k {
+  color: var(--jr-gold); font-size: 14px;
+}
 .jr-step-bar {
-  width: clamp(10px, 2.2vw, 30px); height: 1px; background: var(--jr-w12); margin: 0 8px; flex-shrink: 0;
+  width: clamp(12px, 2.4vw, 34px); height: 2px; border-radius: 1px;
+  background: var(--jr-w12); margin: 0 9px; flex-shrink: 0;
 }
-.jr-step-bar[data-done="true"] { background: rgba(74, 124, 89, 0.55); }
+.jr-step-bar[data-done="true"] { background: rgba(127, 174, 140, 0.5); }
 
 /* ── a settled behaviour ─────────────────────────────────────────── */
 .jr-result-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -263,38 +276,6 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
   color: var(--jr-w42); white-space: nowrap;
 }
 .jr-status[data-primary="true"] { color: var(--jr-gold); border-color: var(--jr-gold-34); background: var(--jr-gold-07); }
-
-/* ── the learning curve ──────────────────────────────────────────── */
-.jr-curve-top { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
-.jr-curve-v { font-family: var(--jr-num); font-size: 44px; font-weight: 700; line-height: 1; color: #fff; }
-.jr-curve-delta { font-family: var(--jr-num); font-size: 15px; font-weight: 700; padding-bottom: 6px; }
-.jr-curve-delta[data-dir="up"] { color: var(--jr-bull-t); }
-.jr-curve-delta[data-dir="down"] { color: var(--jr-bear-t); }
-.jr-curve-delta[data-dir="flat"] { color: var(--jr-w42); }
-.jr-chart-wrap { display: flex; gap: 12px; margin-top: 22px; align-items: stretch; }
-.jr-chart-box { position: relative; flex: 1; min-width: 0; height: 168px; }
-.jr-chart { width: 100%; height: 100%; display: block; }
-/* The axis runs 0-100 because the score does. Labelled so a reader never has
-   to wonder whether the frame was fitted to the data. */
-.jr-axis {
-  display: flex; flex-direction: column; justify-content: space-between;
-  font-family: var(--jr-num); font-size: 10px; font-weight: 700;
-  color: var(--jr-w24); text-align: start; padding-block: 1px;
-  direction: ltr;
-}
-/* Markers live outside the SVG: the path is stretched with
-   preserveAspectRatio="none", and a <circle> in that space renders as an
-   ellipse that gets wider as the panel does. */
-.jr-dot {
-  position: absolute; width: 5px; height: 5px; border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(212, 175, 55, 0.45);
-  pointer-events: none;
-}
-.jr-dot[data-last="true"] {
-  width: 9px; height: 9px; background: var(--jr-gold);
-  box-shadow: 0 0 12px rgba(212, 175, 55, 0.7);
-}
 
 /* ── evolution + log ─────────────────────────────────────────────── */
 .jr-evo { display: flex; gap: 14px; padding: 16px 0; border-top: 1px solid var(--jr-rule); }

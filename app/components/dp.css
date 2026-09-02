@@ -164,329 +164,71 @@
    Sits under the bias card, and is quieter than it: the bias is a control the
    trader operates, this is a number they watch. It renders only while a window
    is open, so it is never competing for attention with nothing to say. */
-.dp-app .dp-track{
-  display:flex;flex-direction:column;gap:9px;flex-shrink:0;
-  padding:13px 18px 15px;border-radius:14px;
+.dp-app .dp-state{
+  display:flex;flex-direction:column;gap:11px;flex-shrink:0;
+  padding:16px 20px 18px;border-radius:14px;
   background:linear-gradient(160deg,rgba(35,32,40,.38),rgba(24,22,33,.22));
   border:1px solid var(--dp-border);
 }
-.dp-app .dp-track-head{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;}
-.dp-app .dp-track-k{
+.dp-app .dp-state-head{display:flex;align-items:center;gap:12px;}
+.dp-app .dp-state-k{
   font-family:var(--dp-ff-sans);font-size:10px;font-weight:800;
   letter-spacing:.2em;text-transform:uppercase;color:var(--dp-gold);white-space:nowrap;
 }
-.dp-app .dp-track-label{font-family:var(--dp-ff-sans);font-size:13.5px;font-weight:600;color:var(--dp-w92);}
-.dp-app .dp-track-count{
-  margin-inline-start:auto;font-family:var(--dp-ff-mono);font-size:12px;font-weight:700;
+.dp-app .dp-state-more{
+  margin-inline-start:auto;
+  font-family:var(--dp-ff-mono);font-size:11px;font-weight:700;
+  letter-spacing:.08em;color:var(--dp-w40,rgba(255,255,255,.4));white-space:nowrap;
+  transition:color .25s var(--dp-ease);
+}
+.dp-app .dp-state-more:hover{color:var(--dp-gold);}
+.dp-app .dp-state-more:focus-visible{outline:2px solid var(--dp-gold);outline-offset:3px;}
+
+/* The claim. One line, and the biggest thing on the panel — a trader glancing
+   at the dashboard for five seconds should leave with this sentence and
+   nothing else. */
+.dp-app .dp-state-claim{display:flex;align-items:center;gap:11px;flex-wrap:wrap;}
+.dp-app .dp-state-subject{
+  flex:1;min-width:200px;
+  font-family:var(--dp-ff-sans);font-size:16px;font-weight:600;color:var(--dp-w92);
+  line-height:1.4;
+}
+.dp-app .dp-state-chip{
+  font-family:var(--dp-ff-mono);font-size:9.5px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--dp-gold);
+  border:1px solid rgba(212,175,55,.34);border-radius:2px;
+  background:rgba(212,175,55,.07);padding:4px 9px;white-space:nowrap;
+}
+/* The denominator, never a bare count. */
+.dp-app .dp-state-count{
+  font-family:var(--dp-ff-mono);font-size:17px;font-weight:700;
   color:var(--dp-gold);font-variant-numeric:tabular-nums;white-space:nowrap;
 }
-.dp-app .dp-track-rail{display:block;height:2px;background:var(--dp-w06);overflow:hidden;}
-.dp-app .dp-track-fill{
+.dp-app .dp-state-rail{display:block;height:2px;background:var(--dp-w06);overflow:hidden;}
+.dp-app .dp-state-fill{
   display:block;height:100%;background:linear-gradient(90deg,var(--dp-gold-deep),var(--dp-gold));
   transition:width .6s var(--dp-ease);
 }
-.dp-app .dp-track-what{margin:0;font-size:12.5px;line-height:1.65;color:var(--dp-w55);text-wrap:pretty;}
-/* 9.5px is not a caption, it is a line nobody reads. Either the sentence is
-   worth saying or it is not — and this one is: it tells the trader the count
-   is built from their own logging and is not the system telling them what to
-   do. Sized to be read, at the scale of the block it belongs to. */
-.dp-app .dp-track-note{margin:0;font-family:var(--dp-ff-mono);font-size:11.5px;line-height:1.6;letter-spacing:.04em;color:var(--dp-w40,rgba(255,255,255,.4));}
+.dp-app .dp-state-what{margin:0;font-size:13px;line-height:1.7;color:var(--dp-w55);text-wrap:pretty;}
+.dp-app .dp-state-quiet{color:var(--dp-w40,rgba(255,255,255,.4));}
 
-
-.dp-app .dp-control-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;flex-wrap:wrap;}
-.dp-app .dp-sessions{display:flex;gap:8px;flex-wrap:wrap;}
-.dp-app .dp-session-chip{display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:11px;border:1px solid var(--dp-border);background:linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));}
-.dp-app .dp-session-dot{width:6px;height:6px;border-radius:50%;background:var(--dp-w28);flex-shrink:0;}
-.dp-app .dp-session-name{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dp-w92);}
-.dp-app .dp-session-time{font-family:var(--dp-ff-mono);font-size:12px;font-weight:700;color:var(--dp-w72);direction:ltr;}
-.dp-app .dp-session-chip.active{border-color:var(--dp-gold-30);background:linear-gradient(155deg,rgba(230,198,101,.14),var(--dp-card-b));box-shadow:0 0 26px -12px var(--dp-gold-40);}
-.dp-app .dp-session-chip.active .dp-session-dot{background:var(--dp-gold);box-shadow:0 0 9px 1px var(--dp-gold-40);animation:dp-pulse-dot 2s ease-in-out infinite;}
-.dp-app .dp-session-chip.active .dp-session-name{color:var(--dp-gold);}
-.dp-app .dp-session-live{font-family:var(--dp-ff-mono);font-size:8px;font-weight:800;letter-spacing:.1em;color:var(--dp-bull);background:var(--dp-bull-08);border:1px solid var(--dp-bull-30);border-radius:20px;padding:2px 6px;}
-
-.dp-app .dp-unit-wrap{display:flex;align-items:center;gap:12px;}
-.dp-app .dp-unit-label{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dp-gold);}
-.dp-app .dp-unit-toggle{display:flex;gap:4px;padding:5px;border-radius:13px;direction:ltr;
-  background:linear-gradient(155deg,rgba(230,198,101,.08),rgba(20,19,26,.85));
-  border:1px solid var(--dp-gold-25);
-  box-shadow:0 0 34px -14px var(--dp-gold-40),inset 0 1px 0 rgba(255,255,255,.05);}
-.dp-app .dp-unit-toggle button{font-family:var(--dp-ff-mono);font-size:13px;font-weight:800;letter-spacing:.03em;color:var(--dp-w55);background:transparent;border:none;border-radius:9px;padding:11px 22px;cursor:pointer;transition:.18s var(--dp-ease);}
-.dp-app .dp-unit-toggle button.active{background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));color:#1a1405;box-shadow:0 5px 16px -4px var(--dp-gold-40);}
-.dp-app .dp-unit-toggle button:not(.active):hover{color:#fff;}
-
-/* ── KPI grid ── */
-.dp-app .dp-kpis{flex:0 0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));grid-auto-rows:140px;gap:14px;}
-/* align-items:start so the macro rail keeps its natural height instead of
-   being stretched to match a now-taller calendar. */
-.dp-app .dp-body{flex:0 0 auto;display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start;}
-.dp-app .dp-col{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;}
-.dp-app .dp-side > .dp-ai,.dp-app .dp-side > .dp-ai-locked{flex:0 0 auto;} .dp-app .dp-side > .dp-macro{flex:1;}
-.dp-app .dp-panel{background:linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));border:1px solid var(--dp-border);border-radius:14px;box-shadow:0 20px 44px -34px #000,inset 0 1px 0 rgba(255,255,255,.04);min-height:0;}
-
-/* ── The P&L / balance HERO — the whole point of the dashboard.
-   Spans 2 columns AND 2 rows so it visually dominates the grid rather
-   than tying for weight with "Streak" or "Long/Short". Gold-accent
-   border, gold radial-glow background, and a value size (60px) that
-   nearly doubles a normal KPI (32px) so the eye lands on it first. ── */
-.dp-app .dp-kpi-balance{
-  grid-column:span 2; grid-row:span 2;
-  justify-content:flex-start; padding:24px 28px;
-  background:
-    radial-gradient(85% 100% at 100% 0%, rgba(230,198,101,.16), transparent 60%),
-    radial-gradient(60% 80% at 0% 100%, rgba(240,160,90,.08), transparent 60%),
-    linear-gradient(155deg, #221f2b, #17151f);
-  border:1px solid rgba(230,198,101,.30);
-  box-shadow:
-    0 30px 60px -30px #000,
-    0 0 70px -22px rgba(230,198,101,.30),
-    inset 0 1px 0 rgba(255,255,255,.05);
+.dp-app .dp-state-foot{
+  display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+  padding-top:11px;border-top:1px solid var(--dp-border);
 }
-.dp-app .dp-kpi-balance .dp-widget-k{font-size:13px;margin-bottom:14px;}
-.dp-app .dp-kpi-val{
-  font-family:var(--dp-ff-mono);font-size:clamp(38px,3.8vw,52px);font-weight:900;line-height:1;
-  font-variant-numeric:tabular-nums;letter-spacing:-.02em;
-  background:linear-gradient(180deg,#fff 20%,var(--dp-gold-soft) 90%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
+/* Sized to be read. The thing the system does not know is the line most
+   likely to be true in a trader's first month, and a 9px caption for it is a
+   way of not saying it. */
+.dp-app .dp-state-unknown{
+  flex:1;min-width:260px;
+  font-size:12.5px;line-height:1.65;color:var(--dp-w40,rgba(255,255,255,.4));text-wrap:pretty;
 }
-.dp-app .dp-kpi-balance .dp-widget-sub{font-size:14px;font-weight:800;margin-top:10px;}
-.dp-app .dp-kpi-spark{width:100%;height:56px;margin-top:auto;}
-
-.dp-app .dp-widget{position:relative;overflow:hidden;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;
-  /* Lifted the card ground by ~15% brightness and moved the border to
-     rgba white .09 so tiles stop dissolving into the app background. */
-  background:linear-gradient(155deg,#232028,#181621);
-  border:1px solid rgba(255,255,255,.09);
-  box-shadow:0 16px 34px -30px #000,inset 0 1px 0 rgba(255,255,255,.05);
-  transition:transform .22s var(--dp-ease),box-shadow .22s,border-color .2s;}
-.dp-app .dp-widget::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(160px 160px at var(--mx,50%) var(--my,0%),var(--dp-gold-15),transparent 70%);}
-.dp-app .dp-widget:hover::before{opacity:1;}
-.dp-app .dp-widget > *{position:relative;}
-.dp-app .dp-widget:hover{transform:translateY(-3px);box-shadow:0 24px 44px -26px #000,0 0 40px -20px var(--dp-gold-40);border-color:var(--dp-gold-25);}
-.dp-app.editing .dp-widget{border-style:dashed;cursor:grab;}
-.dp-app .dp-widget-k{display:flex;align-items:center;gap:6px;font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--dp-gold);margin-bottom:11px;}
-.dp-app .dp-widget-v{font-family:var(--dp-ff-mono);font-size:32px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;color:#fff;letter-spacing:-.015em;}
-.dp-app .dp-widget-v.bull{color:var(--dp-bull);text-shadow:0 0 22px rgba(95,211,158,.4);}
-.dp-app .dp-widget-v.bear{color:var(--dp-bear);text-shadow:0 0 22px rgba(240,137,158,.35);}
-.dp-app .dp-widget-v.gold{background:linear-gradient(180deg,var(--dp-gold-soft),var(--dp-gold-deep));-webkit-background-clip:text;background-clip:text;color:transparent;}
-.dp-app .dp-widget-sub{font-family:var(--dp-ff-sans);font-size:13px;font-weight:700;color:var(--dp-w72);margin-top:8px;}
-.dp-app .dp-widget-remove{position:absolute;top:6px;left:6px;width:24px;height:24px;border-radius:50%;
-  background:linear-gradient(155deg,var(--dp-bear),var(--dp-bear-deep));color:#1a0509;
-  border:1px solid rgba(240,137,158,.55);font-size:13px;font-weight:900;line-height:1;
-  cursor:pointer;display:none;align-items:center;justify-content:center;z-index:5;
-  box-shadow:0 6px 16px -4px rgba(240,137,158,.55),0 0 22px -4px rgba(240,137,158,.4),inset 0 1px 0 rgba(255,255,255,.25);
-  transition:transform .16s var(--dp-ease),box-shadow .16s var(--dp-ease);}
-.dp-app.editing .dp-widget-remove{display:flex;}
-.dp-app.editing .dp-widget-remove:hover{transform:scale(1.15);box-shadow:0 8px 22px -4px rgba(240,137,158,.7),0 0 30px -2px rgba(240,137,158,.55);}
-
-.dp-app .dp-gauge{display:flex;align-items:center;gap:12px;}
-.dp-app .dp-gauge-ring{width:46px;height:46px;border-radius:50%;flex-shrink:0;position:relative;box-shadow:0 0 20px -6px rgba(95,211,158,.4);}
-.dp-app .dp-gauge-ring::after{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--dp-card-b);}
-.dp-app .dp-gauge-legend{display:flex;flex-direction:column;gap:4px;font-family:var(--dp-ff-sans);font-size:13px;font-weight:700;color:var(--dp-w92);}
-.dp-app .dp-streak-row{display:flex;gap:14px;}
-.dp-app .dp-streak-cell{flex:1;}
-
-/* ── AI insight card ── */
-.dp-app .dp-ai{position:relative;overflow:hidden;padding:16px 20px;flex-shrink:0;display:flex;flex-direction:column;gap:9px;border-radius:14px;
-  background:linear-gradient(150deg,rgba(230,198,101,.10),var(--dp-card-b) 65%);
-  border:1px solid var(--dp-gold-25);
-  box-shadow:0 22px 50px -38px #000,0 0 60px -46px var(--dp-gold-40),inset 0 1px 0 rgba(255,255,255,.05);}
-.dp-app .dp-ai::before{content:"";position:absolute;top:-60px;inset-inline-start:-40px;width:200px;height:200px;background:radial-gradient(circle,var(--dp-gold-15),transparent 70%);pointer-events:none;}
-.dp-app .dp-ai-head{display:flex;align-items:flex-start;gap:12px;position:relative;}
-.dp-app .dp-ai-ico{width:40px;height:40px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));box-shadow:0 8px 20px -6px var(--dp-gold-40);}
-.dp-app .dp-ai-head-text{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.dp-app .dp-ai-k{font-family:var(--dp-ff-sans);font-size:11.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--dp-gold);}
-.dp-app .dp-ai-title{font-family:var(--dp-ff-serif);font-size:17px;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.005em;}
-.dp-app .dp-ai-txt{position:relative;font-family:var(--dp-ff-serif);font-size:17px;line-height:1.55;color:var(--dp-w92);font-weight:500;}
-/* Structured "action" line — the takeaway sits just below the body copy
-   in a soft gold rail. Gives the insight a clear beginning (title) →
-   middle (evidence) → end (action) structure instead of one prose blob. */
-.dp-app .dp-ai-action{
-  display:flex;align-items:flex-start;gap:8px;
-  padding:10px 14px;border-radius:10px;
-  background:rgba(230,198,101,.06);border:1px solid var(--dp-gold-25);
-  font-family:var(--dp-ff-sans);font-size:13px;font-weight:700;color:#fff;line-height:1.55;
-}
-.dp-app .dp-ai-action-k{color:var(--dp-gold);font-weight:900;font-size:14px;line-height:1.4;}
-.dp-app .dp-ai-txt b{color:#fff;}
-.dp-app .dp-ai-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;}
-.dp-app .dp-ai-conf{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-bull);background:var(--dp-bull-08);border:1px solid var(--dp-bull-30);border-radius:20px;padding:5px 12px;}
-.dp-app .dp-ai-note{font-family:var(--dp-ff-sans);font-size:13px;font-weight:600;color:var(--dp-w72);}
-.dp-app .dp-ai-cta{margin-inline-start:auto;white-space:nowrap;font-family:var(--dp-ff-mono);font-size:11px;font-weight:800;letter-spacing:.06em;color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));border:none;border-radius:9px;padding:10px 16px;cursor:pointer;box-shadow:0 8px 20px -8px var(--dp-gold-40);transition:.2s var(--dp-ease);text-decoration:none;display:inline-flex;align-items:center;}
-.dp-app .dp-ai-cta:hover{transform:translateY(-1px);}
-.dp-app .dp-ai-locked{position:relative;overflow:hidden;padding:16px 20px;border-radius:14px;background:linear-gradient(150deg,rgba(230,198,101,.06),var(--dp-card-b) 65%);border:1px solid var(--dp-w10);}
-.dp-app .dp-ai-locked-eyebrow{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dp-gold);margin-bottom:9px;}
-.dp-app .dp-ai-locked-msg{color:#fff;font-size:16px;font-weight:500;line-height:1.55;margin-bottom:13px;}
-.dp-app .dp-ai-locked-msg b{color:var(--dp-gold);}
-.dp-app .dp-ai-locked-cta{display:inline-flex;align-items:center;gap:6px;font-family:var(--dp-ff-mono);font-size:11px;font-weight:800;letter-spacing:.06em;color:#1a1405;background:linear-gradient(155deg,var(--dp-gold-soft),var(--dp-gold-deep));border-radius:9px;padding:10px 16px;text-decoration:none;box-shadow:0 8px 20px -8px var(--dp-gold-40);transition:.2s var(--dp-ease);}
-.dp-app .dp-ai-locked-cta:hover{transform:translateY(-1px);}
-
-/* ── Calendar — warm parchment panel so empty days feel like part of the aurora, not holes ── */
-.dp-app .dp-cal{position:relative;flex:0 0 auto;display:flex;flex-direction:column;padding:15px 17px;
-  background:
-    radial-gradient(60% 80% at 15% 0%,rgba(230,198,101,.08),transparent 55%),
-    radial-gradient(50% 70% at 85% 100%,rgba(240,160,90,.06),transparent 60%),
-    linear-gradient(155deg,var(--dp-card-a),var(--dp-card-b));}
-.dp-app .dp-cal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0;gap:12px;}
-.dp-app .dp-cal-month{font-family:var(--dp-ff-serif);font-size:22px;font-weight:800;color:#fff;letter-spacing:-.01em;}
-.dp-app .dp-cal-nav{display:flex;gap:5px;}
-.dp-app .dp-cal-nav button{width:26px;height:26px;border-radius:7px;background:rgba(20,19,26,.8);border:1px solid var(--dp-border-strong);color:var(--dp-w55);cursor:pointer;font-size:12px;}
-.dp-app .dp-cal-nav button:hover{border-color:var(--dp-gold-40);color:var(--dp-gold);}
-.dp-app .dp-cal-hd-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-.dp-app .dp-cal-monthly{font-family:var(--dp-ff-sans);font-size:13px;font-weight:700;color:var(--dp-w72);}
-.dp-app .dp-cal-monthly b{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;font-family:var(--dp-ff-mono);letter-spacing:-.01em;margin-inline-start:6px;}
-.dp-app .dp-cal-monthly b.win{color:var(--dp-bull);}
-.dp-app .dp-cal-monthly b.loss{color:var(--dp-bear);}
-.dp-app .dp-cal-dows{display:grid;grid-template-columns:repeat(7,1fr) 112px;gap:6px;flex-shrink:0;margin-bottom:6px;}
-.dp-app .dp-cal-dow{font-family:var(--dp-ff-sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-w72);text-align:center;}
-.dp-app .dp-cal-dow.wk{color:var(--dp-gold);}
-/* Rows size to their content, which is now a square (see .dp-cal-cell). The
-   old `1fr` handed the calendar whatever height was left over after every
-   other section had taken its share, which is how a month ended up as a band
-   of slivers. */
-.dp-app .dp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr) 112px;grid-auto-rows:auto;gap:6px;}
-/* 4:3 — the wall-calendar proportion. A true square read better in isolation
-   but cost ~160px of page height at 1920, and the point of the fix was a
-   month you can take in, not a month you scroll through. The old cells had
-   no ratio at all: they took whatever height was left over, which is how a
-   day ended up a wide, unreadable sliver. */
-.dp-app .dp-cal-cell{aspect-ratio:4/3;border-radius:8px;border:1px solid transparent;padding:6px 7px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;transition:transform .15s var(--dp-ease);
-  background:linear-gradient(160deg,rgba(230,198,101,.04),rgba(230,198,101,.015));
-  box-shadow:inset 0 0 0 1px rgba(230,198,101,.06);}
-.dp-app .dp-cal-cell.win{background:linear-gradient(160deg,var(--dp-bull-08),rgba(95,211,158,.02));border-color:var(--dp-bull-30);box-shadow:none;}
-.dp-app .dp-cal-cell.loss{background:linear-gradient(160deg,var(--dp-bear-08),rgba(240,137,158,.02));border-color:var(--dp-bear-30);box-shadow:none;}
-.dp-app .dp-cal-cell.win:hover,.dp-app .dp-cal-cell.loss:hover{transform:scale(1.04);}
-.dp-app .dp-cal-cell.best{box-shadow:0 0 22px -6px var(--dp-gold-40),inset 0 0 0 1px var(--dp-gold-30);}
-.dp-app .dp-cal-cell.empty{background:linear-gradient(160deg,rgba(230,198,101,.02),rgba(240,160,90,.008));box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);opacity:.6;}
-
-.dp-app .dp-cal-daynum{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;color:var(--dp-w92);text-align:right;}
-.dp-app .dp-cal-pnl{font-family:var(--dp-ff-mono);font-size:15px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;line-height:1;letter-spacing:-.005em;}
-.dp-app .dp-cal-pnl.win{color:var(--dp-bull);}
-.dp-app .dp-cal-pnl.loss{color:var(--dp-bear);}
-.dp-app .dp-cal-trades{font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;color:var(--dp-w72);direction:ltr;}
-/* Three lines, each with room of its own. They used to be sized for a cell
-   that had no height to give them, so the label, the figure and the trade
-   count sat on top of one another. */
-.dp-app .dp-week-cell{border-radius:10px;border:1px solid var(--dp-gold-15);background:linear-gradient(155deg,rgba(230,198,101,.05),var(--dp-card-b));padding:9px 10px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:5px;overflow:hidden;}
-.dp-app .dp-week-cell-k{font-family:var(--dp-ff-sans);font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--dp-gold);white-space:nowrap;}
-.dp-app .dp-week-cell-v{font-family:var(--dp-ff-mono);font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;direction:ltr;letter-spacing:-.01em;white-space:nowrap;}
-.dp-app .dp-week-cell-v.win{color:var(--dp-bull);}
-.dp-app .dp-week-cell-v.loss{color:var(--dp-bear);}
-.dp-app .dp-week-cell-v.flat{color:var(--dp-w40);}
-.dp-app .dp-week-cell-d{font-family:var(--dp-ff-sans);font-size:10.5px;font-weight:800;color:var(--dp-w92);background:var(--dp-w06);border:1px solid var(--dp-w10);border-radius:6px;padding:3px 8px;align-self:flex-start;white-space:nowrap;}
-
-/* ── Macro list ── */
-.dp-app .dp-macro{flex-shrink:0;padding:14px 16px;display:flex;flex-direction:column;}
-.dp-app .dp-macro-hd{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
-.dp-app .dp-macro-k{font-family:var(--dp-ff-sans);font-size:13px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dp-gold);flex:1;min-width:0;}
-.dp-app .dp-macro-all{font-family:var(--dp-ff-sans);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dp-w72);text-decoration:none;padding:4px 8px;border-radius:6px;transition:color .18s var(--dp-ease),background .18s var(--dp-ease);white-space:nowrap;}
-.dp-app .dp-macro-all:hover{color:var(--dp-gold);background:var(--dp-gold-08);}
-.dp-app .dp-macro-note{font-family:var(--dp-ff-sans);font-size:13px;font-weight:600;color:var(--dp-w72);}
-/* Legend — a tiny "● High impact" chip in the macro header so the red
-   dots down the list are readable at first glance instead of ominous. */
-.dp-app .dp-macro-legend{display:inline-flex;align-items:center;gap:6px;
-  font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--dp-w72);
-  padding:4px 9px;border-radius:20px;border:1px solid rgba(229,72,77,.28);background:rgba(229,72,77,.06);}
-.dp-app .dp-macro-legend-dot{width:7px;height:7px;border-radius:50%;background:#e5484d;box-shadow:0 0 7px 1px rgba(229,72,77,.45);}
-.dp-app .dp-macro-list{display:flex;flex-direction:column;overflow-y:auto;min-height:0;flex:1;}
-.dp-app .dp-macro-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--dp-w06);}
-.dp-app .dp-macro-row:last-child{border-bottom:none;}
-.dp-app .dp-macro-impact{width:9px;height:9px;border-radius:50%;background:#e5484d;box-shadow:0 0 10px 1px rgba(229,72,77,.55);flex-shrink:0;}
-.dp-app .dp-macro-day{font-family:var(--dp-ff-sans);font-size:13px;font-weight:900;text-transform:uppercase;color:var(--dp-w92);width:36px;flex-shrink:0;letter-spacing:.02em;}
-.dp-app .dp-macro-time{font-family:var(--dp-ff-mono);font-size:15px;font-weight:900;color:#fff;flex-shrink:0;font-variant-numeric:tabular-nums;}
-.dp-app .dp-macro-row.next .dp-macro-time,.dp-app .dp-macro-row.next .dp-macro-day{color:var(--dp-gold);}
-.dp-app .dp-macro-title{font-family:var(--dp-ff-sans);font-size:15px;font-weight:600;color:#fff;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.dp-app .dp-macro-next{font-family:var(--dp-ff-sans);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--dp-gold);border:1px solid var(--dp-gold-30);background:var(--dp-gold-08);border-radius:6px;padding:4px 8px;flex-shrink:0;}
-.dp-app .dp-macro-cur{font-family:var(--dp-ff-sans);font-size:12px;font-weight:900;color:#e5484d;flex-shrink:0;letter-spacing:.02em;}
-.dp-app .dp-macro-empty{padding:18px 4px;color:var(--dp-w72);font-size:14px;font-weight:500;}
-
-/* ── Edit-mode floating palette ── */
-.dp-app .dp-palette{display:none;position:fixed;left:22px;bottom:16px;z-index:20;max-width:520px;border-radius:14px;padding:16px 18px;
-  background:linear-gradient(150deg,rgba(230,198,101,.10),var(--dp-card-b));border:1px solid var(--dp-gold-40);box-shadow:0 30px 60px -20px #000;}
-.dp-app.editing .dp-palette{display:block;animation:dp-rise .3s var(--dp-ease) both;}
-.dp-app .dp-palette-hd{font-family:var(--dp-ff-mono);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--dp-gold);margin-bottom:12px;}
-.dp-app .dp-palette-grid{display:flex;flex-wrap:wrap;gap:8px;}
-.dp-app .dp-chip{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--dp-w72);background:rgba(27,26,34,.9);border:1px solid var(--dp-border-strong);border-radius:9px;padding:8px 12px;cursor:pointer;transition:.16s var(--dp-ease);}
-.dp-app .dp-chip:hover{border-color:var(--dp-gold);color:var(--dp-gold);}
-.dp-app .dp-chip .plus{color:var(--dp-gold);font-weight:900;}
-.dp-app .dp-chip.added{opacity:.4;pointer-events:none;}
-
-/* ── Confirm dialog (widget removal) — warm overlay with red warning glow ── */
-.dp-confirm-overlay{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:20px;
-  background:rgba(4,4,8,.72);backdrop-filter:blur(8px);animation:dp-fade .18s var(--dp-ease);}
-.dp-confirm-overlay.on{display:flex;}
-@keyframes dp-fade{from{opacity:0;}to{opacity:1;}}
-@keyframes dp-modal-rise{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
-.dp-confirm{width:100%;max-width:400px;border-radius:20px;overflow:hidden;text-align:center;direction:rtl;
-  background:radial-gradient(120% 90% at 50% 0%,rgba(230,198,101,.11),transparent 65%),linear-gradient(155deg,#231a24,var(--dp-card-b) 65%);
-  border:1px solid var(--dp-gold-25);
-  box-shadow:0 40px 100px -25px #000,0 0 80px -30px rgba(240,137,158,.3),inset 0 1px 0 rgba(255,220,180,.06);
-  animation:dp-modal-rise .28s cubic-bezier(.34,1.56,.64,1) both;font-family:var(--dp-ff-sans);}
-.dp-confirm-head{padding:26px 20px 14px;display:flex;flex-direction:column;align-items:center;gap:14px;}
-.dp-confirm-icon{width:64px;height:64px;border-radius:50%;color:var(--dp-bear);display:flex;align-items:center;justify-content:center;font-size:28px;
-  background:rgba(240,137,158,.10);border:1px solid var(--dp-bear-30);
-  box-shadow:0 0 40px -10px var(--dp-bear-30),inset 0 1px 0 rgba(255,255,255,.05);
-  animation:dp-icon-pulse 1.4s ease-in-out infinite;}
-@keyframes dp-icon-pulse{0%,100%{box-shadow:0 0 40px -10px var(--dp-bear-30),inset 0 1px 0 rgba(255,255,255,.05);}50%{box-shadow:0 0 60px -6px var(--dp-bear-30),inset 0 1px 0 rgba(255,255,255,.05);}}
-.dp-confirm-title{font-family:var(--dp-ff-serif);font-size:20px;font-weight:700;color:#fff;letter-spacing:-.005em;}
-.dp-confirm-body{padding:0 26px 20px;text-align:center;}
-.dp-confirm-msg{font-size:14px;line-height:1.65;color:var(--dp-w72);}
-.dp-confirm-msg b{color:var(--dp-gold-soft);font-weight:800;}
-.dp-confirm-note{font-family:var(--dp-ff-mono);font-size:10px;color:var(--dp-w40);margin-top:10px;letter-spacing:.05em;}
-.dp-confirm-foot{display:flex;justify-content:flex-end;gap:9px;padding:14px 20px;border-top:1px solid var(--dp-border);background:rgba(0,0,0,.2);}
-.dp-confirm-btn{font-family:var(--dp-ff-mono);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:11px 20px;border-radius:9px;cursor:pointer;border:none;transition:.15s var(--dp-ease);}
-.dp-confirm-btn.ghost{background:transparent;border:1px solid var(--dp-border-strong);color:var(--dp-w72);}
-.dp-confirm-btn.ghost:hover{color:#fff;border-color:var(--dp-w40);}
-.dp-confirm-btn.danger{background:linear-gradient(155deg,var(--dp-bear),var(--dp-bear-deep));color:#180307;box-shadow:0 8px 20px -8px var(--dp-bear-30);}
-.dp-confirm-btn.danger:hover{transform:translateY(-1px);box-shadow:0 12px 28px -8px var(--dp-bear-30);}
-
-/* ── Phone: stack vertically, allow scroll ── */
-@media(max-width:900px){
-  .dp-app{height:auto;overflow:auto;padding:14px 16px 40px;gap:14px;}
-  .dp-app .dp-kpis{grid-template-columns:1fr 1fr;height:auto;}
-  .dp-app .dp-kpi-balance{grid-column:1 / -1;}
-  .dp-app .dp-body{grid-template-columns:1fr;}
-  .dp-app .dp-side{flex-direction:column-reverse;}
-  .dp-app .dp-bar,.dp-app .dp-greet-row,.dp-app .dp-control-row{flex-wrap:wrap;}
-  .dp-app .dp-cal,.dp-app .dp-side > .dp-macro{flex:none;}
-  /* Cells are square now, so the grid sizes itself — the old min-height was
-     propping up rows that had been squeezed flat. On a narrow screen the
-     week rail would leave the day columns too thin to read, so it goes. */
-  .dp-app .dp-cal-grid,.dp-app .dp-cal-dows{grid-template-columns:repeat(7,1fr);}
-  .dp-app .dp-week-cell,.dp-app .dp-cal-dow.wk{display:none;}
-  .dp-app .dp-palette{position:static;max-width:none;margin-top:6px;}
-}
-
-
-/* The locked-analysis panel sits where the daily insight would, so a trader on
-   the journal tier sees what the AI tier is rather than an empty card. */
-.dp-app .dp-ai-locked-note{color:var(--dp-w60,rgba(255,255,255,.6));font-size:13px;line-height:1.55;margin:-4px 0 13px;}
-
-/* The journey strip's counts. One row under the open window — or the whole
-   strip on a day when no window is open, which is most days.
-
-   `changed` is the number that should grow over a year, so it is the one that
-   gets the gold. `relapsed` is deliberately not folded into it. */
-.dp-app .dp-track-counts{
-  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
-  padding-top:2px;
-}
-.dp-app .dp-track-stat{
-  display:flex;align-items:baseline;gap:6px;
+.dp-app .dp-state-won{
   font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--dp-w40,rgba(255,255,255,.4));
-  white-space:nowrap;
-}
-.dp-app .dp-track-stat b{
-  font-family:var(--dp-ff-mono);font-size:16px;font-weight:700;
-  font-variant-numeric:tabular-nums;color:var(--dp-gold);letter-spacing:0;
-}
-.dp-app .dp-track-stat[data-tone="warn"] b{color:#c07878;}
-.dp-app .dp-track-stat[data-tone="score"] b{color:var(--dp-w92);}
-.dp-app .dp-track-more{
-  margin-inline-start:auto;
-  font-family:var(--dp-ff-mono);font-size:11px;font-weight:700;
   letter-spacing:.1em;color:var(--dp-w55);white-space:nowrap;
-  transition:color .25s var(--dp-ease);
 }
-.dp-app .dp-track-more:hover{color:var(--dp-gold);}
-.dp-app .dp-track-more:focus-visible{outline:2px solid var(--dp-gold);outline-offset:3px;}
+.dp-app .dp-state-won b{
+  font-family:var(--dp-ff-mono);font-size:15px;color:#7fae8c;letter-spacing:0;
+}
+.dp-app .dp-state-won em{font-style:normal;color:var(--dp-w40,rgba(255,255,255,.4));}
+.dp-app .dp-state-won em b{color:#c07878;font-size:13px;}

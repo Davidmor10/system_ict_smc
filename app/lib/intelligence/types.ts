@@ -202,8 +202,12 @@ export interface RootCauseFinding {
 
 export interface ScoreSnapshot {
   at: string;
-  edgeScore: number;
-  learningScore: number;
+  /** Null when too little of the score's definition could be measured that
+   *  run. Never a neutral placeholder — see lib/intelligence/scores.ts. */
+  edgeScore: number | null;
+  /** Null when the history is too short to compare, or the edge score it
+   *  reads was itself unmeasurable. */
+  learningScore: number | null;
   winRate: number;
   avgRR: number;
   profitFactor: number;

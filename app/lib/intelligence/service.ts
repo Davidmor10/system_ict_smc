@@ -92,8 +92,10 @@ interface RefreshResult {
   previousProfile: TraderProfile | null;
   patternRows: PatternMemoryRow[];
   hypothesis: HypothesisState;
-  edgeScore: number;
-  learningScore: number;
+  /** Null when too little of the score's definition was measurable — never a
+   *  neutral placeholder. See lib/intelligence/scores.ts. */
+  edgeScore: number | null;
+  learningScore: number | null;
   knownFacts: KnownFact[];
 }
 
@@ -182,7 +184,16 @@ async function refreshIntelligence(
   }
   await repo.saveHypothesis(supabase, hypothesis);
 
-  const edgeScore = computeEdgeScore(profile, diff.toUpsert, existingProfileRecord?.edgeScore ?? null);
+  // `hasPreviousProfile` is not cosmetic: with nothing to compare against,
+  // every trend in the profile defaults to 'flat', and scoring 'flat' as 70
+  // invented a stability reading for an account on its first ever run.
+  const edge = computeEdgeScore(
+    profile,
+    diff.toUpsert,
+    existingProfileRecord?.edgeScore ?? null,
+    existingProfileRecord?.profile != null,
+  );
+  const edgeScore = edge.score;
   const learningScore = computeLearningScore(existingProfileRecord?.scoreHistory ?? [], edgeScore);
   const scoreSnapshot: ScoreSnapshot = {
     at: nowISO, edgeScore, learningScore,
@@ -198,7 +209,14 @@ async function refreshIntelligence(
     edgeScore, learningScore, scoreHistory, knownFacts,
     builtFromTradeCount: closedCount, lastTradeDateIso: trades[0]?.dateISO ?? null,
   });
-  await repo.appendInsightHistory(supabase, userId, 'profile_update', null, { closedCount, edgeScore, learningScore });
+  // The audit trail records how much of the score could be read, not just the
+  // number — a 62 out of four measurable factors and a 62 out of seven are not
+  // the same claim, and only one of them survives a question about it.
+  await repo.appendInsightHistory(supabase, userId, 'profile_update', null, {
+    closedCount, edgeScore, learningScore,
+    edgeMeasured: edge.measured, edgeTotal: edge.total,
+    edgeMeasuredWeight: Number(edge.measuredWeight.toFixed(2)),
+  });
 
   return {
     trades, analysis, profile, previousProfile: existingProfileRecord?.profile ?? null,

@@ -8,7 +8,7 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
-import ProgressStrip from './ProgressStrip';
+import CurrentState from './CurrentState';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
@@ -628,14 +628,12 @@ export default function DashboardView() {
           disagreement waiting to be shipped, and the trade is the one that
           knows which day it belongs to. */}
 
-      {/* The journey, in one line — the open window when there is one, and
-          otherwise what stands: how many behaviours changed and held, how many
-          are watched, and the learning score. Above the numbers, because it is
-          a standing commitment rather than a figure about yesterday.
-
-          Renders nothing at all for an account with no detected behaviour and
-          no measurable history. */}
-      {hasAi && <ProgressStrip />}
+      {/* The state panel: the one best-supported fact about this trader right
+          now, what is still unknown, and what has already changed and held.
+          Above the numbers on purpose — the KPI grid answers "what happened",
+          and this answers "what do I know about myself", which is the question
+          a person opens the app with. */}
+      {hasAi && <CurrentState />}
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">

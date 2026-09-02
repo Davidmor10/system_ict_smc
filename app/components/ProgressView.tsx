@@ -22,10 +22,14 @@
 //   • A verdict of `traded_one_problem_for_another` is printed in those words.
 //     The guardrails exist to catch it; describing it as partial success
 //     wastes the mechanism that found it.
-//   • An unmeasurable learning score is said in words, never drawn. The engine
-//     returns a neutral 50 when it has too little history, and a flat line at
-//     the midpoint reads as months of standing still to a trader who has
-//     simply never been measured.
+//   • No score. A learning-score curve shipped here and was pulled a day
+//     later: it could not say WHICH habit moved, only that a number had, and
+//     a number going up with no attribution is a vanity metric. The engine
+//     still runs nightly. It gets a surface when it can name the cause.
+//
+// This screen is the HISTORY. What the trader should look at today is the
+// state panel at the top of the dashboard; this is where they come to see
+// whether the last three months went anywhere.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import './journey.css';
@@ -34,7 +38,7 @@ import Link from 'next/link';
 import EvidenceList from './EvidenceList';
 import WeeklyBehaviorReview from './WeeklyBehaviorReview';
 import {
-  STATUS_LABELS, STATUS_ORDER, VERDICT_LABELS, type JourneyCounts, type Trajectory,
+  STATUS_LABELS, STATUS_ORDER, VERDICT_LABELS, type JourneyCounts,
 } from '../lib/progress/journey';
 
 interface Active {
@@ -63,7 +67,6 @@ interface Journey {
   active: Active | null;
   changed: Changed[];
   watching: Watching[];
-  trajectory: Trajectory;
   evolution: Evolution[];
   events: LogEvent[];
   insufficientEvidence: boolean;
@@ -96,8 +99,8 @@ export default function ProgressView() {
         <div className="jr-eyebrow"><span>◈</span><span>המסלול</span></div>
         <h1 className="jr-h1">מה השתנה אצלך</h1>
         <p className="jr-lede">
-          שאר המסכים מתארים איפה אתה עומד. המסך הזה עונה על שאלה אחרת — האם משהו זז.
-          כל מה שכאן נמדד מול מה שתיעדת בעצמך, ומול שני בסיסי השוואה שצריכים להסכים.
+          ההיסטוריה שלך כסוחר — כל התנהגות שזוהתה, מה קרה כשבדקת אותה, ומה החזיק.
+          נמדד מול מה שתיעדת בעצמך, ומול שני בסיסי השוואה שצריכים להסכים.
         </p>
         <Counts data={data} />
       </header>
@@ -117,7 +120,7 @@ export default function ProgressView() {
           <Working data={data} />
           <ChangedBand data={data} />
           <WatchingBand data={data} />
-          <TrajectoryBand data={data} onToggleEvents={() => setAllEvents(v => !v)} allEvents={allEvents} />
+          <HistoryBand data={data} onToggleEvents={() => setAllEvents(v => !v)} allEvents={allEvents} />
 
           <section className="jr-band jr-sec" data-i="4">
             <div className="jr-band-head">
@@ -343,49 +346,23 @@ function WatchingBand({ data }: { data: Journey }) {
 
 /* ── 4 · where this is going ──────────────────────────────────────────────── */
 
-function TrajectoryBand({
+function HistoryBand({
   data, allEvents, onToggleEvents,
 }: { data: Journey; allEvents: boolean; onToggleEvents: () => void }) {
-  const t = data.trajectory;
   const events = allEvents ? data.events : data.events.slice(0, 8);
 
-  return (
-    <section className="jr-band jr-sec" data-i="4" id="trajectory">
-      <div className="jr-band-head">
-        <h2 className="jr-band-q">לאן זה הולך</h2>
-        <span className="jr-band-cap">ציון למידה · ציר התפתחות</span>
-      </div>
+  if (data.evolution.length === 0 && data.events.length === 0) return null;
 
-      <div className="jr-panel">
-        {t.known && t.latest !== null ? (
-          <>
-            <div className="jr-curve-top">
-              <span className="jr-curve-v" dir="ltr">{t.latest}</span>
-              {t.delta !== null && (
-                <span className="jr-curve-delta" data-dir={t.delta > 0 ? 'up' : t.delta < 0 ? 'down' : 'flat'} dir="ltr">
-                  {t.delta > 0 ? '▲' : t.delta < 0 ? '▼' : '■'} {Math.abs(t.delta)}
-                </span>
-              )}
-              <span className="jr-count-k" style={{ marginTop: 0, paddingBottom: 8 }}>ציון למידה</span>
-            </div>
-            <Curve points={t.points} />
-            <p className="jr-note">
-              הציון משווה את המחצית המוקדמת של ההיסטוריה שלך למאוחרת — יחס R ממוצע, יחס רווח,
-              ואיכות היתרון. הוא מודד כיוון, לא רווחיות. חמישים הוא נקודת האמצע, לא ציון עובר.
-            </p>
-          </>
-        ) : (
-          <div className="jr-empty">
-            <b>עוד אין מספיק היסטוריה כדי לומר לאן זה הולך</b>
-            הציון משווה תקופה לתקופה, ולכן הוא דורש כמה מדידות שבועיות לפני שיש לו מה להשוות.
-            עד אז אין כאן מספר — ובמכוון: מספר ניטרלי היה נראה כמו עמידה במקום.
-          </div>
-        )}
+  return (
+    <section className="jr-band jr-sec" data-i="4" id="history">
+      <div className="jr-band-head">
+        <h2 className="jr-band-q">איך הגעת לכאן</h2>
+        <span className="jr-band-cap">ציר התפתחות · יומן התהליך</span>
       </div>
 
       {data.evolution.length > 0 && (
         <div className="jr-panel">
-          <div className="jr-count-k" style={{ marginTop: 0, marginBottom: 14 }}>ציר ההתפתחות</div>
+          <div className="jr-panel-k">ציר ההתפתחות</div>
           {data.evolution.map(e => (
             <div className="jr-evo" key={`${e.fromIsoWeek}-${e.toIsoWeek}`}>
               <div className="jr-evo-week" dir="ltr">
@@ -398,12 +375,16 @@ function TrajectoryBand({
               </div>
             </div>
           ))}
+          <p className="jr-note">
+            כל שורה היא תקופה שבה ההשערה על היתרון שלך נשארה זהה. שבוע שבו לא זוהה יתרון ברור
+            נרשם ככזה ולא מושמט — זה חלק מהתמונה.
+          </p>
         </div>
       )}
 
       {data.events.length > 0 && (
         <div className="jr-panel">
-          <div className="jr-count-k" style={{ marginTop: 0, marginBottom: 14 }}>יומן התהליך</div>
+          <div className="jr-panel-k">יומן התהליך</div>
           {events.map((e, i) => (
             <div className="jr-log" key={`${e.kind}-${e.at}-${i}`}>
               <span className="jr-log-at" dir="ltr">{day(e.at)}</span>
@@ -422,91 +403,10 @@ function TrajectoryBand({
       )}
 
       <p className="jr-note">
-        אף אחד מהמספרים כאן אינו המלצה. המערכת מודדת מה שתיעדת ומדווחת מה זז — ההחלטות נשארות שלך.{' '}
+        אין כאן ציון ואין המלצה. המערכת מראה מה עשית, אם זה חוזר, ומה קרה כשבדקת את זה —
+        מה לשנות נשאר שלך.{' '}
         <Link href="/dashboard/stats" style={{ color: '#d4af37' }}>לסטטיסטיקות המלאות →</Link>
       </p>
     </section>
-  );
-}
-
-/** The learning curve.
- *
- *  Drawn only from points whose score was actually computed — the placeholder
- *  head is removed upstream, so nothing here has to know about it.
- *
- *  THE AXIS IS FIXED AT 0–100 AND LABELLED AS SUCH.
- *
- *  Fitting the axis to the data is the default every charting library ships,
- *  and on a bounded score it is a lie of presentation: a four-point drift
- *  would fill the frame corner to corner and read as a collapse. The score
- *  runs 0 to 100, so the axis runs 0 to 100, the midpoint is drawn, and a
- *  modest move is allowed to look modest.
- *
- *  THE MARKERS ARE HTML, NOT <circle>. The path is stretched to the container
- *  with preserveAspectRatio="none", which scales x and y by different factors
- *  — a circle in that space renders as an ellipse, and the first reading came
- *  out a visible blob. Positioning them outside the SVG keeps them round at
- *  any width. */
-function Curve({ points }: { points: Array<{ at: string; learning: number }> }) {
-  const path = useMemo(() => {
-    if (points.length === 0) return null;
-    const W = 100, H = 100;
-    const step = points.length > 1 ? W / (points.length - 1) : 0;
-    const y = (v: number) => H - (Math.max(0, Math.min(100, v)) / 100) * H;
-    // RTL: the earliest reading sits on the right, so x runs backwards.
-    const pts = points.map((p, i) => ({ x: W - i * step, y: y(p.learning) }));
-    const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
-    return {
-      line,
-      // Closed back along the baseline, so a gentle slope still has a shape.
-      area: points.length > 1
-        ? `${line} L${pts[pts.length - 1].x.toFixed(2)},${H} L${pts[0].x.toFixed(2)},${H} Z`
-        : null,
-      pts,
-      single: points.length === 1,
-    };
-  }, [points]);
-
-  if (!path) return null;
-
-  return (
-    <div className="jr-chart-wrap">
-      {/* Labelled, and first in the DOM so RTL puts it at the reading start.
-          An unlabelled axis is where a reader assumes it was fitted. */}
-      <div className="jr-axis" aria-hidden>
-        <span>100</span><span>50</span><span>0</span>
-      </div>
-
-      <div className="jr-chart-box">
-        <svg className="jr-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="עקומת ציון הלמידה">
-          <defs>
-            <linearGradient id="jrFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#d4af37" stopOpacity="0.20" />
-              <stop offset="100%" stopColor="#d4af37" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          {/* The midpoint, so the curve is read against something. It is not a
-              passing mark, and the note below says so. */}
-          <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.16)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-
-          {path.area && <path d={path.area} fill="url(#jrFill)" stroke="none" />}
-          {!path.single && (
-            <path d={path.line} fill="none" stroke="#d4af37" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
-
-        {/* Every reading, not only the last: how many measurements there are is
-            itself information about what the line is worth. */}
-        {path.pts.map((p, i) => (
-          <span
-            key={i}
-            className="jr-dot"
-            data-last={i === path.pts.length - 1}
-            style={{ left: `${p.x}%`, top: `${p.y}%` }}
-          />
-        ))}
-      </div>
-    </div>
   );
 }

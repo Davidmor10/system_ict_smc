@@ -1,26 +1,28 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/coach/journey — the trader's trajectory.
+// GET /api/coach/journey — the trader's history, behaviour by behaviour.
 //
 // Three questions, in the order a person asks them: what am I working on, what
-// have I already changed, and where is this going.
+// have I already changed, and what is still being watched.
 //
 // EVERY FIELD HERE WAS ALREADY BEING COMPUTED AND SHOWN TO NOBODY.
 //
 //   • the lifecycle events — `listFindingEvents` had no caller at all;
-//   • the learning score — computed nightly, persisted with twelve snapshots
-//     of history, read by no route and no component;
-//   • the evolution timeline — carried a comment in the source saying it was
-//     not wired into any UI;
+//   • the evolution timeline — carried a comment in its own source saying it
+//     was not wired into any UI;
 //   • `past` on the tracking route — served for months, and the one component
 //     reading that route used only `active` and dropped it.
 //
 // So this is not a new analysis. It is a window onto work the system was
 // already doing in the dark.
 //
+// WHAT IT DOES NOT SERVE is the learning score. It is still computed and
+// stored nightly; it does not travel to a browser until it can say WHICH
+// habit moved, rather than only that a number did.
+//
 // READ-ONLY, AND THAT IS LOAD-BEARING. Opening a page must never advance the
 // trader's behavioural state or spend a model call: `analyzeBehavior` is
-// called with persist:false and the score history is read, never refreshed.
-// The nightly run is the only thing allowed to write.
+// called with persist:false. The nightly run is the only thing allowed to
+// write.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { auth } from '@clerk/nextjs/server';
@@ -29,8 +31,8 @@ import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBe
 import { BEHAVIOR_LABELS, type BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import { listFindingEvents, loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
 import { windowProgress, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
-import { getEvolutionTimeline, getScoreHistory } from '../../../lib/intelligence/service';
-import { countJourney, learningTrajectory, stageOf } from '../../../lib/progress/journey';
+import { getEvolutionTimeline } from '../../../lib/intelligence/service';
+import { countJourney, stageOf } from '../../../lib/progress/journey';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -62,11 +64,10 @@ export async function GET() {
     // Each of the four is independently allowed to fail. A missing evolution
     // timeline must not blank the experiment the trader is ten trades into —
     // the parts of this screen are not a transaction.
-    const [behavior, stored, events, scores, evolution] = await Promise.all([
+    const [behavior, stored, events, evolution] = await Promise.all([
       analyzeBehavior(userId, { persist: false }).catch(() => null),
       loadFindings(userId).catch(() => new Map<BehaviorKind, StoredFinding>()),
       listFindingEvents(userId, EVENT_LIMIT).catch(() => [] as unknown[]),
-      getScoreHistory(userId).catch(() => []),
       getEvolutionTimeline(userId).catch(() => []),
     ]);
 
@@ -130,14 +131,14 @@ export async function GET() {
       }))
       .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || b.rate - a.rate);
 
-    const trajectory = learningTrajectory(scores);
-
+    // The learning score is NOT served. It is still computed and stored every
+    // night; it does not travel to a browser until it can name what moved.
+    // See lib/progress/journey.ts for the reasoning.
     return NextResponse.json({
       counts: countJourney(findings),
       active,
       changed,
       watching,
-      trajectory,
       evolution,
       events: (events as Array<{ kind: string; at: string; from_status: string | null; to_status: string; reason: string }>)
         .map(e => ({
