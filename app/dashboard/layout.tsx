@@ -7,6 +7,7 @@ import PageTransition from '../components/PageTransition';
 import ViewportScale from '../components/ViewportScale';
 import { PlanProvider } from '../components/PlanProvider';
 import { getSessionId, getUserRole } from '../lib/getUserRole';
+import { viewerIsAdmin } from '../lib/payments/admin';
 import { requirePlan } from '../lib/withRoleCheck';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -16,8 +17,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   await requirePlan('starter');
   const role = await getUserRole();
   const splashScope = (await getSessionId()) ?? undefined;
+  // Only so the sidebar can show the owner their verification link. The page
+  // behind it gates itself on the server.
+  const isAdmin = await viewerIsAdmin();
   return (
-    <PlanProvider role={role}>
+    <PlanProvider role={role} isAdmin={isAdmin}>
       {/* Same overlay, same session key: whichever screen the visit starts
           on shows it, and only that one. Someone deep-linking straight to
           the dashboard gets the opening; someone who arrived through the

@@ -27,12 +27,20 @@ function IconCoach()     { return <svg {...iconProps}><path d="M8 9h8M8 13h5" />
 function IconPlaybook()  { return <svg {...iconProps}><path d="M12 4v16" /><path d="M3 6a3 3 0 0 1 3-3h5v18H6a3 3 0 0 1-3-3Z" /><path d="M21 6a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 0 3-3Z" /></svg>; }
 function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z" /><path d="M9 12l2 2 4-4" /></svg>; }
 function IconReports()   { return <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M8 13h5M8 17h4M16 12l3 3-3 3" /></svg>; }
+// A banknote with a check — the owner's payment-verification queue. Distinct
+// from IconRules' shield, which is about the trader's own discipline.
+function IconVerify()    { return <svg {...iconProps}><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M8.5 12l2 2 4-4" /></svg>; }
 function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>; }
 
 // `child: true` nests an item under the one above it — indented, no icon, a
 // smaller label. Statistics sits under Notebook because it is a view of the
 // same record rather than a section of its own.
-const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolean }[] = [
+//
+// `owner: true` is not a plan tier — no subscription reaches it. It is drawn
+// only for an address on the admin allowlist, and hiding it is a convenience:
+// the page itself answers everyone else with a 404 and never reads a row for
+// them.
+const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolean; owner?: boolean }[] = [
   { href: '/dashboard',              key: 'nav_workspace',    min: 'starter',   Icon: IconGrid     },
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter',   Icon: IconBook     },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter',   Icon: IconNotebook },
@@ -43,6 +51,7 @@ const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolea
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'starter',   Icon: IconRules    },
   { href: '/dashboard/reports',      key: 'nav_reports',      min: 'starter',   Icon: IconReports  },
   { href: '/dashboard/settings',     key: 'nav_settings',     min: 'starter',   Icon: IconSettings },
+  { href: '/dashboard/payments',     key: 'nav_payments',     min: 'starter',   Icon: IconVerify, owner: true },
 ];
 
 function LockIcon() {
@@ -57,7 +66,7 @@ function LockIcon() {
 export default function Sidebar() {
   const pathname = usePathname();
   const { lang, t } = useLanguage();
-  const { canAccess } = usePlan();
+  const { canAccess, isAdmin } = usePlan();
   const rtl = lang === 'he';
 
   return (
@@ -75,7 +84,7 @@ export default function Sidebar() {
 
       {/* ── Navigation ───────────────────────────────────────── */}
       <nav className="flex-1 px-3 py-5 flex flex-col gap-0.5">
-        {NAV.map(({ href, key, min, Icon, child }) => {
+        {NAV.filter(item => !item.owner || isAdmin).map(({ href, key, min, Icon, child }) => {
           const locked = !canAccess(min);
           const active = !locked && (pathname === href || (href !== '/dashboard' && pathname.startsWith(href)));
           return (

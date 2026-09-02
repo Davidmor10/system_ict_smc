@@ -3,11 +3,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The checkout, recreated from the design handoff.
 //
-// Three screens behind two pieces of state: which plan is selected, and
-// whether we are on plans or payment. The admin view is a third, and it is
-// only ever reachable when the SERVER said so — `canSeeAdmin` arrives as a
-// prop that a server component computed, and the request rows arrive already
-// filtered. Nothing here decides who is an admin; it only decides what to draw.
+// Two screens behind two pieces of state: which plan is selected, and whether
+// we are on plans or payment. Nothing else — the owner's verification panel
+// used to be a third screen here behind a toggle, and it now lives at
+// /dashboard/payments, so this file carries no other customer's data at all.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useMemo, useState } from 'react';
@@ -15,26 +14,7 @@ import {
   PLANS, PLAN_DISPLAY_ORDER, isVerificationValid,
   type PaymentRequest, type PlanKey, type RequestStatus,
 } from '../../lib/payments/plans';
-
-/** Copy for each state of the customer's status card. Verbatim from the
- *  handoff — the wording is the product's voice and is not to be improvised. */
-const STATUS_COPY: Record<RequestStatus, { title: string; body: string; label: string }> = {
-  pending: {
-    title: 'ההודעה נשלחה · ממתין לאימות',
-    body: 'הפרטים שלך נשלחו לבדיקה. ההעברה תאומת ידנית והגישה תיפתח מיד לאחר האישור.',
-    label: 'ממתין',
-  },
-  approved: {
-    title: 'התשלום אומת · הגישה נפתחה',
-    body: 'המנוי שלך פעיל. אפשר להיכנס למערכת ולהתחיל לעבוד.',
-    label: 'אושר',
-  },
-  rejected: {
-    title: 'ההעברה לא אותרה',
-    body: 'לא נמצאה העברה תואמת. בדוק את הסכום ואת פרטי ההעברה, ושלח שוב לאימות.',
-    label: 'נדחה',
-  },
-};
+import { STATUS_COPY } from './statusCopy';
 
 /** Where the per-plan Bit QR images live once they are supplied. Absent for
  *  now, and the frame says so rather than showing a broken image. */
@@ -45,10 +25,6 @@ const QR_SRC: Record<PlanKey, string> = {
 };
 
 export interface CheckoutFlowProps {
-  /** Decided on the server. False for everyone else, always. */
-  canSeeAdmin: boolean;
-  /** Empty for non-admins — never sent to the browser at all. */
-  initialRequests: PaymentRequest[];
   /** The trader's own latest request, for the status card on reload. */
   myRequest: PaymentRequest | null;
   /** Pre-fills the verification form. */
@@ -56,9 +32,6 @@ export interface CheckoutFlowProps {
   defaultEmail: string;
   /** From ?plan= on the marketing link. */
   initialPlan: PlanKey;
-  /** From ?view=admin — the link in the owner's notification email. Honoured
-   *  only for an admin, because `canSeeAdmin` still governs the toggle. */
-  openAdmin?: boolean;
   /** Supplied once the owner has them; rendered as — until then. */
   bitNumber: string | null;
   bitPayee: string | null;
@@ -66,23 +39,18 @@ export interface CheckoutFlowProps {
 }
 
 export default function CheckoutFlow({
-  canSeeAdmin, initialRequests, myRequest, defaultName, defaultEmail,
-  initialPlan, openAdmin = false, bitNumber, bitPayee, qrAvailable,
+  myRequest, defaultName, defaultEmail,
+  initialPlan, bitNumber, bitPayee, qrAvailable,
 }: CheckoutFlowProps) {
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
   const [step, setStep] = useState<'plans' | 'pay'>('plans');
-  const [view, setView] = useState<'user' | 'admin'>(openAdmin && canSeeAdmin ? 'admin' : 'user');
   const [fullName, setFullName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
-  const [requests, setRequests] = useState<PaymentRequest[]>(initialRequests);
   const [mine, setMine] = useState<PaymentRequest | null>(myRequest);
   const [confirmed, setConfirmed] = useState(myRequest !== null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  // The effective view. A non-admin cannot reach 'admin' even by setting the
-  // state, and the server would not have sent them any rows to render anyway.
-  const effectiveView = canSeeAdmin ? view : 'user';
   const selected = PLANS[plan];
   const valid = isVerificationValid(fullName, email);
 
@@ -127,38 +95,9 @@ export default function CheckoutFlow({
     }
   }
 
-  async function decide(id: string, status: 'approved' | 'rejected') {
-    // Optimistic: the row settles immediately and reverts if the call fails,
-    // so a decision never looks made when it was not.
-    const before = requests;
-    setRequests(rs => rs.map(r => (r.id === id ? { ...r, status } : r)));
-    try {
-      const res = await fetch(`/api/payment-requests/${id}/decision`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) setRequests(before);
-    } catch {
-      setRequests(before);
-    }
-  }
-
   return (
     <div className="ck" dir="rtl">
-      {canSeeAdmin && (
-        <button
-          type="button"
-          className="ck-admin-toggle"
-          onClick={() => setView(v => (v === 'admin' ? 'user' : 'admin'))}
-        >
-          {effectiveView === 'admin' ? '→ תצוגת לקוח' : 'פאנל אימות ←'}
-        </button>
-      )}
-
-      {effectiveView === 'admin' ? (
-        <AdminPanel requests={requests} onDecide={decide} />
-      ) : step === 'plans' ? (
+      {step === 'plans' ? (
         <PlansScreen plan={plan} onPick={setPlan} onContinue={() => { setStep('pay'); }} />
       ) : (
         <PayScreen
@@ -413,78 +352,6 @@ function PayScreen(props: PayScreenProps) {
       <p className="ck-disclaimer">
         המסחר כרוך בסיכון משמעותי. הכלים במערכת נועדו למטרות לימוד ומחקר בלבד, והשימוש בהם באחריות המשתמש.
       </p>
-    </div>
-  );
-}
-
-/* ── Admin ────────────────────────────────────────────────────────────────── */
-
-function AdminPanel({
-  requests, onDecide,
-}: { requests: PaymentRequest[]; onDecide: (id: string, s: 'approved' | 'rejected') => void }) {
-  return (
-    <div className="ck-admin ck-fade">
-      <div className="ck-admin-head ck-rise">
-        <div className="ck-kicker">ADMIN · אימות תשלומים</div>
-        <h1 className="ck-h1 ck-h1-admin">בקשות ממתינות</h1>
-        <p>
-          כל שליחה מהצ׳קאאוט מגיעה לכאן ובמקביל נשלחת אליך התראה. אישור פותח את הגישה למסלול שנבחר,
-          דחייה משאירה את החשבון סגור.
-        </p>
-      </div>
-
-      <div className="ck-admin-list">
-        {requests.length === 0 ? (
-          <div className="ck-admin-empty">אין בקשות. כל שליחה חדשה מהצ׳קאאוט תופיע כאן.</div>
-        ) : (
-          requests.map(r => {
-            const decided = r.status !== 'pending';
-            return (
-              <div className="ck-req" key={r.id}>
-                <div className="ck-req-main">
-                  <div className="ck-req-top">
-                    <div className="ck-req-name">{r.name}</div>
-                    <div className={`ck-req-status ck-req-status-${r.status}`}>{STATUS_COPY[r.status].label}</div>
-                  </div>
-                  <div className="ck-req-email" dir="ltr">{r.email}</div>
-                  <div className="ck-req-metrics">
-                    <div className="ck-req-metric">
-                      <div className="ck-req-metric-k">מסלול</div>
-                      <div className="ck-req-plan">{PLANS[r.plan].name}</div>
-                    </div>
-                    <div className="ck-req-metric">
-                      <div className="ck-req-metric-k">סכום מוצהר</div>
-                      <div className="ck-req-amount ck-num">{r.amount} ₪</div>
-                    </div>
-                    <div className="ck-req-metric">
-                      <div className="ck-req-metric-k">נשלח</div>
-                      <div className="ck-req-time ck-num">{r.time}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className={`ck-req-actions${decided ? ' ck-req-actions-decided' : ''}`}>
-                  <button
-                    type="button"
-                    className="ck-btn ck-btn-md ck-btn-primary"
-                    disabled={decided}
-                    onClick={() => onDecide(r.id, 'approved')}
-                  >
-                    אישור — פתיחת גישה
-                  </button>
-                  <button
-                    type="button"
-                    className="ck-btn ck-btn-md ck-btn-ghost"
-                    disabled={decided}
-                    onClick={() => onDecide(r.id, 'rejected')}
-                  >
-                    לא התקבל תשלום
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
     </div>
   );
 }

@@ -71,7 +71,7 @@ describe('notifyOwner', () => {
     }));
 
     await notifyOwner(note);
-    expect(JSON.parse(body).html).toContain('/checkout?view=admin');
+    expect(JSON.parse(body).html).toContain('/dashboard/payments');
   });
 
   // The name and the address are typed by a customer, and the owner is the
@@ -148,11 +148,11 @@ describe('notifyOwner', () => {
 describe('adminPanelUrl', () => {
   it('points at the panel', () => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://onyxtrading.vercel.app';
-    expect(adminPanelUrl()).toBe('https://onyxtrading.vercel.app/checkout?view=admin');
+    expect(adminPanelUrl()).toBe('https://onyxtrading.vercel.app/dashboard/payments');
   });
 
   it('does not double the slash when the base carries one', () => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://onyxtrading.vercel.app/';
-    expect(adminPanelUrl()).toBe('https://onyxtrading.vercel.app/checkout?view=admin');
+    expect(adminPanelUrl()).toBe('https://onyxtrading.vercel.app/dashboard/payments');
   });
 });

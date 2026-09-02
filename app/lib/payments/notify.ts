@@ -30,13 +30,15 @@ export interface OwnerNotification {
   time: string;
 }
 
-/** Where the admin panel lives, absolute, so the link works from a mail client.
+/** Where the verification panel lives, absolute, so the link works from a mail
+ *  client.
  *
- *  `?view=admin` opens the panel directly rather than dropping the owner on
- *  the plan grid to find the toggle. */
+ *  Inside the dashboard rather than on the checkout: the owner is signed in
+ *  and already in the app when this arrives, and the page is admin-gated on
+ *  the server. */
 export function adminPanelUrl(): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
-  return `${base}/checkout?view=admin`;
+  return `${base}/dashboard/payments`;
 }
 
 /** Escapes text before it goes into the HTML body.
