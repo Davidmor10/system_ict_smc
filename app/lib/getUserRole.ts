@@ -1,6 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { connection } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from './supabase/server';
+import { effectiveRole } from './payments/access';
 
 // Four real tiers, strictly ranked deluxe ⊇ pro ⊇ starter ⊇ free.
 //   free    — dashboard, journal, playbook, rules; NO AI Insight panel
@@ -74,7 +75,7 @@ export async function getUserContext(): Promise<UserContext> {
     const supabase = createServerSupabaseClient();
     const { data, error } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, access_until')
       .eq('clerk_id', userId)
       .maybeSingle();
 
@@ -111,7 +112,10 @@ export async function getUserContext(): Promise<UserContext> {
       return { role: 'free', isOwner: false };
     }
 
-    return { role: normalizeRole(data.role), isOwner: false };
+    // Through the expiry, not straight off the column. A Bit transfer buys one
+    // month; once access_until is past the account is free again, whatever the
+    // stored role still says. Null means no expiry — see lib/payments/access.
+    return { role: effectiveRole(data.role, (data as { access_until?: string | null }).access_until), isOwner: false };
   } catch {
     return { role: 'free', isOwner: false };
   }

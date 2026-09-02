@@ -40,6 +40,7 @@ import { generateDailyInsight, type PlanTier } from '../../../lib/coach-pipeline
 import { getClient } from '../../../lib/coach-pipeline/db/client';
 import { T } from '../../../lib/coach-pipeline/types';
 import { israelToday } from '../../../lib/coach-pipeline/dates';
+import { effectiveRole } from '../../../lib/payments/access';
 import { normalizeRole } from '../../../lib/getUserRole';
 import { listTradesForDate } from '../../../lib/coach-pipeline/db/trades';
 import { logger } from '../../../lib/logger';
@@ -194,12 +195,12 @@ export async function GET(req: NextRequest) {
     // Resolve the plan the same way the worker does.
     const { data: profileRow } = await getClient()
       .from('profiles')
-      .select('role, email')
+      .select('role, email, access_until')
       .eq('clerk_id', userId)
       .maybeSingle();
     const planTier: PlanTier = isOwnerEmail(profileRow?.email)
       ? 'deluxe'
-      : (normalizeRole(profileRow?.role) as PlanTier);
+      : (effectiveRole(profileRow?.role, (profileRow as { access_until?: string | null } | null)?.access_until) as PlanTier);
 
     // Pre-flight context, so a boring result ("no trades today") is obvious
     // from the response rather than needing a second round of digging.

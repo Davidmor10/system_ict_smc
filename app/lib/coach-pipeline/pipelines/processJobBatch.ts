@@ -13,6 +13,7 @@ import { flags } from '../db/flags';
 import { generateDailyInsight, type PlanTier } from './generateDailyInsight';
 import { embedEntry } from './embedEntry';
 import { refreshIntelligenceNightly } from '../../intelligence/service';
+import { effectiveRole } from '../../payments/access';
 import { normalizeRole } from '../../getUserRole';
 import { isOwnerEmail } from '../auth/owners';
 import { israelToday, israelYesterday } from '../dates';
@@ -42,13 +43,16 @@ export interface BatchResult {
 async function fetchPlanTier(clerkId: string): Promise<PlanTier> {
   const { data } = await getClient()
     .from('profiles')
-    .select('role, email')
+    .select('role, email, access_until')
     .eq('clerk_id', clerkId)
     .maybeSingle();
   // Owner override, same rule as getUserRole.ts — keyed off the stored email
   // because the worker has no Clerk session to ask.
   if (isOwnerEmail((data as { email?: string | null } | null)?.email)) return 'deluxe';
-  return normalizeRole(data?.role);
+  // Respecting the expiry here is not cosmetic: this is the path that spends
+  // money on AI. Without it a lapsed account keeps getting a nightly run, every
+  // night, for as long as nobody notices.
+  return effectiveRole(data?.role, (data as { access_until?: string | null } | null)?.access_until) as PlanTier;
 }
 
 /** Dispatch a single job. Returns whether it should be marked success, and

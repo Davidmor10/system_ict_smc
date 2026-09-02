@@ -120,6 +120,36 @@ async function drainUntilEmptyOrBudget(started: number): Promise<Pick<BatchResul
  *
  *  Reported through `cron_runs` only as counts. The rows themselves are named
  *  in the log, and orphans are never touched. */
+/** Downgrade accounts whose Bit month has run out.
+ *
+ *  Every reader already resolves the role through the expiry, so access is
+ *  correct without this. What this fixes is the TABLE: left alone it goes on
+ *  saying `pro` about an account that lost the plan weeks ago, and that row is
+ *  what the owner reads, what a support answer is based on, and what any
+ *  future query counts as a paying customer.
+ *
+ *  Scoped to rows that actually lapsed, so it is a no-op on a normal night.
+ *  Never throws — a failed sweep must not fail the nightly run, because the
+ *  analysis is the part traders notice. */
+async function expireLapsedAccess(): Promise<{ expired: number }> {
+  try {
+    const { data, error } = await getClient()
+      .from('profiles')
+      .update({ role: 'free', subscription_status: 'inactive' })
+      .not('access_until', 'is', null)
+      .lt('access_until', new Date().toISOString())
+      .neq('role', 'free')
+      .select('clerk_id');
+    if (error) throw error;
+    const expired = (data ?? []).length;
+    if (expired) logger.info('access expired for lapsed accounts', { expired });
+    return { expired };
+  } catch (err) {
+    logger.error('expiry sweep failed', { error: err instanceof Error ? err.message : String(err) });
+    return { expired: 0 };
+  }
+}
+
 async function reconcileAll(): Promise<{ repairedMissing: number; repairedGhosts: number; orphans: number }> {
   let repairedMissing = 0, repairedGhosts = 0, orphans = 0;
   try {
@@ -166,12 +196,16 @@ export async function POST(req: Request) {
     // failed mirror is invisible for exactly that long.
     const repaired = await reconcileAll();
 
+    // Before scheduling, so tonight's jobs are not created for accounts whose
+    // month ran out this morning.
+    const lapsed = await expireLapsedAccess();
+
     // Schedule with spread=0 — every job is due immediately so the drain
     // below picks them all in the first pass.
     const scheduled = await scheduleNightlyJobs(new Date(), 0);
     const drained   = await drainUntilEmptyOrBudget(started);
 
-    const combined = { ...scheduled, ...drained, ...repaired };
+    const combined = { ...scheduled, ...drained, ...repaired, ...lapsed };
     await logRun(startedAt, true, combined);
     return NextResponse.json({ ok: true, ...combined });
   } catch (err) {
