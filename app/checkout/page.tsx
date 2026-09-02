@@ -51,7 +51,7 @@ function qrAvailable(): boolean {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; view?: string }>;
 }) {
   // Guarded the way the root layout guards it. `auth()` throws outright when
   // the Clerk middleware is not running — a missing key, a misconfigured
@@ -73,7 +73,7 @@ export default async function CheckoutPage({
   const initialRequests: PaymentRequest[] = canSeeAdmin ? await listAllRequests() : [];
   const myRequest = userId ? await latestRequestFor(userId) : null;
 
-  const { plan } = await searchParams;
+  const { plan, view } = await searchParams;
   const initialPlan: PlanKey = isPlanKey(plan) ? plan : DEFAULT_PLAN;
 
   const bit = bitDetails();
@@ -87,6 +87,7 @@ export default async function CheckoutPage({
       defaultName={name}
       defaultEmail={email}
       initialPlan={initialPlan}
+      openAdmin={view === 'admin'}
       bitNumber={bit.number}
       bitPayee={bit.payee}
       qrAvailable={qrAvailable()}

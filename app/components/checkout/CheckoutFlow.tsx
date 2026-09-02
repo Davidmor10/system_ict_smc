@@ -56,6 +56,9 @@ export interface CheckoutFlowProps {
   defaultEmail: string;
   /** From ?plan= on the marketing link. */
   initialPlan: PlanKey;
+  /** From ?view=admin — the link in the owner's notification email. Honoured
+   *  only for an admin, because `canSeeAdmin` still governs the toggle. */
+  openAdmin?: boolean;
   /** Supplied once the owner has them; rendered as — until then. */
   bitNumber: string | null;
   bitPayee: string | null;
@@ -64,11 +67,11 @@ export interface CheckoutFlowProps {
 
 export default function CheckoutFlow({
   canSeeAdmin, initialRequests, myRequest, defaultName, defaultEmail,
-  initialPlan, bitNumber, bitPayee, qrAvailable,
+  initialPlan, openAdmin = false, bitNumber, bitPayee, qrAvailable,
 }: CheckoutFlowProps) {
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
   const [step, setStep] = useState<'plans' | 'pay'>('plans');
-  const [view, setView] = useState<'user' | 'admin'>('user');
+  const [view, setView] = useState<'user' | 'admin'>(openAdmin && canSeeAdmin ? 'admin' : 'user');
   const [fullName, setFullName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [requests, setRequests] = useState<PaymentRequest[]>(initialRequests);

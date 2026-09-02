@@ -7,6 +7,7 @@ import { logger } from '../../lib/logger';
 import { viewerEmail, isAdminEmail } from '../../lib/payments/admin';
 import { createRequest, listAllRequests } from '../../lib/payments/requests';
 import { PLANS, isPlanKey, isVerificationValid } from '../../lib/payments/plans';
+import { notifyOwner } from '../../lib/payments/notify';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,12 +100,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 
-  // The owner has to learn about this out of band — nothing polls the queue.
-  // Logged rather than silently queued so an unsent notification is at least
-  // findable; wiring a real channel is listed in the handoff as production
-  // work and has not been done.
+  // Tell the owner. Awaited, not fire-and-forget: on Vercel the function can
+  // be frozen the moment the response returns, which is exactly how the trades
+  // mirror silently wrote nothing for a day. notifyOwner swallows its own
+  // errors and never throws, so awaiting it cannot fail this request — the
+  // payment is already recorded, and a customer must not be told their
+  // submission failed because a mail provider was down.
+  const notified = await notifyOwner({
+    name: fullName.trim(),
+    email: email.trim(),
+    plan,
+    amount: PLANS[plan].price,
+    time: result.request.time,
+  });
+
   logger.info('payment request received', {
-    plan, amount: PLANS[plan].price, email: email.trim(),
+    plan, amount: PLANS[plan].price, email: email.trim(), notified,
   });
 
   return NextResponse.json({ ok: true, request: result.request });
