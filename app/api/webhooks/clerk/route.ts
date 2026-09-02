@@ -44,6 +44,8 @@ const USER_TABLES = [
   'rule_violations', 'journal_trades', 'intelligence_trades', 'trades',
   // the trader's own definitions
   'trading_rules', 'setups', 'user_collections', 'user_preferences',
+  // declared Bit transfers — these carry a name and an email address
+  'payment_requests',
   // everything the AI produced about them
   'daily_insights', 'weekly_ai_reports', 'ai_insight_history',
   'trader_hypotheses', 'trader_profiles', 'user_profile', 'pattern_memory',
