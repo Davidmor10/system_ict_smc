@@ -11,6 +11,7 @@ export const DICT = {
   nav_journal:          { en: 'Journal',                he: 'יומן'                           },
   nav_notebook:         { en: 'Notebook',               he: 'מחברת'                          },
   nav_stats:            { en: 'Statistics',             he: 'סטטיסטיקה'                      },
+  nav_progress:         { en: 'Progress',               he: 'המסלול'                         },
   nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
   nav_reports:          { en: 'Reports',                he: 'דוחות'                          },

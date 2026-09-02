@@ -44,6 +44,7 @@ const preferences = await import('../../app/api/preferences/route');
 const macro = await import('../../app/api/macro/route');
 const readiness = await import('../../app/api/coach/readiness/route');
 const dailyInsight = await import('../../app/api/coach/daily-insight/route');
+const journey = await import('../../app/api/coach/journey/route');
 
 const body = (o: unknown) =>
   new Request('http://x', { method: 'POST', body: JSON.stringify(o) });
@@ -65,6 +66,9 @@ describe('an account with no subscription is refused', () => {
     // Analysis starts at pro — starter buys the journal, not the AI.
     ['GET  /api/coach/readiness', () => readiness.GET(), 'pro'],
     ['GET  /api/coach/daily-insight', () => dailyInsight.GET(), 'pro'],
+    // The journey screen carries the behaviour lifecycle and the score
+    // history, both produced by the pipeline that starts at pro.
+    ['GET  /api/coach/journey',   () => journey.GET(), 'pro'],
   ];
 
   for (const [name, call, requiredPlan] of cases) {
@@ -103,7 +107,7 @@ describe('a subscriber is let through the same gate', () => {
 describe('a starter account is refused the analysis', () => {
   it('gets 403 from the AI routes it did not pay for', async () => {
     role = 'starter';
-    for (const call of [() => readiness.GET(), () => dailyInsight.GET()]) {
+    for (const call of [() => readiness.GET(), () => dailyInsight.GET(), () => journey.GET()]) {
       const res = await call();
       expect(res.status).toBe(403);
       expect((await res.json()).requiredPlan).toBe('pro');
@@ -123,7 +127,7 @@ describe('a starter account is refused the analysis', () => {
 
   it('lets pro through the same AI routes', async () => {
     role = 'pro';
-    for (const call of [() => readiness.GET(), () => dailyInsight.GET()]) {
+    for (const call of [() => readiness.GET(), () => dailyInsight.GET(), () => journey.GET()]) {
       expect((await call()).status).not.toBe(403);
     }
   });

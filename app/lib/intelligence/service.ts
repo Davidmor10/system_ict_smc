@@ -451,6 +451,24 @@ function confidenceLevelForScore(score: number): ConfidenceLevel {
   return 'low';
 }
 
+// ── Scores, read-only ────────────────────────────────────────────────────────
+
+/** The stored score history, without recomputing anything.
+ *
+ *  READ-ONLY ON PURPOSE. Every other entry point into this module refreshes
+ *  the intelligence as a side effect of being asked a question — which is
+ *  right for a nightly job and wrong for a screen. Opening the progress page
+ *  must not spend a model call, must not move the trader's stored state, and
+ *  must not let a page load rewrite the very history the page is drawing.
+ *
+ *  Returns an empty history rather than throwing for an account the nightly
+ *  run has never touched. */
+export async function getScoreHistory(userId: string): Promise<ScoreSnapshot[]> {
+  if (!isSupabaseConfigured()) return [];
+  const record = await repo.getTraderProfile(getClient(), userId);
+  return record?.scoreHistory ?? [];
+}
+
 export async function generateDashboardPrimaryInsight(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<AiDiscovery | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = getClient();
@@ -544,7 +562,8 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
 }
 
 // ── Evolution Timeline ───────────────────────────────────────────────────────
-// Not wired into any UI in this pass — available for a future surface.
+// Surfaced by /dashboard/progress. It sat here unwired for long enough to grow
+// a comment saying so.
 
 export async function getEvolutionTimeline(userId: string): Promise<EvolutionEntry[]> {
   if (!isSupabaseConfigured()) return [];

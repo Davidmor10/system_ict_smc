@@ -8,7 +8,7 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
-import TrackingLine from './TrackingLine';
+import ProgressStrip from './ProgressStrip';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
@@ -628,10 +628,14 @@ export default function DashboardView() {
           disagreement waiting to be shipped, and the trade is the one that
           knows which day it belongs to. */}
 
-      {/* What is being counted right now. Renders nothing when nothing is —
-          above the numbers, because it is a standing commitment rather than a
-          figure about yesterday. */}
-      {hasAi && <TrackingLine />}
+      {/* The journey, in one line — the open window when there is one, and
+          otherwise what stands: how many behaviours changed and held, how many
+          are watched, and the learning score. Above the numbers, because it is
+          a standing commitment rather than a figure about yesterday.
+
+          Renders nothing at all for an account with no detected behaviour and
+          no measurable history. */}
+      {hasAi && <ProgressStrip />}
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">

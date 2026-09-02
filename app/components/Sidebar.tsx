@@ -27,6 +27,10 @@ function IconCoach()     { return <svg {...iconProps}><path d="M8 9h8M8 13h5" />
 function IconPlaybook()  { return <svg {...iconProps}><path d="M12 4v16" /><path d="M3 6a3 3 0 0 1 3-3h5v18H6a3 3 0 0 1-3-3Z" /><path d="M21 6a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 0 3-3Z" /></svg>; }
 function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z" /><path d="M9 12l2 2 4-4" /></svg>; }
 function IconReports()   { return <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M8 13h5M8 17h4M16 12l3 3-3 3" /></svg>; }
+// A path with a marker at its end — a route travelled, not a bar chart. The
+// journey screen is about direction over time, and IconChart already means
+// "the statistics page".
+function IconPath()      { return <svg {...iconProps}><path d="M4 20c3.5 0 3.5-5 7-5s3.5-5 7-5" /><circle cx="18" cy="10" r="2" /><circle cx="4" cy="20" r="1" /></svg>; }
 // A banknote with a check — the owner's payment-verification queue. Distinct
 // from IconRules' shield, which is about the trader's own discipline.
 function IconVerify()    { return <svg {...iconProps}><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M8.5 12l2 2 4-4" /></svg>; }
@@ -45,6 +49,7 @@ const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolea
   { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter',   Icon: IconBook     },
   { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter',   Icon: IconNotebook },
   { href: '/dashboard/stats',        key: 'nav_stats',        min: 'starter',   Icon: IconChart, child: true },
+  { href: '/dashboard/progress',     key: 'nav_progress',     min: 'pro',       Icon: IconPath     },
   { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconSparkles },
   { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter',   Icon: IconPlaybook },

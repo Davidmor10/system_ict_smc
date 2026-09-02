@@ -460,3 +460,33 @@
 /* The locked-analysis panel sits where the daily insight would, so a trader on
    the journal tier sees what the AI tier is rather than an empty card. */
 .dp-app .dp-ai-locked-note{color:var(--dp-w60,rgba(255,255,255,.6));font-size:13px;line-height:1.55;margin:-4px 0 13px;}
+
+/* The journey strip's counts. One row under the open window — or the whole
+   strip on a day when no window is open, which is most days.
+
+   `changed` is the number that should grow over a year, so it is the one that
+   gets the gold. `relapsed` is deliberately not folded into it. */
+.dp-app .dp-track-counts{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding-top:2px;
+}
+.dp-app .dp-track-stat{
+  display:flex;align-items:baseline;gap:6px;
+  font-family:var(--dp-ff-sans);font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--dp-w40,rgba(255,255,255,.4));
+  white-space:nowrap;
+}
+.dp-app .dp-track-stat b{
+  font-family:var(--dp-ff-mono);font-size:16px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--dp-gold);letter-spacing:0;
+}
+.dp-app .dp-track-stat[data-tone="warn"] b{color:#c07878;}
+.dp-app .dp-track-stat[data-tone="score"] b{color:var(--dp-w92);}
+.dp-app .dp-track-more{
+  margin-inline-start:auto;
+  font-family:var(--dp-ff-mono);font-size:11px;font-weight:700;
+  letter-spacing:.1em;color:var(--dp-w55);white-space:nowrap;
+  transition:color .25s var(--dp-ease);
+}
+.dp-app .dp-track-more:hover{color:var(--dp-gold);}
+.dp-app .dp-track-more:focus-visible{outline:2px solid var(--dp-gold);outline-offset:3px;}

@@ -2,6 +2,7 @@
 import { readOwned } from '../../lib/sync/owned';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios,
@@ -12,7 +13,7 @@ import EmptyState from '../../components/EmptyState';
 import PatternEvidence from '../../components/PatternEvidence';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
-import WeeklyTabs from '../../components/WeeklyTabs';
+import WeeklyReportPanel from '../../components/WeeklyReportPanel';
 import TrackingArchive from '../../components/TrackingArchive';
 import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
 
@@ -978,11 +979,20 @@ export default function AiAnalyticsPage() {
         </NumberedSection>
 
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
+        {/* One panel, not two tabs.
+            The behaviour half of this section — did anything about HOW you
+            trade move — was the second tab, which meant it was reachable only
+            by opening this page, scrolling to section six of twelve, and then
+            noticing a tab that was not the default. It is the only surface
+            that answers whether the trader is changing, and it was the most
+            buried thing in the product. It now opens /dashboard/progress,
+            where it is one of four bands instead of a tab nobody clicked. */}
         <NumberedSection
           index={6} total={12} eyebrow="AI · Weekly Review" title="סיכום השבוע"
-          description="השבוע הנוכחי משתי זוויות: מה עשו המספרים, ומה עשית אתה. שתי שאלות שונות על אותו שבוע, ולכן שתי לשוניות ולא פסקה אחת."
+          description="מה עשו המספרים בשבוע הנוכחי. השאלה השנייה על אותו שבוע — מה עשית אתה — נמצאת במסלול, כי היא על מגמה ולא על תוצאה."
+          extra={<Link href="/dashboard/progress" className="inline-block mt-4 text-[#d4af37] text-[12px] font-bold whitespace-nowrap hover:underline">למסלול ←</Link>}
         >
-          <WeeklyTabs hasEnoughData={hasEnoughData} closedThisWeek={closedThisWeek} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
+          <WeeklyReportPanel hasEnoughData={hasEnoughData} closedThisWeek={closedThisWeek} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
 
