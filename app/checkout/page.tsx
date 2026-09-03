@@ -21,13 +21,13 @@ export const dynamic = 'force-dynamic';
 
 
 
-/** Whether the three per-plan QR images have been added to /public/bit.
+/** Whether the per-plan QR images were committed to /public/bit.
  *
- *  Checked rather than assumed: an <img> pointing at a file nobody has
- *  supplied yet renders as a broken icon inside a gold-glowing frame, which
- *  looks like a bug in the payment page. Absent, the frame says which code is
- *  missing instead. */
-function qrAvailable(): boolean {
+ *  Legacy, and kept only so a deployment that already had the files keeps
+ *  working. The owner now uploads codes from their own settings screen, which
+ *  is what the checkout prefers — nobody should need a deploy to change where
+ *  money goes. */
+function qrFilesPresent(): boolean {
   try {
     const dir = join(process.cwd(), 'public', 'bit');
     return ['starter', 'pro', 'deluxe'].every(k => existsSync(join(dir, `bit-qr-${k}.png`)));
@@ -72,7 +72,8 @@ export default async function CheckoutPage({
       initialPlan={initialPlan}
       bitNumber={bit.number}
       bitPayee={bit.payee}
-      qrAvailable={qrAvailable()}
+      qr={bit.qr}
+      qrFilesPresent={qrFilesPresent()}
     />
   );
 }

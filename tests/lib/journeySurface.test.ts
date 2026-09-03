@@ -326,7 +326,14 @@ describe('the checkout refuses to take a declaration it cannot honour', () => {
   const FLOW = read('components', 'checkout', 'CheckoutFlow.tsx');
 
   it('says so instead of rendering a dash that looks intentional', () => {
-    expect(FLOW).toContain('התשלום בביט עדיין לא זמין');
+    expect(FLOW).toContain('התשלום במסלול הזה עדיין לא זמין');
+  });
+
+  // The number is the owner's personal one. A row printing "—" for it made an
+  // unconfigured page look configured, and publishing it at all is a choice.
+  it('shows the number only when the owner published one', () => {
+    expect(FLOW).toContain('{props.bitNumber && (');
+    expect(FLOW).not.toContain("props.bitNumber ?? '—'");
   });
 
   it('disables the declaration button', () => {

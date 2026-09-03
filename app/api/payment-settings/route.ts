@@ -11,16 +11,22 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isAdminEmail, viewerEmail } from '../../lib/payments/admin';
-import { getBitSettings, normalizeBit, saveBitSettings } from '../../lib/payments/settings';
+import { getBitSettings, normalizeBit, saveBitSettings, MAX_QR_CHARS } from '../../lib/payments/settings';
 import { checkRateLimit } from '../../lib/rateLimit';
 import { logSecurityEvent } from '../../lib/securityLog';
 import { logger } from '../../lib/logger';
 
 export const dynamic = 'force-dynamic';
 
+// The QR is validated by `normalizeBit`, which is stricter than a length
+// check: it must be a raster image data URI. Anything else — an svg+xml URI
+// that can carry script, a remote URL that would make the checkout fetch from
+// wherever the row says — is dropped rather than stored, because this string
+// is rendered into an <img src> on a public page.
 const bodySchema = z.object({
   number: z.string().max(60),
   payee: z.string().max(120),
+  qr: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
 });
 
 async function requireAdmin(route: string): Promise<{ userId: string; email: string } | NextResponse> {
@@ -65,11 +71,30 @@ export async function PUT(req: Request) {
   }
 
   const next = normalizeBit(parsed.data);
+
+  // A silently dropped code is the worst outcome: the owner sees "saved" and
+  // the checkout stays shut. If something was sent for a plan and did not
+  // survive validation, say so instead.
+  const sent = parsed.data.qr ?? {};
+  const rejected = Object.keys(sent).filter(
+    k => typeof sent[k] === 'string' && sent[k] !== '' && next.qr[k as keyof typeof next.qr] == null,
+  );
+  if (rejected.length > 0) {
+    return NextResponse.json(
+      { error: 'invalid_qr', plans: rejected, maxChars: MAX_QR_CHARS },
+      { status: 400 },
+    );
+  }
+
   if (!await saveBitSettings(next, gate.email)) {
     return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
   }
 
   // Worth a line: this is the setting that decides where customers send money.
-  logger.info('bit settings updated', { by: gate.email, hasNumber: next.number !== null });
+  logger.info('bit settings updated', {
+    by: gate.email,
+    hasNumber: next.number !== null,
+    qrPlans: Object.entries(next.qr).filter(([, v]) => v).map(([k]) => k),
+  });
   return NextResponse.json({ ok: true, settings: next });
 }

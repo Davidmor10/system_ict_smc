@@ -42,12 +42,15 @@ export interface CheckoutFlowProps {
   /** Supplied once the owner has them; rendered as — until then. */
   bitNumber: string | null;
   bitPayee: string | null;
-  qrAvailable: boolean;
+  /** The owner's uploaded codes, one per plan, as data URIs. */
+  qr: Record<string, string | null>;
+  /** Legacy files in /public/bit, for a deployment that had them. */
+  qrFilesPresent: boolean;
 }
 
 export default function CheckoutFlow({
   myRequest, defaultName, defaultEmail,
-  initialPlan, bitNumber, bitPayee, qrAvailable,
+  initialPlan, bitNumber, bitPayee, qr, qrFilesPresent,
 }: CheckoutFlowProps) {
   const [plan, setPlan] = useState<PlanKey>(initialPlan);
   const [step, setStep] = useState<'plans' | 'pay'>('plans');
@@ -171,7 +174,8 @@ export default function CheckoutFlow({
           sendError={sendError}
           bitNumber={bitNumber}
           bitPayee={bitPayee}
-          qrAvailable={qrAvailable}
+          qr={qr[selected.key] ?? null}
+          qrFilesPresent={qrFilesPresent}
         />
       )}
     </div>
@@ -269,17 +273,19 @@ interface PayScreenProps {
   sendError: string | null;
   bitNumber: string | null;
   bitPayee: string | null;
-  qrAvailable: boolean;
+  qr: string | null;
+  qrFilesPresent: boolean;
 }
 
 function PayScreen(props: PayScreenProps) {
   const p = PLANS[props.plan];
   const st = STATUS_COPY[props.status];
-  // Without a number there is nowhere to send the money. Rendering "—" made a
-  // missing configuration look like a design element — a dash inside a gold
-  // frame reads as intentional — so the page took declarations for transfers
-  // that could not have happened.
-  const payable = props.bitNumber !== null;
+  // The code the customer scans: the owner's upload first, then a legacy file.
+  const code = props.qr ?? (props.qrFilesPresent ? QR_SRC[props.plan] : null);
+  // Either route is enough. Rendering "—" made a missing configuration look
+  // like a design element — a dash inside a gold frame reads as intentional —
+  // so the page took declarations for transfers that could not have happened.
+  const payable = code !== null || props.bitNumber !== null;
 
   return (
     <div className="ck-pay ck-fade">
@@ -312,9 +318,9 @@ function PayScreen(props: PayScreenProps) {
 
             <div className="ck-bit-row">
               <div className="ck-qr">
-                {props.qrAvailable ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- fixed-size static asset in a 220px frame; no loader to gain from
-                  <img src={QR_SRC[props.plan]} alt={`ברקוד ביט — ${p.name} ${p.price} ₪`} />
+                {code ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- a data URI or a fixed-size static asset in a 220px frame; no loader to gain from
+                  <img src={code} alt={`ברקוד ביט — ${p.name} ${p.price} ₪`} />
                 ) : (
                   <div className="ck-qr-missing">ברקוד ביט — {p.name} {p.price} ₪</div>
                 )}
@@ -324,22 +330,30 @@ function PayScreen(props: PayScreenProps) {
                   <div className="ck-micro">סכום להעברה</div>
                   <div className="ck-amount ck-num">{p.price} ₪</div>
                 </div>
-                <div className="ck-detail">
-                  <div className="ck-micro">מספר לביט</div>
-                  <div className="ck-detail-mono ck-num" dir="ltr">{props.bitNumber ?? '—'}</div>
-                </div>
-                <div className="ck-detail">
-                  <div className="ck-micro">שם המוטב</div>
-                  <div className="ck-detail-text">{props.bitPayee ?? '—'}</div>
-                </div>
+                {/* Only when the owner chose to publish them. The number is
+                    their personal one, and a customer scanning a code has no
+                    need of it — an empty row saying "—" was the whole reason
+                    the page looked configured when it was not. */}
+                {props.bitNumber && (
+                  <div className="ck-detail">
+                    <div className="ck-micro">מספר לביט</div>
+                    <div className="ck-detail-mono ck-num" dir="ltr">{props.bitNumber}</div>
+                  </div>
+                )}
+                {props.bitPayee && (
+                  <div className="ck-detail">
+                    <div className="ck-micro">שם המוטב</div>
+                    <div className="ck-detail-text">{props.bitPayee}</div>
+                  </div>
+                )}
               </div>
             </div>
 
             {!payable && (
               <div className="ck-bit-blocked">
-                <b>התשלום בביט עדיין לא זמין</b>
-                פרטי ההעברה לא הוגדרו, ולכן אין לאן להעביר. אל תשלח כלום — נסה שוב מאוחר יותר, או פנה
-                אלינו ונפתח לך את הגישה ידנית.
+                <b>התשלום במסלול הזה עדיין לא זמין</b>
+                עוד לא הוגדר ברקוד למסלול הזה, ולכן אין לאן להעביר. אל תשלח כלום — נסה מסלול אחר, או
+                פנה אלינו ונפתח לך את הגישה ידנית.
               </div>
             )}
 

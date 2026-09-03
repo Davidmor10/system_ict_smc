@@ -17,32 +17,74 @@
 
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { logger } from '../logger';
+import { PLAN_KEYS, type PlanKey } from './plans';
 
 const KEY = 'bit_payment';
 
+export type QrByPlan = Record<PlanKey, string | null>;
+
 export interface BitSettings {
-  /** The phone number or handle a transfer is sent to. Null when unset. */
+  /** The phone number a transfer is sent to. OPTIONAL, and deliberately so:
+   *  it is the owner's personal number and every customer would see it. A QR
+   *  encodes the same transfer without publishing it. */
   number: string | null;
   /** Who the customer should see as the recipient. Null when unset. */
   payee: string | null;
+  /** One Bit QR per plan, as a data URI, because the amount differs per plan.
+   *  Stored rather than committed to /public for the same reason the number is
+   *  stored: an owner should not need a deploy to change where money goes. */
+  qr: QrByPlan;
 }
 
-export const EMPTY_BIT: BitSettings = { number: null, payee: null };
+export const EMPTY_QR: QrByPlan = { starter: null, pro: null, deluxe: null };
+export const EMPTY_BIT: BitSettings = { number: null, payee: null, qr: { ...EMPTY_QR } };
+
+/** What a stored QR may be.
+ *
+ *  Narrow on purpose. This string is rendered into an <img src> on a public
+ *  page, so anything that is not a raster image data URI has no business
+ *  being there — an svg+xml data URI can carry script, and a remote URL would
+ *  let whoever wrote this row make the checkout fetch from anywhere. */
+const QR_PREFIX = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/** Roughly 90KB decoded. A QR needs a fraction of that; a photo of a screen
+ *  does not, and three of those would be a megabyte in the page. */
+export const MAX_QR_CHARS = 120_000;
+
+export function isValidQr(v: unknown): v is string {
+  return typeof v === 'string' && v.length <= MAX_QR_CHARS && QR_PREFIX.test(v);
+}
+
+function normalizeQr(raw: unknown): QrByPlan {
+  const src = (raw ?? {}) as Record<string, unknown>;
+  const out = { ...EMPTY_QR };
+  for (const k of PLAN_KEYS) if (isValidQr(src[k])) out[k] = src[k] as string;
+  return out;
+}
 
 /** Trim, and treat blank as absent.
  *
  *  A settings form submits "" for a cleared field, and an empty string that
  *  reaches the checkout renders as a present-but-blank recipient — the same
  *  silent-misconfiguration shape the dash had. */
-export function normalizeBit(input: { number?: unknown; payee?: unknown }): BitSettings {
+export function normalizeBit(input: { number?: unknown; payee?: unknown; qr?: unknown }): BitSettings {
   const clean = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-  return { number: clean(input.number), payee: clean(input.payee) };
+  return { number: clean(input.number), payee: clean(input.payee), qr: normalizeQr(input.qr) };
 }
 
-/** True when a customer actually has somewhere to send money. The payee name
- *  is a courtesy; the number is what makes the page usable. */
+/** True when a customer on THIS plan has somewhere to send money.
+ *
+ *  Per plan, because the QR encodes the amount — a code for PRO does not let
+ *  a DELUXE customer pay. Either route is enough on its own: a scannable code,
+ *  or a number to send to. The payee name is a courtesy and gates nothing. */
+export function isPayableFor(s: BitSettings, plan: PlanKey): boolean {
+  return s.qr[plan] !== null || s.number !== null;
+}
+
+/** True when at least one plan can be paid for at all — for the owner's
+ *  settings screen, which is asking a different question than the checkout. */
 export function isPayable(s: BitSettings): boolean {
-  return s.number !== null;
+  return s.number !== null || PLAN_KEYS.some(k => s.qr[k] !== null);
 }
 
 function fromEnv(): BitSettings {
@@ -56,7 +98,8 @@ function fromEnv(): BitSettings {
  *  be read must leave the page saying "not available", not 500. */
 export async function getBitSettings(): Promise<BitSettings> {
   const env = fromEnv();
-  if (env.number) return env;
+  // The table is always consulted now: the QR codes live only there, so an
+  // environment-configured number must not short-circuit the read.
   if (!isSupabaseConfigured()) return env;
 
   try {
@@ -68,8 +111,8 @@ export async function getBitSettings(): Promise<BitSettings> {
     if (error) throw error;
     const stored = normalizeBit((data?.value ?? {}) as Record<string, unknown>);
     // Field by field, so a payee set in the environment survives a number that
-    // is only in the table.
-    return { number: stored.number ?? env.number, payee: stored.payee ?? env.payee };
+    // is only in the table. QR codes only ever come from the table.
+    return { number: stored.number ?? env.number, payee: stored.payee ?? env.payee, qr: stored.qr };
   } catch (err) {
     logger.warn('bit settings unavailable', { error: err instanceof Error ? err.message : String(err) });
     return env;
