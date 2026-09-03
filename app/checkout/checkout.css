@@ -398,6 +398,32 @@
   padding: 40px 32px 64px;
 }
 
+.ck-settings {
+  max-width: 920px; margin: 0 auto 28px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 24px 26px;
+}
+.ck-settings-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ck-settings-state {
+  margin-inline-start: auto;
+  font-family: var(--ck-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  border: 1px solid; border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+}
+.ck-settings-state-on  { color: #7fae8c; border-color: rgba(74, 124, 89, 0.5); background: rgba(74, 124, 89, 0.10); }
+.ck-settings-state-off { color: #c07878; border-color: rgba(139, 58, 58, 0.5); background: rgba(139, 58, 58, 0.10); }
+.ck-settings-body { margin: 14px 0 0; font-size: 14px; line-height: 1.75; color: var(--text-muted); text-wrap: pretty; }
+.ck-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+@media (max-width: 620px) { .ck-settings-fields { grid-template-columns: 1fr; } }
+.ck-settings-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 18px; }
+/* .ck-btn is a full-width CTA by default, which is right on the payment
+   screen and wrong for a settings form where the button is one control
+   among several. */
+.ck-settings-actions .ck-btn { width: auto; min-width: 140px; }
+.ck-settings-ok  { font-size: 13px; color: #7fae8c; }
+.ck-settings-err { font-size: 13px; color: #c07878; }
+.ck-settings-note { margin: 16px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--white-30); text-wrap: pretty; }
+
 .ck-admin { max-width: 920px; margin: 0 auto; }
 .ck-admin-head { display: flex; flex-direction: column; gap: 14px; }
 

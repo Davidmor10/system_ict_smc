@@ -132,3 +132,23 @@ describe('a starter account is refused the analysis', () => {
     }
   });
 });
+
+// ── the setting that decides where money goes ───────────────────────────────
+//
+// The Bit number is not a secret — every customer sees it — but whoever can
+// WRITE it decides where the payments land. So it carries the admin gate, not
+// the plan gate, and a signed-in subscriber must not get past it.
+
+describe('the payment settings route is admin-only', () => {
+  it('refuses a signed-in non-admin on both verbs', async () => {
+    role = 'deluxe';
+    const settings = await import('../../app/api/payment-settings/route');
+    for (const call of [
+      () => settings.GET(),
+      () => settings.PUT(new Request('http://x', { method: 'PUT', body: '{"number":"050","payee":"x"}' })),
+    ]) {
+      const res = await call();
+      expect(res.status).toBe(403);
+    }
+  });
+});

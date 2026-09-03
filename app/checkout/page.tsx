@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import CheckoutFlow from '../components/checkout/CheckoutFlow';
 import { latestRequestFor } from '../lib/payments/requests';
+import { getBitSettings } from '../lib/payments/settings';
 import { DEFAULT_PLAN, isPlanKey, type PlanKey } from '../lib/payments/plans';
 import './checkout.css';
 
@@ -18,13 +19,7 @@ import './checkout.css';
 
 export const dynamic = 'force-dynamic';
 
-/** Bit details, supplied by the owner through the environment rather than
- *  committed. Rendered as — until they are set, exactly as the design shows. */
-function bitDetails(): { number: string | null; payee: string | null } {
-  const number = process.env.NEXT_PUBLIC_BIT_NUMBER?.trim();
-  const payee = process.env.NEXT_PUBLIC_BIT_PAYEE?.trim();
-  return { number: number || null, payee: payee || null };
-}
+
 
 /** Whether the three per-plan QR images have been added to /public/bit.
  *
@@ -65,7 +60,8 @@ export default async function CheckoutPage({
   const { plan } = await searchParams;
   const initialPlan: PlanKey = isPlanKey(plan) ? plan : DEFAULT_PLAN;
 
-  const bit = bitDetails();
+  // Read from the owner's settings, falling back to the environment.
+  const bit = await getBitSettings();
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
 
   return (

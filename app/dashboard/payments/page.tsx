@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import AdminPanel from '../../components/checkout/AdminPanel';
+import BitSettingsForm from '../../components/checkout/BitSettingsForm';
 import { viewerIsAdmin } from '../../lib/payments/admin';
 import { listAllRequests } from '../../lib/payments/requests';
+import { getBitSettings } from '../../lib/payments/settings';
 import '../../checkout/checkout.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,9 +32,15 @@ export const dynamic = 'force-dynamic';
 export default async function PaymentsPage() {
   if (!(await viewerIsAdmin())) notFound();
 
+  const [requests, bit] = await Promise.all([listAllRequests(), getBitSettings()]);
+  // The form cannot edit what an environment variable is forcing, and saying
+  // so beats a save button that silently does nothing.
+  const fromEnv = (process.env.NEXT_PUBLIC_BIT_NUMBER ?? '').trim().length > 0;
+
   return (
     <div className="ck ck-embedded" dir="rtl">
-      <AdminPanel initialRequests={await listAllRequests()} />
+      <BitSettingsForm initial={bit} fromEnv={fromEnv} />
+      <AdminPanel initialRequests={requests} />
     </div>
   );
 }
