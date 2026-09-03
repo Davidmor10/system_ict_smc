@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeRow } from '../types';
-import { detectBehaviors, type BehaviorKind } from './behaviors';
+import { detectBehaviors, type BehaviorTally, type BehaviorKind } from './behaviors';
 import { computeHoldingStreaks, type HoldingStreak } from './holding';
 import { buildContexts } from './context';
 import { buildFinding, pickPrimary, ROLLING_WINDOW, type BehaviorFinding } from './finding';
@@ -47,6 +47,13 @@ export interface BehaviorDecision {
 
 export interface BehaviorRun {
   findings: BehaviorFinding[];
+  /** The raw tallies the findings were built from.
+   *
+   *  Returned so a caller can ask which TRADES each behaviour happened on,
+   *  not just how many. Two detectors reporting the same count is meaningless
+   *  on its own; two detectors firing on the same trades means one act is
+   *  being counted twice, and only the trade ids can tell those apart. */
+  tallies:  BehaviorTally[];
   /** The one behaviour being worked on, or null when nothing clears the bar. */
   primary:  BehaviorFinding | null;
   watching: BehaviorFinding[];
@@ -124,5 +131,5 @@ export function runBehaviorLayer(input: RunInput): BehaviorRun {
     return { finding, prior, record, transition, measured };
   });
 
-  return { findings, primary: primary ?? null, watching, holding, decisions };
+  return { findings, tallies, primary: primary ?? null, watching, holding, decisions };
 }

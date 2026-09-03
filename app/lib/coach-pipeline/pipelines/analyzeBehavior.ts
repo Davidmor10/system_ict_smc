@@ -28,6 +28,7 @@ import { listRecentTrades } from '../db/trades';
 import { loadFindings, saveFinding } from '../db/behaviorFindings';
 import type { BehaviorKind } from '../behavior/behaviors';
 import type { HoldingStreak } from '../behavior/holding';
+import { occurrenceTradeIds } from '../behavior/behaviors';
 import { runBehaviorLayer } from '../behavior/run';
 import type { StoredFinding } from '../behavior/memory';
 import type { EvidenceTier } from '../behavior/evidence';
@@ -104,7 +105,14 @@ export interface AnalyzeResult {
   /** For the context snapshot on the insight row — what was tracked, and where
    *  each one stands. Lets a bad insight be traced to the state that produced
    *  it, without re-deriving a history that has since moved on. */
-  snapshot: Array<{ kind: BehaviorKind; status: string; occurrences: number; opportunities: number }>;
+  snapshot: Array<{
+    kind: BehaviorKind; status: string; occurrences: number; opportunities: number;
+    /** The trades this behaviour happened on. Carried so a caller can tell
+     *  two detectors that merely agree on a COUNT from two detectors firing
+     *  on the same trades — the second means one act is being counted twice,
+     *  and the counts alone cannot distinguish them. */
+    occurrenceIds: string[];
+  }>;
   error: string | null;
 }
 
@@ -137,7 +145,7 @@ export async function analyzeBehavior(
 
     // The decision itself is pure and lives in behavior/run.ts, shared with
     // the preview route so the two cannot disagree about what tonight does.
-    const { findings, primary, watching, holding, decisions } =
+    const { findings, tallies, primary, watching, holding, decisions } =
       runBehaviorLayer({ trades, stored, now });
 
     let primaryRecord:  StoredFinding | null = null;
@@ -168,10 +176,14 @@ export async function analyzeBehavior(
       }
     }
 
-    const snapshot = findings.map(f => ({
-      kind: f.kind, status: f.status,
-      occurrences: f.occurrences, opportunities: f.opportunities,
-    }));
+    const snapshot = findings.map(f => {
+      const tally = tallies.find(t => t.kind === f.kind);
+      return {
+        kind: f.kind, status: f.status,
+        occurrences: f.occurrences, opportunities: f.opportunities,
+        occurrenceIds: tally ? [...occurrenceTradeIds(tally)] : [],
+      };
+    });
 
     if (!primary) {
       return {

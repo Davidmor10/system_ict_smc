@@ -42,7 +42,7 @@ import { listFindingEvents, loadFindings } from '../../../lib/coach-pipeline/db/
 import { windowProgress, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { loadRuleBreaches } from '../../../lib/coach-pipeline/db/collections';
 import { countJourney } from '../../../lib/progress/journey';
-import { sortRows, stageFor, trendOf, type JourneyRow } from '../../../lib/progress/rows';
+import { findOverlap, sortRows, stageFor, trendOf, type JourneyRow } from '../../../lib/progress/rows';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -88,6 +88,15 @@ export async function GET() {
     const eventsFor = (kind: string) => log
       .filter(e => e.kind === kind)
       .map(e => ({ at: e.at, to: e.to_status, reason: e.reason }));
+
+    // Which trades each behaviour actually happened on. Two detectors
+    // agreeing on a COUNT means nothing; two firing on the same trades means
+    // one act is being counted twice, and only the ids can tell those apart.
+    const occ = snapshot.map(s => ({
+      kind: s.kind,
+      label: BEHAVIOR_LABELS[s.kind] ?? s.kind,
+      occurrenceIds: s.occurrenceIds ?? [],
+    }));
 
     // ── the five detectors, every one of them ────────────────────────────
     const builtin: JourneyRow[] = (Object.keys(BEHAVIOR_LABELS) as BehaviorKind[]).map(kind => {
@@ -139,6 +148,7 @@ export async function GET() {
         firstDetectedAt: f?.firstDetectedAt ?? null,
         lastSeenAt: f?.lastSeenAt ?? null,
         events: eventsFor(kind),
+        overlap: findOverlap({ kind, occurrenceIds: fresh?.occurrenceIds ?? [] }, occ),
       };
     });
 
@@ -187,6 +197,9 @@ export async function GET() {
         firstDetectedAt: null,
         lastSeenAt: agg.last,
         events: [],
+        // A rule breach is a tick on a form, not a detection over trade ids —
+        // there is nothing to intersect.
+        overlap: null,
       }))
       .sort((a, b) => b.occurrences - a.occurrences);
 

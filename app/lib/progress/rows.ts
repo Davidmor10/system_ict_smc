@@ -104,6 +104,9 @@ export interface JourneyRow {
   lastSeenAt: string | null;
   /** This row's own history, newest first. */
   events: Array<{ at: string; to: string; reason: string }>;
+  /** Another behaviour firing on most of the same trades, when there is one.
+   *  Two rows with identical counts are unreadable without this. */
+  overlap: Overlap | null;
 }
 
 /** The part of the record a row belongs to.
@@ -239,4 +242,58 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
   }
 
   return { lines, focus: open?.label ?? null };
+}
+
+// ── the same act, counted twice ─────────────────────────────────────────────
+//
+// Two rows on a live journal read 6 / 34 and 6 / 34, with identical historical
+// and rolling rates. That looked like a bug and was not: the detectors are
+// independent, and their denominators match because both questions sit on the
+// same form and get answered together.
+//
+// What made it unreadable is that nothing on the screen could tell the trader
+// whether the two rows were about the same trades. If they are — a stop
+// widened on the same trade the trader graded as a rule break, because one of
+// their rules is about the stop — then the page is reporting one act twice,
+// and an experiment could open on one while the other sits confirmed,
+// measuring the same thing under two names.
+//
+// The counts cannot answer that. Only the trade ids can.
+
+/** Occurrences shared before it is worth mentioning at all. One shared trade
+ *  is a coincidence in any pair of behaviours. */
+const MIN_SHARED = 2;
+/** …and the shared trades must be most of THIS row's occurrences. Below that
+ *  the two behaviours merely co-occur sometimes, which is ordinary and not
+ *  worth a line on a screen. */
+const MIN_SHARE = 2 / 3;
+
+export interface Overlap {
+  kind: string;
+  label: string;
+  /** Occurrences of this behaviour that are also occurrences of the other. */
+  shared: number;
+}
+
+/** The behaviour whose occurrences most nearly coincide with this one's.
+ *
+ *  Asymmetric on purpose: a rare behaviour fully contained inside a common one
+ *  is worth telling the trader about on the rare one's row, while the common
+ *  one is not mostly explained by the rare one and gets no line. */
+export function findOverlap(
+  self: { kind: string; occurrenceIds: string[] },
+  others: ReadonlyArray<{ kind: string; label: string; occurrenceIds: string[] }>,
+): Overlap | null {
+  if (self.occurrenceIds.length === 0) return null;
+  const mine = new Set(self.occurrenceIds);
+
+  let best: Overlap | null = null;
+  for (const other of others) {
+    if (other.kind === self.kind) continue;
+    const shared = other.occurrenceIds.filter(id => mine.has(id)).length;
+    if (shared < MIN_SHARED) continue;
+    if (shared / mine.size < MIN_SHARE) continue;
+    if (!best || shared > best.shared) best = { kind: other.kind, label: other.label, shared };
+  }
+  return best;
 }

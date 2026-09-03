@@ -19,7 +19,7 @@ function row(over: Partial<JourneyRow> = {}): JourneyRow {
     kind: 'k', label: 'l', source: 'builtin', status: 'detected', stage: 'watching',
     occurrences: 1, opportunities: 10, rate: 0.1, trend: 'unknown',
     historicalRate: 0.1, rollingRate: 0.1, isPrimary: false, relapses: 0,
-    window: null, result: null, firstDetectedAt: null, lastSeenAt: null, events: [],
+    window: null, result: null, firstDetectedAt: null, lastSeenAt: null, events: [], overlap: null,
     ...over,
   };
 }
@@ -243,5 +243,80 @@ describe('the summary', () => {
 
   it('is never empty', () => {
     expect(summarizeJourney([]).lines.length).toBeGreaterThan(0);
+  });
+});
+
+// ── the same act, counted twice ─────────────────────────────────────────────
+//
+// Two rows on the live journal read 6/34 and 6/34 with identical rates, which
+// looked like a bug. It was not — the detectors are independent and their
+// denominators match because both questions sit on the same form. But nothing
+// on the screen could say whether the two rows were about the same TRADES, and
+// only the trade ids can answer that.
+
+import { findOverlap } from '../../app/lib/progress/rows';
+
+const other = (kind: string, label: string, ids: string[]) => ({ kind, label, occurrenceIds: ids });
+
+describe('overlapping occurrences', () => {
+  it('names the behaviour firing on the same trades', () => {
+    const o = findOverlap(
+      { kind: 'stop_widened', occurrenceIds: ['t1', 't2', 't3'] },
+      [other('rule_violation', 'סטייה מהחוקים', ['t1', 't2', 't3'])],
+    );
+    expect(o?.label).toBe('סטייה מהחוקים');
+    expect(o?.shared).toBe(3);
+  });
+
+  // Same count, different trades — the exact case that proves a matching
+  // count says nothing at all.
+  it('says nothing when the counts match but the trades do not', () => {
+    expect(findOverlap(
+      { kind: 'a', occurrenceIds: ['t1', 't2', 't3'] },
+      [other('b', 'B', ['t7', 't8', 't9'])],
+    )).toBeNull();
+  });
+
+  it('ignores a single shared trade, which any pair will have', () => {
+    expect(findOverlap(
+      { kind: 'a', occurrenceIds: ['t1', 't2', 't3', 't4'] },
+      [other('b', 'B', ['t1'])],
+    )).toBeNull();
+  });
+
+  it('ignores incidental co-occurrence below the share floor', () => {
+    // 2 of 9 shared: they overlap sometimes, which is ordinary.
+    expect(findOverlap(
+      { kind: 'a', occurrenceIds: ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9'] },
+      [other('b', 'B', ['t1', 't2'])],
+    )).toBeNull();
+  });
+
+  // Asymmetric on purpose: the rare behaviour is fully explained by the common
+  // one, the common one is not explained by the rare one.
+  it('reports on the contained row and not on the containing one', () => {
+    const rare = ['t1', 't2'];
+    const common = ['t1', 't2', 't3', 't4', 't5', 't6'];
+    expect(findOverlap({ kind: 'rare', occurrenceIds: rare }, [other('common', 'C', common)])?.shared).toBe(2);
+    expect(findOverlap({ kind: 'common', occurrenceIds: common }, [other('rare', 'R', rare)])).toBeNull();
+  });
+
+  it('picks the strongest overlap when there are several', () => {
+    const o = findOverlap(
+      { kind: 'a', occurrenceIds: ['t1', 't2', 't3'] },
+      [other('b', 'B', ['t1', 't2']), other('c', 'C', ['t1', 't2', 't3'])],
+    );
+    expect(o?.kind).toBe('c');
+  });
+
+  it('never compares a row against itself', () => {
+    expect(findOverlap(
+      { kind: 'a', occurrenceIds: ['t1', 't2', 't3'] },
+      [other('a', 'A', ['t1', 't2', 't3'])],
+    )).toBeNull();
+  });
+
+  it('is null for a behaviour that never occurred', () => {
+    expect(findOverlap({ kind: 'a', occurrenceIds: [] }, [other('b', 'B', ['t1', 't2'])])).toBeNull();
   });
 });

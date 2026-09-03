@@ -212,6 +212,16 @@ function Row({ r, open, onToggle }: { r: JourneyRow; open: boolean; onToggle: ()
             )}
           </div>
 
+          {/* Two rows reading 6/34 with the same rates looked like a bug and
+              were not. What was missing is whether they are about the same
+              trades — which the counts cannot say and the trade ids can. */}
+          {r.overlap && (
+            <p className="jr-overlap">
+              מתוך {r.occurrences} המקרים, {r.overlap.shared} הם אותן עסקאות שסימנת גם תחת:{' '}
+              <b>{r.overlap.label}</b>. שתי השורות סופרות שם את אותו מעשה.
+            </p>
+          )}
+
           {r.window && <Window w={r.window} kind={r.kind} />}
           {r.result && <Result res={r.result} />}
 

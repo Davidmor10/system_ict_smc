@@ -226,6 +226,14 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
 .jr-meta[data-trend="unknown"] .jr-meta-v { color: var(--jr-w34); font-weight: 600; }
 .jr-meta[data-tone="warn"] .jr-meta-v { color: var(--jr-bear-t); }
 
+.jr-overlap {
+  margin: 14px 0 0; padding: 11px 14px;
+  border: 1px solid rgba(122, 143, 168, 0.35); border-radius: 8px;
+  background: rgba(122, 143, 168, 0.07);
+  font-size: 13px; line-height: 1.7; color: var(--jr-w62); text-wrap: pretty;
+}
+.jr-overlap b { color: var(--jr-steel); font-weight: 700; }
+
 /* ── the open window inside a row ────────────────────────────────────────── */
 .jr-window {
   margin-top: 16px; padding: 16px 18px;
