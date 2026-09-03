@@ -35,7 +35,7 @@ import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import EvidenceList from './EvidenceList';
 import { STATUS_LABELS, STATUS_ORDER, VERDICT_LABELS, type JourneyCounts } from '../lib/progress/journey';
-import { TREND_LABELS, undetectedNote, type JourneyRow } from '../lib/progress/rows';
+import { TREND_LABELS, summarizeJourney, undetectedNote, type JourneyRow } from '../lib/progress/rows';
 
 interface Journey {
   counts: JourneyCounts;
@@ -74,10 +74,10 @@ export default function ProgressView() {
       <header className="jr-hero jr-sec">
         <div className="jr-eyebrow"><span>◈</span><span>המסלול</span></div>
         <h1 className="jr-h1">מה השתנה אצלך</h1>
-        <p className="jr-lede">
-          הרשומה שלך — כל התנהגות שהמערכת בודקת, איפה היא עומדת, ומה קרה כשניסית לשנות אותה.
-          מה שקורה היום נמצא בלוח הבקרה; כאן זה לאורך זמן.
-        </p>
+        {/* One line only. The summary below says the rest, and saying it
+            twice is how a page starts feeling like filler. */}
+        <p className="jr-lede">מה שקורה היום נמצא בלוח הבקרה. כאן זה לאורך זמן.</p>
+        {data && <Summary rows={data.rows} />}
         {data && <Counts counts={data.counts} />}
       </header>
 
@@ -143,7 +143,22 @@ function Counts({ counts }: { counts: JourneyCounts }) {
     <div className="jr-counts">
       {cell('working', counts.working, 'בעבודה', 'נמדדת עכשיו בחלון פתוח')}
       {cell('changed', counts.changed, 'השתנו', 'עברו ניסיון והחזיקו')}
-      {cell('watching', counts.watching, 'במעקב', 'זוהו, עוד לא בשלות לפעולה')}
+      {cell('watching', counts.watching, 'במעקב', 'זוהו — עוד לא נפתח עליהן חלון')}
+    </div>
+  );
+}
+
+/** The page in sentences.
+ *
+ *  Derived from the rows underneath it, so it cannot drift from them and costs
+ *  no model call. It exists because the page was a table of rates: every row a
+ *  percentage and a pair of percentages, and nothing on the screen a person
+ *  would read aloud. */
+function Summary({ rows }: { rows: JourneyRow[] }) {
+  const { lines } = summarizeJourney(rows);
+  return (
+    <div className="jr-summary">
+      {lines.map((l, i) => <p key={i} className="jr-summary-line" data-lead={i === 0}>{l}</p>)}
     </div>
   );
 }

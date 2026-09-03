@@ -131,6 +131,21 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
 }
 .jr-count-sub { margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--jr-w34); }
 
+/* ── the summary ─────────────────────────────────────────────────────────
+   The page opens in prose. Everything below it is a grid of rates, and a
+   screen made only of rates has nothing a person reads aloud. */
+.jr-summary {
+  margin-top: 26px; padding: 22px 24px;
+  background: var(--jr-panel); border: 1px solid var(--jr-rule);
+  border-inline-start: 2px solid var(--jr-gold-34); border-radius: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 74ch;
+}
+.jr-summary-line {
+  margin: 0; font-size: 15px; line-height: 1.85; color: var(--jr-w62); text-wrap: pretty;
+}
+.jr-summary-line[data-lead="true"] { font-size: 16.5px; color: var(--jr-w88); font-weight: 600; }
+
 /* ── bands ───────────────────────────────────────────────────────── */
 .jr-band { max-width: 1120px; margin: 0 auto; padding: clamp(36px, 4vw, 56px) clamp(20px, 4vw, 48px) 0; }
 .jr-band-head {

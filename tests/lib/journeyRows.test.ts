@@ -129,3 +129,119 @@ describe('a row with nothing detected', () => {
     }
   });
 });
+
+// ── the summary ─────────────────────────────────────────────────────────────
+//
+// The page was a table of rates: every row a percentage and a pair of
+// percentages, and not one sentence a person would read aloud. These tests
+// hold the summary to being derived — assembled from the rows' own counts, so
+// it cannot drift from what is underneath it, cannot invent a claim, and
+// cannot quietly start giving advice.
+
+import { summarizeJourney } from '../../app/lib/progress/rows';
+
+const win = (done: number, of: number) => ({ what: 'x', done, of });
+const res = (verdict: string) => ({
+  verdict, before: 30, after: 10, historicalImproved: true, rollingImproved: true, broken: [] as string[],
+});
+
+describe('the summary', () => {
+  it('opens with the denominator of the whole screen', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', status: 'confirmed' }), row({ kind: 'b', status: null }),
+      row({ kind: 'c', status: null }),
+    ]);
+    expect(s.lines[0]).toContain('3');
+    expect(s.lines[0]).toContain('1');
+  });
+
+  it('says plainly when nothing has been detected at all', () => {
+    const s = summarizeJourney([row({ status: null }), row({ kind: 'b', status: null })]);
+    expect(s.lines[0]).toContain('אף אחת מהן לא זוהתה');
+  });
+
+  it('leads with the open window and how far it has to go', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', label: 'סגירה מוקדמת', status: 'monitoring', window: win(6, 10) }),
+    ]);
+    expect(s.focus).toBe('סגירה מוקדמת');
+    expect(s.lines.join(' ')).toContain('6');
+    expect(s.lines.join(' ')).toContain('10');
+    expect(s.lines.join(' ')).toContain('עוד 4');
+  });
+
+  it('does not promise a verdict once the window is full', () => {
+    const s = summarizeJourney([row({ status: 'monitoring', window: win(10, 10) })]);
+    expect(s.lines.join(' ')).toContain('החלון מלא');
+    expect(s.lines.join(' ')).not.toContain('עוד 0');
+  });
+
+  // The state his own screen was in: two behaviours established and nothing
+  // running on either.
+  it('reports what is confirmed and has no window open', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', status: 'confirmed' }), row({ kind: 'b', status: 'confirmed' }),
+    ]);
+    expect(s.lines.join(' ')).toContain('2 אוששו');
+    expect(s.lines.join(' ')).toContain('לא נפתח עליהן חלון');
+  });
+
+  // An absent line here would read as a quiet yes.
+  it('says outright when no experiment has ever been settled', () => {
+    const s = summarizeJourney([row({ status: 'confirmed' })]);
+    expect(s.lines.join(' ')).toContain('אין עדיין שינוי מדיד');
+  });
+
+  it('counts only the experiments that actually improved', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', status: 'resolved', result: res('improved') }),
+      row({ kind: 'b', status: 'improved', result: res('traded_one_problem_for_another') }),
+    ]);
+    expect(s.lines.join(' ')).toContain('1 עברו ניסוי והחזיקו');
+  });
+
+  // A window that closed without a real improvement must not be summarised as
+  // one — the guardrails exist to catch exactly that.
+  it('does not call a traded-off problem a success', () => {
+    const s = summarizeJourney([row({ status: 'improved', result: res('traded_one_problem_for_another') })]);
+    const text = s.lines.join(' ');
+    expect(text).toContain('לא הגיע לשיפור');
+    expect(text).not.toContain('החזיקו');
+  });
+
+  it('names a rate that is climbing, because a fall would be named too', () => {
+    const s = summarizeJourney([row({ label: 'סטייה מהחוקים', status: 'confirmed', trend: 'worsening' })]);
+    expect(s.lines.join(' ')).toContain('סטייה מהחוקים');
+    expect(s.lines.join(' ')).toContain('עלתה');
+  });
+
+  it('counts the trader’s own rules separately from the detectors', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', status: 'confirmed' }),
+      row({ kind: 'rule:1', label: 'לא להיכנס לפני 16:30', source: 'rule', status: null, occurrences: 7 }),
+      row({ kind: 'rule:2', label: 'שתי עסקאות ביום', source: 'rule', status: null, occurrences: 3 }),
+    ]);
+    const text = s.lines.join(' ');
+    expect(text).toContain('10 הפרות');
+    expect(text).toContain('לא להיכנס לפני 16:30');
+    // The rules are not folded into the detector denominator.
+    expect(s.lines[0]).toContain('מתוך 1');
+  });
+
+  // The line every other rule in this codebase exists to protect.
+  it('never says why, and never says what to do', () => {
+    const s = summarizeJourney([
+      row({ kind: 'a', status: 'monitoring', window: win(3, 10), trend: 'worsening' }),
+      row({ kind: 'b', status: 'confirmed' }),
+      row({ kind: 'rule:1', source: 'rule', status: null, occurrences: 4 }),
+    ]);
+    const text = s.lines.join(' ');
+    for (const forbidden of ['כי אתה', 'בגלל ש', 'מומלץ', 'כדאי', 'אתה צריך', 'נסה ל']) {
+      expect(text).not.toContain(forbidden);
+    }
+  });
+
+  it('is never empty', () => {
+    expect(summarizeJourney([]).lines.length).toBeGreaterThan(0);
+  });
+});

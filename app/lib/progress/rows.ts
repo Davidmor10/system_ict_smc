@@ -61,10 +61,17 @@ export function trendOf(
   return diff < 0 ? 'improving' : 'worsening';
 }
 
+/** The wording matters more than it looks.
+ *
+ *  'steady' is printed beside the two rates it was computed from, so a row
+ *  reading "18% → 15%" next to the words "no change" reads as a broken screen
+ *  — the reader can see the numbers differ. It is not no change; it is a
+ *  change too small for a twenty-opportunity window to tell from noise, and
+ *  the label has to say which of those two things it means. */
 export const TREND_LABELS: Record<Trend, string> = {
   improving: 'פוחת',
   worsening: 'גובר',
-  steady:    'ללא שינוי',
+  steady:    'שינוי לא מובהק',
   unknown:   'אין מספיק לאחרונה',
 };
 
@@ -142,4 +149,94 @@ export function undetectedNote(opportunities: number): string {
   return opportunities > 0
     ? `נבדק ב-${opportunities} הזדמנויות ולא נמצא כדפוס חוזר.`
     : 'עוד לא היו עסקאות שמאפשרות לבדוק את זה.';
+}
+
+// ── the summary ─────────────────────────────────────────────────────────────
+//
+// The page was a table of rates. Every row had a percentage and a pair of
+// percentages, and nothing on the screen was a sentence a person would read
+// aloud — which is what "it feels like numbers with no summary" means when a
+// trader says it.
+//
+// So the page opens with prose. DERIVED, NOT GENERATED: every line below is
+// assembled from counts the rows already carry, so it costs no model call,
+// cannot drift from the rows underneath it, and cannot invent a claim. It
+// names what is happening and how much of it; it never says why, and never
+// says what to do.
+
+export interface JourneySummary {
+  lines: string[];
+  /** The behaviour the summary leads with, when there is one. */
+  focus: string | null;
+}
+
+const CONFIRMED_WAITING = new Set(['confirmed']);
+const JUST_SEEN = new Set(['detected', 'investigating']);
+
+export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
+  const builtin = rows.filter(r => r.source === 'builtin');
+  const rules = rows.filter(r => r.source === 'rule');
+
+  const total = builtin.length;
+  const seen = builtin.filter(r => r.status !== null).length;
+  const open = builtin.find(r => r.window !== null) ?? null;
+  const waiting = builtin.filter(r => r.status && CONFIRMED_WAITING.has(r.status)).length;
+  const early = builtin.filter(r => r.status && JUST_SEEN.has(r.status)).length;
+  const held = builtin.filter(r => r.result && r.result.verdict === 'improved').length;
+  const judged = builtin.filter(r => r.result !== null).length;
+  const worsening = builtin.filter(r => r.trend === 'worsening');
+
+  const lines: string[] = [];
+
+  // 1 · coverage. The denominator of the whole screen, said once.
+  lines.push(seen === 0
+    ? `המערכת בודקת ${total} התנהגויות. אף אחת מהן לא זוהתה אצלך עדיין.`
+    : `מתוך ${total} ההתנהגויות שהמערכת בודקת, ${seen} זוהו אצלך.`);
+
+  // 2 · what is being counted right now.
+  if (open?.window) {
+    const left = Math.max(0, open.window.of - open.window.done);
+    lines.push(
+      `אחת נמדדת עכשיו — ${open.label}. נספרו ${open.window.done} מתוך ${open.window.of} הזדמנויות` +
+      (left > 0 ? `, ועוד ${left} עד שתהיה פסיקה.` : ', והחלון מלא.'),
+    );
+  }
+
+  // 3 · what is ripe but untouched. This is the state his screen was in, and
+  // the one the counts panel used to describe as "not ready yet".
+  if (waiting > 0) {
+    lines.push(waiting === 1
+      ? 'אחת אוששה כדפוס חוזר ועדיין לא נפתח עליה חלון מדידה.'
+      : `${waiting} אוששו כדפוס חוזר ועדיין לא נפתח עליהן חלון מדידה.`);
+  } else if (early > 0 && !open) {
+    lines.push(early === 1
+      ? 'אחת זוהתה ועוד לא הצטבר עליה מדגם שיכול לאשש או לשלול.'
+      : `${early} זוהו ועוד לא הצטבר עליהן מדגם שיכול לאשש או לשלול.`);
+  }
+
+  // 4 · whether anything has actually been settled. Said plainly when nothing
+  // has, because an absent line here reads as a quiet yes.
+  lines.push(judged === 0
+    ? 'עוד לא נסגר אצלך ניסוי, ולכן אין עדיין שינוי מדיד.'
+    : held > 0
+      ? `${held} עברו ניסוי והחזיקו.`
+      : 'ניסויים נסגרו, אך אף אחד מהם לא הגיע לשיפור שעמד בשני בסיסי ההשוואה.');
+
+  // 5 · a rate that is climbing is a fact, and it belongs in the summary for
+  // the same reason a fall does. No cause is offered and none is available.
+  if (worsening.length === 1) {
+    lines.push(`אחת עלתה לאחרונה מול ההיסטוריה שלה: ${worsening[0].label}.`);
+  } else if (worsening.length > 1) {
+    lines.push(`${worsening.length} עלו לאחרונה מול ההיסטוריה שלהן.`);
+  }
+
+  // 6 · the trader's own problems, counted separately because they rest on
+  // self-report and not on a detector.
+  if (rules.length > 0) {
+    const breaches = rules.reduce((a, r) => a + r.occurrences, 0);
+    const top = [...rules].sort((a, b) => b.occurrences - a.occurrences)[0];
+    lines.push(`בנוסף סימנת ${breaches} הפרות של חוקים שכתבת בעצמך, הנפוצה: ${top.label}.`);
+  }
+
+  return { lines, focus: open?.label ?? null };
 }
