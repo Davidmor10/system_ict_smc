@@ -723,7 +723,7 @@ export default function DashboardView() {
         </div>
 
         {/* Calendar */}
-        <div className="dp-col dp-main-cal dp-rise">
+        <div className="dp-col dp-rise">
           <div className="dp-panel dp-cal">
             <div className="dp-cal-hd">
               <div className="dp-cal-month">{s.calTitle(monthLabel)}</div>
