@@ -70,10 +70,10 @@ export function trendOf(
  *  change too small for a twenty-opportunity window to tell from noise, and
  *  the label has to say which of those two things it means. */
 export const TREND_LABELS: Record<Trend, string> = {
-  improving: 'פוחת',
-  worsening: 'גובר',
-  steady:    'שינוי לא מובהק',
-  unknown:   'אין מספיק לאחרונה',
+  improving: 'קורה פחות',
+  worsening: 'קורה יותר',
+  steady:    'בערך אותו דבר',
+  unknown:   'אין מספיק מידע',
 };
 
 /** One line of the trader's record. */
@@ -108,6 +108,21 @@ export interface JourneyRow {
   /** Another behaviour firing on most of the same trades, when there is one.
    *  Two rows with identical counts are unreadable without this. */
   overlap: Overlap | null;
+}
+
+/** The status to SHOW, which is not always the status that was stored.
+ *
+ *  `deriveStatus` falls through to 'detected' for any kind it tallied, and a
+ *  kind can be tallied with zero occurrences — it had opportunities and simply
+ *  never happened. The row then read "זוהתה · 0 / 34 · 0%", which is a
+ *  contradiction on its face: a behaviour that was noticed, never observed.
+ *
+ *  Fixed here rather than in deriveStatus on purpose. The engine's floor is
+ *  load-bearing for the lifecycle — every tallied kind needs a status to
+ *  transition from — and a screen is where the claim is made. */
+export function presentedStatus(status: string | null | undefined, occurrences: number): string | null {
+  if (!status) return null;
+  return occurrences > 0 ? status : null;
 }
 
 /** The part of the record a row belongs to.
@@ -206,7 +221,7 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
       (open.window.done === 1
         ? `נספרה הזדמנות אחת מתוך ${heNum(open.window.of)}`
         : `נספרו ${heNum(open.window.done)} הזדמנויות מתוך ${heNum(open.window.of)}`) +
-      (left > 0 ? `, ועוד ${feminine(left)} עד שתהיה פסיקה.` : ', והחלון מלא.'),
+      (left > 0 ? `, ועוד ${feminine(left)} עד שנדע אם משהו השתנה.` : ', והספירה הושלמה.'),
     );
   }
 
@@ -214,28 +229,28 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
   // the one the counts panel used to describe as "not ready yet".
   if (waiting > 0) {
     lines.push(waiting === 1
-      ? 'אחת אוששה כדפוס חוזר ועדיין לא נפתח עליה חלון מדידה.'
-      : `${waiting} אוששו כדפוס חוזר ועדיין לא נפתח עליהן חלון מדידה.`);
+      ? 'אחת חוזרת על עצמה, ועוד לא התחלנו לנסות לשנות אותה.'
+      : `${heNum(waiting)} חוזרות על עצמן, ועוד לא התחלנו לנסות לשנות אותן.`);
   } else if (early > 0 && !open) {
     lines.push(early === 1
-      ? 'אחת זוהתה ועוד לא הצטבר עליה מדגם שיכול לאשש או לשלול.'
-      : `${early} זוהו ועוד לא הצטבר עליהן מדגם שיכול לאשש או לשלול.`);
+      ? 'אחת ראינו, ועוד אין מספיק עסקאות כדי לדעת אם היא באמת חוזרת.'
+      : `${heNum(early)} ראינו, ועוד אין מספיק עסקאות כדי לדעת אם הן באמת חוזרות.`);
   }
 
   // 4 · whether anything has actually been settled. Said plainly when nothing
   // has, because an absent line here reads as a quiet yes.
   lines.push(judged === 0
-    ? 'עוד לא נסגר אצלך ניסוי, ולכן אין עדיין שינוי מדיד.'
+    ? 'עוד לא סיימנו למדוד שינוי אצלך, אז אי אפשר להגיד שמשהו כבר השתפר.'
     : held > 0
-      ? (held === 1 ? 'התנהגות אחת עברה ניסוי והחזיקה.' : `${heNum(held)} עברו ניסוי והחזיקו.`)
-      : 'ניסויים נסגרו, אך אף אחד מהם לא הגיע לשיפור שעמד בשני בסיסי ההשוואה.');
+      ? (held === 1 ? 'התנהגות אחת כבר שינית, והשינוי החזיק.' : `${heNum(held)} כבר שינית, והשינוי החזיק.`)
+      : 'ניסינו לשנות, אבל אף שינוי לא החזיק מספיק כדי להיחשב אמיתי.');
 
   // 5 · a rate that is climbing is a fact, and it belongs in the summary for
   // the same reason a fall does. No cause is offered and none is available.
   if (worsening.length === 1) {
-    lines.push(`אחת עלתה לאחרונה מול ההיסטוריה שלה: ${worsening[0].label}.`);
+    lines.push(`אחת קורית לאחרונה יותר מבעבר: ${worsening[0].label}.`);
   } else if (worsening.length > 1) {
-    lines.push(`${worsening.length} עלו לאחרונה מול ההיסטוריה שלהן.`);
+    lines.push(`${heNum(worsening.length)} קורות לאחרונה יותר מבעבר.`);
   }
 
   // 6 · the trader's own problems, counted separately because they rest on

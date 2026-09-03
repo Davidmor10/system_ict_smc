@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  trendOf, sortRows, stageFor, undetectedNote, TREND_LABELS, type JourneyRow,
+  trendOf, sortRows, stageFor, undetectedNote, presentedStatus, TREND_LABELS, type JourneyRow,
 } from '../../app/lib/progress/rows';
 
 function row(over: Partial<JourneyRow> = {}): JourneyRow {
@@ -174,7 +174,7 @@ describe('the summary', () => {
 
   it('does not promise a verdict once the window is full', () => {
     const s = summarizeJourney([row({ status: 'monitoring', window: win(10, 10) })]);
-    expect(s.lines.join(' ')).toContain('החלון מלא');
+    expect(s.lines.join(' ')).toContain('הספירה הושלמה');
     expect(s.lines.join(' ')).not.toContain('עוד 0');
   });
 
@@ -184,14 +184,14 @@ describe('the summary', () => {
     const s = summarizeJourney([
       row({ kind: 'a', status: 'confirmed' }), row({ kind: 'b', status: 'confirmed' }),
     ]);
-    expect(s.lines.join(' ')).toContain('2 אוששו');
-    expect(s.lines.join(' ')).toContain('לא נפתח עליהן חלון');
+    expect(s.lines.join(' ')).toContain('2 חוזרות על עצמן');
+    expect(s.lines.join(' ')).toContain('לא התחלנו לנסות לשנות');
   });
 
   // An absent line here would read as a quiet yes.
   it('says outright when no experiment has ever been settled', () => {
     const s = summarizeJourney([row({ status: 'confirmed' })]);
-    expect(s.lines.join(' ')).toContain('אין עדיין שינוי מדיד');
+    expect(s.lines.join(' ')).toContain('אי אפשר להגיד שמשהו כבר השתפר');
   });
 
   it('counts only the experiments that actually improved', () => {
@@ -199,7 +199,7 @@ describe('the summary', () => {
       row({ kind: 'a', status: 'resolved', result: res('improved') }),
       row({ kind: 'b', status: 'improved', result: res('traded_one_problem_for_another') }),
     ]);
-    expect(s.lines.join(' ')).toContain('התנהגות אחת עברה ניסוי והחזיקה');
+    expect(s.lines.join(' ')).toContain('התנהגות אחת כבר שינית, והשינוי החזיק');
   });
 
   // A window that closed without a real improvement must not be summarised as
@@ -207,14 +207,13 @@ describe('the summary', () => {
   it('does not call a traded-off problem a success', () => {
     const s = summarizeJourney([row({ status: 'improved', result: res('traded_one_problem_for_another') })]);
     const text = s.lines.join(' ');
-    expect(text).toContain('לא הגיע לשיפור');
-    expect(text).not.toContain('החזיקו');
+    expect(text).toContain('אף שינוי לא החזיק');
   });
 
   it('names a rate that is climbing, because a fall would be named too', () => {
     const s = summarizeJourney([row({ label: 'סטייה מהחוקים', status: 'confirmed', trend: 'worsening' })]);
     expect(s.lines.join(' ')).toContain('סטייה מהחוקים');
-    expect(s.lines.join(' ')).toContain('עלתה');
+    expect(s.lines.join(' ')).toContain('קורית לאחרונה יותר מבעבר');
   });
 
   it('counts the trader’s own rules separately from the detectors', () => {
@@ -320,5 +319,54 @@ describe('overlapping occurrences', () => {
 
   it('is null for a behaviour that never occurred', () => {
     expect(findOverlap({ kind: 'a', occurrenceIds: [] }, [other('b', 'B', ['t1', 't2'])])).toBeNull();
+  });
+});
+
+// ── a kind that never happened ──────────────────────────────────────────────
+//
+// deriveStatus falls through to 'detected' for any kind it tallied, and a kind
+// can be tallied with zero occurrences — it had opportunities and simply never
+// happened. The row then read "זוהתה · 0 / 34 · 0%": a behaviour that was
+// noticed and never observed, on the same line.
+
+describe('the status a row shows', () => {
+  it('is not "detected" when the behaviour never occurred', () => {
+    expect(presentedStatus('detected', 0)).toBeNull();
+  });
+
+  it('keeps the stored status once it has happened at all', () => {
+    expect(presentedStatus('detected', 1)).toBe('detected');
+    expect(presentedStatus('confirmed', 6)).toBe('confirmed');
+  });
+
+  it('passes an absent status through unchanged', () => {
+    expect(presentedStatus(null, 5)).toBeNull();
+    expect(presentedStatus(undefined, 5)).toBeNull();
+  });
+
+  // Undetected is outside the process, so the row falls to the bottom and
+  // renders its "we looked and did not find it" note.
+  it('lands the row outside the lifecycle', () => {
+    expect(stageFor(presentedStatus('detected', 0))).toBe('undetected');
+  });
+});
+
+// ── the words a trader reads ────────────────────────────────────────────────
+
+describe('the labels are readable without a statistics book', () => {
+  it('has dropped the jargon that was on screen', () => {
+    const all = Object.values(TREND_LABELS).join(' ');
+    expect(all).not.toContain('מובהק');
+  });
+
+  it('still separates the three directions', () => {
+    expect(TREND_LABELS.improving).not.toBe(TREND_LABELS.worsening);
+    expect(TREND_LABELS.steady).not.toBe(TREND_LABELS.unknown);
+  });
+
+  // "no information" must never read as "nothing is wrong".
+  it('does not let an unknown trend sound like good news', () => {
+    expect(TREND_LABELS.unknown).not.toContain('פחות');
+    expect(TREND_LABELS.unknown).not.toContain('אותו דבר');
   });
 });

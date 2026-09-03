@@ -152,18 +152,22 @@ export function summarizeTrader(
 
   // 2 · did it move. Fenced by the test above.
   if (facts.closed > 0) {
+    // WRITTEN TO SURVIVE RTL. "מ-44% ל-53%" puts two left-to-right numbers
+    // either side of a hyphen inside a right-to-left sentence, and the browser
+    // reorders them — on screen it read as though the rates had swapped. Two
+    // separate clauses, each with one number, cannot be reordered into a lie.
+    //
+    // It is also plainer Hebrew, which is the same fix twice.
+    const halves =
+      `אחוז ההצלחה במחצית הראשונה היה ${pct(shift.kind === 'insufficient' ? 0 : shift.earlier)}, ` +
+      `ובמחצית השנייה ${pct(shift.kind === 'insufficient' ? 0 : shift.later)}.`;
+
     if (shift.kind === 'insufficient') {
-      lines.push('עוד אין מספיק עסקאות שהוכרעו כדי להשוות תקופה לתקופה.');
+      lines.push('עוד אין מספיק עסקאות כדי להשוות בין תקופות.');
     } else if (shift.kind === 'flat') {
-      lines.push(
-        `אחוז ההצלחה עבר מ-${pct(shift.earlier)} ל-${pct(shift.later)} בין המחצית הראשונה לשנייה — ` +
-        'הפרש שנמצא בתוך תחום המקריות, ולכן אינו שינוי מדיד.',
-      );
+      lines.push(`${halves} ההפרש קטן מדי מכדי לדעת אם באמת השתנה משהו.`);
     } else {
-      lines.push(
-        `אחוז ההצלחה ${shift.direction === 'up' ? 'עלה' : 'ירד'} מ-${pct(shift.earlier)} ל-${pct(shift.later)} ` +
-        'בין המחצית הראשונה לשנייה, והפרש בגודל הזה לא מוסבר במקריות.',
-      );
+      lines.push(`${halves} הפרש כזה כבר לא נובע ממקריות.`);
     }
   }
 
@@ -175,20 +179,20 @@ export function summarizeTrader(
         `נמדדת עכשיו התנהגות אחת — ${behaviour.open.label}. ` +
         (behaviour.open.done === 1 ? 'נספרה הזדמנות אחת' : `נספרו ${num(behaviour.open.done)} הזדמנויות`) +
         ` מתוך ${num(behaviour.open.of)}` +
-        (left > 0 ? `, ועוד ${one(left)} עד לפסיקה.` : ', והחלון מלא.'),
+        (left > 0 ? `, ועוד ${one(left)} עד שנדע אם משהו השתנה.` : ', והספירה הושלמה.'),
       );
     } else if (behaviour.insufficientEvidence) {
-      lines.push('עוד לא הצטברו מספיק עסקאות מתועדות כדי לזהות התנהגות חוזרת.');
+      lines.push('עוד אין מספיק עסקאות מתועדות כדי לראות התנהגות שחוזרת על עצמה.');
     } else if (behaviour.detected > 0) {
       lines.push(
         `${num(behaviour.detected)} מתוך ${num(behaviour.watched)} ההתנהגויות שנבדקות זוהו אצלך, ` +
-        'ואף אחת מהן לא נמדדת כרגע בחלון פתוח.',
+        'ואף אחת מהן לא נמדדת כרגע.',
       );
     }
     if (behaviour.changed > 0) {
       const held = behaviour.changed === 1
-        ? 'התנהגות אחת כבר עברה ניסוי והחזיקה'
-        : `${q(behaviour.changed, 'התנהגות אחת', 'התנהגויות')} כבר עברו ניסוי והחזיקו`;
+        ? 'התנהגות אחת כבר שינית, והשינוי החזיק'
+        : `${heNum(behaviour.changed)} התנהגויות כבר שינית, והשינוי החזיק`;
       // "ו-אחת חזרו" — a hyphen before a word, and a plural verb on a
       // singular subject. The vav attaches to a word and hyphenates only
       // before a numeral.

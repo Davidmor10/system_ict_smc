@@ -9,12 +9,19 @@
 // /dashboard/payments, so this file carries no other customer's data at all.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PLANS, PLAN_DISPLAY_ORDER, isVerificationValid,
   type PaymentRequest, type PlanKey, type RequestStatus,
 } from '../../lib/payments/plans';
 import { STATUS_COPY } from './statusCopy';
+
+/** How often a pending request asks whether it has been decided.
+ *
+ *  Ten seconds: the customer is sitting on this screen having just paid, and
+ *  the wait is measured in the minutes it takes the owner to check their Bit
+ *  app. Cheap — one row, by session, and it stops the moment an answer lands. */
+const POLL_MS = 10_000;
 
 /** Where the per-plan Bit QR images live once they are supplied. Absent for
  *  now, and the frame says so rather than showing a broken image. */
@@ -50,6 +57,54 @@ export default function CheckoutFlow({
   const [confirmed, setConfirmed] = useState(myRequest !== null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // ── the decision has to arrive on its own ──────────────────────────────
+  //
+  // The status card was rendered once, from the server, at page load. The
+  // owner then decides in the admin panel and this screen keeps saying
+  // "waiting" until the customer happens to reload — which after a rejection
+  // means sitting still for access that is never coming, and after an approval
+  // means having paid and been shown nothing.
+  //
+  // Polls only while a request is actually pending, and stops the moment a
+  // decision lands. Coming back to the tab checks immediately, because that is
+  // when a customer looks.
+  const pendingId = mine && mine.status === 'pending' ? mine.id : null;
+  const seen = useRef(pendingId);
+  seen.current = pendingId;
+
+  useEffect(() => {
+    if (!pendingId) return;
+    let alive = true;
+
+    const check = async () => {
+      if (!alive || seen.current === null || document.visibilityState !== 'visible') return;
+      try {
+        const res = await fetch('/api/payment-requests/mine', { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        const fresh = data?.request as PaymentRequest | null | undefined;
+        if (!alive || !fresh) return;
+        // Only ever move this card forward. A late answer to an older poll
+        // must not put a decided request back to pending.
+        if (fresh.id === pendingId && fresh.status !== 'pending') {
+          setMine(fresh);
+          setConfirmed(true);
+        }
+      } catch { /* a failed poll is a poll that did not happen */ }
+    };
+
+    const onVisible = () => { if (document.visibilityState === 'visible') void check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = window.setInterval(() => void check(), POLL_MS);
+    void check();
+
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(timer);
+    };
+  }, [pendingId]);
 
   const selected = PLANS[plan];
   const valid = isVerificationValid(fullName, email);
@@ -220,6 +275,11 @@ interface PayScreenProps {
 function PayScreen(props: PayScreenProps) {
   const p = PLANS[props.plan];
   const st = STATUS_COPY[props.status];
+  // Without a number there is nowhere to send the money. Rendering "—" made a
+  // missing configuration look like a design element — a dash inside a gold
+  // frame reads as intentional — so the page took declarations for transfers
+  // that could not have happened.
+  const payable = props.bitNumber !== null;
 
   return (
     <div className="ck-pay ck-fade">
@@ -275,6 +335,14 @@ function PayScreen(props: PayScreenProps) {
               </div>
             </div>
 
+            {!payable && (
+              <div className="ck-bit-blocked">
+                <b>התשלום בביט עדיין לא זמין</b>
+                פרטי ההעברה לא הוגדרו, ולכן אין לאן להעביר. אל תשלח כלום — נסה שוב מאוחר יותר, או פנה
+                אלינו ונפתח לך את הגישה ידנית.
+              </div>
+            )}
+
             <div className="ck-bit-foot">
               ההעברה בביט היא חד-פעמית לחודש. יש לחזור על ההעברה בכל תחילת חודש כדי לשמור על הגישה פתוחה.
             </div>
@@ -326,11 +394,20 @@ function PayScreen(props: PayScreenProps) {
           <button
             type="button"
             className="ck-btn ck-btn-lg ck-btn-primary"
-            disabled={!props.valid || props.sending}
+            disabled={!props.valid || props.sending || !payable}
             onClick={props.onSubmit}
           >
             {props.sending ? 'שולח…' : 'העברתי את התשלום — שליחה לאימות'}
           </button>
+
+          {/* A declaration of a transfer nobody could have made is worse than
+              no button: it puts a request in the owner's queue that can only
+              ever be rejected. */}
+          {!payable && (
+            <div className="ck-status ck-status-rejected">
+              <div className="ck-status-body">אי אפשר לשלוח לאימות כל עוד פרטי ההעברה חסרים.</div>
+            </div>
+          )}
 
           {props.sendError && <div className="ck-status ck-status-rejected"><div className="ck-status-body">{props.sendError}</div></div>}
 
@@ -342,6 +419,14 @@ function PayScreen(props: PayScreenProps) {
               </div>
               {props.summary && <div className="ck-status-line">{props.summary}</div>}
               <div className="ck-status-body">{st.body}</div>
+              {props.status === 'approved' && (
+                // A plain anchor, not a router link. The approval changed this
+                // account's role on the server, and a client-side navigation
+                // would carry the cached payload from before it did.
+                <a className="ck-btn ck-btn-md ck-btn-primary" href="/dashboard" style={{ marginTop: 14 }}>
+                  כניסה למערכת ←
+                </a>
+              )}
             </div>
           )}
 

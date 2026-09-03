@@ -142,9 +142,9 @@ function Counts({ counts }: { counts: JourneyCounts }) {
   );
   return (
     <div className="jr-counts">
-      {cell('working', counts.working, 'בעבודה', 'נמדדת עכשיו בחלון פתוח')}
-      {cell('changed', counts.changed, 'השתנו', 'עברו ניסיון והחזיקו')}
-      {cell('watching', counts.watching, 'במעקב', 'זוהו — עוד לא נפתח עליהן חלון')}
+      {cell('working', counts.working, 'בעבודה', 'נמדדת עכשיו')}
+      {cell('changed', counts.changed, 'השתנו', 'שינית והשינוי החזיק')}
+      {cell('watching', counts.watching, 'במעקב', 'ראינו אותן — עוד לא ניסינו לשנות')}
     </div>
   );
 }
@@ -173,7 +173,7 @@ function Row({ r, open, onToggle }: { r: JourneyRow; open: boolean; onToggle: ()
     <div className="jr-row" data-stage={r.stage} data-open={open}>
       <div className="jr-row-top">
         <span className="jr-status" data-primary={r.isPrimary} data-undetected={undetected}>
-          {undetected ? 'טרם זוהתה' : STATUS_LABELS[r.status!] ?? r.status}
+          {undetected ? 'לא ראינו את זה' : STATUS_LABELS[r.status!] ?? r.status}
         </span>
         <span className="jr-row-label">{r.label}</span>
         {r.opportunities > 0 && (
@@ -381,10 +381,12 @@ function MyRules({ rows, data }: { rows: JourneyRow[]; data: Journey }) {
 
           {/* The honest limit of this section, stated where it is read. */}
           <p className="jr-note">
-            המכנה הוא {q(data.gradedTrades, 'העסקה האחת שבה ענית', 'העסקאות שבהן ענית')} על שאלת החוקים — הוא משותף לכל החוקים,
-            כי השאלה נשאלת פעם אחת לעסקה. השורות האלה נספרות ומוצגות, אבל הן עוד לא עוברות את
-            התהליך שלמעלה: אין להן ניסוי ואין פסיקה, כי הן מבוססות על דיווח עצמי בלבד ולא נבדקו מול
-            מדגם שיכול היה לשלול אותן.
+            הספירה היא מתוך {q(data.gradedTrades, 'העסקה האחת שבה ענית', 'העסקאות שבהן ענית')} על שאלת החוקים —
+            אותו מספר לכל החוקים, כי השאלה נשאלת פעם אחת לעסקה.
+            <br />
+            השורות האלה נספרות ומוצגות, אבל הן לא עוברות את התהליך שלמעלה: לא מנסים לשנות אותן ואין
+            עליהן תשובה סופית. הן מבוססות רק על מה שסימנת בעצמך, ולא נבדקו מול מספיק עסקאות שהיו
+            יכולות להראות שזה לא באמת קורה.
           </p>
         </>
       )}

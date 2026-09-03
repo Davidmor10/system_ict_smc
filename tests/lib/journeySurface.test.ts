@@ -136,13 +136,13 @@ describe('the state panel makes one claim, not a scoreboard', () => {
   // lives in the lib now, which is where its tests are.
   it('says out loud what it does not know', () => {
     const LIB = read('lib', 'progress', 'traderSummary.ts');
-    expect(LIB).toContain('עוד אין מספיק עסקאות שהוכרעו כדי להשוות');
-    expect(LIB).toContain('עוד לא הצטברו מספיק עסקאות מתועדות');
+    expect(LIB).toContain('עוד אין מספיק עסקאות כדי להשוות');
+    expect(LIB).toContain('עוד אין מספיק עסקאות מתועדות');
   });
 
   it('carries the counterweight, so it is not only a problem finder', () => {
     const LIB = read('lib', 'progress', 'traderSummary.ts');
-    expect(LIB).toContain('עברו ניסוי והחזיקו');
+    expect(LIB).toContain('והשינוי החזיק');
   });
 
   // The trend sentence compares one group of trades against another, which
@@ -274,10 +274,62 @@ describe('the trader’s own rules get a record too', () => {
   });
 
   it('says on the page why those rows stop short of a verdict', () => {
-    expect(VIEW).toContain('דיווח עצמי');
+    expect(VIEW).toContain('רק על מה שסימנת בעצמך');
   });
 
   it('tells a trader with no rules how to raise one', () => {
     expect(VIEW).toContain('/dashboard/rules');
+  });
+});
+
+// ── the customer's screen must not need a refresh ───────────────────────────
+//
+// The status card was server-rendered once. The owner decided in the admin
+// panel and the customer kept reading "waiting" — after a rejection, sitting
+// still for access that was never coming; after an approval, having paid and
+// been shown nothing.
+
+describe('a decision reaches the customer on its own', () => {
+  const FLOW = read('components', 'checkout', 'CheckoutFlow.tsx');
+  const MINE = read('api', 'payment-requests', 'mine', 'route.ts');
+
+  it('polls while a request is pending', () => {
+    expect(FLOW).toContain('/api/payment-requests/mine');
+    expect(FLOW).toContain('visibilitychange');
+  });
+
+  it('stops as soon as there is nothing pending', () => {
+    expect(FLOW).toContain('if (!pendingId) return;');
+  });
+
+  // A late answer to an older poll must not put a decided request back to
+  // pending, and must not adopt a different request's row.
+  it('only ever moves the card forward', () => {
+    expect(FLOW).toContain("fresh.id === pendingId && fresh.status !== 'pending'");
+  });
+
+  // The approval changed the role on the server; a router navigation would
+  // carry the payload from before it did.
+  it('sends an approved customer in with a full page load', () => {
+    expect(FLOW).toContain('href="/dashboard"');
+  });
+
+  it('looks the row up by session rather than by a parameter', () => {
+    expect(MINE).toContain('latestRequestFor(userId)');
+    expect(MINE).not.toContain('params');
+  });
+});
+
+// ── a payment page with nowhere to send money ───────────────────────────────
+
+describe('the checkout refuses to take a declaration it cannot honour', () => {
+  const FLOW = read('components', 'checkout', 'CheckoutFlow.tsx');
+
+  it('says so instead of rendering a dash that looks intentional', () => {
+    expect(FLOW).toContain('התשלום בביט עדיין לא זמין');
+  });
+
+  it('disables the declaration button', () => {
+    expect(FLOW).toContain('|| !payable');
   });
 });

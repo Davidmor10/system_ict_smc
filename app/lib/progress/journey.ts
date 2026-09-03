@@ -33,14 +33,24 @@
  *  dashboard, and until now it existed only as English enum members inside the
  *  engine. A trader cannot be moved through a process they cannot see the
  *  shape of. */
+//  The words a trader reads, not the words the engine thinks in.
+//
+//  "אוששה" is the correct term for a finding established on a sample that
+//  could have said no, and it is not a word anyone uses. The same goes for
+//  "מובהק" on the trend. Every label here has to survive being read by
+//  someone who has never opened a statistics book, because the whole screen
+//  is worthless to a trader who has to decode it first.
+//
+//  The meaning is unchanged — only the wording. `confirmed` still means the
+//  sample was large enough to have refuted it; "זה חוזר" is what that means.
 export const STATUS_LABELS: Record<string, string> = {
-  detected:      'זוהתה',
-  investigating: 'נבדקת',
-  confirmed:     'אוששה',
-  experiment:    'בניסוי',
-  monitoring:    'במדידה',
-  improved:      'השתפרה',
-  resolved:      'נסגרה',
+  detected:      'שמנו לב',
+  investigating: 'בודקים',
+  confirmed:     'זה חוזר',
+  experiment:    'מנסים לשנות',
+  monitoring:    'סופרים',
+  improved:      'השתפר',
+  resolved:      'נפתר',
   archived:      'לא במעקב',
 };
 
@@ -67,8 +77,8 @@ export function stageOf(status: string): Stage {
 export const VERDICT_LABELS: Record<string, string> = {
   improved:                        'השתפר',
   traded_one_problem_for_another:  'הוחלפה בעיה באחרת',
-  unchanged:                       'ללא שינוי מדיד',
-  insufficient_data:               'לא הצטברו מספיק הזדמנויות',
+  unchanged:                       'לא השתנה',
+  insufficient_data:               'לא היו מספיק הזדמנויות',
 };
 
 export interface JourneyCounts {

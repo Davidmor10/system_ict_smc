@@ -89,7 +89,7 @@ describe('the paragraph', () => {
 
   it('says outright when there is nothing to compare yet', () => {
     const text = summarizeTrader(facts(), { kind: 'insufficient' }, null).join(' ');
-    expect(text).toContain('עוד אין מספיק עסקאות שהוכרעו כדי להשוות');
+    expect(text).toContain('עוד אין מספיק עסקאות כדי להשוות');
   });
 
   // A tested difference that failed the test is reported as such, with both
@@ -99,7 +99,7 @@ describe('the paragraph', () => {
     const text = summarizeTrader(facts(), { kind: 'flat', earlier: 0.44, later: 0.53 }, null).join(' ');
     expect(text).toContain('44%');
     expect(text).toContain('53%');
-    expect(text).toContain('אינו שינוי מדיד');
+    expect(text).toContain('קטן מדי מכדי לדעת');
   });
 
   it('carries the open window and how far it has to go', () => {
@@ -146,7 +146,7 @@ describe('the paragraph', () => {
 describe('a relapse', () => {
   it('is said alongside the successes, never inside them', () => {
     const text = summarizeTrader(facts(), { kind: 'insufficient' }, behaviour({ changed: 3, relapsed: 1 })).join(' ');
-    expect(text).toContain('3 התנהגויות כבר עברו ניסוי והחזיקו');
+    expect(text).toContain('3 התנהגויות כבר שינית, והשינוי החזיק');
     expect(text).toContain('ואחת חזרה אחרי שנסגרה');
     expect(text).not.toContain('ו-אחת');
   });
@@ -194,8 +194,27 @@ describe('Hebrew agreement', () => {
       behaviour({ open: { label: 'x', done: 1, of: 10 }, changed: 1 }),
     ).join(' ');
     expect(text).toContain('נספרה הזדמנות אחת');
-    expect(text).toContain('התנהגות אחת כבר עברה ניסוי והחזיקה');
+    expect(text).toContain('התנהגות אחת כבר שינית, והשינוי החזיק');
     expect(text).toContain('אחת בלי מחיר יציאה');
     expect(text).not.toMatch(/\b1 בלי/);
+  });
+});
+
+// The sentence renders inside a right-to-left page. "מ-44% ל-53%" puts two
+// left-to-right runs either side of a hyphen, and the browser reorders them —
+// on screen the two rates appeared to have swapped places.
+describe('the trend sentence survives RTL', () => {
+  it('never puts both rates in one hyphenated clause', () => {
+    for (const shift of [
+      { kind: 'flat' as const, earlier: 0.44, later: 0.53 },
+      { kind: 'moved' as const, direction: 'up' as const, earlier: 0.3, later: 0.6 },
+    ]) {
+      const line = summarizeTrader(facts(), shift, null).find(l => l.includes('%'))!;
+      expect(line).not.toMatch(/מ-\d+% ל-/);
+      // One number per clause, so nothing can be reordered into a lie.
+      for (const clause of line.split('.')) {
+        expect((clause.match(/%/g) ?? []).length).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });

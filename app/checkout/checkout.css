@@ -299,6 +299,14 @@
 .ck-detail-mono { font-family: var(--ck-mono); font-size: 16px; font-weight: 700; color: var(--text-body); }
 .ck-detail-text { font-size: 15px; font-weight: 500; color: var(--text-body); }
 
+.ck-bit-blocked {
+  margin-top: 18px; padding: 16px 18px;
+  border: 1px solid rgba(139, 58, 58, 0.5); border-radius: 8px;
+  background: rgba(139, 58, 58, 0.10);
+  font-size: 14px; line-height: 1.75; color: var(--bearish-text, #c07878);
+}
+.ck-bit-blocked b { display: block; color: #fff; font-size: 15px; margin-bottom: 5px; }
+
 .ck-bit-foot {
   border-top: 1px solid var(--border); padding-top: 18px;
   font-size: 13px; line-height: 1.7; color: var(--text-muted); text-wrap: pretty;

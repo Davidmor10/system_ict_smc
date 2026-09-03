@@ -42,7 +42,7 @@ import { listFindingEvents, loadFindings } from '../../../lib/coach-pipeline/db/
 import { windowProgress, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
 import { loadRuleBreaches } from '../../../lib/coach-pipeline/db/collections';
 import { countJourney } from '../../../lib/progress/journey';
-import { findOverlap, sortRows, stageFor, trendOf, type JourneyRow } from '../../../lib/progress/rows';
+import { findOverlap, presentedStatus, sortRows, stageFor, trendOf, type JourneyRow } from '../../../lib/progress/rows';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -111,13 +111,16 @@ export async function GET() {
 
       const opportunities = f?.opportunities ?? fresh?.opportunities ?? 0;
       const occurrences = f?.occurrences ?? fresh?.occurrences ?? 0;
+      // A kind tallied with no occurrences is not a detected behaviour, whatever
+      // the engine's fall-through status says.
+      const shown = presentedStatus(f?.status, occurrences);
 
       return {
         kind,
         label: BEHAVIOR_LABELS[kind],
         source: 'builtin' as const,
-        status: f?.status ?? null,
-        stage: stageFor(f?.status ?? null),
+        status: shown,
+        stage: stageFor(shown),
         occurrences,
         opportunities,
         rate: opportunities > 0 ? occurrences / opportunities : null,
