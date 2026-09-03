@@ -1,16 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/coach/journey — the trader's history, behaviour by behaviour.
 //
-// Three questions, in the order a person asks them: what am I working on, what
-// have I already changed, and what is still being watched.
+// ONE ROW PER BEHAVIOUR, and every kind gets one whether or not it ever fired.
+// The detector taxonomy is a closed set of five, so grouping them into stage
+// buckets scattered each behaviour's history and made the ones that never
+// fired vanish — and a kind the system looked at and did not find is the only
+// thing that tells a trader what is actually being watched.
+//
+// The trader's own rules arrive as rows of the same shape and are marked as
+// theirs. They carry no lifecycle stage: the stages mean confirmed on a sample
+// that could have said no, and an experiment with guardrails, and none of that
+// has run on a self-reported breach.
 //
 // EVERY FIELD HERE WAS ALREADY BEING COMPUTED AND SHOWN TO NOBODY.
 //
 //   • the lifecycle events — `listFindingEvents` had no caller at all;
-//   • the evolution timeline — carried a comment in its own source saying it
-//     was not wired into any UI;
 //   • `past` on the tracking route — served for months, and the one component
-//     reading that route used only `active` and dropped it.
+//     reading that route used only `active` and dropped it;
+//   • the rules the trader wrote and ticked as broken — collected for weeks
+//     into `user_collections`, read only to rank a sentence for the daily
+//     note, and never shown as a record of anything.
 //
 // So this is not a new analysis. It is a window onto work the system was
 // already doing in the dark.
@@ -31,8 +40,9 @@ import { analyzeBehavior } from '../../../lib/coach-pipeline/pipelines/analyzeBe
 import { BEHAVIOR_LABELS, type BehaviorKind } from '../../../lib/coach-pipeline/behavior/behaviors';
 import { listFindingEvents, loadFindings } from '../../../lib/coach-pipeline/db/behaviorFindings';
 import { windowProgress, type StoredFinding } from '../../../lib/coach-pipeline/behavior/memory';
-import { getEvolutionTimeline } from '../../../lib/intelligence/service';
-import { countJourney, stageOf } from '../../../lib/progress/journey';
+import { loadRuleBreaches } from '../../../lib/coach-pipeline/db/collections';
+import { countJourney } from '../../../lib/progress/journey';
+import { sortRows, stageFor, trendOf, type JourneyRow } from '../../../lib/progress/rows';
 import { checkRateLimit } from '../../../lib/rateLimit';
 import { logSecurityEvent } from '../../../lib/securityLog';
 import { logger } from '../../../lib/logger';
@@ -61,94 +71,132 @@ export async function GET() {
   }
 
   try {
-    // Each of the four is independently allowed to fail. A missing evolution
-    // timeline must not blank the experiment the trader is ten trades into —
-    // the parts of this screen are not a transaction.
-    const [behavior, stored, events, evolution] = await Promise.all([
+    // Each source is independently allowed to fail. A rules collection that
+    // cannot be read must not blank the experiment the trader is ten trades
+    // into — the parts of this screen are not a transaction.
+    const [behavior, stored, events, ruleData] = await Promise.all([
       analyzeBehavior(userId, { persist: false }).catch(() => null),
       loadFindings(userId).catch(() => new Map<BehaviorKind, StoredFinding>()),
       listFindingEvents(userId, EVENT_LIMIT).catch(() => [] as unknown[]),
-      getEvolutionTimeline(userId).catch(() => []),
+      loadRuleBreaches(userId).catch(() => ({ rules: new Map<string, string>(), breaches: [] })),
     ]);
 
     const findings = [...stored.values()];
     const snapshot = behavior?.snapshot ?? [];
 
-    // ── what I am working on ─────────────────────────────────────────────
-    const running = findings.find(f => f.experiment && f.experimentStartedAt && !f.experimentResult);
-    let active = null;
-    if (running?.experiment && running.experimentStartedAt) {
-      // The SAME subtraction the verdict makes, from the same detection pass.
-      // A progress bar that disagrees with the thing it is a progress bar for
-      // is worse than no progress bar.
-      const fresh = snapshot.find(s => s.kind === running.kind);
-      const progress = fresh ? windowProgress(running, fresh.opportunities) : null;
-      active = {
-        kind: running.kind,
-        label: BEHAVIOR_LABELS[running.kind],
-        status: running.status,
-        what: running.experiment.instruction,
-        done: progress?.done ?? 0,
-        of: progress?.of ?? running.experiment.windowTrades,
-        startedAt: running.experimentStartedAt,
+    const log = (events as Array<{ kind: string; at: string; to_status: string; reason: string }>);
+    const eventsFor = (kind: string) => log
+      .filter(e => e.kind === kind)
+      .map(e => ({ at: e.at, to: e.to_status, reason: e.reason }));
+
+    // ── the five detectors, every one of them ────────────────────────────
+    const builtin: JourneyRow[] = (Object.keys(BEHAVIOR_LABELS) as BehaviorKind[]).map(kind => {
+      const f = stored.get(kind) ?? null;
+      // The fresh pass knows the denominator even for a kind that has never
+      // been stored — which is what makes "looked at 24 opportunities, not
+      // found" sayable instead of a blank row.
+      const fresh = snapshot.find(s => s.kind === kind) ?? null;
+
+      const running = f?.experiment && f.experimentStartedAt && !f.experimentResult ? f : null;
+      const progress = running && fresh ? windowProgress(running, fresh.opportunities) : null;
+
+      const opportunities = f?.opportunities ?? fresh?.opportunities ?? 0;
+      const occurrences = f?.occurrences ?? fresh?.occurrences ?? 0;
+
+      return {
+        kind,
+        label: BEHAVIOR_LABELS[kind],
+        source: 'builtin' as const,
+        status: f?.status ?? null,
+        stage: stageFor(f?.status ?? null),
+        occurrences,
+        opportunities,
+        rate: opportunities > 0 ? occurrences / opportunities : null,
+        trend: trendOf(f?.baselines.historicalRate, f?.baselines.rollingRate, f?.baselines.rollingN),
+        historicalRate: f?.baselines.historicalRate ?? null,
+        rollingRate: f?.baselines.rollingRate ?? null,
+        isPrimary: f?.isPrimary ?? false,
+        relapses: f?.relapses ?? 0,
+        window: running?.experiment
+          ? {
+              what: running.experiment.instruction,
+              done: progress?.done ?? 0,
+              of: progress?.of ?? running.experiment.windowTrades,
+            }
+          : null,
+        result: f?.experimentResult
+          ? {
+              verdict: f.experimentResult.verdict,
+              before: Math.round(f.experimentResult.targetBefore * 100),
+              after: Math.round(f.experimentResult.targetAfter * 100),
+              // Both baselines: agreeing is the whole test, and a reader shown
+              // only one cannot tell a changed habit from a good month.
+              historicalImproved: f.experimentResult.historicalImproved,
+              rollingImproved: f.experimentResult.rollingImproved,
+              broken: f.experimentResult.broken.map(String),
+            }
+          : null,
+        firstDetectedAt: f?.firstDetectedAt ?? null,
+        lastSeenAt: f?.lastSeenAt ?? null,
+        events: eventsFor(kind),
       };
+    });
+
+    // ── and the problems the trader named themselves ─────────────────────
+    //
+    // The denominator is the same one the rule detector uses: trades the
+    // trader actually graded. Every rule shares it, because the question on
+    // the form is asked once per trade and covers all of them. Counting
+    // breaches against ALL trades instead would quietly divide by ungraded
+    // ones and make every rate flattering.
+    const gradedTrades = stored.get('rule_violation')?.opportunities
+      ?? snapshot.find(s => s.kind === 'rule_violation')?.opportunities
+      ?? 0;
+
+    const perRule = new Map<string, { count: number; last: string }>();
+    for (const b of ruleData.breaches) {
+      const prev = perRule.get(b.ruleId);
+      perRule.set(b.ruleId, {
+        count: (prev?.count ?? 0) + 1,
+        last: prev && prev.last > b.date ? prev.last : b.date,
+      });
     }
 
-    // ── what I already changed ───────────────────────────────────────────
-    // Only behaviours with a judged experiment. A status of 'improved'
-    // without a result behind it is a claim with nothing to open.
-    const changed = findings
-      .filter(f => f.experimentResult)
-      .map(f => ({
-        kind: f.kind,
-        label: BEHAVIOR_LABELS[f.kind],
-        status: f.status,
-        verdict: f.experimentResult!.verdict,
-        before: Math.round(f.experimentResult!.targetBefore * 100),
-        after: Math.round(f.experimentResult!.targetAfter * 100),
-        // Both baselines, because agreeing is the whole test — and a trader
-        // who can see only one cannot tell a changed habit from a good month.
-        historicalImproved: f.experimentResult!.historicalImproved,
-        rollingImproved: f.experimentResult!.rollingImproved,
-        broken: f.experimentResult!.broken.map(String),
-        relapses: f.relapses,
-        at: f.statusSince,
+    const ruleRows: JourneyRow[] = [...perRule.entries()]
+      // A breach whose rule was deleted is a database key, not a finding.
+      .filter(([id]) => ruleData.rules.has(id))
+      .map(([id, agg]) => ({
+        kind: `rule:${id}`,
+        label: ruleData.rules.get(id)!,
+        source: 'rule' as const,
+        // No stage. Nothing here was confirmed against a counter-example and
+        // no experiment has run on it — borrowing the vocabulary without the
+        // evidence would be the same lie as a neutral score.
+        status: null,
+        stage: 'undetected' as const,
+        occurrences: agg.count,
+        opportunities: gradedTrades,
+        rate: gradedTrades > 0 ? agg.count / gradedTrades : null,
+        trend: 'unknown' as const,
+        historicalRate: null,
+        rollingRate: null,
+        isPrimary: false,
+        relapses: 0,
+        window: null,
+        result: null,
+        firstDetectedAt: null,
+        lastSeenAt: agg.last,
+        events: [],
       }))
-      .sort((a, b) => b.at.localeCompare(a.at));
+      .sort((a, b) => b.occurrences - a.occurrences);
 
-    // ── what is being watched ────────────────────────────────────────────
-    const watching = findings
-      .filter(f => stageOf(f.status) === 'watching' && f.status !== 'archived')
-      .map(f => ({
-        kind: f.kind,
-        label: BEHAVIOR_LABELS[f.kind],
-        status: f.status,
-        occurrences: f.occurrences,
-        opportunities: f.opportunities,
-        rate: f.rate,
-        isPrimary: f.isPrimary,
-        firstDetectedAt: f.firstDetectedAt,
-      }))
-      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || b.rate - a.rate);
-
-    // The learning score is NOT served. It is still computed and stored every
-    // night; it does not travel to a browser until it can name what moved.
-    // See lib/progress/journey.ts for the reasoning.
     return NextResponse.json({
       counts: countJourney(findings),
-      active,
-      changed,
-      watching,
-      evolution,
-      events: (events as Array<{ kind: string; at: string; from_status: string | null; to_status: string; reason: string }>)
-        .map(e => ({
-          kind: e.kind,
-          label: BEHAVIOR_LABELS[e.kind as BehaviorKind] ?? e.kind,
-          at: e.at,
-          from: e.from_status,
-          to: e.to_status,
-          reason: e.reason,
-        })),
+      rows: sortRows([...builtin, ...ruleRows]),
+      // True when the trader has written rules but never ticked one, so the
+      // surface can tell "no rules yet" apart from "rules kept".
+      hasRules: ruleData.rules.size > 0,
+      gradedTrades,
       // Nothing has ever been detected. The surface uses this to explain the
       // silence rather than render an empty frame, which reads as a verdict.
       insufficientEvidence: behavior?.block.insufficientEvidence ?? true,

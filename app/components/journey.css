@@ -162,28 +162,128 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
   margin: 14px 0 0; font-size: 12.5px; line-height: 1.75; color: var(--jr-w34); text-wrap: pretty;
 }
 
-/* ── the active experiment ───────────────────────────────────────── */
-.jr-active { border-color: var(--jr-gold-20); }
-.jr-active-top {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding-bottom: 16px; border-bottom: 1px solid var(--jr-rule);
+/* ── one behaviour, one row ──────────────────────────────────────────────── */
+.jr-row {
+  background: var(--jr-panel); border: 1px solid var(--jr-rule); border-radius: 14px;
+  padding: 20px 22px;
+  transition: border-color 300ms var(--jr-ease);
 }
-.jr-active-label { font-family: var(--jr-serif); font-size: 20px; font-weight: 700; color: #fff; flex: 1; min-width: 200px; }
-.jr-active-count { font-family: var(--jr-num); font-size: 22px; font-weight: 700; color: var(--jr-gold); }
-.jr-what {
-  margin: 18px 0 0; font-size: 16px; line-height: 1.75; color: var(--jr-w88); text-wrap: pretty;
+.jr-row + .jr-row { margin-top: 10px; }
+/* The one being counted right now is the only row that gets the accent. */
+.jr-row[data-stage="working"] { border-color: var(--jr-gold-20); }
+.jr-row[data-stage="undetected"] { background: var(--jr-panel-2); }
+.jr-row[data-open="true"] { border-color: var(--jr-rule-str); }
+
+.jr-row-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.jr-row-label {
+  flex: 1; min-width: 200px;
+  font-family: var(--jr-serif); font-size: 17px; font-weight: 700; color: #fff; line-height: 1.4;
+}
+.jr-row[data-stage="undetected"] .jr-row-label { color: var(--jr-w62); font-weight: 600; }
+.jr-row-count {
+  font-family: var(--jr-num); font-size: 17px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--jr-gold); white-space: nowrap;
+}
+.jr-row[data-stage="undetected"] .jr-row-count { color: var(--jr-w34); }
+
+.jr-status {
+  font-family: var(--jr-num); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  border: 1px solid var(--jr-rule-str); border-radius: 2px; padding: 5px 10px;
+  color: var(--jr-w42); white-space: nowrap;
+}
+.jr-status[data-primary="true"] { color: var(--jr-gold); border-color: var(--jr-gold-34); background: var(--jr-gold-07); }
+.jr-status[data-undetected="true"] { color: var(--jr-w24); border-color: var(--jr-rule); }
+.jr-status[data-source="rule"] { color: var(--jr-steel); border-color: rgba(122, 143, 168, 0.4); background: rgba(122, 143, 168, 0.08); }
+
+.jr-row-note { margin: 12px 0 0; font-size: 13.5px; line-height: 1.7; color: var(--jr-w42); text-wrap: pretty; }
+
+.jr-row-meta { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; }
+.jr-meta { display: flex; align-items: baseline; gap: 7px; }
+.jr-meta-k {
+  font-family: var(--jr-num); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--jr-w34);
+}
+.jr-meta-v { font-size: 14px; font-weight: 700; color: var(--jr-w88); }
+.jr-meta[data-trend="improving"] .jr-meta-v { color: var(--jr-bull-t); }
+.jr-meta[data-trend="worsening"] .jr-meta-v { color: var(--jr-bear-t); }
+/* Unknown must not read as clean. Grey, never green. */
+.jr-meta[data-trend="unknown"] .jr-meta-v { color: var(--jr-w34); font-weight: 600; }
+.jr-meta[data-tone="warn"] .jr-meta-v { color: var(--jr-bear-t); }
+
+/* ── the open window inside a row ────────────────────────────────────────── */
+.jr-window {
+  margin-top: 16px; padding: 16px 18px;
+  border: 1px solid var(--jr-gold-20); border-radius: 10px; background: var(--jr-gold-07);
+}
+.jr-window-head { display: flex; align-items: center; gap: 12px; }
+.jr-window-k {
+  font-family: var(--jr-num); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--jr-gold);
+}
+.jr-window-count {
+  margin-inline-start: auto;
+  font-size: 17px; font-weight: 700; color: var(--jr-gold);
 }
 .jr-rail {
-  position: relative; height: 4px; border-radius: 2px;
-  background: var(--jr-w12); margin-top: 18px; overflow: hidden;
+  position: relative; height: 3px; border-radius: 2px;
+  background: var(--jr-w12); margin-top: 12px; overflow: hidden;
 }
 .jr-fill {
   position: absolute; inset-block: 0; inset-inline-start: 0;
   background: linear-gradient(90deg, var(--jr-gold), var(--jr-gold-t));
-  box-shadow: 0 0 14px rgba(212, 175, 55, 0.5);
-  transform-origin: right center;
-  animation: jr-fill 700ms var(--jr-ease) both;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.5);
 }
+.jr-what { margin: 14px 0 0; font-size: 15px; line-height: 1.7; color: var(--jr-w88); text-wrap: pretty; }
+
+/* ── a judged experiment ─────────────────────────────────────────────────── */
+.jr-result { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--jr-rule); }
+.jr-result-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.jr-verdict {
+  font-family: var(--jr-num); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  border: 1px solid; border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+}
+.jr-verdict[data-v="improved"] { color: var(--jr-bull-t); border-color: rgba(74, 124, 89, 0.5); background: rgba(74, 124, 89, 0.1); }
+.jr-verdict[data-v="traded_one_problem_for_another"] { color: var(--jr-bear-t); border-color: rgba(139, 58, 58, 0.5); background: rgba(139, 58, 58, 0.1); }
+.jr-verdict[data-v="unchanged"] { color: var(--jr-w50); border-color: var(--jr-rule-str); }
+.jr-verdict[data-v="insufficient_data"] { color: var(--jr-w34); border-color: var(--jr-rule); }
+
+/* before → after. In RTL the arrow points left, which is forward. */
+.jr-move { display: flex; align-items: center; gap: 10px; font-family: var(--jr-num); font-variant-numeric: tabular-nums; }
+.jr-move-v { font-size: 22px; font-weight: 700; }
+.jr-move-v[data-side="before"] { color: var(--jr-w42); }
+.jr-move-v[data-side="after"] { color: #fff; }
+.jr-move-arrow { color: var(--jr-w34); font-size: 16px; }
+.jr-move-k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.16em; color: var(--jr-w34); }
+
+.jr-baselines { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; }
+.jr-baseline { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--jr-w50); }
+.jr-baseline-mark { font-size: 13px; }
+.jr-baseline[data-ok="true"] .jr-baseline-mark { color: var(--jr-bull-t); }
+.jr-baseline[data-ok="false"] .jr-baseline-mark { color: var(--jr-bear-t); }
+
+.jr-broken {
+  margin-top: 14px; padding: 12px 14px;
+  border: 1px solid rgba(139, 58, 58, 0.4); border-radius: 8px;
+  background: rgba(139, 58, 58, 0.08);
+  font-size: 13px; line-height: 1.7; color: var(--jr-bear-t);
+}
+
+/* ── a row's own history ─────────────────────────────────────────────────── */
+.jr-row-history { margin-top: 4px; padding-top: 4px; }
+.jr-log { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--jr-rule); font-size: 13px; }
+.jr-log-at { font-family: var(--jr-num); font-size: 11px; color: var(--jr-w34); white-space: nowrap; min-width: 74px; padding-top: 2px; }
+.jr-log-body { flex: 1; min-width: 0; line-height: 1.65; color: var(--jr-w62); }
+.jr-log-to { color: var(--jr-gold-t); font-weight: 700; }
+
+.jr-more {
+  margin-top: 14px; background: none; border: 0; cursor: pointer;
+  font-family: var(--jr-num); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.16em; color: var(--jr-w42); padding: 8px 0;
+}
+.jr-more:hover { color: var(--jr-gold); }
+.jr-more:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3px; }
 
 /* ── the lifecycle stepper ───────────────────────────────────────────────────
    Drawn at 10px in grey in the first version — the strongest idea in the
@@ -218,92 +318,8 @@ a.jr-count:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3p
 }
 .jr-step-bar[data-done="true"] { background: rgba(127, 174, 140, 0.5); }
 
-/* ── a settled behaviour ─────────────────────────────────────────── */
-.jr-result-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.jr-result-label { font-family: var(--jr-serif); font-size: 17px; font-weight: 700; color: #fff; flex: 1; min-width: 180px; }
-.jr-verdict {
-  font-family: var(--jr-num); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase;
-  border: 1px solid; border-radius: 2px; padding: 5px 10px; white-space: nowrap;
-}
-.jr-verdict[data-v="improved"] { color: var(--jr-bull-t); border-color: rgba(74, 124, 89, 0.5); background: rgba(74, 124, 89, 0.1); }
-.jr-verdict[data-v="traded_one_problem_for_another"] { color: var(--jr-bear-t); border-color: rgba(139, 58, 58, 0.5); background: rgba(139, 58, 58, 0.1); }
-.jr-verdict[data-v="unchanged"] { color: var(--jr-w50); border-color: var(--jr-rule-str); }
-.jr-verdict[data-v="insufficient_data"] { color: var(--jr-w34); border-color: var(--jr-rule); }
 
-/* before → after. In RTL the arrow points left, which is forward. */
-.jr-move {
-  display: flex; align-items: center; gap: 12px; margin-top: 16px;
-  font-family: var(--jr-num); font-variant-numeric: tabular-nums;
-}
-.jr-move-v { font-size: 26px; font-weight: 700; }
-.jr-move-v[data-side="before"] { color: var(--jr-w42); }
-.jr-move-v[data-side="after"] { color: #fff; }
-.jr-move-arrow { color: var(--jr-w34); font-size: 18px; }
-.jr-move-k { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: var(--jr-w34); }
-
-/* Both baselines, side by side. Agreeing is the whole test, so a reader has
-   to be able to see that they agreed. */
-.jr-baselines { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; }
-.jr-baseline { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--jr-w50); }
-.jr-baseline-mark { font-size: 13px; }
-.jr-baseline[data-ok="true"] .jr-baseline-mark { color: var(--jr-bull-t); }
-.jr-baseline[data-ok="false"] .jr-baseline-mark { color: var(--jr-bear-t); }
-
-.jr-broken {
-  margin-top: 16px; padding: 12px 14px;
-  border: 1px solid rgba(139, 58, 58, 0.4); border-radius: 8px;
-  background: rgba(139, 58, 58, 0.08);
-  font-size: 13px; line-height: 1.7; color: var(--jr-bear-t);
-}
-.jr-relapse {
-  margin-top: 12px; font-size: 12.5px; color: var(--jr-gold-t);
-}
-
-/* ── watched behaviours ──────────────────────────────────────────── */
-.jr-watch {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 16px 20px;
-  background: var(--jr-panel-2); border: 1px solid var(--jr-rule); border-radius: 10px;
-}
-.jr-watch + .jr-watch { margin-top: 8px; }
-.jr-watch-label { flex: 1; min-width: 180px; font-size: 14.5px; color: var(--jr-w88); }
-.jr-watch-rate { font-family: var(--jr-num); font-size: 15px; font-weight: 700; color: var(--jr-w62); }
-.jr-status {
-  font-family: var(--jr-num); font-size: 9.5px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase;
-  border: 1px solid var(--jr-rule-str); border-radius: 2px; padding: 4px 9px;
-  color: var(--jr-w42); white-space: nowrap;
-}
-.jr-status[data-primary="true"] { color: var(--jr-gold); border-color: var(--jr-gold-34); background: var(--jr-gold-07); }
-
-/* ── evolution + log ─────────────────────────────────────────────── */
-.jr-evo { display: flex; gap: 14px; padding: 16px 0; border-top: 1px solid var(--jr-rule); }
-.jr-evo:first-child { border-top: 0; padding-top: 0; }
-.jr-evo-week {
-  font-family: var(--jr-num); font-size: 11px; font-weight: 700; color: var(--jr-gold);
-  white-space: nowrap; padding-top: 3px; min-width: 96px;
-}
-.jr-evo-body { flex: 1; min-width: 0; }
-.jr-evo-desc { font-size: 14.5px; line-height: 1.7; color: var(--jr-w88); text-wrap: pretty; }
-.jr-evo-desc[data-empty="true"] { color: var(--jr-w34); }
-
-.jr-log { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--jr-rule); font-size: 13px; }
-.jr-log:first-child { border-top: 0; }
-.jr-log-at { font-family: var(--jr-num); font-size: 11px; color: var(--jr-w34); white-space: nowrap; min-width: 74px; padding-top: 2px; }
-.jr-log-body { flex: 1; min-width: 0; line-height: 1.65; color: var(--jr-w62); }
-.jr-log-to { color: var(--jr-gold-t); font-weight: 700; }
-
-.jr-more {
-  margin-top: 14px; background: none; border: 0; cursor: pointer;
-  font-family: var(--jr-num); font-size: 10.5px; font-weight: 700;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--jr-w42);
-  padding: 8px 0;
-}
-.jr-more:hover { color: var(--jr-gold); }
-.jr-more:focus-visible { outline: 2px solid var(--jr-gold); outline-offset: 3px; }
-
-/* ── empties ─────────────────────────────────────────────────────── */
+/* ── empties ─────────────────────────────────────────────────────────────── */
 /* Never an encouragement. A surface that fills silence with a compliment
    teaches the trader to skim past it, and then it is useless on the day it
    has something real to say. */

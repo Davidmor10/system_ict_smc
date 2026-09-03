@@ -149,20 +149,28 @@ describe('a relapse is never counted as a success', () => {
     expect(STATE).toContain('counts.changed');
   });
 
-  it('is stated on the page for a behaviour that came back', () => {
-    expect(VIEW).toContain('relapses');
-    expect(VIEW).toContain('אחרי שנסגרה');
+  it('is its own field on a behaviour row, never folded into the verdict', () => {
+    expect(VIEW).toContain('r.relapses > 0');
+    expect(VIEW).toContain('חזרה');
   });
 });
 
-describe('the behaviour review moved rather than being copied', () => {
-  it('is on the journey page', () => {
-    expect(VIEW).toContain('WeeklyBehaviorReview');
+// ── the weekly review folded into the rows ──────────────────────────────────
+//
+// It was a panel reporting movement for the whole account. Per row it is the
+// same pair the improvement verdict is judged on — the recent window against
+// the whole history — so the panel is gone rather than duplicated.
+
+describe('the weekly behaviour panel', () => {
+  it('is not a panel anywhere any more', () => {
+    expect(VIEW).not.toContain('WeeklyBehaviorReview');
+    expect(ANALYTICS).not.toContain('WeeklyBehaviorReview');
+    expect(ANALYTICS).not.toContain('WeeklyTabs');
   });
 
-  it('is no longer a buried tab on the analytics page', () => {
-    expect(ANALYTICS).not.toContain('WeeklyTabs');
-    expect(ANALYTICS).not.toContain('WeeklyBehaviorReview');
+  it('became a per-row trend instead', () => {
+    expect(ROUTE).toContain('trendOf');
+    expect(VIEW).toContain('TREND_LABELS');
   });
 
   it('leaves the weekly results panel where it was', () => {
@@ -170,14 +178,92 @@ describe('the behaviour review moved rather than being copied', () => {
   });
 });
 
+// ── the two stacks stay apart ───────────────────────────────────────────────
+//
+// docs/ai-architecture.md splits them by the claims they own. The evolution
+// axis is an edge hypothesis — the descriptive stack — and it was briefly
+// rendered on a behaviour screen, which is the blend the document exists to
+// prevent.
+
+describe('the evolution axis belongs to the descriptive stack', () => {
+  it('is no longer served by the behaviour route or drawn on the journey', () => {
+    expect(ROUTE).not.toContain('getEvolutionTimeline');
+    expect(VIEW).not.toContain('evolution');
+  });
+
+  it('is on the analytics page, behind its own route', () => {
+    expect(ANALYTICS).toContain('EvolutionAxis');
+    const AXIS = read('components', 'EvolutionAxis.tsx');
+    expect(AXIS).toContain('/api/ai/evolution');
+  });
+});
+
 describe('the history page stays a history', () => {
-  it('keeps the lifecycle, the evolution axis and the process log', () => {
+  it('keeps the lifecycle and each behaviour’s own process log', () => {
     expect(VIEW).toContain('STATUS_ORDER');
-    expect(VIEW).toContain('ציר ההתפתחות');
-    expect(VIEW).toContain('יומן התהליך');
+    expect(VIEW).toContain('r.events');
   });
 
   it('states plainly that it gives no recommendation', () => {
     expect(VIEW).toContain('אין כאן ציון ואין המלצה');
+  });
+});
+
+// ── every kind gets a row ───────────────────────────────────────────────────
+//
+// The taxonomy is a closed set of five. A kind that never fired must still
+// appear: "the system looked and found nothing" is the only thing that tells a
+// trader what is actually being watched, and an absent row says nothing.
+
+describe('the closed set of behaviours is shown in full', () => {
+  it('builds a row from the label map rather than from what was stored', () => {
+    expect(ROUTE).toContain('Object.keys(BEHAVIOR_LABELS)');
+  });
+
+  it('reads the denominator from the fresh pass, so an undetected kind can still state one', () => {
+    expect(ROUTE).toContain('fresh?.opportunities');
+  });
+
+  // "Nothing found" and "nothing to look at" are different facts, and neither
+  // is a compliment.
+  it('never turns an undetected row into a clean bill of health', () => {
+    const ROWS = read('lib', 'progress', 'rows.ts');
+    expect(ROWS).toContain('undetectedNote');
+    expect(ROWS).not.toContain('אין בעיה');
+  });
+});
+
+// ── a problem that is none of the five ──────────────────────────────────────
+//
+// The trader writes it as a rule and ticks it on the trade form. That data has
+// been collected for weeks and only ever ranked into a sentence for the daily
+// note. It arrives here as rows of the same shape.
+
+describe('the trader’s own rules get a record too', () => {
+  it('is read from the collection the trade form already writes', () => {
+    expect(ROUTE).toContain('loadRuleBreaches');
+  });
+
+  // Every rule shares one denominator because the form asks once per trade.
+  // Counting against all trades would divide by ungraded ones.
+  it('counts breaches against the trades the trader actually graded', () => {
+    expect(ROUTE).toContain('gradedTrades');
+    expect(ROUTE).toContain("stored.get('rule_violation')?.opportunities");
+  });
+
+  // The stages mean confirmed against a counter-example and an experiment with
+  // guardrails. None of that has run on a self-reported breach.
+  it('gives a rule row no lifecycle stage it did not earn', () => {
+    const block = ROUTE.slice(ROUTE.indexOf('const ruleRows'), ROUTE.indexOf('rows: sortRows'));
+    expect(block).toContain('status: null');
+    expect(block).toContain("stage: 'undetected'");
+  });
+
+  it('says on the page why those rows stop short of a verdict', () => {
+    expect(VIEW).toContain('דיווח עצמי');
+  });
+
+  it('tells a trader with no rules how to raise one', () => {
+    expect(VIEW).toContain('/dashboard/rules');
   });
 });

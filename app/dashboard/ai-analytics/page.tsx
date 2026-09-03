@@ -14,6 +14,7 @@ import PatternEvidence from '../../components/PatternEvidence';
 import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyReportPanel from '../../components/WeeklyReportPanel';
+import EvolutionAxis from '../../components/EvolutionAxis';
 import TrackingArchive from '../../components/TrackingArchive';
 import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
 
@@ -767,7 +768,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ EXPECTANCY ══════════ */}
         <NumberedSection
-          index={1} total={12} eyebrow="Expectancy" title="מה שווה לך עסקה"
+          index={1} total={13} eyebrow="Expectancy" title="מה שווה לך עסקה"
           description={
             exp.trades === 0
               ? 'צריך עסקאות סגורות כדי לחשב תוחלת.'
@@ -818,7 +819,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ PLAN VS EXECUTION ══════════ */}
         <NumberedSection
-          index={2} total={12} eyebrow="Plan vs Execution" title="תוכנית מול ביצוע"
+          index={2} total={13} eyebrow="Plan vs Execution" title="תוכנית מול ביצוע"
           description={
             pve.measured === 0
               ? 'רשום יעד, סטופ ומחיר יציאה כדי שאפשר יהיה להשוות תוכנית לביצוע.'
@@ -869,7 +870,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 07 · EXIT MANAGEMENT ══════════ */}
         <NumberedSection
-          index={3} total={12} eyebrow="Exit Management" title="ניהול יציאות"
+          index={3} total={13} eyebrow="Exit Management" title="ניהול יציאות"
           description={
             exits.sampleSize === 0
               ? 'רשום יציאות (מחיר + חוזים) על עסקאות כדי לנתח איך אתה יוצא מהן.'
@@ -916,7 +917,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ TRACKING ARCHIVE ══════════ */}
         <NumberedSection
-          index={4} total={12} eyebrow="Tracking" title="מה היה במעקב"
+          index={4} total={13} eyebrow="Tracking" title="מה היה במעקב"
           description="כל חלון מעקב שנסגר ומה הוא הראה — כולל המקרה שבו היעד השתפר ומשהו אחר נחלש בדרך. המקור הוא תמיד מה שאתה מתעד בעצמך."
         >
           <TrackingArchive />
@@ -929,7 +930,7 @@ export default function AiAnalyticsPage() {
         />
         {/* ══════════ 09 · PATTERN DETECTION ══════════ */}
         <NumberedSection
-          index={5} total={12} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
+          index={5} total={13} eyebrow="AI · Pattern Detection" title="גילוי דפוסים"
           description="המנוע קורא את היומן ומזהה דפוסים חוזרים — כל דפוס מסומן ברמת ביטחון לפי גודל הדגימה."
         >
           {patternsLoading ? (
@@ -978,6 +979,19 @@ export default function AiAnalyticsPage() {
           )}
         </NumberedSection>
 
+        {/* ══════════ 09b · EVOLUTION AXIS ══════════ */}
+        {/* Moved here from the journey page. It belongs to the descriptive
+            stack — where a trader's results concentrate — and the journey is
+            the behavioural one. docs/ai-architecture.md keeps those apart
+            because a page that mixes an edge hypothesis with a habit teaches
+            the reader they are the same kind of claim. */}
+        <NumberedSection
+          index={6} total={13} eyebrow="Edge Evolution" title="ציר ההתפתחות"
+          description="איך ההשערה על היתרון שלך השתנתה לאורך השבועות. שבועות רצופים עם אותה השערה מתאחדים לטווח אחד, ושבוע בלי יתרון ברור נרשם ככזה ולא מושמט."
+        >
+          <EvolutionAxis />
+        </NumberedSection>
+
         {/* ══════════ 10 · WEEKLY REPORT ══════════ */}
         {/* One panel, not two tabs.
             The behaviour half of this section — did anything about HOW you
@@ -988,7 +1002,7 @@ export default function AiAnalyticsPage() {
             buried thing in the product. It now opens /dashboard/progress,
             where it is one of four bands instead of a tab nobody clicked. */}
         <NumberedSection
-          index={6} total={12} eyebrow="AI · Weekly Review" title="סיכום השבוע"
+          index={7} total={13} eyebrow="AI · Weekly Review" title="סיכום השבוע"
           description="מה עשו המספרים בשבוע הנוכחי. השאלה השנייה על אותו שבוע — מה עשית אתה — נמצאת במסלול, כי היא על מגמה ולא על תוצאה."
           extra={<Link href="/dashboard/progress" className="inline-block mt-4 text-[#d4af37] text-[12px] font-bold whitespace-nowrap hover:underline">למסלול ←</Link>}
         >
@@ -1002,7 +1016,7 @@ export default function AiAnalyticsPage() {
         />
         {/* ══════════ 01 · INSTRUMENT ══════════ */}
         <NumberedSection
-          index={7} total={12} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
+          index={8} total={13} eyebrow="Instrument Edge" title="ניתוח לפי מכשיר"
           description={
             instrumentRows.length === 0 ? 'עדיין אין עסקאות סגורות למכשיר כלשהו.'
             : instrumentRows.length === 1 ? `כרגע יש נתונים רק על ${instrumentRows[0].key}.`
@@ -1045,7 +1059,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 03 · TIME SIGNATURE ══════════ */}
         <NumberedSection
-          index={8} total={12} eyebrow="Time Signature" title="חתימת זמן"
+          index={9} total={13} eyebrow="Time Signature" title="חתימת זמן"
           description="מתי הביצועים בשיאם ומתי הם נחלשים — לפי שעה בסשן וחודש. הפילוח לפי יום בשבוע נמצא בדף הסטטיסטיקה."
         >
           <div>
@@ -1090,7 +1104,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 04 · MODEL / SETUP ══════════ */}
         <NumberedSection
-          index={9} total={12} eyebrow="Model / Setup" title="מודל / סטאפ"
+          index={10} total={13} eyebrow="Model / Setup" title="מודל / סטאפ"
           description={
             confirmationRows.length === 0 ? 'עדיין לא תיוגת עסקאות במודל/סטאפ ספציפי.'
             : confirmationRows.length === 1 ? `כרגע יש נתונים רק על "${confirmationRows[0].key}".`
@@ -1120,7 +1134,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 05 · CONFIRMATION TAGS ══════════ */}
         <NumberedSection
-          index={10} total={12} eyebrow="Confluence Tags" title="אישורי כניסה"
+          index={11} total={13} eyebrow="Confluence Tags" title="אישורי כניסה"
           description={
             confirmationTagRows.length === 0
               ? 'עדיין לא סימנת אישורי כניסה על עסקאות.'
@@ -1147,7 +1161,7 @@ export default function AiAnalyticsPage() {
 
         {/* ══════════ 06 · EMOTIONAL STATE ══════════ */}
         <NumberedSection
-          index={11} total={12} eyebrow="Psychology" title="מצב רגשי"
+          index={12} total={13} eyebrow="Psychology" title="מצב רגשי"
           description={
             emotionRows.length === 0
               ? 'עדיין לא תיעדת מצב רגשי לפני כניסה.'
@@ -1170,7 +1184,7 @@ export default function AiAnalyticsPage() {
         />
         {/* ══════════ 11 · WHAT-IF SIMULATOR ══════════ */}
         <NumberedSection
-          index={12} total={12} eyebrow="What-If" title="סימולטור תרחישים"
+          index={13} total={13} eyebrow="What-If" title="סימולטור תרחישים"
           description="מה היו הנתונים שלך אילו סיננת תנאי מסוים — רק כשהרגשתי FOMO, רק לונדון, רק NQ, או רק בין 16:00–17:00. הכל מותאם למה שאתה בעצמך תיעדת, וחושב במדויק על העסקאות האמיתיות שלך — לא ניחוש."
         >
           {baseScenarios.length === 0 && !hourCapable ? (
