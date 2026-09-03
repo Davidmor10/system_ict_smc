@@ -18,7 +18,7 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', '..', 'app',
 const CSS = read('components', 'dp.css');
 const SOURCES = [
   read('components', 'DashboardView.tsx'),
-  read('components', 'CurrentState.tsx'),
+  read('components', 'TraderSummary.tsx'),
 ];
 
 /** Class names used in the markup: className="…" and className={`…`}. */

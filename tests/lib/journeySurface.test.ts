@@ -20,7 +20,7 @@ const read = (...p: string[]) => readFileSync(app(...p), 'utf8');
 
 const ROUTE   = read('api', 'coach', 'journey', 'route.ts');
 const VIEW    = read('components', 'ProgressView.tsx');
-const STATE   = read('components', 'CurrentState.tsx');
+const STATE   = read('components', 'TraderSummary.tsx');
 const DASH    = read('components', 'DashboardView.tsx');
 const ANALYTICS = read('dashboard', 'ai-analytics', 'page.tsx');
 const SERVICE = read('lib', 'intelligence', 'service.ts');
@@ -107,7 +107,7 @@ describe('the state panel and the history page cannot disagree', () => {
   });
 
   it('is what the dashboard renders', () => {
-    expect(DASH).toContain('<CurrentState />');
+    expect(DASH).toContain('<TraderSummary');
     expect(DASH).not.toContain('TrackingLine');
     expect(DASH).not.toContain('ProgressStrip');
   });
@@ -132,21 +132,35 @@ describe('the state panel makes one claim, not a scoreboard', () => {
   });
 
   // Trade data can establish where a behaviour concentrates, never why —
-  // docs/ai-architecture.md makes that a rule, not a preference.
+  // docs/ai-architecture.md makes that a rule, not a preference. The wording
+  // lives in the lib now, which is where its tests are.
   it('says out loud what it does not know', () => {
-    expect(STATE).toContain('unknownLine');
-    expect(STATE).toContain('לא ממצא לטובתך ולא לרעתך');
+    const LIB = read('lib', 'progress', 'traderSummary.ts');
+    expect(LIB).toContain('עוד אין מספיק עסקאות שהוכרעו כדי להשוות');
+    expect(LIB).toContain('עוד לא הצטברו מספיק עסקאות מתועדות');
   });
 
   it('carries the counterweight, so it is not only a problem finder', () => {
-    expect(STATE).toContain('כבר השתנו והחזיקו');
+    const LIB = read('lib', 'progress', 'traderSummary.ts');
+    expect(LIB).toContain('עברו ניסוי והחזיקו');
+  });
+
+  // The trend sentence compares one group of trades against another, which
+  // AGENTS.md gates on the shared test and the shared sample floor.
+  it('tests the trend instead of asserting it', () => {
+    const LIB = read('lib', 'progress', 'traderSummary.ts');
+    expect(LIB).toContain('fisherExactTwoSided');
+    expect(LIB).toContain('bonferroni');
+    expect(LIB).toContain('canSupportClaim');
+    // No locally invented floor — AGENTS.md names the file it must come from.
+    expect(LIB).not.toMatch(/const MIN_[A-Z_]* = \d/);
   });
 });
 
 describe('a relapse is never counted as a success', () => {
-  it('is a field of its own on the panel, not folded into the changed count', () => {
-    expect(STATE).toContain('counts.relapsed');
-    expect(STATE).toContain('counts.changed');
+  it('is a field of its own on the dashboard, not folded into the changed count', () => {
+    expect(STATE).toContain('relapsed: journey.counts.relapsed');
+    expect(STATE).toContain('changed: journey.counts.changed');
   });
 
   it('is its own field on a behaviour row, never folded into the verdict', () => {

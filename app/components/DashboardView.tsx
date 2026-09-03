@@ -8,7 +8,7 @@ import { useUser } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import { usePlan } from './PlanProvider';
 import DailyInsightCard from './DailyInsightCard';
-import CurrentState from './CurrentState';
+import TraderSummary from './TraderSummary';
 import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
 import { clockCaption, clockWithSecondsInZone } from '../lib/time/zone';
 import type { TradeEntry } from '../lib/journal';
@@ -628,12 +628,11 @@ export default function DashboardView() {
           disagreement waiting to be shipped, and the trade is the one that
           knows which day it belongs to. */}
 
-      {/* The state panel: the one best-supported fact about this trader right
-          now, what is still unknown, and what has already changed and held.
-          Above the numbers on purpose — the KPI grid answers "what happened",
-          and this answers "what do I know about myself", which is the question
-          a person opens the app with. */}
-      {hasAi && <CurrentState />}
+      {/* The summary, in sentences, before any tile. The KPI grid answers
+          "what are the numbers"; this answers "what do they say", which is the
+          question a person actually opens the app with — and the one a grid of
+          nine tiles cannot answer however many tiles it has. */}
+      {hasAi && <TraderSummary trades={trades} accountStart={accountStart} />}
 
       {/* Row 3 — sessions + unit toggle */}
       <div className="dp-control-row">
