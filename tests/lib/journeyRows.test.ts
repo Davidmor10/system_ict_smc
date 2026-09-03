@@ -118,7 +118,9 @@ describe('a row with nothing detected', () => {
   // "Nothing found" and "nothing to look at" are different facts, and only one
   // of them is about the trader.
   it('separates a clean look from an empty denominator', () => {
-    expect(undetectedNote(24)).toContain('24');
+    expect(undetectedNote(24)).toContain('ב-24 הזדמנויות');
+    expect(undetectedNote(1)).toContain('בהזדמנות אחת');
+    expect(undetectedNote(1)).not.toMatch(/\b1 /);
     expect(undetectedNote(0)).toContain('עוד לא היו עסקאות');
   });
 
@@ -151,8 +153,8 @@ describe('the summary', () => {
       row({ kind: 'a', status: 'confirmed' }), row({ kind: 'b', status: null }),
       row({ kind: 'c', status: null }),
     ]);
-    expect(s.lines[0]).toContain('3');
-    expect(s.lines[0]).toContain('1');
+    expect(s.lines[0]).toContain('מתוך 3');
+    expect(s.lines[0]).toContain('אחת זוהתה');
   });
 
   it('says plainly when nothing has been detected at all', () => {
@@ -197,7 +199,7 @@ describe('the summary', () => {
       row({ kind: 'a', status: 'resolved', result: res('improved') }),
       row({ kind: 'b', status: 'improved', result: res('traded_one_problem_for_another') }),
     ]);
-    expect(s.lines.join(' ')).toContain('1 עברו ניסוי והחזיקו');
+    expect(s.lines.join(' ')).toContain('התנהגות אחת עברה ניסוי והחזיקה');
   });
 
   // A window that closed without a real improvement must not be summarised as

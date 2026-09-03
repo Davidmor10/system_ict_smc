@@ -36,6 +36,7 @@ import Link from 'next/link';
 import EvidenceList from './EvidenceList';
 import { STATUS_LABELS, STATUS_ORDER, VERDICT_LABELS, type JourneyCounts } from '../lib/progress/journey';
 import { TREND_LABELS, summarizeJourney, undetectedNote, type JourneyRow } from '../lib/progress/rows';
+import { q } from '../lib/hebrew';
 
 interface Journey {
   counts: JourneyCounts;
@@ -380,7 +381,7 @@ function MyRules({ rows, data }: { rows: JourneyRow[]; data: Journey }) {
 
           {/* The honest limit of this section, stated where it is read. */}
           <p className="jr-note">
-            המכנה הוא {data.gradedTrades} העסקאות שבהן ענית על שאלת החוקים — הוא משותף לכל החוקים,
+            המכנה הוא {q(data.gradedTrades, 'העסקה האחת שבה ענית', 'העסקאות שבהן ענית')} על שאלת החוקים — הוא משותף לכל החוקים,
             כי השאלה נשאלת פעם אחת לעסקה. השורות האלה נספרות ומוצגות, אבל הן עוד לא עוברות את
             התהליך שלמעלה: אין להן ניסוי ואין פסיקה, כי הן מבוססות על דיווח עצמי בלבד ולא נבדקו מול
             מדגם שיכול היה לשלול אותן.

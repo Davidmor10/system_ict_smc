@@ -147,12 +147,15 @@ describe('a relapse', () => {
   it('is said alongside the successes, never inside them', () => {
     const text = summarizeTrader(facts(), { kind: 'insufficient' }, behaviour({ changed: 3, relapsed: 1 })).join(' ');
     expect(text).toContain('3 התנהגויות כבר עברו ניסוי והחזיקו');
-    expect(text).toContain('אחת חזרו אחרי שנסגרו');
+    expect(text).toContain('ואחת חזרה אחרי שנסגרה');
+    expect(text).not.toContain('ו-אחת');
   });
 
   it('is said even when nothing has held yet', () => {
     const text = summarizeTrader(facts(), { kind: 'insufficient' }, behaviour({ changed: 0, relapsed: 2 })).join(' ');
     expect(text).toContain('2 התנהגויות חזרו');
+    expect(summarizeTrader(facts(), { kind: 'insufficient' }, behaviour({ changed: 0, relapsed: 1 })).join(' '))
+      .toContain('התנהגות אחת חזרה אחרי שנסגרה');
   });
 });
 

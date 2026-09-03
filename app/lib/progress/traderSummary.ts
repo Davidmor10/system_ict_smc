@@ -33,6 +33,7 @@
 import { PATTERN_ALPHA } from '../analytics/patterns';
 import { canSupportClaim } from '../stats/evidence';
 import { bonferroni, fisherExactTwoSided } from '../stats/fisher';
+import { feminine, heNum, q } from '../hebrew';
 
 export interface TradingFacts {
   closed: number;
@@ -109,20 +110,8 @@ export interface BehaviourFacts {
 }
 
 const pct = (r: number) => `${Math.round(r * 100)}%`;
-const num = (n: number) => n.toLocaleString('he-IL');
-
-/** Count and noun, agreeing.
- *
- *  "1 עסקאות סגורות" is what a template produces and what nobody writes, and
- *  a paragraph whose whole purpose is to read like language cannot afford it.
- *  Only one and many are separated — Hebrew's dual is a nicety here, the
- *  singular is the case that reads broken. */
-function q(n: number, one: string, many: string): string {
-  return n === 1 ? one : `${num(n)} ${many}`;
-}
-
-/** Just the quantity, feminine — "אחת" rather than "1". */
-const one = (n: number) => (n === 1 ? 'אחת' : num(n));
+const num = heNum;
+const one = feminine;
 
 export function summarizeTrader(
   facts: TradingFacts,
@@ -199,12 +188,19 @@ export function summarizeTrader(
     if (behaviour.changed > 0) {
       const held = behaviour.changed === 1
         ? 'התנהגות אחת כבר עברה ניסוי והחזיקה'
-        : `${num(behaviour.changed)} התנהגויות כבר עברו ניסוי והחזיקו`;
+        : `${q(behaviour.changed, 'התנהגות אחת', 'התנהגויות')} כבר עברו ניסוי והחזיקו`;
+      // "ו-אחת חזרו" — a hyphen before a word, and a plural verb on a
+      // singular subject. The vav attaches to a word and hyphenates only
+      // before a numeral.
       lines.push(held + (behaviour.relapsed > 0
-        ? `, ו-${one(behaviour.relapsed)} חזרו אחרי שנסגרו.`
+        ? (behaviour.relapsed === 1
+            ? ', ואחת חזרה אחרי שנסגרה.'
+            : `, ו-${heNum(behaviour.relapsed)} חזרו אחרי שנסגרו.`)
         : '.'));
     } else if (behaviour.relapsed > 0) {
-      lines.push(`${q(behaviour.relapsed, 'התנהגות אחת חזרה', 'התנהגויות חזרו')} אחרי שנסגרו.`);
+      lines.push(behaviour.relapsed === 1
+        ? 'התנהגות אחת חזרה אחרי שנסגרה.'
+        : `${heNum(behaviour.relapsed)} התנהגויות חזרו אחרי שנסגרו.`);
     }
   }
 

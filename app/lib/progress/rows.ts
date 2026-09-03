@@ -34,6 +34,7 @@
 // same lie as a neutral 50.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { feminine, heNum, q } from '../hebrew';
 import { stageOf, type Stage } from './journey';
 
 /** Which way a behaviour is moving, comparing the recent window against the
@@ -149,9 +150,10 @@ export function sortRows(rows: JourneyRow[]): JourneyRow[] {
  *  different facts. The wording turns on whether there was anything to look
  *  at. */
 export function undetectedNote(opportunities: number): string {
-  return opportunities > 0
-    ? `נבדק ב-${opportunities} הזדמנויות ולא נמצא כדפוס חוזר.`
-    : 'עוד לא היו עסקאות שמאפשרות לבדוק את זה.';
+  if (opportunities === 0) return 'עוד לא היו עסקאות שמאפשרות לבדוק את זה.';
+  // The hyphen belongs before a numeral and not before a word.
+  const where = opportunities === 1 ? 'בהזדמנות אחת' : `ב-${heNum(opportunities)} הזדמנויות`;
+  return `נבדק ${where} ולא נמצא כדפוס חוזר.`;
 }
 
 // ── the summary ─────────────────────────────────────────────────────────────
@@ -193,15 +195,18 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
 
   // 1 · coverage. The denominator of the whole screen, said once.
   lines.push(seen === 0
-    ? `המערכת בודקת ${total} התנהגויות. אף אחת מהן לא זוהתה אצלך עדיין.`
-    : `מתוך ${total} ההתנהגויות שהמערכת בודקת, ${seen} זוהו אצלך.`);
+    ? `המערכת בודקת ${q(total, 'התנהגות אחת', 'התנהגויות')}. אף אחת מהן לא זוהתה אצלך עדיין.`
+    : `מתוך ${heNum(total)} ההתנהגויות שהמערכת בודקת, ${q(seen, 'אחת זוהתה', 'זוהו')} אצלך.`);
 
   // 2 · what is being counted right now.
   if (open?.window) {
     const left = Math.max(0, open.window.of - open.window.done);
     lines.push(
-      `אחת נמדדת עכשיו — ${open.label}. נספרו ${open.window.done} מתוך ${open.window.of} הזדמנויות` +
-      (left > 0 ? `, ועוד ${left} עד שתהיה פסיקה.` : ', והחלון מלא.'),
+      `אחת נמדדת עכשיו — ${open.label}. ` +
+      (open.window.done === 1
+        ? `נספרה הזדמנות אחת מתוך ${heNum(open.window.of)}`
+        : `נספרו ${heNum(open.window.done)} הזדמנויות מתוך ${heNum(open.window.of)}`) +
+      (left > 0 ? `, ועוד ${feminine(left)} עד שתהיה פסיקה.` : ', והחלון מלא.'),
     );
   }
 
@@ -222,7 +227,7 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
   lines.push(judged === 0
     ? 'עוד לא נסגר אצלך ניסוי, ולכן אין עדיין שינוי מדיד.'
     : held > 0
-      ? `${held} עברו ניסוי והחזיקו.`
+      ? (held === 1 ? 'התנהגות אחת עברה ניסוי והחזיקה.' : `${heNum(held)} עברו ניסוי והחזיקו.`)
       : 'ניסויים נסגרו, אך אף אחד מהם לא הגיע לשיפור שעמד בשני בסיסי ההשוואה.');
 
   // 5 · a rate that is climbing is a fact, and it belongs in the summary for
@@ -238,7 +243,11 @@ export function summarizeJourney(rows: JourneyRow[]): JourneySummary {
   if (rules.length > 0) {
     const breaches = rules.reduce((a, r) => a + r.occurrences, 0);
     const top = [...rules].sort((a, b) => b.occurrences - a.occurrences)[0];
-    lines.push(`בנוסף סימנת ${breaches} הפרות של חוקים שכתבת בעצמך, הנפוצה: ${top.label}.`);
+    lines.push(
+      `בנוסף סימנת ${q(breaches, 'הפרה אחת', 'הפרות')} של ` +
+      (rules.length === 1 ? 'חוק שכתבת בעצמך' : 'חוקים שכתבת בעצמך') +
+      (rules.length > 1 ? `, הנפוצה: ${top.label}.` : `: ${top.label}.`),
+    );
   }
 
   return { lines, focus: open?.label ?? null };
