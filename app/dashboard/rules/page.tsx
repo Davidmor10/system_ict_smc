@@ -7,6 +7,7 @@ import { loadTrades, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { hydrateList, commitList } from '../../lib/sync/collections';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import TimeField from '../../components/form/TimeField';
 import { sessionLabel, activeSessions } from '../../lib/sessions';
 import { INSTRUMENT_KEYS } from '../../lib/instruments';
 import { AUTO_SUPPORTED, type RuleCheckContext } from '../../lib/rules/engine';
@@ -102,6 +103,11 @@ const shortDate = (iso: string | null) => { if (!iso) return '—'; const p = is
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const fmtMin = (m: number) => `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
+/** The inverse of fmtMin: "09:30" back to minutes since midnight. */
+const toMin = (hhmm: string) => {
+  const [h, mi] = hhmm.split(':').map(Number);
+  return h * 60 + mi;
+};
 const sessionHe = (key: string) => sessionLabel(key);
 const fmtR = (r: number) => `${r >= 0 ? '+' : '-'}${Math.abs(r).toFixed(1)}R`;
 
@@ -674,10 +680,20 @@ export default function RulesPage() {
                                     <input type="number" min={1} className={numInputCls} style={numInputStyle} value={cv.losses ?? ''} onChange={e => setCV({ losses: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
                                 )}
                                 {draft.conditionType === 'allowed_hours' && (
-                                  <div className="flex items-center gap-2" dir="ltr">
-                                    <input type="time" step={60} className="rounded-sm px-2 py-1.5 font-mono text-xs text-white [color-scheme:dark] outline-none border focus:border-[#d4af37]/60" style={numInputStyle} value={cv.startMin != null ? fmtMin(cv.startMin) : ''} onChange={e => { const v = e.target.value; if (!v) return setCV({ startMin: undefined }); const [h, mi] = v.split(':').map(Number); setCV({ startMin: h * 60 + mi }); }} />
-                                    <span className="font-mono text-xs text-white/30">→</span>
-                                    <input type="time" step={60} className="rounded-sm px-2 py-1.5 font-mono text-xs text-white [color-scheme:dark] outline-none border focus:border-[#d4af37]/60" style={numInputStyle} value={cv.endMin != null ? fmtMin(cv.endMin) : ''} onChange={e => { const v = e.target.value; if (!v) return setCV({ endMin: undefined }); const [h, mi] = v.split(':').map(Number); setCV({ endMin: h * 60 + mi }); }} />
+                                  <div className="flex items-center gap-2">
+                                    {/* An allowed-hours window: both ends may be
+                                        unset, which is why these clear. */}
+                                    <TimeField
+                                      compact clearable label="משעה"
+                                      value={cv.startMin != null ? fmtMin(cv.startMin) : ''}
+                                      onChange={v => setCV({ startMin: v ? toMin(v) : undefined })}
+                                    />
+                                    <span className="font-mono text-xs text-white/30">←</span>
+                                    <TimeField
+                                      compact clearable label="עד שעה"
+                                      value={cv.endMin != null ? fmtMin(cv.endMin) : ''}
+                                      onChange={v => setCV({ endMin: v ? toMin(v) : undefined })}
+                                    />
                                   </div>
                                 )}
                                 {draft.conditionType === 'allowed_sessions' && activeSessions().map(s => <Pill key={s.key} active={(cv.sessions ?? []).includes(s.key)} onClick={() => toggleArr('sessions', s.key)}>{s.he}</Pill>)}

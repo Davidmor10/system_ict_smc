@@ -67,6 +67,21 @@
 .dtf-trigger:focus-visible { outline: none; border-color: var(--dtf-gold-55); box-shadow: 0 0 0 3px var(--dtf-gold-08); }
 .dtf-trigger.is-open { border-color: var(--dtf-gold-55); background: #131315; box-shadow: 0 0 0 3px var(--dtf-gold-08); }
 .dtf-trigger.is-bad  { border-color: rgba(139, 58, 58, 0.55); background: rgba(139, 58, 58, 0.06); }
+/* A filter that is currently on, on the rules and analytics screens. */
+.dtf-trigger.is-accent { border-color: var(--dtf-gold-30); }
+.dtf-trigger.is-accent .dtf-value { color: var(--dtf-gold); }
+.dtf-trigger.is-accent .dtf-glyph { color: var(--dtf-gold); }
+
+/* The inline shape: a control in a row of controls rather than a form field,
+   so it takes the width of its own contents. */
+.dtf-trigger.is-compact {
+  width: auto;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 9px;
+}
+.dtf-trigger.is-compact .dtf-value { font-size: 12.5px; flex: none; }
+.dtf-trigger.is-compact .dtf-glyph { width: 13px; height: 13px; }
 
 /* The value itself. Mono, tabular, so the field does not jitter as the
    digits change. */
@@ -79,6 +94,8 @@
   flex: 1;
 }
 .dtf-trigger.is-bad .dtf-value { color: var(--dtf-bear-t); }
+/* Nothing chosen yet. Dim, so an unset field never reads as a set one. */
+.dtf-value.is-empty { color: var(--dtf-w30); letter-spacing: 0.1em; }
 
 /* The weekday, or the session hint — context, not data. */
 .dtf-sub {
@@ -270,9 +287,11 @@
 
 .dtf-foot {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
+.dtf-foot .dtf-btn { min-width: 62px; }
 .dtf-btn {
   flex: 1;
   padding: 7px 0;
@@ -362,6 +381,11 @@
   transition: color 0.14s var(--dtf-ease), transform 0.14s var(--dtf-ease);
 }
 .dtf-tick:hover { color: var(--dtf-w88); }
+/* Later today. Faint and unreachable, the same answer the calendar gives a
+   day that has not happened. */
+.dtf-tick.is-later { color: var(--dtf-w18); cursor: not-allowed; }
+.dtf-tick.is-later:hover { color: var(--dtf-w18); }
+
 .dtf-tick.is-on {
   color: var(--dtf-gold);
   font-weight: 700;

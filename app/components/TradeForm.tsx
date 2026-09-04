@@ -733,7 +733,9 @@ export default function TradeForm({
    *  It checks the DATE ON THE TRADE, never the clock. Traders write up their
    *  week at the weekend, and a journal that refused entries exactly when
    *  someone sits down to catch up is a journal they stop using. */
-  const dateIssue = dateProblem(form.date, form.time, todayISO());
+  // Recomputed on every render, so the "now" it compares against is the
+  // clock at this keystroke and not the clock when the form opened.
+  const dateIssue = dateProblem(form.date, form.time, todayISO(), clockInZone());
 
   const canSubmit = missingRequired.length === 0 && dateIssue === null;
 
@@ -821,7 +823,13 @@ export default function TradeForm({
               />
             </Field>
             <Field label="שעת כניסה">
-              <TimeField value={form.time} onChange={v => set('time', v)} now={clockInZone()} />
+              {/* On today, the wheels stop at the current hour — the same
+                  refusal the calendar makes with tomorrow, made before the
+                  tap rather than after it. */}
+              <TimeField
+                value={form.time} onChange={v => set('time', v)} now={clockInZone()}
+                max={form.date === todayISO() ? clockInZone() : undefined}
+              />
             </Field>
           </div>
           <p className="font-mono text-[10px] text-white/30 -mt-2">

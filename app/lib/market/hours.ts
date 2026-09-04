@@ -89,9 +89,51 @@ export function isFutureDate(dateISO: string, todayISO: string): boolean {
 }
 
 export const FUTURE_REASON = 'התאריך הזה עוד לא הגיע. אפשר לתעד רק עסקה שכבר קרתה.';
+export const FUTURE_TIME_REASON = 'השעה הזאת עוד לא הגיעה. אפשר לתעד רק עסקה שכבר קרתה.';
 
-/** Everything wrong with this date and time, or null when nothing is. */
-export function dateProblem(dateISO: string, time: string | null | undefined, todayISO: string): string | null {
+/** Minutes since midnight, or null if this is not a time. */
+export function minutesOf(time: string | null | undefined): number | null {
+  const hit = /^(\d{1,2}):(\d{2})$/.exec(time ?? '');
+  if (!hit) return null;
+  const h = Number(hit[1]), m = Number(hit[2]);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+/** Is this a moment later today than it is right now?
+ *
+ *  ONLY ON TODAY. A time of day says nothing on its own — 23:50 is perfectly
+ *  ordinary on any day but this one — so the date has to match before the
+ *  clock is consulted at all.
+ *
+ *  Silent when either value is missing or malformed: a trader mid-way through
+ *  typing an hour is not making a mistake yet. */
+export function isFutureTime(
+  dateISO: string, time: string | null | undefined, todayISO: string, nowTime: string | null | undefined,
+): boolean {
+  if (dateISO !== todayISO) return false;
+  const at = minutesOf(time);
+  const now = minutesOf(nowTime);
+  if (at === null || now === null) return false;
+  return at > now;
+}
+
+/** Everything wrong with this date and time, or null when nothing is.
+ *
+ *  `nowTime` is the trader's own wall clock as HH:MM. Optional, and when it is
+ *  left out the hour is simply not checked — the caller that has a clock is
+ *  the form, and the callers that only have a date should not be made to
+ *  invent one. */
+export function dateProblem(
+  dateISO: string,
+  time: string | null | undefined,
+  todayISO: string,
+  nowTime?: string | null,
+): string | null {
+  // Ordered by how wrong it is. A date that has not arrived is a bigger
+  // mistake than an hour that has not, and both are bigger than an hour the
+  // exchange happened to be shut for.
   if (isFutureDate(dateISO, todayISO)) return FUTURE_REASON;
+  if (isFutureTime(dateISO, time, todayISO, nowTime)) return FUTURE_TIME_REASON;
   return closureFor(dateISO, time)?.reason ?? null;
 }

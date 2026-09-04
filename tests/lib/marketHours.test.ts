@@ -11,10 +11,12 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  closureAt, closureFor, isFutureDate, dateProblem, REOPEN_HOUR, FUTURE_REASON,
+  closureAt, closureFor, isFutureDate, isFutureTime, minutesOf,
+  dateProblem, REOPEN_HOUR, FUTURE_REASON, FUTURE_TIME_REASON,
 } from '../../app/lib/market/hours';
 
 // 2026-09-04 is a Friday, so the week around it is:
+const THU = '2026-09-03';
 const FRI = '2026-09-04';
 const SAT = '2026-09-05';
 const SUN = '2026-09-06';
@@ -97,12 +99,94 @@ describe('a date that has not happened', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// An hour that has not happened yet.
+//
+// The date rule alone lets today's form take 23:50 at nine in the morning, and
+// that trade then joins every session bucket, every hour-of-day pattern and
+// every count as though it had been taken. The clock is only consulted ON
+// TODAY: 23:50 is an ordinary hour on every other day of the year.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('minutesOf', () => {
+  it('reads a wall clock', () => {
+    expect(minutesOf('00:00')).toBe(0);
+    expect(minutesOf('09:30')).toBe(570);
+    expect(minutesOf('23:59')).toBe(1439);
+  });
+
+  it('refuses what is not one', () => {
+    for (const bad of ['', null, undefined, '9:3', 'now', '24:00', '12:60', '12:00:00']) {
+      expect(minutesOf(bad)).toBeNull();
+    }
+  });
+
+  // A single digit hour is what a hand-typed time looks like.
+  it('accepts a single-digit hour', () => {
+    expect(minutesOf('9:05')).toBe(545);
+  });
+});
+
+describe('isFutureTime', () => {
+  const NOW = '15:39';
+
+  it('blocks later today', () => {
+    expect(isFutureTime(FRI, '15:40', FRI, NOW)).toBe(true);
+    expect(isFutureTime(FRI, '17:00', FRI, NOW)).toBe(true);
+    expect(isFutureTime(FRI, '23:59', FRI, NOW)).toBe(true);
+  });
+
+  it('allows this minute and every one before it', () => {
+    expect(isFutureTime(FRI, NOW, FRI, NOW)).toBe(false);
+    expect(isFutureTime(FRI, '15:38', FRI, NOW)).toBe(false);
+    expect(isFutureTime(FRI, '00:00', FRI, NOW)).toBe(false);
+  });
+
+  // The rule that keeps this from breaking ordinary journalling: on any past
+  // day the whole day is fair game, evening included.
+  it('says nothing about any day but today', () => {
+    expect(isFutureTime(THU, '23:50', FRI, NOW)).toBe(false);
+    expect(isFutureTime(TUE, '23:59', FRI, NOW)).toBe(false);
+  });
+
+  it('is silent while the hour is still being typed', () => {
+    expect(isFutureTime(FRI, '', FRI, NOW)).toBe(false);
+    expect(isFutureTime(FRI, null, FRI, NOW)).toBe(false);
+    expect(isFutureTime(FRI, '1', FRI, NOW)).toBe(false);
+  });
+
+  // No clock, no claim. A caller without one must not have times refused at
+  // random by a fallback.
+  it('is silent without a clock to compare against', () => {
+    expect(isFutureTime(FRI, '23:59', FRI, undefined)).toBe(false);
+    expect(isFutureTime(FRI, '23:59', FRI, '')).toBe(false);
+  });
+});
+
 describe('the one call the form makes', () => {
   // A future date is the more serious mistake, so it is the one reported.
   it('reports the future before the closure', () => {
     // Compared against the exported constant, not a literal: the wording is
     // rewritten from time to time and the rule is what this asserts.
     expect(dateProblem('2035-09-06', '10:00', FRI)).toBe(FUTURE_REASON);
+  });
+
+  it('reports the hour before the closure', () => {
+    // Today is a Friday and the exchange is open, so only the clock objects.
+    expect(dateProblem(FRI, '23:00', FRI, '15:39')).toBe(FUTURE_TIME_REASON);
+  });
+
+  it('leaves a past day alone whatever the hour', () => {
+    expect(dateProblem(THU, '23:50', FRI, '09:00')).toBeNull();
+  });
+
+  it('does not check the hour when no clock was given', () => {
+    expect(dateProblem(FRI, '23:50', FRI)).toBeNull();
+  });
+
+  // The order the three answers come in, on one date that trips all of them.
+  it('reports the date before the hour', () => {
+    expect(dateProblem('2035-09-06', '23:00', FRI, '09:00')).toBe(FUTURE_REASON);
   });
 
   it('reports a closure on a past date', () => {

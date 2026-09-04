@@ -3,13 +3,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The time field.
 //
-// Same reason as the date field: `<input type="time">` is drawn by the
-// browser, in the browser's own light chrome, and no stylesheet reaches it.
+// It replaces `<input type="time">`, which the browser draws itself and no
+// stylesheet reaches. `color-scheme: dark` makes Chrome's version dark rather
+// than white, which is why the two filter screens were tolerable and the
+// journal was not — but dark is all it makes it: the fonts, the spacing and
+// the little spinner are still the browser's.
 //
-// Two wheels rather than a keypad, because the hour is nearly always close to
-// now — a trader logging a trade scrolls a few notches, they do not retype a
-// number. Typing still works: the wheels are buttons and the keyboard walks
-// them.
+// Two wheels rather than a keypad, because the value is nearly always near
+// where the wheel already is — a trader logging a trade scrolls a few notches,
+// they do not retype a number.
+//
+// IT IS USED IN TWO SHAPES. In the journal it is a full-width field with a
+// value that always exists. On the rules and analytics screens it is a small
+// inline control in a row, and "no time chosen" is a real answer — so `value`
+// may be empty, and `clearable` gives that answer back.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -35,6 +42,8 @@ function partOfDay(h: number): string {
   return 'לילה';
 }
 
+/** Midday for an empty field: the wheels have to open somewhere, and the
+ *  middle of the day is the shortest scroll to anywhere else. */
 function split(time: string): { h: number; m: number } {
   const hit = /^(\d{1,2}):(\d{2})/.exec(time);
   if (!hit) return { h: 12, m: 0 };
@@ -47,9 +56,13 @@ function split(time: string): { h: number; m: number } {
 /** One column of the wheel. Owns its own scrolling: the parent tells it what
  *  is chosen, it reports back when the wheel settles somewhere else. */
 function Wheel({
-  values, value, onPick, label,
+  values, value, onPick, label, blocked,
 }: {
   values: number[]; value: number; onPick: (v: number) => void; label: string;
+  /** Values that cannot be chosen — on today, the hours that have not
+   *  happened. Shown faint rather than removed, so the column keeps its
+   *  shape and the trader can see where the day currently ends. */
+  blocked?: (v: number) => boolean;
 }) {
   const col = useRef<HTMLDivElement>(null);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,11 +84,20 @@ function Wheel({
       const el = col.current;
       if (!el) return;
       const i = Math.max(0, Math.min(values.length - 1, Math.round(el.scrollTop / ITEM)));
-      if (values[i] !== value) onPick(values[i]);
+      const landed = values[i];
+      if (landed === value) return;
+      // Scrolled past the end of the day: bounce back to where it stops,
+      // rather than reporting a time that has not happened.
+      if (blocked?.(landed)) {
+        el.scrollTo({ top: values.indexOf(value) * ITEM, behavior: 'smooth' });
+        return;
+      }
+      onPick(landed);
     }, 110);
   };
 
   const tap = (v: number) => {
+    if (blocked?.(v)) return;
     onPick(v);
     col.current?.scrollTo({ top: values.indexOf(v) * ITEM, behavior: 'smooth' });
   };
@@ -91,7 +113,8 @@ function Wheel({
             type="button"
             role="option"
             aria-selected={v === value}
-            className={`dtf-tick${v === value ? ' is-on' : ''}`}
+            disabled={blocked?.(v) ?? false}
+            className={`dtf-tick${v === value ? ' is-on' : ''}${blocked?.(v) ? ' is-later' : ''}`}
             onClick={() => tap(v)}
           >
             {pad2(v)}
@@ -104,17 +127,41 @@ function Wheel({
 }
 
 export default function TimeField({
-  value, onChange, now,
+  value, onChange, now, max, compact = false, clearable = false, accent = false,
+  placeholder = '--:--', label,
 }: {
+  /** "HH:MM", or empty for a field nothing has been chosen in yet. */
   value: string;
+  /** Called with "HH:MM", or with "" when the trader clears the field. */
   onChange: (time: string) => void;
-  /** The trader's own clock, as HH:MM — passed in rather than read here, so
-   *  this component has no opinion about which timezone the app runs on. */
-  now: string;
+  /** The trader's own clock, as HH:MM. Passed in rather than read here, so
+   *  this component has no opinion about which timezone the app runs on.
+   *  Omitted where "now" means nothing — a rule's allowed hours, say. */
+  now?: string;
+  /** The latest time that may be chosen, as HH:MM. Passed only when the
+   *  chosen DATE is today — on any other day every hour is a real hour, and a
+   *  wheel that stopped at the current time would refuse yesterday evening. */
+  max?: string;
+  /** The small inline shape, for a control that sits in a row of others. */
+  compact?: boolean;
+  /** Offer "נקה". Only where an empty field is a meaningful answer. */
+  clearable?: boolean;
+  /** Draw the closed field in gold, for a filter that is currently on. */
+  accent?: boolean;
+  placeholder?: string;
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const { h, m } = split(value);
+  const empty = value === '';
+
+  // The ceiling, split the same way. An hour past the ceiling is blocked
+  // outright; a minute is blocked only inside the final hour, because 45 is
+  // fine at 14:45 and not at 15:45.
+  const ceil = max ? split(max) : null;
+  const hourBlocked = ceil ? (v: number) => v > ceil.h : undefined;
+  const minuteBlocked = ceil && h >= ceil.h ? (v: number) => v > ceil.m : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -135,7 +182,13 @@ export default function TimeField({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`dtf-trigger${open ? ' is-open' : ''}`}
+        aria-label={label}
+        className={
+          'dtf-trigger'
+          + (compact ? ' is-compact' : '')
+          + (open ? ' is-open' : '')
+          + (accent && !open ? ' is-accent' : '')
+        }
         aria-haspopup="dialog"
         aria-expanded={open}
       >
@@ -143,23 +196,42 @@ export default function TimeField({
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7v5l3.2 2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="dtf-value">{pad2(h)}:{pad2(m)}</span>
-        <span className="dtf-sub">{partOfDay(h)}</span>
+        <span className={`dtf-value${empty ? ' is-empty' : ''}`}>
+          {empty ? placeholder : `${pad2(h)}:${pad2(m)}`}
+        </span>
+        {!compact && !empty && <span className="dtf-sub">{partOfDay(h)}</span>}
       </button>
 
       {open && (
-        <div className="dtf-pop dtf-time" role="dialog" aria-label="בחירת שעה">
+        <div className="dtf-pop dtf-time" role="dialog" aria-label={label ?? 'בחירת שעה'}>
           <div className="dtf-wheels">
             <div className="dtf-band" />
-            {/* Hours on the right, minutes on the left — the reading order of
-                the page, so 15:39 is scanned the way it is written. */}
-            <Wheel label="שעה" values={HOURS} value={h} onPick={v => onChange(`${pad2(v)}:${pad2(m)}`)} />
-            <Wheel label="דקה" values={MINUTES} value={m} onPick={v => onChange(`${pad2(h)}:${pad2(v)}`)} />
+            {/* Hour first, minute second — which puts the hour on the reading
+                side in either direction, so 15:39 is scanned the way it is
+                written whether the surrounding page is RTL or LTR. */}
+            <Wheel
+              label="שעה" values={HOURS} value={h} blocked={hourBlocked}
+              // Moving into the final hour can strand the minutes past the
+              // ceiling, so they come back with it rather than leaving a time
+              // on screen that the form would then refuse.
+              onPick={v => onChange(`${pad2(v)}:${pad2(ceil && v === ceil.h && m > ceil.m ? ceil.m : m)}`)}
+            />
+            <Wheel
+              label="דקה" values={MINUTES} value={m} blocked={minuteBlocked}
+              onPick={v => onChange(`${pad2(h)}:${pad2(v)}`)}
+            />
           </div>
           <div className="dtf-foot">
-            <button type="button" className="dtf-btn is-primary" onClick={() => { onChange(now); setOpen(false); }}>
-              עכשיו
-            </button>
+            {now && (
+              <button type="button" className="dtf-btn is-primary" onClick={() => { onChange(now); setOpen(false); }}>
+                עכשיו
+              </button>
+            )}
+            {clearable && (
+              <button type="button" className="dtf-btn" onClick={() => { onChange(''); setOpen(false); }}>
+                נקה
+              </button>
+            )}
             <button type="button" className="dtf-btn" onClick={() => setOpen(false)}>
               סיימתי
             </button>

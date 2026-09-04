@@ -15,6 +15,7 @@ import InsightText from '../../components/InsightText';
 import TypingDots from '../../components/TypingDots';
 import WeeklyReportPanel from '../../components/WeeklyReportPanel';
 import EvolutionAxis from '../../components/EvolutionAxis';
+import TimeField from '../../components/form/TimeField';
 import TrackingArchive from '../../components/TrackingArchive';
 import { readInsightCache, tradesFingerprint, writeInsightCache } from '../../lib/ai/insightCache';
 
@@ -1197,7 +1198,6 @@ export default function AiAnalyticsPage() {
                     if (!hourCapable) return null;
                     const active = hourStartMin != null && whatIfId === `hour_${hourStartMin}`;
                     const endMin = hourStartMin != null ? (hourStartMin + 60) % 1440 : null;
-                    const inputCls = `py-2 px-3 rounded-lg border bg-[#0a0a0b] font-mono text-xs font-semibold outline-none transition-colors [color-scheme:dark] ${active ? 'border-[#d4af37]/60 text-[#d4af37]' : 'border-[#222] text-white/70 hover:border-[#2a2a2d]'}`;
                     const pickStart = (v: string) => {
                       if (!v) { setHourStartMin(null); if (whatIfId?.startsWith('hour_')) setWhatIfId(null); return; }
                       const [h, mi] = v.split(':').map(Number); const m = h * 60 + mi;
@@ -1211,10 +1211,21 @@ export default function AiAnalyticsPage() {
                     return (
                       <div key="שעה">
                         <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">שעה · חלון של שעה, לבחירתך</span>
-                        <div className="flex items-center gap-2.5 flex-wrap" dir="ltr">
-                          <input type="time" step={60} aria-label="שעת התחלה" value={hourStartMin != null ? fmtMin(hourStartMin) : ''} onChange={e => pickStart(e.target.value)} className={inputCls} />
-                          <span className="font-mono text-xs text-white/30">→</span>
-                          <input type="time" step={60} aria-label="שעת סיום" value={endMin != null ? fmtMin(endMin) : ''} onChange={e => pickEnd(e.target.value)} className={inputCls} />
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          {/* Either end sets the window; the other is derived.
+                              Both clear it, which is how the filter is turned
+                              off again. */}
+                          <TimeField
+                            compact clearable accent={active} label="שעת התחלה"
+                            value={hourStartMin != null ? fmtMin(hourStartMin) : ''}
+                            onChange={pickStart}
+                          />
+                          <span className="font-mono text-xs text-white/30">←</span>
+                          <TimeField
+                            compact clearable accent={active} label="שעת סיום"
+                            value={endMin != null ? fmtMin(endMin) : ''}
+                            onChange={pickEnd}
+                          />
                         </div>
                       </div>
                     );

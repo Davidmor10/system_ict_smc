@@ -397,14 +397,26 @@ describe('the trade form checks the date, not the hour it is opened', () => {
 
   it('blocks a future date in the picker and by hand', () => {
     expect(FORM).toContain('max={todayISO()}');
-    expect(FORM).toContain('dateProblem(form.date, form.time, todayISO())');
+    expect(FORM).toContain('dateProblem(form.date, form.time, todayISO(), clockInZone())');
   });
 
   it('stops the save rather than only colouring the field', () => {
     expect(FORM).toContain('dateIssue === null');
   });
 
-  // Nothing here may consult the current time to decide whether the form works.
+  // An hour that has not happened yet, which the date rule alone lets through:
+  // at nine in the morning, today plus 23:50 was accepted and then counted.
+  //
+  // The wheels are capped ONLY when the chosen date is today. Passing the
+  // clock unconditionally would refuse yesterday evening, which is most of
+  // what a journal is for.
+  it('caps the hour on today, and only on today', () => {
+    expect(FORM).toContain("max={form.date === todayISO() ? clockInZone() : undefined}");
+  });
+
+  // Nothing here may gate the form on the day it is OPENED — only on the day
+  // and hour written on the trade. `clockInZone` above is the trader's wall
+  // clock, compared against a date the form already knows is today.
   it('never gates the form on when it is being used', () => {
     expect(FORM).not.toContain('new Date().getDay()');
     expect(FORM).not.toContain('closureAt(');
