@@ -237,7 +237,7 @@
   position: relative;
   transition: all 0.13s var(--dtf-ease);
 }
-.dtf-day:hover:not(:disabled) {
+.dtf-day:hover:not([aria-disabled='true']) {
   background: var(--dtf-gold-08);
   border-color: var(--dtf-gold-30);
   color: var(--dtf-gold-t);
@@ -265,10 +265,18 @@
 }
 .dtf-day.is-sel::after { background: rgba(0, 0, 0, 0.5); }
 
+/* The keyboard cursor. Every day is focusable — see DateField — so this is
+   what a keyboard user follows, and it has to read on the gold fill of the
+   chosen day as well as on the panel behind it. */
+.dtf-day:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dtf-panel), 0 0 0 4px var(--dtf-gold);
+}
+
 /* Two different refusals, drawn differently on purpose: a day the
    market was shut is struck through, a day that has not happened is
    simply faint. */
-.dtf-day:disabled { cursor: not-allowed; }
+.dtf-day[aria-disabled='true'] { cursor: not-allowed; }
 .dtf-day.is-shut  { color: rgba(192, 120, 120, 0.34); text-decoration: line-through; text-decoration-thickness: 1px; }
 .dtf-day.is-later { color: var(--dtf-w18); }
 
@@ -398,6 +406,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dtf-pop, .dtf-grid.slide-next, .dtf-grid.slide-prev { animation: none; }
-  .dtf-day:hover:not(:disabled) { transform: none; }
+  .dtf-day:hover:not([aria-disabled='true']) { transform: none; }
   .dtf-wheel { scroll-behavior: auto; }
 }

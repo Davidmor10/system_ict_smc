@@ -190,8 +190,14 @@ export default function DateField({
                   key={d}
                   type="button"
                   data-d={d}
-                  disabled={later || shut}
-                  onClick={() => pick(d)}
+                  // `aria-disabled`, not `disabled`. A disabled button cannot
+                  // take focus, so walking the arrow keys onto a Saturday left
+                  // the focus ring behind on the last open day while the
+                  // cursor moved on — the keyboard still worked and nothing on
+                  // screen said where it was. Every day is focusable; the
+                  // click is refused here instead.
+                  aria-disabled={later || shut}
+                  onClick={() => { if (!later && !shut) pick(d); }}
                   tabIndex={d === cursor ? 0 : -1}
                   title={later ? 'התאריך עוד לא הגיע' : shut ? 'אין מסחר ביום הזה' : undefined}
                   className={

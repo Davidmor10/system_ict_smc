@@ -64,6 +64,20 @@ describe('the picker stylesheet covers what the pickers render', () => {
     }
   });
 
+  // A day the calendar refuses is marked with aria-disabled rather than
+  // disabled, so the arrow keys can still put the focus ring on it — a
+  // disabled button cannot take focus, and the cursor moved on without it.
+  // The stylesheet has to key off the same attribute, and it has to draw a
+  // focus ring at all, or the keyboard cursor is invisible.
+  it('draws the keyboard cursor the calendar relies on', () => {
+    expect(SOURCES[0]).toContain('aria-disabled={later || shut}');
+    expect(SOURCES[0]).not.toMatch(/\sdisabled=\{later/);
+    expect(CSS).toContain('.dtf-day:focus-visible');
+    expect(CSS).toContain(".dtf-day[aria-disabled='true']");
+    // A :disabled rule here would silently stop matching.
+    expect(CSS).not.toMatch(/\.dtf-day[^{]*:disabled/);
+  });
+
   // The wheel's arithmetic is split across the two files, and nothing at
   // runtime notices when it stops adding up: the component scrolls a column
   // to `index * ITEM`, which centres the chosen row on the gold band only

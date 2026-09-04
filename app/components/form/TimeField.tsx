@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
+import { landedValue } from '../../lib/form/wheel';
 import './datetime.css';
 
 /** Row height, in pixels, matching .dtf-tick in the stylesheet. Centring the
@@ -56,14 +57,15 @@ function split(time: string): { h: number; m: number } {
 /** One column of the wheel. Owns its own scrolling: the parent tells it what
  *  is chosen, it reports back when the wheel settles somewhere else. */
 function Wheel({
-  values, value, onPick, label, blocked,
+  values, value, onPick, label, ceiling,
 }: {
   values: number[]; value: number; onPick: (v: number) => void; label: string;
-  /** Values that cannot be chosen — on today, the hours that have not
-   *  happened. Shown faint rather than removed, so the column keeps its
-   *  shape and the trader can see where the day currently ends. */
-  blocked?: (v: number) => boolean;
+  /** The highest value that may be chosen — on today, the hour it currently
+   *  is. Everything above it is shown faint rather than removed, so the
+   *  column keeps its shape and the trader can see where the day ends. */
+  ceiling?: number;
 }) {
+  const blocked = (v: number) => ceiling !== undefined && v > ceiling;
   const col = useRef<HTMLDivElement>(null);
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,21 +85,19 @@ function Wheel({
     settle.current = setTimeout(() => {
       const el = col.current;
       if (!el) return;
-      const i = Math.max(0, Math.min(values.length - 1, Math.round(el.scrollTop / ITEM)));
-      const landed = values[i];
+      // Clamps rather than springing back — lib/form/wheel says why.
+      const landed = landedValue(values, el.scrollTop, ITEM, ceiling);
       if (landed === value) return;
-      // Scrolled past the end of the day: bounce back to where it stops,
-      // rather than reporting a time that has not happened.
-      if (blocked?.(landed)) {
-        el.scrollTo({ top: values.indexOf(value) * ITEM, behavior: 'smooth' });
-        return;
-      }
       onPick(landed);
+      // Clamped: the column is not where the value now is, so bring it there.
+      if (blocked(landedValue(values, el.scrollTop, ITEM))) {
+        el.scrollTo({ top: values.indexOf(landed) * ITEM, behavior: 'smooth' });
+      }
     }, 110);
   };
 
   const tap = (v: number) => {
-    if (blocked?.(v)) return;
+    if (blocked(v)) return;
     onPick(v);
     col.current?.scrollTo({ top: values.indexOf(v) * ITEM, behavior: 'smooth' });
   };
@@ -113,8 +113,8 @@ function Wheel({
             type="button"
             role="option"
             aria-selected={v === value}
-            disabled={blocked?.(v) ?? false}
-            className={`dtf-tick${v === value ? ' is-on' : ''}${blocked?.(v) ? ' is-later' : ''}`}
+            disabled={blocked(v)}
+            className={`dtf-tick${v === value ? ' is-on' : ''}${blocked(v) ? ' is-later' : ''}`}
             onClick={() => tap(v)}
           >
             {pad2(v)}
@@ -160,8 +160,8 @@ export default function TimeField({
   // outright; a minute is blocked only inside the final hour, because 45 is
   // fine at 14:45 and not at 15:45.
   const ceil = max ? split(max) : null;
-  const hourBlocked = ceil ? (v: number) => v > ceil.h : undefined;
-  const minuteBlocked = ceil && h >= ceil.h ? (v: number) => v > ceil.m : undefined;
+  const hourCeiling = ceil?.h;
+  const minuteCeiling = ceil && h >= ceil.h ? ceil.m : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -210,14 +210,14 @@ export default function TimeField({
                 side in either direction, so 15:39 is scanned the way it is
                 written whether the surrounding page is RTL or LTR. */}
             <Wheel
-              label="שעה" values={HOURS} value={h} blocked={hourBlocked}
+              label="שעה" values={HOURS} value={h} ceiling={hourCeiling}
               // Moving into the final hour can strand the minutes past the
               // ceiling, so they come back with it rather than leaving a time
               // on screen that the form would then refuse.
               onPick={v => onChange(`${pad2(v)}:${pad2(ceil && v === ceil.h && m > ceil.m ? ceil.m : m)}`)}
             />
             <Wheel
-              label="דקה" values={MINUTES} value={m} blocked={minuteBlocked}
+              label="דקה" values={MINUTES} value={m} ceiling={minuteCeiling}
               onPick={v => onChange(`${pad2(h)}:${pad2(v)}`)}
             />
           </div>
