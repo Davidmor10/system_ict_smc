@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { TradeEntry, Direction, TradeResult, EmotionalState, Bias } from '../lib/journal';
 import { todayISO, computeStats, UNSPECIFIED_MODEL } from '../lib/journal';
+import { dateProblem } from '../lib/market/hours';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { decidedCounts, winRatePercent } from '../lib/calc/decided';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
@@ -721,7 +722,18 @@ export default function TradeForm({
    *  opening an old trade is now how it gets finished. The exit price included
    *  — a trade left OPEN under the old flow is closed by typing where it
    *  closed. */
-  const canSubmit = missingRequired.length === 0;
+  /** A trade that could not have happened.
+   *
+   *  Two mistakes, one line. A mistyped year puts a trade in 2035 and it then
+   *  joins every statistic, trend and behaviour count as though it were real;
+   *  a weekend date describes a session the exchange never ran.
+   *
+   *  It checks the DATE ON THE TRADE, never the clock. Traders write up their
+   *  week at the weekend, and a journal that refused entries exactly when
+   *  someone sits down to catch up is a journal they stop using. */
+  const dateIssue = dateProblem(form.date, form.time, todayISO());
+
+  const canSubmit = missingRequired.length === 0 && dateIssue === null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -796,7 +808,15 @@ export default function TradeForm({
               form. */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="תאריך">
-              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className={inputCls} required />
+              {/* `max` stops the calendar offering a day that has not happened;
+                  `dateIssue` catches a year typed by hand, which the picker
+                  never sees. */}
+              <input
+                type="date" value={form.date} max={todayISO()}
+                onChange={e => set('date', e.target.value)}
+                className={inputCls} required
+                aria-invalid={dateIssue !== null}
+              />
             </Field>
             <Field label="שעת כניסה">
               <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
@@ -1224,6 +1244,12 @@ export default function TradeForm({
             </span>
           </p>
         )}
+        {dateIssue && (
+          <p className="rounded-xl border border-[#8b3a3a]/50 bg-[#8b3a3a]/10 px-4 py-3 text-[13px] leading-relaxed text-[#c07878]">
+            {dateIssue}
+          </p>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button

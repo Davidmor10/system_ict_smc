@@ -340,3 +340,73 @@ describe('the checkout refuses to take a declaration it cannot honour', () => {
     expect(FLOW).toContain('|| !payable');
   });
 });
+
+// ── an approval that failed halfway ─────────────────────────────────────────
+//
+// The request is marked approved BEFORE the access is granted. When the grant
+// failed, the owner was left with a row reading "approved", a customer with
+// nothing, and a retry that could only ever return 409 — the row it looked for
+// was no longer pending. The only way out was a hand-written SQL statement.
+
+describe('an approval can be run again to repair itself', () => {
+  const REQUESTS = read('lib', 'payments', 'requests.ts');
+  const DECISION = read('api', 'payment-requests', '[id]', 'decision', 'route.ts');
+
+  it('reports an already-decided row instead of refusing it', () => {
+    expect(REQUESTS).toContain('alreadyDecided');
+    expect(REQUESTS).toContain("(existing as { status: string }).status !== status");
+  });
+
+  // A repeat only repairs the SAME decision. Re-running an approval over a
+  // rejection would overturn it silently.
+  it('refuses when the stored decision is a different one', () => {
+    const block = REQUESTS.slice(REQUESTS.indexOf('const { data: existing }'));
+    expect(block).toContain('return { ok: false }');
+  });
+
+  it('re-runs the access grant on the repeat', () => {
+    expect(DECISION).toContain('renewalStart');
+    expect(DECISION).toContain('repaired: decision.alreadyDecided === true');
+  });
+});
+
+// ── a renewal must not take back paid time ──────────────────────────────────
+
+describe('the approval extends rather than resets', () => {
+  const DECISION = read('api', 'payment-requests', '[id]', 'decision', 'route.ts');
+
+  it('reads what the customer still holds before writing a new expiry', () => {
+    expect(DECISION).toContain("select('access_until')");
+    expect(DECISION).toContain('accessPeriodEnd(');
+    expect(DECISION).toContain('renewalStart(');
+  });
+
+  it('no longer writes a month from today unconditionally', () => {
+    expect(DECISION).not.toContain('accessPeriodEnd().toISOString()');
+  });
+});
+
+// ── a trade that could not have happened ────────────────────────────────────
+//
+// It validates the DATE ON THE TRADE, never the clock. Traders write up their
+// week at the weekend, and a journal that refused entries exactly when someone
+// sits down to catch up is a journal they stop using.
+
+describe('the trade form checks the date, not the hour it is opened', () => {
+  const FORM = read('components', 'TradeForm.tsx');
+
+  it('blocks a future date in the picker and by hand', () => {
+    expect(FORM).toContain('max={todayISO()}');
+    expect(FORM).toContain('dateProblem(form.date, form.time, todayISO())');
+  });
+
+  it('stops the save rather than only colouring the field', () => {
+    expect(FORM).toContain('dateIssue === null');
+  });
+
+  // Nothing here may consult the current time to decide whether the form works.
+  it('never gates the form on when it is being used', () => {
+    expect(FORM).not.toContain('new Date().getDay()');
+    expect(FORM).not.toContain('closureAt(');
+  });
+});

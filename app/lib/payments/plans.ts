@@ -125,3 +125,22 @@ export function accessPeriodEnd(from: Date = new Date()): Date {
   end.setMonth(end.getMonth() + 1);
   return end;
 }
+
+/** Where a renewal's month should be added from.
+ *
+ *  A RENEWAL EXTENDS; IT DOES NOT RESET.
+ *
+ *  The approval used to write "today plus a month" unconditionally, so a
+ *  customer who paid a week before their access ran out lost that week — they
+ *  had bought it and it was thrown away. Renew consistently early and it is a
+ *  fortnight a year of paid time taken back.
+ *
+ *  The new period starts from whichever is later: now, or the end of the one
+ *  they are still inside. An expiry already in the past is not a credit, so it
+ *  falls back to now. */
+export function renewalStart(currentAccessUntil: string | null | undefined, now: Date = new Date()): Date {
+  if (!currentAccessUntil) return now;
+  const current = new Date(currentAccessUntil);
+  if (Number.isNaN(current.getTime())) return now;
+  return current.getTime() > now.getTime() ? current : now;
+}

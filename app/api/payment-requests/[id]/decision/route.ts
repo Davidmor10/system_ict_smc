@@ -6,7 +6,7 @@ import { logSecurityEvent } from '../../../../lib/securityLog';
 import { logger } from '../../../../lib/logger';
 import { viewerEmail, isAdminEmail } from '../../../../lib/payments/admin';
 import { decideRequest } from '../../../../lib/payments/requests';
-import { PLANS, accessPeriodEnd } from '../../../../lib/payments/plans';
+import { PLANS, accessPeriodEnd, renewalStart } from '../../../../lib/payments/plans';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,17 +63,31 @@ export async function POST(
   if (status === 'approved' && decision.clerkId && decision.plan && isSupabaseConfigured()) {
     const plan = PLANS[decision.plan];
     try {
+      const supabase = createServerSupabaseClient();
+
+      // A RENEWAL EXTENDS; IT DOES NOT RESET. Writing "today plus a month"
+      // unconditionally took back whatever the customer had left — pay a week
+      // early and that week was gone. Read what they still hold and add to it.
+      const { data: current } = await supabase
+        .from('profiles')
+        .select('access_until')
+        .eq('clerk_id', decision.clerkId)
+        .maybeSingle();
+      const until = accessPeriodEnd(
+        renewalStart((current as { access_until?: string | null } | null)?.access_until),
+      );
+
       // Upsert, not update. The profiles row is normally there, but an account
       // whose provisioning webhook never fired would silently be approved into
       // nothing — money taken, access still closed.
-      const { error } = await createServerSupabaseClient()
+      const { error } = await supabase
         .from('profiles')
         .upsert(
           {
             clerk_id: decision.clerkId,
             role: plan.role,
             subscription_status: 'active',
-            access_until: accessPeriodEnd().toISOString(),
+            access_until: until.toISOString(),
           },
           { onConflict: 'clerk_id' },
         );
@@ -88,5 +102,8 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({ ok: true, status });
+  // `alreadyDecided` says the row had been decided before and this call
+  // re-ran the access grant — the recovery path for an approval that once
+  // failed halfway. The panel shows the same settled row either way.
+  return NextResponse.json({ ok: true, status, repaired: decision.alreadyDecided === true });
 }

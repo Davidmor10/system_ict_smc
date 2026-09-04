@@ -136,10 +136,11 @@ export async function decideRequest(
   id: string,
   status: Exclude<RequestStatus, 'pending'>,
   decidedBy: string,
-): Promise<{ ok: boolean; clerkId?: string; plan?: PlanKey }> {
+): Promise<{ ok: boolean; clerkId?: string; plan?: PlanKey; alreadyDecided?: boolean }> {
   if (!isSupabaseConfigured()) return { ok: false };
+  const supabase = createServerSupabaseClient();
   try {
-    const { data, error } = await createServerSupabaseClient()
+    const { data, error } = await supabase
       .from('payment_requests')
       .update({ status, decided_at: new Date().toISOString(), decided_by: decidedBy })
       .eq('id', id)
@@ -147,9 +148,35 @@ export async function decideRequest(
       .select('clerk_id, plan')
       .maybeSingle();
     if (error) throw error;
-    if (!data) return { ok: false };
-    const plan = (data as { plan: string }).plan;
-    return { ok: true, clerkId: (data as { clerk_id: string }).clerk_id, plan: isPlanKey(plan) ? plan : undefined };
+
+    if (data) {
+      const plan = (data as { plan: string }).plan;
+      return { ok: true, clerkId: (data as { clerk_id: string }).clerk_id, plan: isPlanKey(plan) ? plan : undefined };
+    }
+
+    // No pending row moved. Either somebody decided it already, or — the case
+    // this branch exists for — a previous approval marked it and then FAILED
+    // to open the access. That left the owner with a row reading "approved",
+    // a customer with nothing, and a retry that could only ever return 409,
+    // because the row it was looking for was no longer pending. The only way
+    // out was a hand-written SQL statement.
+    //
+    // So a repeat of the same decision reports the row rather than refusing:
+    // the caller can run the access grant again, which is idempotent.
+    const { data: existing } = await supabase
+      .from('payment_requests')
+      .select('clerk_id, plan, status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (!existing || (existing as { status: string }).status !== status) return { ok: false };
+    const plan = (existing as { plan: string }).plan;
+    return {
+      ok: true,
+      alreadyDecided: true,
+      clerkId: (existing as { clerk_id: string }).clerk_id,
+      plan: isPlanKey(plan) ? plan : undefined,
+    };
   } catch (err) {
     logger.error('payment request decision failed', { id, error: err instanceof Error ? err.message : String(err) });
     return { ok: false };

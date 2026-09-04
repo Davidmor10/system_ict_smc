@@ -8,7 +8,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import {
   PLANS, PLAN_KEYS, PLAN_DISPLAY_ORDER, DEFAULT_PLAN,
-  isPlanKey, isRequestStatus, isVerificationValid, accessPeriodEnd,
+  isPlanKey, isRequestStatus, isVerificationValid, accessPeriodEnd, renewalStart,
 } from '../../app/lib/payments/plans';
 import { isAdminEmail } from '../../app/lib/payments/admin';
 
@@ -138,5 +138,44 @@ describe('the access period', () => {
     const end = accessPeriodEnd(new Date('2026-01-31T10:00:00Z'));
     expect(Number.isNaN(end.getTime())).toBe(false);
     expect(end.getTime()).toBeGreaterThan(new Date('2026-01-31T10:00:00Z').getTime());
+  });
+});
+
+// ── a renewal extends; it does not reset ────────────────────────────────────
+//
+// The approval wrote "today plus a month" unconditionally, so a customer who
+// paid a week before their access ran out lost that week — they had bought it
+// and it was thrown away. Renew consistently early and that is a fortnight a
+// year of paid time taken back.
+
+describe('renewalStart', () => {
+  const NOW = new Date('2026-09-04T12:00:00Z');
+
+  it('starts from the end of the period they are still inside', () => {
+    const inTen = '2026-09-14T12:00:00Z';
+    expect(renewalStart(inTen, NOW).toISOString()).toBe(new Date(inTen).toISOString());
+  });
+
+  it('gives a first-time customer the month from today', () => {
+    expect(renewalStart(null, NOW).getTime()).toBe(NOW.getTime());
+    expect(renewalStart(undefined, NOW).getTime()).toBe(NOW.getTime());
+  });
+
+  // An expiry already past is not a credit to be handed back.
+  it('does not backdate from an expiry that has already passed', () => {
+    expect(renewalStart('2026-08-01T00:00:00Z', NOW).getTime()).toBe(NOW.getTime());
+  });
+
+  it('falls back to now rather than throwing on an unreadable date', () => {
+    expect(renewalStart('not a date', NOW).getTime()).toBe(NOW.getTime());
+  });
+
+  // The whole point, stated as the arithmetic a customer would check.
+  it('adds a full month to what was left, not to today', () => {
+    const left = '2026-09-11T12:00:00Z';
+    const end = accessPeriodEnd(renewalStart(left, NOW));
+    expect(end.toISOString().slice(0, 10)).toBe('2026-10-11');
+    // The resetting behaviour would have landed here instead, a week short.
+    expect(end.toISOString().slice(0, 10)).not.toBe('2026-10-04');
   });
 });
