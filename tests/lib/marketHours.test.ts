@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  closureAt, closureFor, isFutureDate, dateProblem, REOPEN_HOUR,
+  closureAt, closureFor, isFutureDate, dateProblem, REOPEN_HOUR, FUTURE_REASON,
 } from '../../app/lib/market/hours';
 
 // 2026-09-04 is a Friday, so the week around it is:
@@ -100,7 +100,9 @@ describe('a date that has not happened', () => {
 describe('the one call the form makes', () => {
   // A future date is the more serious mistake, so it is the one reported.
   it('reports the future before the closure', () => {
-    expect(dateProblem('2035-09-06', '10:00', FRI)).toContain('התאריך עוד לא הגיע');
+    // Compared against the exported constant, not a literal: the wording is
+    // rewritten from time to time and the rule is what this asserts.
+    expect(dateProblem('2035-09-06', '10:00', FRI)).toBe(FUTURE_REASON);
   });
 
   it('reports a closure on a past date', () => {

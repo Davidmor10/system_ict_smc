@@ -17,6 +17,8 @@ import {
 import { ruleTitle, type Rule } from '../lib/rules/types';
 import { sessionForHour, getActiveSessionKey, sessionLabel, type SessionKey } from '../lib/sessions';
 import { clockInZone } from '../lib/time/zone';
+import DateField from './form/DateField';
+import TimeField from './form/TimeField';
 import { analyzeInstruments, isoWeekKey, normSession } from '../lib/analytics';
 import { confidenceLevelFor } from '../lib/analytics/confidence';
 import { computeBiasAlignment } from '../lib/dailyBias';
@@ -808,18 +810,18 @@ export default function TradeForm({
               form. */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="תאריך">
-              {/* `max` stops the calendar offering a day that has not happened;
-                  `dateIssue` catches a year typed by hand, which the picker
-                  never sees. */}
-              <input
-                type="date" value={form.date} max={todayISO()}
-                onChange={e => set('date', e.target.value)}
-                className={inputCls} required
-                aria-invalid={dateIssue !== null}
+              {/* Our own calendar, not the browser's. It strikes out the days
+                  the exchange was shut and stops at today, so the refusal is
+                  visible before the click rather than as a red banner after
+                  it. `dateIssue` below still guards the value itself. */}
+              <DateField
+                value={form.date} max={todayISO()}
+                onChange={v => set('date', v)}
+                invalid={dateIssue !== null}
               />
             </Field>
             <Field label="שעת כניסה">
-              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} className={inputCls} required />
+              <TimeField value={form.time} onChange={v => set('time', v)} now={clockInZone()} />
             </Field>
           </div>
           <p className="font-mono text-[10px] text-white/30 -mt-2">
@@ -983,8 +985,8 @@ export default function TradeForm({
             </div>
           ) : (
             <p className="font-mono text-[11px] text-white/40 leading-relaxed">
-              מחיר היציאה הוא מה שקובע את ה-R ואת התוצאה — שניהם מחושבים, לא נשאלים.
-              עסקה מתועדת אחרי שהיא נסגרה, ולכן בלי מחיר יציאה אי אפשר לשמור אותה.
+              כאן רושמים עסקה שכבר נסגרה, ולכן צריך מחיר יציאה.
+              ממנו המערכת מחשבת לבד כמה הרווחת ואם זה ניצחון או הפסד — אותך לא שואלים על זה.
             </p>
           )}
 
@@ -1150,7 +1152,7 @@ export default function TradeForm({
 
             <p className="font-mono text-[11px] text-white/40 leading-relaxed mt-2">
               {form.followedRules === ''
-                ? 'אם תדלג — העסקה לא תיספר לשני הכיוונים. עדיף לא לענות מאשר לענות לא נכון.'
+                ? 'אם תדלג, העסקה לא תיספר לאף צד. עדיף לא לענות מאשר לענות לא נכון.'
                 : 'התשובה שלך על העסקה הזו — לא נגזרת מהתוצאה.'}
             </p>
           </Field>
@@ -1239,8 +1241,8 @@ export default function TradeForm({
             עוד חסר: {missingRequired.join(' · ')}
             <span className="block text-white/30 mt-0.5">
               {initial
-                ? 'העסקה הזאת נשמרה לפני שהשדות האלה היו חובה. בלעדיהם היא לא נספרת בניתוח.'
-                : 'עסקה מתועדת אחרי שהיא נסגרה. לכל שאלה יש תשובה שמשמעותה "לא קרה כלום".'}
+                ? 'העסקה הזאת נשמרה לפני שהשדות האלה היו חובה. בלעדיהם היא לא נכנסת לניתוח.'
+                : 'רושמים עסקה אחרי שהיא נסגרה. לכל שאלה יש גם תשובה של "לא קרה כלום".'}
             </span>
           </p>
         )}

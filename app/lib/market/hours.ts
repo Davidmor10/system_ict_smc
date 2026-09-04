@@ -46,15 +46,15 @@ export interface MarketClosure {
  *  Returns null when the market was open, so a caller can use it as a guard. */
 export function closureAt(day: number, hour: number): MarketClosure | null {
   if (day === SAT) {
-    return { reason: 'הבורסה סגורה בשבת. המסחר נעצר בשישי בערב ונפתח שוב במוצאי ראשון.' };
+    return { reason: 'בשבת אין מסחר. הבורסה סוגרת בשישי בערב ופותחת שוב בלילה שבין ראשון לשני.' };
   }
   if (day === SUN && hour < 24) {
     // Sunday is closed all day in Israel time: the week reopens at 01:00 on
     // Monday, not on Sunday evening.
-    return { reason: 'הבורסה סגורה בראשון. המסחר נפתח שוב בלילה שבין ראשון לשני, בסביבות 01:00.' };
+    return { reason: 'ביום ראשון אין מסחר. הבורסה פותחת בלילה שבין ראשון לשני, בערך ב-01:00.' };
   }
   if (day === 1 && hour < REOPEN_HOUR) {
-    return { reason: 'המסחר בשבוע הזה עוד לא נפתח. הפתיחה היא בסביבות 01:00 בלילה שבין ראשון לשני.' };
+    return { reason: 'בשעה הזאת הבורסה עוד סגורה. היא פותחת בערך ב-01:00 בלילה שבין ראשון לשני.' };
   }
   return null;
 }
@@ -88,7 +88,7 @@ export function isFutureDate(dateISO: string, todayISO: string): boolean {
   return dateISO > todayISO;
 }
 
-export const FUTURE_REASON = 'התאריך עוד לא הגיע. עסקה עתידית תיכנס לכל החישובים ותעוות אותם.';
+export const FUTURE_REASON = 'התאריך הזה עוד לא הגיע. אפשר לתעד רק עסקה שכבר קרתה.';
 
 /** Everything wrong with this date and time, or null when nothing is. */
 export function dateProblem(dateISO: string, time: string | null | undefined, todayISO: string): string | null {

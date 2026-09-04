@@ -1,0 +1,379 @@
+/* ══════════════════════════════════════════════════════════════════
+   The date and time pickers.
+
+   THE BROWSER'S OWN PICKERS ARE THE REASON THIS FILE EXISTS. Chrome
+   renders `<input type="date">` as a white LTR calendar with its own
+   fonts and its own blue — on a black RTL Hebrew screen it lands like a
+   window from another application, and no amount of CSS reaches inside
+   it. So the field opens a panel we draw ourselves.
+
+   Same system as the journey and statistics screens: Hebrew words take
+   Heebo, digits take Geist Mono with tabular figures, so a column of
+   days and a column of minutes stay in line.
+
+   Scoped under .dtf so nothing here leaks into the form around it.
+══════════════════════════════════════════════════════════════════ */
+
+.dtf {
+  --dtf-panel:   #0d0d0f;
+  --dtf-panel-2: #08080a;
+  --dtf-field:   #111113;
+  --dtf-rule:    #1c1c1e;
+  --dtf-rule-str:#2a2a2d;
+
+  --dtf-gold:    #d4af37;
+  --dtf-gold-t:  #e3c768;
+  --dtf-gold-08: rgba(212, 175, 55, 0.08);
+  --dtf-gold-16: rgba(212, 175, 55, 0.16);
+  --dtf-gold-30: rgba(212, 175, 55, 0.30);
+  --dtf-gold-55: rgba(212, 175, 55, 0.55);
+
+  --dtf-bear:    #8b3a3a;
+  --dtf-bear-t:  #c07878;
+
+  --dtf-w88: rgba(255, 255, 255, 0.88);
+  --dtf-w60: rgba(255, 255, 255, 0.60);
+  --dtf-w42: rgba(255, 255, 255, 0.42);
+  --dtf-w30: rgba(255, 255, 255, 0.30);
+  --dtf-w18: rgba(255, 255, 255, 0.18);
+  --dtf-w08: rgba(255, 255, 255, 0.08);
+
+  --dtf-num: var(--font-geist-mono, ui-monospace), ui-monospace, monospace;
+  --dtf-ui:  var(--font-heebo, 'Heebo'), system-ui, sans-serif;
+  --dtf-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: relative;
+  display: block;
+}
+
+/* ── the closed field ───────────────────────────────────────────── */
+
+.dtf-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--dtf-field);
+  border: 1px solid var(--dtf-rule);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: right;
+  transition: border-color 0.16s var(--dtf-ease),
+              background 0.16s var(--dtf-ease),
+              box-shadow 0.16s var(--dtf-ease);
+}
+.dtf-trigger:hover { border-color: var(--dtf-rule-str); background: #131315; }
+.dtf-trigger:focus-visible { outline: none; border-color: var(--dtf-gold-55); box-shadow: 0 0 0 3px var(--dtf-gold-08); }
+.dtf-trigger.is-open { border-color: var(--dtf-gold-55); background: #131315; box-shadow: 0 0 0 3px var(--dtf-gold-08); }
+.dtf-trigger.is-bad  { border-color: rgba(139, 58, 58, 0.55); background: rgba(139, 58, 58, 0.06); }
+
+/* The value itself. Mono, tabular, so the field does not jitter as the
+   digits change. */
+.dtf-value {
+  font-family: var(--dtf-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--dtf-w88);
+  flex: 1;
+}
+.dtf-trigger.is-bad .dtf-value { color: var(--dtf-bear-t); }
+
+/* The weekday, or the session hint — context, not data. */
+.dtf-sub {
+  font-family: var(--dtf-ui);
+  font-size: 11px;
+  color: var(--dtf-w30);
+  white-space: nowrap;
+}
+
+.dtf-glyph {
+  width: 15px; height: 15px;
+  color: var(--dtf-w30);
+  flex: none;
+  transition: color 0.16s var(--dtf-ease), transform 0.24s var(--dtf-ease);
+}
+.dtf-trigger:hover .dtf-glyph,
+.dtf-trigger.is-open .dtf-glyph { color: var(--dtf-gold); }
+.dtf-trigger.is-open .dtf-glyph { transform: rotate(-8deg) scale(1.06); }
+
+/* ── the panel ──────────────────────────────────────────────────── */
+
+.dtf-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  right: 0;
+  background: linear-gradient(180deg, var(--dtf-panel) 0%, var(--dtf-panel-2) 100%);
+  border: 1px solid var(--dtf-rule-str);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(212, 175, 55, 0.05);
+  animation: dtf-in 0.2s var(--dtf-ease) both;
+  transform-origin: top right;
+  box-sizing: border-box;
+  width: 288px;
+  max-width: calc(100vw - 24px);
+}
+
+@keyframes dtf-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.965); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* A hairline of gold along the top edge — the same accent the rest of
+   the app uses to mark a surface as active. */
+.dtf-pop::before {
+  content: '';
+  position: absolute;
+  inset: -1px auto auto 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--dtf-gold-30), transparent);
+}
+
+/* ── calendar header ────────────────────────────────────────────── */
+
+.dtf-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.dtf-month {
+  flex: 1;
+  text-align: center;
+  font-family: var(--dtf-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dtf-w88);
+  letter-spacing: 0.01em;
+}
+.dtf-month b {
+  font-family: var(--dtf-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--dtf-w42);
+  margin-inline-start: 6px;
+}
+.dtf-arrow {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 1px solid var(--dtf-rule);
+  border-radius: 9px;
+  color: var(--dtf-w42);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.14s var(--dtf-ease);
+}
+.dtf-arrow:hover:not(:disabled) { color: var(--dtf-gold); border-color: var(--dtf-gold-30); background: var(--dtf-gold-08); }
+.dtf-arrow:disabled { opacity: 0.22; cursor: not-allowed; }
+.dtf-arrow svg { width: 13px; height: 13px; }
+
+/* ── the grid ───────────────────────────────────────────────────── */
+
+.dtf-dows {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.dtf-dow {
+  text-align: center;
+  font-family: var(--dtf-ui);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dtf-w30);
+  padding-bottom: 4px;
+}
+.dtf-dow.is-shut { color: rgba(192, 120, 120, 0.42); }
+
+.dtf-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+/* The month change animates in the direction it moved, so a run of
+   clicks reads as travel rather than as a flicker. */
+.dtf-grid.slide-next { animation: dtf-next 0.22s var(--dtf-ease) both; }
+.dtf-grid.slide-prev { animation: dtf-prev 0.22s var(--dtf-ease) both; }
+@keyframes dtf-next { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+@keyframes dtf-prev { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+
+.dtf-day {
+  aspect-ratio: 1;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  font-family: var(--dtf-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--dtf-w60);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.13s var(--dtf-ease);
+}
+.dtf-day:hover:not(:disabled) {
+  background: var(--dtf-gold-08);
+  border-color: var(--dtf-gold-30);
+  color: var(--dtf-gold-t);
+  transform: translateY(-1px);
+}
+.dtf-day.is-blank { visibility: hidden; }
+
+/* Today: a ring, never a fill — the fill means "chosen". */
+.dtf-day.is-today { color: var(--dtf-gold); border-color: var(--dtf-gold-30); }
+.dtf-day.is-today::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--dtf-gold);
+}
+
+.dtf-day.is-sel {
+  background: var(--dtf-gold);
+  border-color: var(--dtf-gold);
+  color: #000;
+  font-weight: 700;
+  box-shadow: 0 0 18px rgba(212, 175, 55, 0.28);
+}
+.dtf-day.is-sel::after { background: rgba(0, 0, 0, 0.5); }
+
+/* Two different refusals, drawn differently on purpose: a day the
+   market was shut is struck through, a day that has not happened is
+   simply faint. */
+.dtf-day:disabled { cursor: not-allowed; }
+.dtf-day.is-shut  { color: rgba(192, 120, 120, 0.34); text-decoration: line-through; text-decoration-thickness: 1px; }
+.dtf-day.is-later { color: var(--dtf-w18); }
+
+.dtf-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--dtf-rule);
+  font-family: var(--dtf-ui);
+  font-size: 10.5px;
+  color: var(--dtf-w30);
+}
+.dtf-legend s { color: rgba(192, 120, 120, 0.55); text-decoration-thickness: 1px; }
+
+.dtf-foot {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.dtf-btn {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid var(--dtf-rule);
+  border-radius: 10px;
+  background: transparent;
+  font-family: var(--dtf-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dtf-w42);
+  cursor: pointer;
+  transition: all 0.14s var(--dtf-ease);
+}
+.dtf-btn:hover { color: var(--dtf-gold); border-color: var(--dtf-gold-30); background: var(--dtf-gold-08); }
+.dtf-btn.is-primary { color: var(--dtf-gold); border-color: var(--dtf-gold-30); }
+.dtf-btn.is-primary:hover { background: var(--dtf-gold-16); }
+.dtf-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+.dtf-btn:disabled:hover { color: var(--dtf-w42); border-color: var(--dtf-rule); background: transparent; }
+
+/* ── time wheels ────────────────────────────────────────────────── */
+
+/* The time field is the LEFT of the two columns, so its panel is pinned by
+   its left edge and grows inward. Pinned right, like the calendar, it would
+   hang off the side of a phone. */
+.dtf-pop.dtf-time {
+  width: 208px;
+  right: auto;
+  left: 0;
+  transform-origin: top left;
+}
+
+.dtf-wheels {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.dtf-wheel-head {
+  text-align: center;
+  font-family: var(--dtf-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dtf-w30);
+  padding-bottom: 6px;
+}
+
+/* The band the chosen value sits in. Drawn once, behind both columns,
+   so the two always look like one control. */
+.dtf-band {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  height: 32px;
+  transform: translateY(-50%);
+  border-radius: 9px;
+  border: 1px solid var(--dtf-gold-30);
+  background: var(--dtf-gold-08);
+  pointer-events: none;
+}
+
+.dtf-wheel {
+  height: 160px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  /* Fades the ends so the column reads as a wheel rather than a list
+     that got cut off. */
+  mask-image: linear-gradient(180deg, transparent, #000 26%, #000 74%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 26%, #000 74%, transparent);
+}
+.dtf-wheel::-webkit-scrollbar { display: none; }
+
+.dtf-tick {
+  display: block;
+  width: 100%;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  scroll-snap-align: center;
+  font-family: var(--dtf-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--dtf-w30);
+  cursor: pointer;
+  transition: color 0.14s var(--dtf-ease), transform 0.14s var(--dtf-ease);
+}
+.dtf-tick:hover { color: var(--dtf-w88); }
+.dtf-tick.is-on {
+  color: var(--dtf-gold);
+  font-weight: 700;
+  font-size: 16px;
+  transform: scale(1.02);
+}
+
+/* Padding rows, so the first and last real value can reach the band. */
+.dtf-pad { height: 64px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dtf-pop, .dtf-grid.slide-next, .dtf-grid.slide-prev { animation: none; }
+  .dtf-day:hover:not(:disabled) { transform: none; }
+  .dtf-wheel { scroll-behavior: auto; }
+}
