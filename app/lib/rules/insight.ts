@@ -12,7 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TradeEntry } from '../journal';
-import { fisherExactTwoSided } from '../stats/fisher';
+import { bonferroni, fisherExactTwoSided } from '../stats/fisher';
 import type { RulePerformance } from './performance';
 import type { Rule } from './types';
 import { ruleTitle } from './types';
@@ -149,7 +149,19 @@ function lastClosedBefore(sortedClosed: TradeEntry[], beforeDateISO: string): Tr
   return last;
 }
 
-export function ruleInsight(rule: Rule, perf: RulePerformance, violationDates: string[], trades: TradeEntry[]): RuleInsight {
+export function ruleInsight(
+  rule: Rule,
+  perf: RulePerformance,
+  violationDates: string[],
+  trades: TradeEntry[],
+  /** How many rules this screen is testing. The after-loss test below runs
+   *  ONCE PER RULE, and it used to run uncorrected: a trader with a dozen
+   *  rules had a third of a chance, every visit, of being told that one of
+   *  them clusters after losses when nothing of the sort was true. Simulated
+   *  against violations placed at random, that was 33% at twelve rules and 23%
+   *  at eight. Defaults to 1 so a single-rule caller is unaffected. */
+  comparisons = 1,
+): RuleInsight {
   void rule; // reserved for future per-rule phrasing (e.g. naming the rule); kept generic today, matching the spec's examples
 
   if (violationDates.length >= AFTER_LOSS_MIN_VIOLATIONS) {
@@ -173,7 +185,10 @@ export function ruleInsight(rule: Rule, perf: RulePerformance, violationDates: s
       else                 { if (afterLoss) oAfterLoss++; else oOther++; }
     }
 
-    const p = fisherExactTwoSided(vAfterLoss, vOther, oAfterLoss, oOther);
+    const p = bonferroni(
+      fisherExactTwoSided(vAfterLoss, vOther, oAfterLoss, oOther),
+      comparisons,
+    );
     const clusters = vAfterLoss + vOther > 0 && oAfterLoss + oOther > 0
       && vAfterLoss / (vAfterLoss + vOther) > oAfterLoss / (oAfterLoss + oOther)
       && p < AFTER_LOSS_ALPHA;

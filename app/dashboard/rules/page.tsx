@@ -205,11 +205,14 @@ function Pill({ active, color, onClick, children }: { active: boolean; color?: s
 }
 
 // ── Rule card (accordion) ────────────────────────────────────────────────────
-function RuleCard({ rule, perf, history, trades, expanded, todayReported, onToggleExpand, onToggleActive, onDelete, onReport }: {
+function RuleCard({ rule, perf, history, trades, ruleCount, expanded, todayReported, onToggleExpand, onToggleActive, onDelete, onReport }: {
   rule: Rule;
   perf: RulePerformance;
   history: RuleHistory;
   trades: TradeEntry[];
+  /** How many rules the screen holds. The after-loss test inside ruleInsight
+   *  is run once per card, so the correction has to know how many were run. */
+  ruleCount: number;
   expanded: boolean;
   todayReported: 'followed' | 'violated' | null;
   onToggleExpand: () => void;
@@ -224,7 +227,7 @@ function RuleCard({ rule, perf, history, trades, expanded, todayReported, onTogg
   const summary = conditionSummary(rule);
   const impact = ruleImpact(perf);
   const confidence = ruleConfidence(perf);
-  const insight = ruleInsight(rule, perf, history.violationDates, trades);
+  const insight = ruleInsight(rule, perf, history.violationDates, trades, ruleCount);
   const total = perf.followedTrades + perf.violatedTrades;
   const notAutoCheckable = mode === 'automatic' && rule.conditionType != null && !AUTO_SUPPORTED.includes(rule.conditionType);
 
@@ -796,6 +799,10 @@ export default function RulesPage() {
                       perf={computeRulePerformance(rule, trades, userChecks, ruleCtx)}
                       history={computeRuleHistory(rule, trades, userChecks, today, violations, 90, ruleCtx)}
                       trades={trades}
+                      // Every rule on the screen runs the same after-loss test,
+                      // so the correction counts all of them — not just the
+                      // ones currently passing the filter above.
+                      ruleCount={rules.length}
                       expanded={expandedId === rule.id}
                       todayReported={(() => { const c = userChecks.find(x => x.ruleId === rule.id && x.date === today); return c && c.status !== 'unknown' ? c.status : null; })()}
                       onToggleExpand={() => setExpandedId(id => (id === rule.id ? null : rule.id))}

@@ -6,7 +6,8 @@ import { logSecurityEvent } from '../../../../lib/securityLog';
 import { logger } from '../../../../lib/logger';
 import { viewerEmail, isAdminEmail } from '../../../../lib/payments/admin';
 import { decideRequest } from '../../../../lib/payments/requests';
-import { PLANS, accessPeriodEnd, renewalStart } from '../../../../lib/payments/plans';
+import { PLANS } from '../../../../lib/payments/plans';
+import { grantForApproval } from '../../../../lib/payments/grant';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,28 +71,36 @@ export async function POST(
       // early and that week was gone. Read what they still hold and add to it.
       const { data: current } = await supabase
         .from('profiles')
-        .select('access_until')
+        .select('access_until, role')
         .eq('clerk_id', decision.clerkId)
         .maybeSingle();
-      const until = accessPeriodEnd(
-        renewalStart((current as { access_until?: string | null } | null)?.access_until),
-      );
+      const held = current as { access_until?: string | null; role?: unknown } | null;
 
-      // Upsert, not update. The profiles row is normally there, but an account
-      // whose provisioning webhook never fired would silently be approved into
-      // nothing — money taken, access still closed.
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            clerk_id: decision.clerkId,
-            role: plan.role,
-            subscription_status: 'active',
-            access_until: until.toISOString(),
-          },
-          { onConflict: 'clerk_id' },
-        );
-      if (error) throw error;
+      // ...but a RETRY of an already-approved row must not extend anything.
+      // lib/payments/grant says why, and it is the only place that decides.
+      const grant = grantForApproval({
+        alreadyDecided: decision.alreadyDecided === true,
+        currentAccessUntil: held?.access_until,
+        currentRole: held?.role,
+      });
+
+      if (grant.write) {
+        // Upsert, not update. The profiles row is normally there, but an
+        // account whose provisioning webhook never fired would silently be
+        // approved into nothing — money taken, access still closed.
+        const { error } = await supabase
+          .from('profiles')
+          .upsert(
+            {
+              clerk_id: decision.clerkId,
+              role: plan.role,
+              subscription_status: 'active',
+              access_until: grant.until.toISOString(),
+            },
+            { onConflict: 'clerk_id' },
+          );
+        if (error) throw error;
+      }
     } catch (err) {
       // The request is already marked approved, so failing here would leave
       // the owner believing access was opened when it was not. Report it.

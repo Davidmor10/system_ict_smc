@@ -111,6 +111,51 @@ describe('ruleInsight', () => {
     expect(r.text).not.toContain('משמעת');
   });
 
+  // THE CORRECTION.
+  //
+  // The after-loss test runs once per rule, and it used to run uncorrected.
+  // Simulated against a trader whose violations fall at random — no clustering
+  // whatsoever — 23% of eight-rule screens and 33% of twelve-rule screens
+  // carried at least one "these breaches cluster after a loss" claim. The
+  // screen slices the same history a dozen ways; at that count something
+  // clears any single threshold by luck, every visit, for every trader.
+  it('holds a real cluster up under the correction', () => {
+    const trades = Array.from({ length: 20 }, (_, i) =>
+      makeTrade({
+        id: i + 1,
+        dateISO: `2026-07-${String(i + 1).padStart(2, '0')}`,
+        time: '10:00',
+        result: i % 2 === 0 ? 'LOSS' : 'WIN',
+      }));
+    const afterLossDays = Array.from({ length: 10 }, (_, i) => `2026-07-${String((i + 1) * 2).padStart(2, '0')}`);
+    const violationDates = [...afterLossDays.slice(0, 9), '2026-07-03'];
+    // Nine of ten breaches on the ten days that follow a loss survives being
+    // corrected for a screen of ten rules. A real finding still gets said.
+    expect(ruleInsight(rule(), perf(), violationDates, trades, 10).basis).toBe('after_loss');
+  });
+
+  it('drops a borderline cluster once the whole screen is counted', () => {
+    // Six of ten breaches on the after-loss days: enough to clear the raw
+    // threshold on its own, not enough to survive ten rules being tested.
+    const trades = Array.from({ length: 20 }, (_, i) =>
+      makeTrade({
+        id: i + 1,
+        dateISO: `2026-07-${String(i + 1).padStart(2, '0')}`,
+        time: '10:00',
+        result: i % 2 === 0 ? 'LOSS' : 'WIN',
+      }));
+    const afterLoss = Array.from({ length: 10 }, (_, i) => `2026-07-${String((i + 1) * 2).padStart(2, '0')}`);
+    const other = Array.from({ length: 10 }, (_, i) => `2026-07-${String(i * 2 + 1).padStart(2, '0')}`);
+    const violationDates = [...afterLoss.slice(0, 6), ...other.slice(0, 1)];
+
+    const alone = ruleInsight(rule(), perf(), violationDates, trades, 1);
+    const onAScreen = ruleInsight(rule(), perf(), violationDates, trades, 10);
+    // The point of the test: the same data, the same rule, a different answer
+    // depending on how many other rules were tested alongside it.
+    expect(alone.basis).toBe('after_loss');
+    expect(onAScreen.basis).not.toBe('after_loss');
+  });
+
   it('needs more than a handful of breaches before it looks at all', () => {
     const trades = Array.from({ length: 8 }, (_, i) =>
       makeTrade({ id: i + 1, dateISO: `2026-07-0${i + 1}`, time: '10:00', result: 'LOSS' }));

@@ -122,7 +122,19 @@ export function isVerificationValid(fullName: string, email: string): boolean {
  *  approval has to carry an end date, or one payment becomes permanent access. */
 export function accessPeriodEnd(from: Date = new Date()): Date {
   const end = new Date(from);
+  const day = end.getDate();
+  // Move to the first of the next month BEFORE touching the day, then put the
+  // day back, clamped to what that month actually has.
+  //
+  // `setMonth(m + 1)` alone rolls over: 31 January becomes 3 March, because
+  // there is no 31 February. A customer approved on the 31st was told their
+  // month ran to the 3rd of the month after next — February skipped entirely,
+  // and three days of access nobody paid for. It always errs in the customer's
+  // favour, which is why it was never going to be reported.
+  end.setDate(1);
   end.setMonth(end.getMonth() + 1);
+  const lastOfMonth = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+  end.setDate(Math.min(day, lastOfMonth));
   return end;
 }
 

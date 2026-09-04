@@ -43,6 +43,42 @@ describe('checkTrade — weak slice (evidence-gated)', () => {
     expect(weak?.text).toContain('10'); // sample size cited
   });
 
+  // THE WARNING THAT FIRED ON NOTHING.
+  //
+  // A ten-point gap used to be the whole test. On eight decided trades one
+  // extra loss moves the rate by twelve points, so an ordinary slice of an
+  // ordinary trader cleared it constantly: simulated against a trader whose
+  // slices are all identical, about half of their saves drew a warning that
+  // some slice was "below your overall average". A panel that fires on half
+  // of all saves is a panel the trader learns to close.
+  it('stays silent on a gap that is only a small number wobbling', () => {
+    // 3W/5L in the slice against 9W/3L everywhere else — a 22-point gap, and
+    // Fisher puts it at p = 0.17. Nothing happened here.
+    const wobble = [
+      ...Array.from({ length: 3 }, () => makeTrade({ direction: 'SHORT', session: 'nypm', result: 'WIN' })),
+      ...Array.from({ length: 5 }, () => makeTrade({ direction: 'SHORT', session: 'nypm', result: 'LOSS' })),
+      ...Array.from({ length: 9 }, () => makeTrade({ direction: 'LONG', session: 'nyam', result: 'WIN' })),
+      ...Array.from({ length: 3 }, () => makeTrade({ direction: 'LONG', session: 'nyam', result: 'LOSS' })),
+    ];
+    expect(checkTrade(pending({ direction: 'SHORT', session: 'nypm' }), wobble, TODAY)
+      .some(x => x.id === 'weak_session_direction')).toBe(false);
+  });
+
+  // And the correction, which is what stops two slices being tested at 5%
+  // each and the pair firing at ten.
+  it('corrects for both slices when both are looked at', () => {
+    // 2W/8L against 9W/1L: p = 0.0055 alone, 0.011 corrected for two — still
+    // a real finding, and it must survive the correction.
+    const real = [
+      ...Array.from({ length: 2 }, () => makeTrade({ direction: 'SHORT', session: 'nypm', emotionalState: 'CALM', result: 'WIN' })),
+      ...Array.from({ length: 8 }, () => makeTrade({ direction: 'SHORT', session: 'nypm', emotionalState: 'CALM', result: 'LOSS' })),
+      ...Array.from({ length: 9 }, () => makeTrade({ direction: 'LONG', session: 'nyam', emotionalState: 'CALM', result: 'WIN' })),
+      ...Array.from({ length: 1 }, () => makeTrade({ direction: 'LONG', session: 'nyam', emotionalState: 'CALM', result: 'LOSS' })),
+    ];
+    expect(checkTrade(pending({ direction: 'SHORT', session: 'nypm' }), real, TODAY)
+      .some(x => x.id === 'weak_session_direction')).toBe(true);
+  });
+
   it('stays silent when the weak slice sample is too small', () => {
     // Only 3 SHORT/nypm trades — below the 8-decided floor → no warning.
     const few = [

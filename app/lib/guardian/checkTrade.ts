@@ -8,14 +8,53 @@
 import type { TradeEntry, Direction, BiasAlignment } from '../journal';
 import { computeGroupPerformance, normSession } from '../analytics';
 import { sessionLabel } from '../sessions';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
+import { bonferroni, fisherExactTwoSided } from '../stats/fisher';
+import { PATTERN_ALPHA } from '../analytics/patterns';
 
 /** A slice needs at least this many DECIDED trades before it can be called a
-    weak spot — below it, it's noise, so the guardian stays silent (precision
-    over nagging). */
-const MIN_SAMPLE = 8;
-/** How many percentage points below the trader's overall win rate a slice must
-    sit before it's worth flagging. */
+    weak spot. The shared floor, not a local copy of it — see lib/stats/
+    evidence for why both stacks read the same number. */
+const MIN_SAMPLE = MIN_DECIDED_FOR_CLAIM;
+/** How many percentage points below the rest of the journal a slice must sit
+    before it is worth testing at all. A cheap pre-filter, not the test. */
 const WORSE_BY = 10;
+
+/** Was this slice really worse, or is it a small number wobbling?
+ *
+ *  THIS TEST DID NOT EXIST, and the gap alone decided. On eight decided trades
+ *  one extra loss moves the rate by twelve points, so a ten-point gap is what
+ *  an ordinary slice does on an ordinary week — simulated against a trader
+ *  whose slices are all identical, roughly half of their saves drew a warning
+ *  that some slice was "below your overall average". A warning panel that
+ *  fires on half of all saves teaches the trader to close it.
+ *
+ *  Tested against the REST of the journal rather than against the overall
+ *  rate: the slice is inside the overall figure, so comparing the two compares
+ *  a group with itself and shrinks every real gap.
+ *
+ *  `comparisons` is how many slices this save looked at — the guardian checks
+ *  two, and testing two at 5% is a 10% false-warning rate unless it is
+ *  corrected. */
+function reallyWorse(
+  sliceWins: number, sliceLosses: number,
+  restWins: number, restLosses: number,
+  comparisons: number,
+): boolean {
+  const p = fisherExactTwoSided(sliceWins, sliceLosses, restWins, restLosses);
+  return bonferroni(p, comparisons) < PATTERN_ALPHA;
+}
+
+/** Decided wins and losses in a set of trades, and in everything else. */
+function splitAgainstRest(all: TradeEntry[], inSlice: (t: TradeEntry) => boolean) {
+  let sw = 0, sl = 0, rw = 0, rl = 0;
+  for (const t of all) {
+    if (t.result !== 'WIN' && t.result !== 'LOSS') continue;
+    if (inSlice(t)) { if (t.result === 'WIN') sw++; else sl++; }
+    else { if (t.result === 'WIN') rw++; else rl++; }
+  }
+  return { sliceWins: sw, sliceLosses: sl, restWins: rw, restLosses: rl };
+}
 
 const DIRECTION_HE: Record<Direction, string> = { LONG: 'לונג', SHORT: 'שורט' };
 const EMOTION_HE: Record<string, string> = {
@@ -63,30 +102,42 @@ export function checkTrade(pending: PendingTrade, trades: TradeEntry[], todayISO
 
   // Weak-slice checks only make sense once there's a real overall baseline.
   if (overallDecided >= MIN_SAMPLE) {
-    // ── Weak session × direction ──
     const sess = pending.session;
+    // Counted before either test runs, because Bonferroni corrects for the
+    // comparisons MADE, not for the ones that happened to survive.
+    const comparisons =
+      (sess && sess !== 'NONE' ? 1 : 0) + (pending.emotionalState ? 1 : 0);
+
+    // ── Weak session × direction ──
     if (sess && sess !== 'NONE') {
-      const subset = trades.filter(t => normSession(t.session) === normSession(sess) && t.direction === pending.direction);
-      const g = computeGroupPerformance(subset, 'slice', 'slice');
-      if (g.confidence.sampleSize >= MIN_SAMPLE && g.winRate <= overallWR - WORSE_BY) {
+      const inSlice = (t: TradeEntry) =>
+        normSession(t.session) === normSession(sess) && t.direction === pending.direction;
+      const c = splitAgainstRest(trades, inSlice);
+      const n = c.sliceWins + c.sliceLosses;
+      const rate = n ? (100 * c.sliceWins) / n : 0;
+      if (n >= MIN_SAMPLE && rate <= overallWR - WORSE_BY
+        && reallyWorse(c.sliceWins, c.sliceLosses, c.restWins, c.restLosses, comparisons)) {
         warnings.push({
           id: 'weak_session_direction',
           severity: 'caution',
-          text: `${DIRECTION_HE[pending.direction]} ב${sessionHe(sess)}: ${g.winRate.toFixed(0)}% הצלחה על ${g.confidence.sampleSize} עסקאות שנסגרו — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
+          text: `${DIRECTION_HE[pending.direction]} ב${sessionHe(sess)}: ${rate.toFixed(0)}% הצלחה על ${n} עסקאות שנסגרו — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
         });
       }
     }
 
     // ── Weak emotional state ──
     if (pending.emotionalState) {
-      const subset = trades.filter(t => t.emotionalState === pending.emotionalState);
-      const g = computeGroupPerformance(subset, 'emotion', 'emotion');
-      if (g.confidence.sampleSize >= MIN_SAMPLE && g.winRate <= overallWR - WORSE_BY) {
-        const label = EMOTION_HE[pending.emotionalState] ?? pending.emotionalState;
+      const state = pending.emotionalState;
+      const c = splitAgainstRest(trades, t => t.emotionalState === state);
+      const n = c.sliceWins + c.sliceLosses;
+      const rate = n ? (100 * c.sliceWins) / n : 0;
+      if (n >= MIN_SAMPLE && rate <= overallWR - WORSE_BY
+        && reallyWorse(c.sliceWins, c.sliceLosses, c.restWins, c.restLosses, comparisons)) {
+        const label = EMOTION_HE[state] ?? state;
         warnings.push({
           id: 'weak_emotion',
           severity: 'caution',
-          text: `כשנכנסת במצב "${label}": ${g.winRate.toFixed(0)}% הצלחה על ${g.confidence.sampleSize} עסקאות — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
+          text: `כשנכנסת במצב "${label}": ${rate.toFixed(0)}% הצלחה על ${n} עסקאות — מתחת לממוצע הכללי שלך (${overallWR.toFixed(0)}%).`,
         });
       }
     }

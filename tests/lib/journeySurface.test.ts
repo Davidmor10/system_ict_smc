@@ -364,25 +364,37 @@ describe('an approval can be run again to repair itself', () => {
     expect(block).toContain('return { ok: false }');
   });
 
-  it('re-runs the access grant on the repeat', () => {
-    expect(DECISION).toContain('renewalStart');
+  it('tells the caller the repeat was a repair', () => {
     expect(DECISION).toContain('repaired: decision.alreadyDecided === true');
   });
 });
 
-// ── a renewal must not take back paid time ──────────────────────────────────
+// ── how much access one approval buys ───────────────────────────────────────
+//
+// The rule itself lives in lib/payments/grant and is tested against its own
+// behaviour in tests/lib/paymentGrant.test.ts. What is checked here is that
+// the route still ASKS it, and that it did not go back to doing the sum
+// inline — which is how both bugs in it got there.
 
-describe('the approval extends rather than resets', () => {
+describe('the approval defers the grant to one place', () => {
   const DECISION = read('api', 'payment-requests', '[id]', 'decision', 'route.ts');
 
-  it('reads what the customer still holds before writing a new expiry', () => {
-    expect(DECISION).toContain("select('access_until')");
-    expect(DECISION).toContain('accessPeriodEnd(');
-    expect(DECISION).toContain('renewalStart(');
+  it('reads what the customer still holds before deciding', () => {
+    expect(DECISION).toContain("select('access_until, role')");
+    expect(DECISION).toContain('grantForApproval(');
+    expect(DECISION).toContain('alreadyDecided: decision.alreadyDecided === true');
   });
 
-  it('no longer writes a month from today unconditionally', () => {
-    expect(DECISION).not.toContain('accessPeriodEnd().toISOString()');
+  // A retry on a row whose grant already worked must write nothing, or one
+  // payment buys two months.
+  it('writes only when the grant says to', () => {
+    expect(DECISION).toContain('if (grant.write)');
+    expect(DECISION).toContain('access_until: grant.until.toISOString()');
+  });
+
+  it('does not do the date arithmetic itself', () => {
+    expect(DECISION).not.toContain('accessPeriodEnd(');
+    expect(DECISION).not.toContain('renewalStart(');
   });
 });
 
