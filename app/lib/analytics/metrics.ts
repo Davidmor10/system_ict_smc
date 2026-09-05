@@ -38,6 +38,15 @@ export function computeGroupPerformance(trades: TradeEntry[], key: string, label
 
   const rs = closed.map(rMultiple).filter((n): n is number => n !== null);
   const avgRR = rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
+  // Carried for the same reason wins/losses are carried next to winRate: a
+  // mean on its own cannot be compared to another mean. R multiples are widely
+  // spread — a 3R winner and a 1R loser sit four apart — so how far this one
+  // could have landed by luck depends on that spread, not on the count.
+  // See lib/stats/movement.
+  const rrSample = rs.length;
+  const rrStdDev = rrSample > 1
+    ? Math.sqrt(rs.reduce((a, r) => a + (r - avgRR) ** 2, 0) / (rrSample - 1))
+    : null;
 
   return {
     key,
@@ -48,6 +57,8 @@ export function computeGroupPerformance(trades: TradeEntry[], key: string, label
     winRate,
     totalPnl,
     avgRR,
+    rrSample,
+    rrStdDev,
     avgWinner,
     avgLoser,
     profitFactor,

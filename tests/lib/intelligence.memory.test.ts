@@ -8,7 +8,7 @@ const NOW = '2026-07-06T12:00:00.000Z';
 const EMPTY_EXIT: ExitBehavior = { sampleSize: 0, winnerCount: 0, captureRatio: null, winnersCutShort: 0, partialExitRate: 0, avgWinnerR: 0, avgLoserR: 0 };
 
 function group(key: string, winRate: number, sampleSize = 20): GroupPerformance {
-  return { key, label: key, trades: sampleSize, wins: Math.round(sampleSize * winRate / 100), losses: sampleSize - Math.round(sampleSize * winRate / 100), winRate, totalPnl: 0, avgRR: 1, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level: 'medium', sampleSize } };
+  return { key, label: key, trades: sampleSize, wins: Math.round(sampleSize * winRate / 100), losses: sampleSize - Math.round(sampleSize * winRate / 100), winRate, totalPnl: 0, avgRR: 1, rrSample: 0, rrStdDev: null, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level: 'medium', sampleSize } };
 }
 
 function baseProfile(overrides: Partial<TraderProfile> = {}): TraderProfile {

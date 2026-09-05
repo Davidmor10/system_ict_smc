@@ -31,6 +31,12 @@ export interface GroupPerformance {
   totalPnl: number;
   /** Average planned reward-to-risk across trades where it's computable. */
   avgRR: number;
+  /** Trades `avgRR` was averaged over, and how widely they were spread.
+      A mean cannot be compared against another mean without them — see
+      lib/stats/movement. Null standard deviation means fewer than two
+      values, which has no spread to measure. */
+  rrSample: number;
+  rrStdDev: number | null;
   avgWinner: number;
   /** Positive number — average size of a loss, not signed. */
   avgLoser: number;
@@ -55,6 +61,10 @@ export interface PerformanceSummary {
   winRate: number;
   totalPnl: number;
   avgRR: number;
+  /** As on GroupPerformance: the mean's sample and spread, carried so one
+      period's average R can be compared against another's. */
+  rrSample: number;
+  rrStdDev: number | null;
   profitFactor: number;
   avgWinner: number;
   avgLoser: number;

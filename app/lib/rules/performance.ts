@@ -15,7 +15,7 @@ import type { Confidence } from '../analytics/types';
 import type { Rule, RuleCheck, RuleCheckStatus } from './types';
 import { checkRule, type RuleCheckContext } from './engine';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
-import { meanFloor } from '../stats/movement';
+import { meanDiffFloor } from '../stats/movement';
 
 /** Each side needs at least this many decided (WIN/LOSS) trades before the
     comparison is shown.
@@ -97,12 +97,21 @@ export function computeRulePerformance(
   const violatedAvgR = avg(violatedR);
   const hasEnough = followedR.length >= MIN_PER_SIDE && violatedR.length >= MIN_PER_SIDE;
 
-  // The gap has to outgrow one trade on the thinner side. A mean over eight
-  // trades moves by an eighth of a trade's R for every trade in it, so a gap
-  // smaller than that is the last trade, not the rule.
-  const thinner = Math.min(followedR.length, violatedR.length);
+  // The gap has to outgrow the spread of the trades under it, not their count.
+  // This one is quoted to the trader as two averages side by side — "when you
+  // kept this rule your average R was 2.2, when you did not it was 0.1" — off
+  // as few as eight trades a side, so what it takes to say it has to be the
+  // standard error and not a fixed 0.15R. See lib/stats/movement.
+  const sd = (a: number[], mean: number | null) =>
+    (a.length > 1 && mean != null
+      ? Math.sqrt(a.reduce((s, r) => s + (r - mean) ** 2, 0) / (a.length - 1))
+      : null);
   const differenceIsReal = hasEnough && followedAvgR != null && violatedAvgR != null
-    && Math.abs(followedAvgR - violatedAvgR) > meanFloor(R_GAP_FLOOR, thinner);
+    && Math.abs(followedAvgR - violatedAvgR) > meanDiffFloor(
+      R_GAP_FLOOR,
+      { n: followedR.length, sd: sd(followedR, followedAvgR) },
+      { n: violatedR.length, sd: sd(violatedR, violatedAvgR) },
+    );
 
   return {
     followedTrades,

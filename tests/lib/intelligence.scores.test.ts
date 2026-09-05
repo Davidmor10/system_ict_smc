@@ -26,7 +26,7 @@ const EMPTY_EXIT: ExitBehavior = { sampleSize: 0, winnerCount: 0, captureRatio: 
 function group(winRate: number, sampleSize: number): GroupPerformance {
   return {
     key: 'g', label: 'g', trades: sampleSize, wins: 0, losses: 0, winRate,
-    totalPnl: 0, avgRR: 1, avgWinner: 1, avgLoser: 1, profitFactor: 1,
+    totalPnl: 0, avgRR: 1, rrSample: 0, rrStdDev: null, avgWinner: 1, avgLoser: 1, profitFactor: 1,
     confidence: { level: 'medium', sampleSize },
   } as GroupPerformance;
 }
@@ -45,7 +45,7 @@ function profile(overrides: Partial<TraderProfile> = {}): TraderProfile {
 function pattern(status: PatternMemoryRow['status'], level: ConfidenceLevel = 'medium'): PatternMemoryRow {
   return {
     clerkId: 'user_A', patternId: `p_${Math.random()}`, kind: 'instrument_best', subject: { instrument: 'ES' },
-    status, currentMetric: { key: 'ES', label: 'ES', trades: 20, wins: 12, losses: 8, winRate: 60, totalPnl: 0, avgRR: 1, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level, sampleSize: 20 } },
+    status, currentMetric: { key: 'ES', label: 'ES', trades: 20, wins: 12, losses: 8, winRate: 60, totalPnl: 0, avgRR: 1, rrSample: 0, rrStdDev: null, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level, sampleSize: 20 } },
     currentConfidenceLevel: level, currentSampleSize: 20, baselineWinRate: 50, delta: 10,
     firstDetectedAt: '2026-06-01T00:00:00.000Z', lastSeenAt: '2026-07-01T00:00:00.000Z', lastUpdatedAt: '2026-07-01T00:00:00.000Z',
     consecutiveMisses: 0, history: [], aiTitle: null, aiEvidence: null, aiAction: null, aiPhrasedStatus: null, aiPhrasedWinRate: null,

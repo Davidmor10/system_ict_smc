@@ -10,7 +10,7 @@ import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { bonferroni, fisherExactTwoSided } from '../stats/fisher';
 import { PATTERN_ALPHA } from '../analytics/patterns';
 import type { TradeEntry } from '../journal';
-import { meanFloor, ratioFloor, winRateMoved, type DecidedSplit } from '../stats/movement';
+import { meanDiffFloor, ratioFloor, winRateMoved, type DecidedSplit } from '../stats/movement';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
 
@@ -107,9 +107,19 @@ export function deriveTraderProfile(
             : 'flat')
         : computeTrend(winRate, previousProfile.winRate.current, WIN_RATE_THRESHOLD))
     : 'flat';
+  // From the spread of the trades on both sides — see ./movement for what 1/n
+  // was doing here instead, and how often it reported a move that was not one.
+  // A previous snapshot written before the spread was recorded has none to
+  // give, and meanDiffFloor falls back to the old floor for exactly that run.
   const avgRRTrend = computeTrend(
     avgRR, previousProfile?.avgRR.current ?? null,
-    previousSample != null ? meanFloor(AVG_RR_THRESHOLD, n) : AVG_RR_THRESHOLD,
+    previousSample != null
+      ? meanDiffFloor(
+          AVG_RR_THRESHOLD,
+          { n: analysis.performance.rrSample, sd: analysis.performance.rrStdDev },
+          { n: previousSample, sd: previousProfile?.avgRR.spread ?? null },
+        )
+      : AVG_RR_THRESHOLD,
   );
   const profitFactorTrend = computeTrend(
     profitFactor, previousProfile?.profitFactor.current ?? null,
@@ -137,7 +147,9 @@ export function deriveTraderProfile(
     worstHour: analysis.time.worstHour,
     direction,
     winRate: { current: winRate, trend: winRateTrend, sample, decided },
-    avgRR: { current: avgRR, trend: avgRRTrend, sample },
+    // `spread` is what makes the NEXT run's comparison possible — the same
+    // job `decided` does for the win rate one line above.
+    avgRR: { current: avgRR, trend: avgRRTrend, sample, spread: analysis.performance.rrStdDev },
     profitFactor: { current: profitFactor, trend: profitFactorTrend, sample },
     exitBehavior: { ratio: exitRatio, detail: analysis.exits },
     topConfirmations: analysis.confirmations.slice(0, MAX_CONFIRMATIONS),

@@ -1,5 +1,5 @@
 import type { FullAnalysis, GroupPerformance } from '../analytics';
-import { commonSample, meanFloor, ratioFloor, winRateMoved } from '../stats/movement';
+import { commonSample, meanDiffFloor, ratioFloor, winRateMoved } from '../stats/movement';
 import { computeTrend } from './trend';
 import type { ConcentrationCheck, ConcentrationSlice, MetricComparison, PeriodComparison } from './types';
 
@@ -129,7 +129,12 @@ export function computePeriodComparison(
     schemaVersion: SCHEMA_VERSION,
     winRate: metricComparison(p.winRate, q?.winRate ?? null, baseline4wk?.performance.winRate ?? null, winRateTrend),
     avgRR: metricComparison(p.avgRR, q?.avgRR ?? null, baseline4wk?.performance.avgRR ?? null,
-      computeTrend(p.avgRR, q?.avgRR ?? null, meanFloor(AVG_RR_THRESHOLD, n))),
+      // From the spread of the trades, not from their count — see ./movement.
+      computeTrend(p.avgRR, q?.avgRR ?? null, meanDiffFloor(
+        AVG_RR_THRESHOLD,
+        { n: p.rrSample, sd: p.rrStdDev },
+        { n: q?.rrSample ?? 0, sd: q?.rrStdDev ?? null },
+      ))),
     profitFactor: metricComparison(p.profitFactor, q?.profitFactor ?? null, baseline4wk?.performance.profitFactor ?? null,
       computeTrend(p.profitFactor, q?.profitFactor ?? null, ratioFloor(PROFIT_FACTOR_THRESHOLD, p.profitFactor, n))),
     concentration: computeConcentration(thisWeek),

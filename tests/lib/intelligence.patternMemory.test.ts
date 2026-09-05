@@ -14,7 +14,7 @@ function candidate(id: string, delta: number, level: ConfidenceLevel, sampleSize
     id,
     kind: 'instrument_best',
     subject: { instrument: 'ES' },
-    metric: { key: id, label: id, trades: sampleSize, wins: Math.round(sampleSize * winRate / 100), losses: sampleSize - Math.round(sampleSize * winRate / 100), winRate, totalPnl: 0, avgRR: 1, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level, sampleSize } },
+    metric: { key: id, label: id, trades: sampleSize, wins: Math.round(sampleSize * winRate / 100), losses: sampleSize - Math.round(sampleSize * winRate / 100), winRate, totalPnl: 0, avgRR: 1, rrSample: 0, rrStdDev: null, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level, sampleSize } },
     baseline: 50,
     delta,
     confidence: { level, sampleSize },

@@ -29,7 +29,7 @@ const candidate = (over: Partial<PatternCandidate> = {}): PatternCandidate => ({
   subject: { weekday: 2 },
   metric: {
     key: 'p1', label: 'Tuesday', trades: 12, wins: 9, losses: 3,
-    winRate: 75, totalPnl: 900, avgRR: 2.1, avgWinner: 150, avgLoser: 80,
+    winRate: 75, totalPnl: 900, avgRR: 2.1, rrSample: 0, rrStdDev: null, avgWinner: 150, avgLoser: 80,
     profitFactor: 3.1, confidence: { level: 'medium', sampleSize: 12 },
   },
   baseline: 50,

@@ -18,13 +18,20 @@
 //
 //   proportions (win rate)  — Fisher exact on the two win/loss splits,
 //                             corrected for the tests performed in the pass.
-//   means and ratios        — not proportions, so no test applies. The floor
-//                             is raised to what one trade could account for:
-//                             a mean of R moves by about 1/n, a ratio by about
-//                             its own size over n.
+//   means (average R)       — not a proportion, so Fisher does not apply. The
+//                             floor is the standard error of the difference,
+//                             read from how widely the trades were actually
+//                             spread. It used to be 1/n, which assumed every
+//                             trade lands about 1R from the mean; they land
+//                             three times further, and 83% of identical weeks
+//                             were reported as having moved.
+//   ratios (profit factor)  — no test either, and no spread to read. The floor
+//                             stays what one trade could account for: about
+//                             the ratio's own size over n.
 //
-// Both read the SMALLER of the two samples, because that is the one the claim
-// is actually resting on.
+// The ratio floor reads the SMALLER of the two samples, because that is the one
+// the claim is actually resting on; the mean floor reads both, because both
+// contribute to how far the difference could have wandered.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { fisherExactTwoSided, bonferroni } from './fisher';
@@ -84,9 +91,54 @@ export function commonSample(now: DecidedSplit, before: DecidedSplit): number {
 /** A floor no smaller than one trade's influence on a mean of R.
  *
  *  With no sample the floor is infinite, which reads as flat — correctly,
- *  since there is nothing there to have moved. */
+ *  since there is nothing there to have moved.
+ *
+ *  KEPT ONLY FOR CALLERS THAT HAVE NO SPREAD TO OFFER — a previous profile
+ *  snapshot written before the spread was recorded, and nothing else. Prefer
+ *  `meanDiffFloor`: 1/n is far too small for a mean of R, and the note below
+ *  says by how much. */
 export function meanFloor(fixed: number, n: number): number {
   return Math.max(fixed, n > 0 ? 1 / n : Infinity);
+}
+
+/** The mean of R, and how widely the trades behind it were spread. */
+export interface MeanSample {
+  n: number;
+  /** Sample standard deviation, or null when there is nothing to spread. */
+  sd: number | null;
+}
+
+/** Two-sided z at the ALPHA above. Not a t: at these sample sizes the
+ *  difference is inside the noise the floor is guarding against anyway, and a
+ *  named constant is easier to read than a table lookup. */
+const Z = 1.645;
+
+/** How far two average-R figures must differ before the difference is a
+ *  direction rather than the spread of R showing through.
+ *
+ *  WHY 1/n WAS WRONG, AND BADLY. The old floor read "a mean of R moves by
+ *  about 1/n", which is true only if every trade lands about 1R from the mean.
+ *  They do not: a 3R winner and a 1R loser sit four apart, so the standard
+ *  error over ten trades is near 0.45R while the floor it had to clear was
+ *  0.15R. Simulated on two weeks drawn from ONE distribution — the same
+ *  trader, the same edge, nothing changed — 83% of them were labelled as
+ *  having moved. That label is not decoration: `avgRR.trend === 'down'` is
+ *  what makes intelligence/rootCause name exit management as the mechanism,
+ *  and the narrative then explains to the trader that they are cutting
+ *  winners short.
+ *
+ *  So the floor comes from the spread of the trades themselves. `fixed` still
+ *  applies underneath it — a difference smaller than that is not worth
+ *  reporting however tight the sample. */
+export function meanDiffFloor(fixed: number, now: MeanSample, before: MeanSample): number {
+  if (now.n <= 0 || before.n <= 0) return Infinity;
+  // No spread recorded on one side: fall back to the old floor rather than
+  // asserting a move off a number that is not there.
+  if (now.sd === null || before.sd === null) {
+    return meanFloor(fixed, Math.min(now.n, before.n));
+  }
+  const se = Math.sqrt((now.sd ** 2) / now.n + (before.sd ** 2) / before.n);
+  return Math.max(fixed, Z * se);
 }
 
 /** The same, for a rate expressed in percentage POINTS rather than as a

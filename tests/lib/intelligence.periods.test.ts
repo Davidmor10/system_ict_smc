@@ -70,27 +70,48 @@ describe('computePeriodComparison', () => {
     expect(c.profitFactor.trend).toBe('flat');
   });
 
-  it('holds average R flat when one trade could account for the move', () => {
-    // Four decided trades a side, so one trade is worth 0.25R. The weeks are
-    // 0.2R apart — above the fixed 0.15 floor the rule used to stop at, and
-    // below what a single trade in a week this short can explain.
-    const week = (r: number) => runFullAnalysis(
-      Array.from({ length: 4 }, () => makeTrade({
-        symbol: 'ES', session: 'nyam', model: UNSPECIFIED_MODEL, result: 'WIN', tradeR: r,
-      })),
+  // The floor comes from how far apart the trades themselves landed, not from
+  // how many there were. The old rule read "one trade moves a mean of R by
+  // 1/n", which holds only if every trade lands about 1R from the mean; real
+  // R multiples land three times further out. Simulated on two weeks drawn
+  // from ONE distribution — same trader, nothing changed — 83% of them were
+  // reported as having moved, and `avgRR.trend === 'down'` is what makes
+  // rootCause name exit management as the mechanism.
+  const week = (rs: number[]) => runFullAnalysis(
+    rs.map(r => makeTrade({
+      symbol: 'ES', session: 'nyam', model: UNSPECIFIED_MODEL,
+      result: r > 0 ? 'WIN' : 'LOSS', tradeR: r,
+    })),
+  );
+
+  it('holds average R flat when the spread of the trades could account for the move', () => {
+    // Two ordinary weeks: winners between 1.5R and 3R, losers at -1R. Their
+    // averages are 0.06R apart and the trades are spread over four R, so
+    // nothing here is a direction.
+    const c = computePeriodComparison(
+      week([2, -1, 3, -1, 1, -1, 2, -1]),
+      week([1.5, -1, 2.5, -1, 1.5, -1, 2, -1]),
+      null,
     );
-    const c = computePeriodComparison(week(1.2), week(1), null);
-    expect(c.avgRR.deltaVsPrevWeek).toBeCloseTo(0.2, 5);
     expect(c.avgRR.trend).toBe('flat');
   });
 
-  it('calls average R a direction once the move outgrows one trade', () => {
-    const week = (r: number) => runFullAnalysis(
-      Array.from({ length: 4 }, () => makeTrade({
-        symbol: 'ES', session: 'nyam', model: UNSPECIFIED_MODEL, result: 'WIN', tradeR: r,
-      })),
+  // The old fixture used four IDENTICAL trades a side, which has no spread at
+  // all — and with no spread a 0.2R gap really is a direction. Kept as its own
+  // case, because it is the one place the fixed floor still decides.
+  it('calls a gap a direction when the trades had no spread to hide it', () => {
+    const c = computePeriodComparison(week([1.2, 1.2, 1.2, 1.2]), week([1, 1, 1, 1]), null);
+    expect(c.avgRR.deltaVsPrevWeek).toBeCloseTo(0.2, 5);
+    expect(c.avgRR.trend).toBe('up');
+  });
+
+  it('calls average R a direction once the move outgrows that spread', () => {
+    const c = computePeriodComparison(
+      week([3, -1, 3, 2.5, 3, -1, 3, 2.5, 3, 2.5]),
+      week([-1, -1, 0.5, -1, -1, -1, 0.5, -1, -1, -1]),
+      null,
     );
-    expect(computePeriodComparison(week(1.4), week(1), null).avgRR.trend).toBe('up');
+    expect(c.avgRR.trend).toBe('up');
   });
 
   it('flags over-reliance when one instrument carries >=60% of the week\'s trades', () => {

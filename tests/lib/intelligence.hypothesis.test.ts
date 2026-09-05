@@ -12,7 +12,7 @@ function row(overrides: Partial<PatternMemoryRow> & { patternId: string }): Patt
     kind: 'instrument+session',
     subject: { instrument: 'MNQ', session: 'nyam' },
     status: 'active',
-    currentMetric: { key: overrides.patternId, label: overrides.patternId, trades: 20, wins: 14, losses: 6, winRate: 70, totalPnl: 500, avgRR: 1.5, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level: 'medium', sampleSize: 20 } },
+    currentMetric: { key: overrides.patternId, label: overrides.patternId, trades: 20, wins: 14, losses: 6, winRate: 70, totalPnl: 500, avgRR: 1.5, rrSample: 0, rrStdDev: null, avgWinner: 100, avgLoser: 50, profitFactor: 2, confidence: { level: 'medium', sampleSize: 20 } },
     currentConfidenceLevel: 'medium' as ConfidenceLevel,
     currentSampleSize: 20,
     baselineWinRate: 50,

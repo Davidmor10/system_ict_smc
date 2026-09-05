@@ -26,6 +26,11 @@ export interface TrendValue {
   sample?: number;
   /** The win/loss split behind `current`, on metrics that have one. */
   decided?: { wins: number; losses: number };
+  /** How widely the values behind `current` were spread, on metrics that are
+   *  a mean. Carried for the same reason `decided` is: a mean cannot be
+   *  compared against another mean without it. Absent on snapshots written
+   *  before it was recorded, and those fall back to the old floor. */
+  spread?: number | null;
 }
 
 export interface DirectionEdge {
