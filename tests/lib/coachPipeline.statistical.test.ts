@@ -265,45 +265,88 @@ describe('last_7d window + trend', () => {
     expect(computeStatistical(trades, { today }).last_7d).toBeUndefined();
   });
 
-  it('flat trend when last_7d ~= prev_7d avg_r', () => {
+  // prev window: 2026-08-02 .. 2026-08-08. last window: 2026-08-09 .. 2026-08-15.
+  const inPrev  = (r: number, i: number) => T({ date: `2026-08-0${i + 3}`, r_multiple: r, result: r > 0 ? 'WIN' : 'LOSS' });
+  const inLast  = (r: number, i: number) => T({ date: `2026-08-${10 + i}`, r_multiple: r, result: r > 0 ? 'WIN' : 'LOSS' });
+
+  // ONE TRADE AGAINST ONE TRADE USED TO BE A TREND. A single +2R in this week
+  // against a single 0R in the last was reported as "up", and the note is
+  // written by a model whose style rules forbid it from hedging about a value
+  // it was handed. There is no spread in one number, so there is no direction
+  // to read out of it.
+  it('reports no trend at all off one trade a window', () => {
     const trades: TradeRow[] = [
-      T({ date: '2026-08-01', r_multiple: 1, result: 'WIN' }),
-      T({ date: '2026-08-02', r_multiple: 1, result: 'WIN' }),
-      T({ date: '2026-08-10', r_multiple: 1, result: 'WIN' }),
-      T({ date: '2026-08-11', r_multiple: 1, result: 'WIN' }),
+      T({ date: '2026-08-03', r_multiple: 0, result: 'BE' }),
+      T({ date: '2026-08-10', r_multiple: 2, result: 'WIN' }),
+    ];
+    const stat = computeStatistical(trades, { today });
+    expect(stat.last_7d?.n).toBe(1);      // the count is still a fact
+    expect(stat.last_7d?.trend).toBeUndefined();
+  });
+
+  it('flat trend when the two windows sit on top of each other', () => {
+    const trades: TradeRow[] = [
+      ...[1, 1, 1].map(inPrev),
+      ...[1, 1, 1].map(inLast),
     ];
     expect(computeStatistical(trades, { today }).last_7d?.trend).toBe('flat');
   });
 
-  it('up trend when current window is > +0.1R better', () => {
-    // prev window: 2026-08-02 .. 2026-08-08. last window: 2026-08-09 .. 2026-08-15.
+  it('up trend when the gap outgrows the spread under it', () => {
     const trades: TradeRow[] = [
-      T({ date: '2026-08-03', r_multiple: 0, result: 'BE' }),      // prev window: 0R
-      T({ date: '2026-08-10', r_multiple: 2, result: 'WIN' }),     // last window: +2R
+      ...[-1, -1, -1, -1, -1].map(inPrev),
+      ...[3, 2.5, 3, 2.5, 3].map(inLast),
     ];
     expect(computeStatistical(trades, { today }).last_7d?.trend).toBe('up');
   });
 
-  it('down trend when current window is < -0.1R worse', () => {
+  it('down trend when it outgrows it the other way', () => {
     const trades: TradeRow[] = [
-      T({ date: '2026-08-03', r_multiple: 2, result: 'WIN' }),     // prev window: +2R
-      T({ date: '2026-08-10', r_multiple: -1, result: 'LOSS' }),   // last window: -1R
+      ...[3, 2.5, 3, 2.5, 3].map(inPrev),
+      ...[-1, -1, -1, -1, -1].map(inLast),
     ];
     expect(computeStatistical(trades, { today }).last_7d?.trend).toBe('down');
+  });
+
+  it('stays flat when the gap is the spread of R showing through', () => {
+    const trades: TradeRow[] = [
+      ...[2, -1, 3, -1, 1].map(inPrev),
+      ...[1.5, -1, 2.5, -1, 1].map(inLast),
+    ];
+    expect(computeStatistical(trades, { today }).last_7d?.trend).toBe('flat');
   });
 });
 
 // ── trendOf internal ───────────────────────────────────────────────────────
+//
+// It used to take two MEANS and compare them against a fixed tenth of an R.
+// Two windows drawn from an unchanged distribution land further apart than
+// that about nine times in ten, at every window size from one trade to twenty
+// — and the note is written by a model whose style rules forbid it from
+// hedging about a value it was handed. It takes the trades now, and the floor
+// comes from how far apart they landed.
 describe('trendOf', () => {
-  it('handles nulls as flat', () => {
-    expect(__internals.trendOf(null, 1)).toBe('flat');
-    expect(__internals.trendOf(1, null)).toBe('flat');
-    expect(__internals.trendOf(null, null)).toBe('flat');
+  it('has no answer when a window is empty', () => {
+    expect(__internals.trendOf([], [1])).toBeNull();
+    expect(__internals.trendOf([1], [])).toBeNull();
+    expect(__internals.trendOf([], [])).toBeNull();
   });
-  it('respects the 0.1R threshold', () => {
-    expect(__internals.trendOf(0.05, 0)).toBe('flat');
-    expect(__internals.trendOf(0.15, 0)).toBe('up');
-    expect(__internals.trendOf(-0.15, 0)).toBe('down');
+
+  it('calls a direction when the windows are far apart relative to their spread', () => {
+    expect(__internals.trendOf([3, 2.5, 3, 2.5, 3], [-1, -1, -1, -1, -1])).toBe('up');
+    expect(__internals.trendOf([-1, -1, -1, -1, -1], [3, 2.5, 3, 2.5, 3])).toBe('down');
+  });
+
+  // The case that used to be reported nine times in ten.
+  it('stays flat when the gap is the spread of R showing through', () => {
+    expect(__internals.trendOf([2, -1, 3, -1, 1], [1.5, -1, 2.5, -1, 1])).toBe('flat');
+  });
+
+  // With no spread at all, a tenth of an R really is a direction — that is
+  // what the fixed floor underneath is still for.
+  it('keeps the fixed floor underneath when there is no spread', () => {
+    expect(__internals.trendOf([1.2, 1.2, 1.2], [1, 1, 1])).toBe('up');
+    expect(__internals.trendOf([1.05, 1.05, 1.05], [1, 1, 1])).toBe('flat');
   });
 });
 
@@ -346,5 +389,44 @@ describe('realistic profile of a mid-tier trader', () => {
     }
     const s = computeStatistical(trades, { today });
     expect(s.by_session?.nyam?.n).toBe(5);
+  });
+});
+
+// ── a count is a fact, a rate is not ────────────────────────────────────────
+//
+// by_setup and by_symbol were built at a minimum sample of ONE. A setup tried
+// once and won reached the prompt as `wr: 1.00`, and the note's own style
+// rules forbid the model from hedging about a value it was handed — so "you
+// win every time you trade that setup" was a sentence the system could
+// produce from a single trade.
+
+describe('breakdown buckets below the claim floor', () => {
+  const row = (i: number, over: Partial<TradeRow> = {}): TradeRow => ({
+    clerk_id: 'u', id: String(i), created_at: '', updated_at: '', deleted_at: null,
+    date: '2026-09-01', time: '10:00', symbol: 'ES', direction: 'LONG',
+    contracts: 1, entry_price: 1, stop_loss: 1, result: 'WIN',
+    r_multiple: 1, pnl_usd: 100, setup: 'Bread', session: 'nyam',
+    ...over,
+  } as TradeRow);
+
+  const trades = [
+    row(1, { setup: 'OneOff', symbol: 'MNQ', r_multiple: 2.5, pnl_usd: 250 }),
+    ...Array.from({ length: 10 }, (_, i) => row(i + 2)),
+  ];
+  const stat = computeStatistical(trades, { today: '2026-09-09' });
+
+  it('still says how many trades a thin bucket holds', () => {
+    expect(stat.by_setup?.OneOff?.n).toBe(1);
+  });
+
+  it('does not hand the model a win rate off one trade', () => {
+    expect(stat.by_setup?.OneOff?.wr).toBeUndefined();
+    expect(stat.by_setup?.OneOff?.r).toBeUndefined();
+  });
+
+  it('keeps the rates on a bucket that can carry them', () => {
+    expect(stat.by_setup?.Bread?.n).toBe(10);
+    expect(stat.by_setup?.Bread?.wr).toBe(1);
+    expect(stat.by_setup?.Bread?.r).toBe(1);
   });
 });

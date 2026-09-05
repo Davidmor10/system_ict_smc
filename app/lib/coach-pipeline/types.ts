@@ -109,6 +109,13 @@ export interface ChunkHit extends NotebookChunkRow {
 }
 
 // ── 4. user_profile ─────────────────────────────────────────────────────────
+/** One breakdown bucket. The count stands on its own; the rates do not. */
+export interface StatBucket {
+  n:   number;
+  wr?: number;
+  r?:  number;
+}
+
 export interface Statistical {
   n?:            number;
   wr?:           number;
@@ -117,10 +124,16 @@ export interface Statistical {
   exp_usd?:      number;
   max_dd_usd?:   number;
   streak_now?:   number;
-  by_session?:   Record<string, { n: number; wr: number; r: number }>;
-  by_setup?:     Record<string, { n: number; wr: number; r: number }>;
-  by_symbol?:    Record<string, { n: number; wr: number; r: number }>;
-  last_7d?:      { n: number; wr: number; r: number; trend: 'up' | 'down' | 'flat' };
+  /** Per-bucket breakdowns. `n` is a count and always present; `wr` and `r`
+   *  are RATES, and a rate on one or two trades is not one — they are omitted
+   *  below the shared claim floor rather than sent as 1.00. The prompt's own
+   *  glossary already says an absent field means "not computed". */
+  by_session?:   Record<string, StatBucket>;
+  by_setup?:     Record<string, StatBucket>;
+  by_symbol?:    Record<string, StatBucket>;
+  /** `trend` is absent when neither window can carry one — see the note on
+   *  `trendOf` in analyzers/statistical. */
+  last_7d?:      StatBucket & { trend?: 'up' | 'down' | 'flat' };
 }
 
 // The rolling profile that was designed here and never built.

@@ -24,7 +24,9 @@
 // In practice the caps here (5 setups, 3 symbols) keep it well under 200 tok.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Statistical, TradeRow } from '../types';
+import type { StatBucket, Statistical, TradeRow } from '../types';
+import { MIN_DECIDED_FOR_CLAIM } from '../../stats/evidence';
+import { meanDiffFloor } from '../../stats/movement';
 
 const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
 
@@ -32,8 +34,16 @@ const DECIDED = new Set(['WIN', 'LOSS', 'BE']);
 interface Bucket { n: number; wins: number; rSum: number; }
 const emptyBucket = (): Bucket => ({ n: 0, wins: 0, rSum: 0 });
 
-interface FinishedBucket { n: number; wr: number; r: number; }
-function finish(b: Bucket): FinishedBucket {
+/** A count is a fact at any size; a RATE is not.
+ *
+ *  `by_setup` and `by_symbol` were built at a minimum sample of ONE, so a
+ *  setup tried once and won showed up as `wr: 1.00` — and the note's own style
+ *  rules forbid the model from hedging about a value it was handed. Below the
+ *  shared claim floor the bucket now carries only how many trades it holds,
+ *  which is true, and the prompt's glossary already reads an absent field as
+ *  "not computed". */
+function finish(b: Bucket): StatBucket {
+  if (b.n < MIN_DECIDED_FOR_CLAIM) return { n: b.n };
   return { n: b.n, wr: round2(b.wins / b.n), r: round2(b.rSum / b.n) };
 }
 
@@ -70,12 +80,12 @@ function topN(
   raw: Map<string, Bucket>,
   n: number,
   minSampleSize: number,
-): Record<string, FinishedBucket> | undefined {
+): Record<string, StatBucket> | undefined {
   const filtered = [...raw.entries()].filter(([, b]) => b.n >= minSampleSize);
   if (!filtered.length) return undefined;
   filtered.sort(([, a], [, b]) => b.n - a.n || b.rSum / b.n - a.rSum / a.n);
   const kept = filtered.slice(0, n);
-  const out: Record<string, FinishedBucket> = {};
+  const out: Record<string, StatBucket> = {};
   for (const [key, b] of kept) out[key] = finish(b);
   return out;
 }
@@ -114,12 +124,30 @@ function maxDrawdownUsd(sortedByDateAscending: TradeRow[]): number {
   return Math.round(maxDd);
 }
 
-/** Trend classification for last_7d vs. the 7d before it. */
-function trendOf(currR: number | null, prevR: number | null): 'up' | 'down' | 'flat' {
-  if (currR == null || prevR == null) return 'flat';
-  const diff = currR - prevR;
-  if (diff >  0.10) return 'up';
-  if (diff < -0.10) return 'down';
+/** Trend classification for last_7d vs. the 7d before it.
+ *
+ *  A FIXED TENTH OF AN R DECIDED THIS, on two windows that are often three or
+ *  four trades each. R multiples are spread over several R, so two windows
+ *  drawn from an unchanged distribution land more than 0.10 apart about nine
+ *  times in ten — simulated at every window size from one trade to twenty, it
+ *  never fell below 81%. The note is then written by a model whose style rules
+ *  forbid it from hedging about a value it was handed.
+ *
+ *  The floor now comes from how far apart the trades themselves landed, the
+ *  same rule the weekly comparison uses. Returns null — not 'flat' — when
+ *  neither window can carry a direction, so the field is omitted rather than
+ *  asserting stability that was not measured either. */
+function trendOf(curr: readonly number[], prev: readonly number[]): 'up' | 'down' | 'flat' | null {
+  if (curr.length === 0 || prev.length === 0) return null;
+  const mean = (a: readonly number[]) => a.reduce((s, r) => s + r, 0) / a.length;
+  const sd = (a: readonly number[], m: number) =>
+    (a.length > 1 ? Math.sqrt(a.reduce((s, r) => s + (r - m) ** 2, 0) / (a.length - 1)) : null);
+  const mc = mean(curr), mp = mean(prev);
+  const floor = meanDiffFloor(0.10, { n: curr.length, sd: sd(curr, mc) }, { n: prev.length, sd: sd(prev, mp) });
+  if (!Number.isFinite(floor)) return null;
+  const diff = mc - mp;
+  if (diff >  floor) return 'up';
+  if (diff < -floor) return 'down';
   return 'flat';
 }
 
@@ -197,10 +225,11 @@ export function computeStatistical(
   const to14   = shiftDate(today, 7);
   const last7  = decided.filter(t => t.date >= from7  && t.date <= today);
   const prev7  = decided.filter(t => t.date >= from14 && t.date <= to14);
-  const last7R = last7.length ? round2(last7.reduce((s, t) => s + (t.r_multiple ?? 0), 0) / last7.length) : null;
-  const prev7R = prev7.length ? round2(prev7.reduce((s, t) => s + (t.r_multiple ?? 0), 0) / prev7.length) : null;
-  const last7Wins = last7.filter(isWin).length;
-  const last7WR   = last7.length ? round2(last7Wins / last7.length) : null;
+  // The previous window's mean is no longer computed here: `trendOf` takes the
+  // trades themselves now, because the floor depends on how far apart they
+  // landed and a mean has thrown that away.
+  const last7Sum   = last7.reduce((s, t) => s + (t.r_multiple ?? 0), 0);
+  const last7Wins  = last7.filter(isWin).length;
 
   const out: Statistical = {
     n,
@@ -219,12 +248,14 @@ export function computeStatistical(
   const by = topN(bySymbol, 3, 1);     // top 3 symbols by n
   if (by) out.by_symbol = by;
 
-  if (last7.length > 0 && last7R != null && last7WR != null) {
+  if (last7.length > 0) {
+    const rsOf = (ts: TradeRow[]) => ts.map(t => t.r_multiple ?? 0);
+    const trend = trendOf(rsOf(last7), rsOf(prev7));
+    // Same rule as every other bucket: the count stands, the rates need the
+    // floor under them, and a trend that could not be measured is left out.
     out.last_7d = {
-      n:     last7.length,
-      wr:    last7WR,
-      r:     last7R,
-      trend: trendOf(last7R, prev7R),
+      ...finish({ n: last7.length, wins: last7Wins, rSum: last7Sum }),
+      ...(trend ? { trend } : {}),
     };
   }
 

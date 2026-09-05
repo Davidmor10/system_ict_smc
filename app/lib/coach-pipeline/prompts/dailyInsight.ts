@@ -265,7 +265,13 @@ writing a single word.
     streak_now  current streak. Positive = wins, negative = losses.
     by_session / by_setup / by_symbol
                 { n: trades, wr: win rate, r: average R } per bucket.
-    last_7d     the last 7 days only, same three fields plus a trend.
+                n is always there. wr and r are RATES and appear only on a
+                bucket big enough to carry one — a bucket with n alone is a
+                count of trades and nothing more, and you may say how many
+                there were but not how they went.
+    last_7d     the last 7 days only, same fields, plus a trend when the two
+                weeks were far enough apart for one to be measured. No trend
+                means it was not measurable — NOT that nothing changed.
   An absent field means "not computed", never "zero".
 </user_profile>
 
