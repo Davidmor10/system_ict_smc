@@ -5,14 +5,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { FullAnalysis, GroupPerformance } from '../analytics';
-import { pairedExtremes } from '../analytics/extremes';
+import { pairedExtremes, winRateSeparated } from '../analytics/extremes';
+import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
+import { bonferroni, fisherExactTwoSided } from '../stats/fisher';
+import { PATTERN_ALPHA } from '../analytics/patterns';
 import type { TradeEntry } from '../journal';
 import { meanFloor, ratioFloor, winRateMoved, type DecidedSplit } from '../stats/movement';
 import { computeTrend } from './trend';
 import type { PatternMemorySubjectSummary, ProfileChange, TraderProfile } from './types';
 
 const SCHEMA_VERSION = 1;
-const MIN_SAMPLE = 3;
+/** The shared floor, not a local copy. Three decided trades was never enough
+    to call a session a strength — see lib/stats/evidence. */
+const MIN_SAMPLE = MIN_DECIDED_FOR_CLAIM;
 // Floors, not the rule — see ./movement. These three used to BE the rule, and
 // at this journal's size a fixed floor is smaller than one trade: on a
 // thirty-trade history one more win moves the win rate by about two points,
@@ -26,11 +31,21 @@ const MAX_NOTES = 5;
 const MAX_CONFIRMATIONS = 3;
 const MAX_RECURRING = 5;
 
-/** Strongest/weakest by win rate, eligible at MIN_SAMPLE, requiring a real
-    win-rate spread — a thin wrapper over the shared `pairedExtremes` so the
-    "never the same group as both" guarantee lives in exactly one place. */
+/** Strongest/weakest by win rate — a thin wrapper over the shared
+    `pairedExtremes`, so the "never the same group as both" guarantee and the
+    separation test both live in exactly one place.
+
+    These two become durable KNOWN FACTS in plain Hebrew — "your strength is
+    ES", "your weakest session is X" — and the narrative and hypothesis prompts
+    cite them as standing context. A fact the LLM builds on has to be a fact. */
 function extremesByWinRate(groups: GroupPerformance[]) {
-  return pairedExtremes(groups, g => g.winRate, g => g.confidence.sampleSize >= MIN_SAMPLE, WIN_RATE_THRESHOLD);
+  return pairedExtremes(
+    groups,
+    g => g.winRate,
+    g => g.confidence.sampleSize >= MIN_SAMPLE,
+    WIN_RATE_THRESHOLD,
+    winRateSeparated,
+  );
 }
 
 function diffField(field: string, previous: string | number | null, current: string | number | null): ProfileChange | null {
@@ -53,10 +68,18 @@ export function deriveTraderProfile(
   const { strongest: strongestInstrument, weakest: weakestInstrument } = extremesByWinRate(analysis.instruments);
   const { strongest: strongestSession, weakest: weakestSession } = extremesByWinRate(analysis.sessions);
 
+  // The word is EDGE, and it was decided by whichever side had the higher win
+  // rate — on as few as three trades each, with nothing asked about whether
+  // the two differed. Four longs at 50% against three shorts at 33% named an
+  // edge. One comparison here, so the correction is a formality, but the test
+  // is not.
   const { long, short } = analysis.direction;
   const bothQualify = long.confidence.sampleSize >= MIN_SAMPLE && short.confidence.sampleSize >= MIN_SAMPLE;
+  const directionSeparated = bothQualify && bonferroni(
+    fisherExactTwoSided(long.wins, long.losses, short.wins, short.losses), 1,
+  ) < PATTERN_ALPHA;
   const direction = {
-    edge: (bothQualify
+    edge: (directionSeparated
       ? (long.winRate > short.winRate ? 'long' : long.winRate < short.winRate ? 'short' : 'none')
       : 'none') as 'long' | 'short' | 'none',
     longWinRate: long.winRate,

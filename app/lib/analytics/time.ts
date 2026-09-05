@@ -1,6 +1,6 @@
 import type { TradeEntry } from '../journal';
 import { computeGroupPerformance } from './metrics';
-import { pairedExtremes } from './extremes';
+import { pairedExtremes, winRateSeparated } from './extremes';
 import type { GroupPerformance, TimeSummary } from './types';
 import { canSupportClaim } from '../stats/evidence';
 
@@ -130,8 +130,12 @@ export function analyzeTime(trades: TradeEntry[]): TimeSummary {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mk, ts]) => computeGroupPerformance(ts, mk, mk));
 
-  const hour = pairedExtremes(byHour, g => g.winRate, canClaim);
-  const weekday = pairedExtremes(byWeekday, g => g.winRate, canClaim);
+  // Hour and weekday assert a tendency — "you trade better at 10:00" — so the
+  // pair has to survive being the most extreme of everything looked at. There
+  // are up to 24 hours and 5 weekdays in these pools; the highest and lowest
+  // of that many noisy rates differ every time, by construction.
+  const hour = pairedExtremes(byHour, g => g.winRate, canClaim, 0, winRateSeparated);
+  const weekday = pairedExtremes(byWeekday, g => g.winRate, canClaim, 0, winRateSeparated);
   const week = pairedExtremes(byWeek, g => g.totalPnl, hasTrades);
 
   return {

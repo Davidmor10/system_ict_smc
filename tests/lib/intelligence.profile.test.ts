@@ -13,9 +13,11 @@ function winsAndLosses(symbol: 'ES' | 'NQ', session: string, wins: number, losse
 
 describe('deriveTraderProfile', () => {
   it('picks the strongest/weakest instrument and session by win rate once sample size qualifies', () => {
+    // Nine and one, each way. Both clear the shared floor and the pair clears
+    // the separation test — a spread on its own no longer buys the claim.
     const trades = [
-      ...winsAndLosses('ES', 'nyam', 5, 0),
-      ...winsAndLosses('NQ', 'london', 0, 5),
+      ...winsAndLosses('ES', 'nyam', 9, 1),
+      ...winsAndLosses('NQ', 'london', 1, 9),
     ];
     const profile = deriveTraderProfile(runFullAnalysis(trades), trades, null);
     expect(profile.strongestInstrument?.key).toBe('ES');
@@ -34,7 +36,7 @@ describe('deriveTraderProfile', () => {
   it('never marks the same instrument as BOTH strongest and weakest (the contradiction bug)', () => {
     // A trader who has only traded MNQ: one eligible instrument. It must not
     // become both "your strength" and "you struggle with it".
-    const trades = winsAndLosses('NQ', 'nyam', 4, 3);
+    const trades = winsAndLosses('NQ', 'nyam', 5, 4);
     const profile = deriveTraderProfile(runFullAnalysis(trades), trades, null);
     expect(profile.strongestInstrument?.key).toBe('NQ');
     expect(profile.weakestInstrument).toBeNull();
@@ -52,16 +54,41 @@ describe('deriveTraderProfile', () => {
 
   it('reports a direction edge only when both long and short qualify by sample size', () => {
     const tooFewShorts = [
-      ...winsAndLosses('ES', 'nyam', 5, 0, 'LONG'),
+      ...winsAndLosses('ES', 'nyam', 9, 1, 'LONG'),
       ...winsAndLosses('ES', 'nyam', 0, 1, 'SHORT'),
     ];
     expect(deriveTraderProfile(runFullAnalysis(tooFewShorts), tooFewShorts, null).direction.edge).toBe('none');
 
     const bothQualify = [
-      ...winsAndLosses('ES', 'nyam', 5, 0, 'LONG'),
-      ...winsAndLosses('ES', 'nyam', 0, 5, 'SHORT'),
+      ...winsAndLosses('ES', 'nyam', 9, 1, 'LONG'),
+      ...winsAndLosses('ES', 'nyam', 1, 9, 'SHORT'),
     ];
     expect(deriveTraderProfile(runFullAnalysis(bothQualify), bothQualify, null).direction.edge).toBe('long');
+  });
+
+  // THE WORD IS "EDGE", and the higher of two win rates used to be the whole
+  // of it. Four longs at 50% against three shorts at 33% named one.
+  it('names no edge when the two sides are a coin apart', () => {
+    const wobble = [
+      ...winsAndLosses('ES', 'nyam', 6, 4, 'LONG'),   // 60%
+      ...winsAndLosses('ES', 'nyam', 4, 6, 'SHORT'),  // 40%
+    ];
+    expect(deriveTraderProfile(runFullAnalysis(wobble), wobble, null).direction.edge).toBe('none');
+  });
+
+  // The finding this whole change came from: a trader who is EXACTLY as good
+  // everywhere was told they had a best session and a worst one, essentially
+  // always, because picking the highest and lowest of several noisy rates
+  // finds a gap by construction.
+  it('names no strongest or weakest session when every session is the same', () => {
+    const even = [
+      ...winsAndLosses('ES', 'asia', 5, 5),
+      ...winsAndLosses('ES', 'london', 6, 4),
+      ...winsAndLosses('ES', 'nyam', 4, 6),
+      ...winsAndLosses('ES', 'nypm', 5, 5),
+    ];
+    const profile = deriveTraderProfile(runFullAnalysis(even), even, null);
+    expect(profile.weakestSession).toBeNull();
   });
 
   it('computes up/down/flat trend against the previous profile, threshold-guarded', () => {
