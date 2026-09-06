@@ -101,6 +101,27 @@ function fmtCell(usd: number, unit: Unit, c: FmtCtx): string {
   return `${sign}$${Math.round(a)}`;
 }
 
+/** The type size the month's longest day total fits in.
+ *
+ *  The handoff fixes a 62px track and 14px mono, and both are kept — but its
+ *  demo month carried a single "+$0", so nothing in it was ever wider than
+ *  three characters. Measured in the browser, a 62px cell holds 40px of text:
+ *  four characters at 14px, five at 12px, six at 11px. So the month picks one
+ *  size for all of its cells from its own longest value, and a month of
+ *  ordinary days keeps the design's 14px.
+ *
+ *  One size for the whole month rather than per cell, or a calendar with a
+ *  "+$0" beside a "-$1.5k" would set them in two different sizes. */
+function fitDaySize(cells: string[]): { value: number; sub: number } {
+  const longest = cells.reduce((n, t) => Math.max(n, t.length), 0);
+  // The sub-line — "2t · הפסד" — is nine characters of Heebo and overruns the
+  // same 40px at the handoff's 10.5px, in its own demo month as much as in a
+  // real one. It gets its own step for the same reason.
+  if (longest <= 4) return { value: 14, sub: 9.5 };
+  if (longest === 5) return { value: 12, sub: 9 };
+  return { value: 11, sub: 8.5 };
+}
+
 /** An absolute figure — the account balance, which carries no sign. */
 function fmtAbs(usd: number, unit: Unit, c: FmtCtx): string {
   if (unit === 'dollar') return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -119,6 +140,8 @@ interface Agg {
   streakTrades: number; streakDays: number;
   /** Distinct days with a closed trade, across the whole journal. */
   tradingDays: number;
+  /** Only computed for the cards that can be switched on. */
+  bestDay: number; tradesPerDay: number | null; avgWin: number; avgLoss: number;
 }
 
 function aggregate(trades: TradeEntry[]): Agg {
@@ -166,6 +189,10 @@ function aggregate(trades: TradeEntry[]): Agg {
     shortPct: dir ? (shorts / dir) * 100 : null,
     streakTrades, streakDays,
     tradingDays: byDay.size,
+    bestDay: days.length ? Math.max(...days.map(d => d[1])) : 0,
+    tradesPerDay: byDay.size ? closed.length / byDay.size : null,
+    avgWin: wins.length ? winsPnl / wins.length : 0,
+    avgLoss: losses.length ? lossesPnl / losses.length : 0,
   };
 }
 
@@ -175,6 +202,37 @@ function aggregate(trades: TradeEntry[]): Agg {
 
 const DOW = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 const RING_C = 2 * Math.PI * 17;   // the handoff's 106.8
+
+/* ── the metric set ────────────────────────────────────────────────────────
+   Which cards the trader keeps, and in what order. The handoff's eight are
+   the default; three more exist and are off until asked for.
+
+   `primary` decides the card's weight — the handoff's big cards are the three
+   headline figures and the win-rate ring, and everything else is a secondary
+   card. It travels with the metric rather than with its position, so removing
+   a card does not restyle the ones after it. */
+type MetricKey =
+  | 'pnl' | 'pf' | 'expectancy' | 'win'
+  | 'avgrr' | 'maxdd' | 'longshort' | 'streak'
+  | 'bestday' | 'tradesday' | 'avgwl';
+
+const METRICS: Array<{ key: MetricKey; label: string; primary: boolean }> = [
+  { key: 'pnl',        label: 'רווח נקי (P&L)',   primary: true  },
+  { key: 'pf',         label: 'יחס רווח (PF)',    primary: true  },
+  { key: 'expectancy', label: 'תוחלת עסקה',       primary: true  },
+  { key: 'win',        label: 'אחוז הצלחה',       primary: true  },
+  { key: 'avgrr',      label: 'יחס R ממוצע',      primary: false },
+  { key: 'maxdd',      label: 'ירידה מקסימלית',   primary: false },
+  { key: 'longshort',  label: 'לונג / שורט',      primary: false },
+  { key: 'streak',     label: 'רצף מנצח',         primary: false },
+  { key: 'bestday',    label: 'היום הכי טוב',     primary: false },
+  { key: 'tradesday',  label: 'עסקאות ליום',      primary: false },
+  { key: 'avgwl',      label: 'ממוצע רווח/הפסד',  primary: false },
+];
+
+const DEFAULT_CARDS: MetricKey[] = ['pnl', 'pf', 'expectancy', 'win', 'avgrr', 'maxdd', 'longshort', 'streak'];
+const CARDS_KEY = 'onyx_dash3_cards';
+const isMetricKey = (v: unknown): v is MetricKey => METRICS.some(m => m.key === v);
 
 export default function DashboardView() {
   const { role, canAccess } = usePlan();
@@ -191,6 +249,8 @@ export default function DashboardView() {
   // they chose, so a trader on New York time is not told it is Israel's.
   const [zoneStamp, setZoneStamp] = useState('');
   const [unit, setUnit] = useState<Unit>('dollar');
+  const [cards, setCards] = useState<MetricKey[]>(DEFAULT_CARDS);
+  const [editing, setEditing] = useState(false);
   const [session, setSession] = useState<number>(-1);
   const [monthCursor, setMonthCursor] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [macro, setMacro] = useState<MacroEvent[] | null>(null);
@@ -213,6 +273,13 @@ export default function DashboardView() {
   useEffect(() => {
     const u = readOwned<Unit>(UNIT_KEY);
     if (u && UNITS.some(x => x.key === u)) setUnit(u);
+    const c = readOwned<unknown[]>(CARDS_KEY);
+    if (Array.isArray(c)) {
+      const kept = c.filter(isMetricKey);
+      // An empty saved set would render a blank column with no way back, so
+      // the default stands until at least one card is chosen.
+      if (kept.length) setCards(kept);
+    }
     setSession(getActiveSessionIdx());
     setTrades(loadTrades());
     initSyncListeners();
@@ -227,6 +294,7 @@ export default function DashboardView() {
   }, []);
 
   useEffect(() => { writeOwned(UNIT_KEY, unit); }, [unit]);
+  useEffect(() => { writeOwned(CARDS_KEY, cards); }, [cards]);
 
   /* ── derived ───────────────────────────────────────────────── */
   const accountStart = settings.accountStartUsd || DEFAULT_SETTINGS.accountStartUsd;
@@ -249,6 +317,12 @@ export default function DashboardView() {
   /* ── the month: calendar, monthly change, equity curve ─────── */
   const cal = useMemo(() => buildCalendar(trades, monthCursor), [trades, monthCursor]);
   const curve = useMemo(() => equityCurve(trades), [trades]);
+  // Every day total the visible month will print, so the cells can agree on a
+  // size that fits the longest of them. See fitDaySize.
+  const daySize = useMemo(
+    () => fitDaySize(cal.rows.flatMap(r => r.days.filter(d => d.n > 0).map(d => fmtCell(d.pnl, unit, ctx)))),
+    [cal.rows, unit, ctx],
+  );
 
   const monthLabel = useMemo(
     () => monthCursor.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }),
@@ -277,10 +351,6 @@ export default function DashboardView() {
 
   useReveal([trades.length, hasAi, cal.rows.length, macroRows.length]);
 
-  /* ── the win ring ──────────────────────────────────────────── */
-  const wr = stats.wr ?? 0;
-  const ringFilled = (wr / 100) * RING_C;
-
   return (
     <div className="dsh" dir="rtl">
       <main className="dsh-main">
@@ -295,7 +365,17 @@ export default function DashboardView() {
           </div>
           <div className="dsh-header-right">
             <span className="dsh-plan">{role.toUpperCase()}</span>
-            <Link href="/dashboard/settings" className="dsh-btn">התאמה אישית</Link>
+            {/* It opens the metric picker below. It used to be a link straight
+                to Settings, which is not what "customise" means on a screen
+                made of cards the trader chooses. */}
+            <button
+              type="button"
+              className={`dsh-btn${editing ? ' is-on' : ''}`}
+              aria-expanded={editing}
+              onClick={() => setEditing(v => !v)}
+            >
+              {editing ? 'סיימתי' : 'התאמה אישית'}
+            </button>
             <Link href="/dashboard/settings" className="dsh-sq" aria-label="הגדרות">◇</Link>
           </div>
         </header>
@@ -362,6 +442,35 @@ export default function DashboardView() {
           </div>
         </section>
 
+        {/* ── the metric picker ──────────────────────────────── */}
+        {editing && (
+          <section className="dsh-picker" aria-label="בחירת מדדים">
+            <div className="dsh-picker-k"><span>◈</span>אילו מדדים להציג</div>
+            <div className="dsh-picker-grid">
+              {METRICS.map(m => {
+                const on = cards.includes(m.key);
+                return (
+                  <button
+                    key={m.key} type="button" className="dsh-pick" aria-pressed={on}
+                    onClick={() => setCards(cs => (
+                      cs.includes(m.key)
+                        // The last card cannot be removed — an empty column has
+                        // no affordance to bring anything back.
+                        ? (cs.length > 1 ? cs.filter(k => k !== m.key) : cs)
+                        : [...cs, m.key]
+                    ))}
+                  >
+                    <span className="dsh-pick-mark">{on ? '✓' : '+'}</span>{m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="dsh-picker-note">
+              הבחירה נשמרת רק אצלך ומשפיעה על התצוגה בלבד — לא על נתוני המסחר.
+            </p>
+          </section>
+        )}
+
         {/* ── balance + curve + metrics ──────────────────────── */}
         <section className="dsh-split" data-reveal="1">
           <div className="dsh-balance">
@@ -390,116 +499,55 @@ export default function DashboardView() {
                 </span>
               </div>
             </div>
+            {/* The equity curve. One series, so no legend — the balance above
+                names it — and one mark, at the end, where the account stands
+                now. The baseline is the opening balance, drawn only when the
+                account has been on both sides of it. */}
             <div className="dsh-curve">
-              <svg viewBox="0 0 600 170" preserveAspectRatio="none" aria-hidden>
+              <svg viewBox={`0 0 ${CURVE_W} ${CURVE_H}`} preserveAspectRatio="none" aria-hidden>
                 <defs>
                   <linearGradient id="dsh-eq" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#d4af37" stopOpacity="0.18" />
                     <stop offset="84%" stopColor="#d4af37" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path d={`${curve} L600,170 L0,170 Z`} fill="url(#dsh-eq)" />
+                {curve.baseY !== null && (
+                  <line
+                    className="dsh-curve-base" x1="0" x2={CURVE_W}
+                    y1={curve.baseY} y2={curve.baseY} vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {curve.area && <path d={curve.area} fill="url(#dsh-eq)" />}
                 <path
-                  className="dsh-curve-line" d={curve} fill="none" stroke="#d4af37"
-                  strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round"
+                  className="dsh-curve-line" d={curve.line} fill="none" stroke="#d4af37"
+                  strokeWidth="1.6" vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round" strokeLinecap="round"
                   strokeDasharray="1700"
                 />
               </svg>
+              {/* Outside the stretched viewBox, so the dot stays a circle:
+                  preserveAspectRatio="none" would squash anything drawn in it. */}
+              {/* Clamped a dot's radius inside the box: the path bleeds to the
+                  panel edges by design, and the panel clips its overflow, so an
+                  unclamped end mark is half a dot. */}
+              <span
+                className="dsh-curve-end"
+                style={{
+                  left: `min(${((curve.end.x / CURVE_W) * 100).toFixed(2)}%, calc(100% - 7px))`,
+                  top: `clamp(7px, ${((curve.end.y / CURVE_H) * 100).toFixed(2)}%, calc(100% - 7px))`,
+                }}
+              />
             </div>
           </div>
 
           <div className="dsh-metrics">
-            <div className="dsh-card">
-              <span className="dsh-card-k">רווח נקי (P&amp;L)</span>
-              <span className="dsh-card-v dsh-ltr" style={{ color: stats.pnl >= 0 ? 'var(--d-green)' : 'var(--d-red)' }}>
-                {fmt(stats.pnl * p, unit, ctx)}
-              </span>
-              <span className="dsh-card-n dsh-ltr">{stats.closed} TRADES</span>
-            </div>
-
-            <div className="dsh-card">
-              <span className="dsh-card-k">יחס רווח (PF)</span>
-              <span className="dsh-card-v dsh-ltr" style={{ color: 'var(--d-white)' }}>
-                {stats.pf == null ? '—' : stats.pf === Infinity ? '∞' : (stats.pf * p).toFixed(2)}
-              </span>
-              <span className="dsh-card-n dsh-ltr">PROFIT FACTOR</span>
-            </div>
-
-            <div className="dsh-card">
-              <span className="dsh-card-k">תוחלת עסקה</span>
-              <span className="dsh-card-v dsh-ltr" style={{ color: 'var(--d-gold-light)' }}>
-                {stats.expectancy == null ? '—' : fmt(stats.expectancy * p, unit, ctx).replace(/^\+/, '')}
-              </span>
-              <span className="dsh-card-n dsh-ltr">EXPECTANCY</span>
-            </div>
-
-            <div className="dsh-card is-win">
-              <div className="dsh-win-left">
-                <span className="dsh-card-k">אחוז הצלחה</span>
-                <span className="dsh-win-legend">
-                  <span style={{ color: 'var(--d-green)' }}>W {stats.wins}</span>
-                  <span style={{ color: 'var(--d-low-1)' }}>BE {stats.bes}</span>
-                  <span style={{ color: 'var(--d-red)' }}>L {stats.losses}</span>
-                </span>
-              </div>
-              <div className="dsh-ring">
-                <svg viewBox="0 0 42 42" aria-hidden>
-                  <circle cx="21" cy="21" r="17" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4" />
-                  <circle
-                    className="dsh-ring-arc" cx="21" cy="21" r="17" fill="none"
-                    stroke="#d4af37" strokeWidth="4" strokeLinecap="butt"
-                    strokeDasharray={RING_C}
-                    style={{ ['--dsh-ring-to' as string]: String(RING_C - ringFilled) }}
-                  />
-                </svg>
-                <span className="dsh-ring-v dsh-ltr">
-                  {stats.wr == null ? '—' : `${Math.round(wr * p)}%`}
-                </span>
-              </div>
-            </div>
-
-            <div className="dsh-card2">
-              <span className="dsh-card2-k">יחס R ממוצע</span>
-              <span className="dsh-card2-v dsh-ltr" style={{ color: 'var(--d-hi-2)' }}>
-                {stats.avgR == null ? '—' : `${stats.avgR >= 0 ? '+' : ''}${(stats.avgR * p).toFixed(2)}R`}
-              </span>
-              <span className="dsh-card2-n dsh-ltr">AVG R</span>
-            </div>
-
-            <div className="dsh-card2">
-              <span className="dsh-card2-k">ירידה מקסימלית</span>
-              <span className="dsh-card2-v dsh-ltr" style={{ color: 'var(--d-red)' }}>
-                {stats.maxDD > 0 ? fmt(-stats.maxDD * p, unit, ctx) : '—'}
-              </span>
-              <span className="dsh-card2-n dsh-ltr">MAX DRAWDOWN</span>
-            </div>
-
-            <div className="dsh-card2 is-pair">
-              <span className="dsh-card2-k">לונג / שורט</span>
-              <span className="dsh-ls-row dsh-ltr">
-                <span style={{ color: 'var(--d-green)' }}>{stats.longPct == null ? '—' : `${Math.round(stats.longPct)}%`}</span>
-                <span className="dsh-ls-slash">/</span>
-                <span style={{ color: 'var(--d-red)' }}>{stats.shortPct == null ? '—' : `${Math.round(stats.shortPct)}%`}</span>
-              </span>
-              <span className="dsh-ls-bar">
-                <span className="dsh-ls-long" style={{ width: `${stats.longPct ?? 50}%` }} />
-                <span className="dsh-ls-short" style={{ width: `${stats.shortPct ?? 50}%` }} />
-              </span>
-            </div>
-
-            <div className="dsh-card2 is-pair">
-              <span className="dsh-card2-k">רצף מנצח</span>
-              <span className="dsh-streak">
-                <span className="dsh-streak-cell">
-                  <span className="dsh-streak-v dsh-ltr" style={{ color: 'var(--d-hi-2)' }}>{stats.streakTrades}</span>
-                  <span className="dsh-streak-k">עסקאות</span>
-                </span>
-                <span className="dsh-streak-cell">
-                  <span className="dsh-streak-v dsh-ltr" style={{ color: 'var(--d-mid-1)' }}>{stats.streakDays}</span>
-                  <span className="dsh-streak-k">ימים</span>
-                </span>
-              </span>
-            </div>
+            {cards.map(key => (
+              <MetricCard
+                key={key} metric={key} stats={stats} unit={unit} ctx={ctx} p={p}
+                editing={editing}
+                onDrop={() => setCards(cs => (cs.length > 1 ? cs.filter(k => k !== key) : cs))}
+              />
+            ))}
           </div>
         </section>
 
@@ -531,7 +579,13 @@ export default function DashboardView() {
             </div>
 
             <div className="dsh-cal-scroll">
-              <div className="dsh-cal">
+              <div
+                className="dsh-cal"
+                style={{
+                  ['--dsh-day-fs' as string]: `${daySize.value}px`,
+                  ['--dsh-sub-fs' as string]: `${daySize.sub}px`,
+                }}
+              >
                 {DOW.map(d => <div key={d} className="dsh-dow">{d}</div>)}
                 <div className="dsh-dow">שבוע</div>
 
@@ -592,6 +646,151 @@ export default function DashboardView() {
       </main>
     </div>
   );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   One metric card
+══════════════════════════════════════════════════════════════════ */
+
+/** Every card in the metric column, in the handoff's two weights.
+ *
+ *  Kept in one place so a card the trader adds later carries the same shell,
+ *  the same hover and the same remove affordance as the eight that ship on. */
+function MetricCard({
+  metric, stats, unit, ctx, p, editing, onDrop,
+}: {
+  metric: MetricKey; stats: Agg; unit: Unit; ctx: FmtCtx; p: number;
+  editing: boolean; onDrop: () => void;
+}) {
+  const meta = METRICS.find(m => m.key === metric)!;
+  const shell = meta.primary ? 'dsh-card' : 'dsh-card2';
+  const kCls = meta.primary ? 'dsh-card-k' : 'dsh-card2-k';
+  const vCls = meta.primary ? 'dsh-card-v' : 'dsh-card2-v';
+  const nCls = meta.primary ? 'dsh-card-n' : 'dsh-card2-n';
+
+  const drop = editing ? (
+    <button type="button" className="dsh-drop" onClick={onDrop} aria-label={`הסר ${meta.label}`}>×</button>
+  ) : null;
+
+  const plain = (value: string, color: string, note: string) => (
+    <div className={shell}>
+      {drop}
+      <span className={kCls}>{meta.label}</span>
+      <span className={`${vCls} dsh-ltr`} style={{ color }}>{value}</span>
+      <span className={`${nCls} dsh-ltr`}>{note}</span>
+    </div>
+  );
+
+  switch (metric) {
+    case 'pnl':
+      return plain(fmt(stats.pnl * p, unit, ctx), stats.pnl >= 0 ? 'var(--d-green)' : 'var(--d-red)', `${stats.closed} TRADES`);
+    case 'pf':
+      return plain(
+        stats.pf == null ? '—' : stats.pf === Infinity ? '∞' : (stats.pf * p).toFixed(2),
+        'var(--d-white)', 'PROFIT FACTOR',
+      );
+    case 'expectancy':
+      return plain(
+        stats.expectancy == null ? '—' : fmt(stats.expectancy * p, unit, ctx).replace(/^\+/, ''),
+        'var(--d-gold-light)', 'EXPECTANCY',
+      );
+    case 'avgrr':
+      return plain(
+        stats.avgR == null ? '—' : `${stats.avgR >= 0 ? '+' : ''}${(stats.avgR * p).toFixed(2)}R`,
+        'var(--d-hi-2)', 'AVG R',
+      );
+    case 'maxdd':
+      return plain(stats.maxDD > 0 ? fmt(-stats.maxDD * p, unit, ctx) : '—', 'var(--d-red)', 'MAX DRAWDOWN');
+    case 'bestday':
+      return plain(
+        stats.bestDay === 0 ? '—' : fmt(stats.bestDay * p, unit, ctx),
+        stats.bestDay >= 0 ? 'var(--d-green)' : 'var(--d-red)', 'BEST DAY',
+      );
+    case 'tradesday':
+      return plain(
+        stats.tradesPerDay == null ? '—' : (stats.tradesPerDay * p).toFixed(1),
+        'var(--d-hi-2)', 'TRADES / DAY',
+      );
+
+    case 'win': {
+      const wr = stats.wr ?? 0;
+      const filled = (wr / 100) * RING_C;
+      return (
+        <div className="dsh-card is-win">
+          {drop}
+          <div className="dsh-win-left">
+            <span className="dsh-card-k">{meta.label}</span>
+            <span className="dsh-win-legend">
+              <span style={{ color: 'var(--d-green)' }}>W {stats.wins}</span>
+              <span style={{ color: 'var(--d-low-1)' }}>BE {stats.bes}</span>
+              <span style={{ color: 'var(--d-red)' }}>L {stats.losses}</span>
+            </span>
+          </div>
+          <div className="dsh-ring">
+            <svg viewBox="0 0 42 42" aria-hidden>
+              <circle cx="21" cy="21" r="17" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4" />
+              <circle
+                className="dsh-ring-arc" cx="21" cy="21" r="17" fill="none"
+                stroke="#d4af37" strokeWidth="4" strokeLinecap="butt"
+                strokeDasharray={RING_C}
+                style={{ ['--dsh-ring-to' as string]: String(RING_C - filled) }}
+              />
+            </svg>
+            <span className="dsh-ring-v dsh-ltr">{stats.wr == null ? '—' : `${Math.round(wr * p)}%`}</span>
+          </div>
+        </div>
+      );
+    }
+
+    case 'longshort':
+      return (
+        <div className="dsh-card2 is-pair">
+          {drop}
+          <span className="dsh-card2-k">{meta.label}</span>
+          <span className="dsh-ls-row dsh-ltr">
+            <span style={{ color: 'var(--d-green)' }}>{stats.longPct == null ? '—' : `${Math.round(stats.longPct)}%`}</span>
+            <span className="dsh-ls-slash">/</span>
+            <span style={{ color: 'var(--d-red)' }}>{stats.shortPct == null ? '—' : `${Math.round(stats.shortPct)}%`}</span>
+          </span>
+          <span className="dsh-ls-bar">
+            <span className="dsh-ls-long" style={{ width: `${stats.longPct ?? 50}%` }} />
+            <span className="dsh-ls-short" style={{ width: `${stats.shortPct ?? 50}%` }} />
+          </span>
+        </div>
+      );
+
+    case 'streak':
+      return (
+        <div className="dsh-card2 is-pair">
+          {drop}
+          <span className="dsh-card2-k">{meta.label}</span>
+          <span className="dsh-streak">
+            <span className="dsh-streak-cell">
+              <span className="dsh-streak-v dsh-ltr" style={{ color: 'var(--d-hi-2)' }}>{stats.streakTrades}</span>
+              <span className="dsh-streak-k">עסקאות</span>
+            </span>
+            <span className="dsh-streak-cell">
+              <span className="dsh-streak-v dsh-ltr" style={{ color: 'var(--d-mid-1)' }}>{stats.streakDays}</span>
+              <span className="dsh-streak-k">ימים</span>
+            </span>
+          </span>
+        </div>
+      );
+
+    case 'avgwl':
+      return (
+        <div className="dsh-card2 is-pair">
+          {drop}
+          <span className="dsh-card2-k">{meta.label}</span>
+          <span className="dsh-ls-row dsh-ltr">
+            <span style={{ color: 'var(--d-green)' }}>{fmt(stats.avgWin * p, unit, ctx)}</span>
+            <span className="dsh-ls-slash">/</span>
+            <span style={{ color: 'var(--d-red)' }}>{fmt(-stats.avgLoss * p, unit, ctx)}</span>
+          </span>
+          <span className="dsh-card2-n dsh-ltr">AVG WIN / LOSS</span>
+        </div>
+      );
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -679,25 +878,92 @@ function buildCalendar(trades: TradeEntry[], cursor: Date) {
  *
  *  Left to right, and NOT mirrored in RTL: an equity curve reads forward in
  *  time whichever way the page runs. */
-function equityCurve(trades: TradeEntry[]): string {
+interface Curve {
+  /** The line itself, as a smoothed path. */
+  line: string;
+  /** The same path closed to the floor, for the wash underneath it. */
+  area: string;
+  /** Where the account stands now — the one point worth a mark. */
+  end: { x: number; y: number };
+  /** The opening balance, as a y in the same box. Null when it is off-scale. */
+  baseY: number | null;
+}
+
+const CURVE_W = 600, CURVE_H = 170, CURVE_TOP = 14, CURVE_BOTTOM = 158;
+
+/** A monotone cubic through the points — the classic equity-curve line.
+ *
+ *  Straight segments between daily closes made the curve read as a saw: every
+ *  join a hard corner, and at twenty-odd points the whole thing looked like a
+ *  chart of nothing in particular. A monotone fit rounds the joins WITHOUT
+ *  overshooting, which matters here: a curve that bulges past a day's real
+ *  balance is drawing money the account never had. */
+function smoothPath(pts: Array<{ x: number; y: number }>): string {
+  if (pts.length < 2) return '';
+  if (pts.length === 2) return `M${pts[0].x},${pts[0].y} L${pts[1].x},${pts[1].y}`;
+
+  // Tangents by Fritsch–Carlson: zero at every local extreme, so the line
+  // flattens into a peak or a trough instead of sailing through it.
+  const n = pts.length;
+  const dx: number[] = [], dy: number[] = [], slope: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1].x - pts[i].x);
+    dy.push(pts[i + 1].y - pts[i].y);
+    slope.push(dy[i] / (dx[i] || 1));
+  }
+  const m: number[] = [slope[0]];
+  for (let i = 1; i < n - 1; i++) {
+    m.push(slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2);
+  }
+  m.push(slope[n - 2]);
+
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < n - 1; i++) {
+    const c = dx[i] / 3;
+    d += ` C${(pts[i].x + c).toFixed(2)},${(pts[i].y + m[i] * c).toFixed(2)}`
+      +  ` ${(pts[i + 1].x - c).toFixed(2)},${(pts[i + 1].y - m[i + 1] * c).toFixed(2)}`
+      +  ` ${pts[i + 1].x.toFixed(2)},${pts[i + 1].y.toFixed(2)}`;
+  }
+  return d;
+}
+
+function equityCurve(trades: TradeEntry[]): Curve {
+  const flat: Curve = {
+    line: `M0,${CURVE_BOTTOM} L${CURVE_W},${CURVE_BOTTOM}`,
+    area: '', end: { x: CURVE_W, y: CURVE_BOTTOM }, baseY: null,
+  };
+
   const byDay = new Map<string, number>();
   for (const t of trades) {
     if (t.result === 'OPEN') continue;
     byDay.set(t.dateISO, (byDay.get(t.dateISO) ?? 0) + (t.pnlUsd ?? tradePnL(t) ?? 0));
   }
   const ordered = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  if (ordered.length === 0) return 'M0,150 L600,150';
+  if (ordered.length === 0) return flat;
 
-  // The line starts at the opening balance — zero cumulative — so the first
-  // day's result is a move rather than the baseline.
+  // Starts at the opening balance — zero cumulative — so the first day is a
+  // move rather than the baseline.
   let cum = 0;
   const cums = [0, ...ordered.map(([, v]) => (cum += v))];
   const lo = Math.min(...cums), hi = Math.max(...cums);
-  const range = Math.max(1, hi - lo);
-  const step = 600 / (cums.length - 1);
-  return cums
-    .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(160 - ((v - lo) / range) * 145).toFixed(1)}`)
-    .join(' ');
+  // A flat account has no range to scale by; draw it on the baseline rather
+  // than dividing by zero into the middle of the box.
+  const range = hi - lo;
+  const y = (v: number) => (range === 0
+    ? CURVE_BOTTOM
+    : CURVE_BOTTOM - ((v - lo) / range) * (CURVE_BOTTOM - CURVE_TOP));
+
+  const step = CURVE_W / (cums.length - 1);
+  const pts = cums.map((v, i) => ({ x: +(i * step).toFixed(2), y: +y(v).toFixed(2) }));
+
+  const line = smoothPath(pts);
+  return {
+    line,
+    area: `${line} L${CURVE_W},${CURVE_H} L0,${CURVE_H} Z`,
+    end: pts[pts.length - 1],
+    // Only worth drawing when the account has been both above and below it.
+    baseY: range > 0 && lo < 0 && hi > 0 ? +y(0).toFixed(2) : null,
+  };
 }
 
 /** One calendar row: seven days and the week's summary cell. */

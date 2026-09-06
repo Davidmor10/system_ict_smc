@@ -321,6 +321,62 @@
   box-shadow: 0 8px 22px -10px rgba(212,175,55,.9);
 }
 
+/* ── customise ─────────────────────────────────────────────── */
+
+.dsh-btn.is-on {
+  background: linear-gradient(160deg, #3a3320, #24200f);
+  color: var(--d-gold-light);
+  box-shadow: inset 0 0 0 1px var(--d-gold-30, rgba(212,175,55,.3));
+}
+
+.dsh-picker {
+  position: relative; overflow: hidden; border-radius: 18px;
+  padding: 20px 24px 22px;
+  background: linear-gradient(165deg, rgba(212,175,55,.09), rgba(212,175,55,.02));
+  box-shadow: 0 0 60px -34px rgba(212,175,55,.8), inset 0 1px 0 rgba(255,255,255,.07);
+  animation: dsh-rise .45s var(--d-ease) both;
+}
+.dsh-picker-k {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 700;
+  letter-spacing: .32em; color: var(--d-gold-bright); margin-bottom: 14px;
+}
+.dsh-picker-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.dsh-pick {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 8px 14px; border: none; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.05); box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 400;
+  letter-spacing: .06em; color: var(--d-low-1);
+  transition: all .35s var(--d-ease);
+}
+.dsh-pick:hover { color: var(--d-white); background: rgba(255,255,255,.08); }
+.dsh-pick[aria-pressed='true'] {
+  font-weight: 700; color: var(--d-gold-light); background: rgba(212,175,55,.13);
+  box-shadow: inset 0 0 0 1px rgba(212,175,55,.3);
+}
+.dsh-pick-mark {
+  width: 13px; font-family: var(--d-num); font-size: 11px; line-height: 1;
+  color: var(--d-div-1);
+}
+.dsh-pick[aria-pressed='true'] .dsh-pick-mark { color: var(--d-gold); }
+.dsh-picker-note {
+  margin: 14px 0 0; font-family: var(--d-ui); font-size: 11px; font-weight: 300;
+  line-height: 1.8; color: var(--d-faint-1);
+}
+
+/* The remove affordance, drawn only while customising. */
+.dsh-card, .dsh-card2 { position: relative; }
+.dsh-drop {
+  position: absolute; top: 8px; inset-inline-end: 8px;
+  width: 20px; height: 20px; border: none; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(163,74,74,.22); color: #e2b4b4;
+  font-family: var(--d-num); font-size: 12px; line-height: 1; cursor: pointer;
+  transition: all .3s var(--d-ease);
+}
+.dsh-drop:hover { background: rgba(163,74,74,.42); color: #fff; }
+
 /* ── section 6 · balance + curve + metrics ─────────────────── */
 
 .dsh-split {
@@ -362,6 +418,29 @@
 .dsh-curve { position: relative; flex: 1; min-height: 150px; margin: 22px -32px 0; }
 .dsh-curve svg { width: 100%; height: 100%; display: block; }
 .dsh-curve-line { animation: dsh-draw 3s var(--d-ease) .3s both; }
+/* One hairline at the opening balance, one step off the surface — so a curve
+   below it reads as a drawdown rather than as a shape. Solid, never dashed. */
+.dsh-curve-base { stroke: rgba(255, 255, 255, .09); stroke-width: 1; }
+.dsh-curve-base-k {
+  position: absolute; inset-inline-end: 32px; transform: translateY(-50%);
+  font-family: var(--d-num); font-size: 8.5px; letter-spacing: .18em;
+  color: var(--d-faint-2); pointer-events: none;
+}
+/* The end of the line is where the account is now — the one point worth a
+   mark. The ring is the panel's own ground, so it stays legible over the fill. */
+/* Drawn in the panel rather than in the SVG: the viewBox is stretched with
+   preserveAspectRatio="none", which would squash a circle into an ellipse.
+   The ring is the panel's own ground so the dot stays legible over the wash. */
+.dsh-curve-end {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--d-gold);
+  box-shadow: 0 0 0 3px #0b0b0f, 0 0 14px rgba(212, 175, 55, .9);
+  pointer-events: none;
+  animation: dsh-fade .8s var(--d-ease) 2.5s both;
+}
+@keyframes dsh-fade { from { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+                      to   { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 
 .dsh-metrics {
   display: grid;
@@ -570,26 +649,10 @@
 
 /* ── section 8 · journal + macro ───────────────────────────── */
 
-/* THE ONE PLACE THIS DEVIATES FROM THE HANDOFF, AND IT IS THE HANDOFF'S OWN
-   NUMBERS THAT FORCED IT.
-   
-   The prototype's demo month carried a single "+$0", so nothing in the
-   calendar was ever wider than three characters and two equal columns fit.
-   A real day total is "-$1,500": at the specified 14px mono in a 62px track
-   it runs into the next cell. Every value the handoff fixes — the 14px, the
-   62px minimum, the 9px gap, the 96px week column — is kept, and the journal
-   is given the width those values need instead. The macro panel is a list and
-   loses nothing by being narrower.
-   
-   Below the stack point it is one column, which is what the handoff's
-   auto-fit did at its own 500px. */
 .dsh-wide {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
   gap: 16px;
-}
-@media (max-width: 1120px) {
-  .dsh-wide { grid-template-columns: minmax(0, 1fr); }
 }
 
 .dsh-journal {
@@ -638,14 +701,14 @@
 }
 .dsh-day-b { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .dsh-day-v {
-  font-family: var(--d-num); font-size: 14px; font-weight: 700;
+  font-family: var(--d-num); font-size: var(--dsh-day-fs, 14px); font-weight: 700;
   font-variant-numeric: tabular-nums; line-height: 1;
   /* A day total is formatted to fit (see fmtCell), but a locale that renders
      it wider must clip inside the cell rather than run into the next one. */
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dsh-day-s {
-  font-family: var(--d-ui); font-size: 10.5px; font-weight: 500;
+  font-family: var(--d-ui); font-size: var(--dsh-sub-fs, 10.5px); font-weight: 500;
   letter-spacing: .06em; color: var(--d-low-1); line-height: 1;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -672,6 +735,9 @@
   font-family: var(--d-num); font-size: 12px; font-weight: 700;
   color: var(--d-gold-bright); align-self: flex-start; line-height: 1;
 }
+/* The week column is 96px, so it never needs to give up the design's sizes. */
+.dsh-week .dsh-day-v { font-size: 14px; }
+.dsh-week .dsh-day-s { font-size: 10.5px; }
 .dsh-week-v.is-empty { color: var(--d-faint-1); }
 
 .dsh-legend {
