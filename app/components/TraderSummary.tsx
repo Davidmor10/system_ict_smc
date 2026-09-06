@@ -107,14 +107,17 @@ export default function TraderSummary({
   if (lines.length === 0) return null;
 
   return (
-    <section className="dp-state dp-rise" aria-label="סיכום">
-      <div className="dp-state-head">
-        <span className="dp-state-k">◈ הסיכום שלך</span>
-        <Link href="/dashboard/progress" className="dp-state-more">למסלול המלא →</Link>
+    <section className="dsh-panel" data-reveal="1" aria-label="סיכום">
+      <div className="dsh-panel-head">
+        <span className="dsh-h"><span className="dsh-h-mark">◈</span>הסיכום שלך</span>
+        <Link href="/dashboard/progress" className="dsh-more">למסלול המלא ←</Link>
       </div>
-      <div className="dp-state-lines">
+      {/* The first line is the lead and the second the figures; the stylesheet
+          reads the index rather than a flag, so the ladder cannot drift out of
+          step with the sentences lib/progress/traderSummary produces. */}
+      <div className="dsh-lines">
         {lines.map((l, i) => (
-          <p key={i} className="dp-state-line" data-lead={i === 0}>{l}</p>
+          <p key={i} className="dsh-line" data-i={i}>{l}</p>
         ))}
       </div>
     </section>

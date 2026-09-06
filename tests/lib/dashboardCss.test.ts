@@ -1,13 +1,16 @@
-// Every dp- class the dashboard renders has a rule behind it.
+// Every class the dashboard renders has a rule behind it.
 //
 // This exists because of a specific accident, and the accident is the kind
-// that ships: an edit to dp.css sliced from the middle of the file to a block
-// that had been appended at the END of it, and took the 258 lines in between
-// with it — the widget grid, the calendar, the macro panel, the AI card. Types
-// passed. Lint passed. 1,613 tests passed. The build passed. The dashboard was
-// a single unstyled column, and nothing said so until a person opened it.
+// that ships: an edit to the old dp.css sliced from the middle of the file to
+// a block that had been appended at the END of it, and took the 258 lines in
+// between with it — the widget grid, the calendar, the macro panel, the AI
+// card. Types passed. Lint passed. 1,613 tests passed. The build passed. The
+// dashboard was a single unstyled column, and nothing said so until a person
+// opened it.
 //
-// A stylesheet has no compiler. This is the compiler.
+// The screen was rebuilt against a design handoff since, and the stylesheets
+// changed with it. The guard did not: a stylesheet has no compiler, and this
+// is the compiler.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -15,57 +18,118 @@ import { join } from 'node:path';
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', '..', 'app', ...p), 'utf8');
 
-const CSS = read('components', 'dp.css');
-const SOURCES = [
-  read('components', 'DashboardView.tsx'),
-  read('components', 'TraderSummary.tsx'),
+const DASH_CSS = read('components', 'dashboard.css');
+const SB_CSS = read('components', 'sidebar.css');
+const CSS = DASH_CSS + '\n' + SB_CSS;
+
+const SOURCES: Array<[string, string]> = [
+  ['DashboardView', read('components', 'DashboardView.tsx')],
+  ['TraderSummary', read('components', 'TraderSummary.tsx')],
+  ['InsightSection', read('components', 'dashboard', 'InsightSection.tsx')],
+  ['Sidebar', read('components', 'Sidebar.tsx')],
 ];
 
-/** Class names used in the markup: className="…" and className={`…`}. */
+/** Class names the markup actually renders.
+ *
+ *  Reads className="…", className={`…`} and the concatenated
+ *  `'dsh-day' + (cond ? ' is-x' : '')` form the calendar builds cells with,
+ *  so a modifier appended at runtime is still seen. */
 function usedClasses(src: string): Set<string> {
   const found = new Set<string>();
-  for (const m of src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
-    for (const raw of (m[1] ?? m[2] ?? '').split(/[\s${}?:'"]+/)) {
-      const c = raw.trim();
-      if (c.startsWith('dp-')) found.add(c);
+  const add = (raw: string) => {
+    for (const c of raw.split(/[\s${}?:'"`+()[\],]+/)) {
+      const t = c.trim();
+      if (/^(dsh|sb)-[\w-]+$/.test(t)) found.add(t);
     }
+  };
+  for (const m of src.matchAll(/className=(?:"([^"]*)"|\{((?:[^{}]|\{[^{}]*\})*)\})/g)) {
+    add(m[1] ?? m[2] ?? '');
   }
   return found;
 }
 
-describe('the dashboard stylesheet covers what the dashboard renders', () => {
-  it('has a rule for every dp- class in the markup', () => {
+describe('the dashboard stylesheets cover what the dashboard renders', () => {
+  it('has a rule for every dsh- and sb- class in the markup', () => {
     const missing: string[] = [];
-    for (const src of SOURCES) {
+    for (const [name, src] of SOURCES) {
       for (const c of usedClasses(src)) {
-        // Word boundary, so dp-state does not match dp-state-head.
-        if (!new RegExp(`\\.${c}(?![\\w-])`).test(CSS)) missing.push(c);
+        // Word boundary, so .dsh-day does not satisfy .dsh-days.
+        if (!new RegExp(`\\.${c}(?![\\w-])`).test(CSS)) missing.push(`${name}: .${c}`);
       }
     }
     expect(missing).toEqual([]);
   });
 
-  // The specific rules whose loss produced the broken screen. Named
-  // individually so a failure says which part of the page went flat rather
-  // than only that a count changed.
-  it('keeps the structural rules the layout collapses without', () => {
-    for (const rule of [
-      '.dp-app .dp-kpis',        // the widget grid
-      '.dp-app .dp-body',        // the calendar + macro row
-      '.dp-app .dp-col',
-      '.dp-app .dp-control-row', // sessions + unit toggle
-      '.dp-app .dp-cal-grid',
-      '.dp-app .dp-macro',
-      '.dp-app .dp-state',       // the claim at the top
-    ]) {
-      expect(CSS).toContain(rule);
+  it('finds the classes at all, so an empty scan cannot pass as a clean one', () => {
+    for (const [name, src] of SOURCES) {
+      expect(usedClasses(src).size, name).toBeGreaterThan(3);
     }
   });
 
-  // The old tracking line was replaced, not renamed around. A leftover rule
-  // for a component nobody renders is how a stylesheet starts lying about
-  // what the page is.
-  it('has no rules left for the component that was removed', () => {
-    expect(CSS).not.toContain('dp-track');
+  // The rules whose loss produced the broken screen, named individually so a
+  // failure says which part of the page went flat rather than only that a
+  // count changed.
+  it('keeps the structural rules the layout collapses without', () => {
+    for (const rule of [
+      '.dsh-main',        // the vertical rhythm of the whole page
+      '.dsh-greet',       // greeting + clock
+      '.dsh-split',       // balance | metrics
+      '.dsh-metrics',     // the metric grid itself
+      '.dsh-insight',     // the note + rail two-column panel
+      '.dsh-rail',
+      '.dsh-wide',        // journal | macro
+      '.dsh-cal',         // the calendar grid
+      '.dsh-panel',       // the summary
+      '.sb',              // the rail's own frame
+      '.sb-nav',
+    ]) {
+      expect(CSS, rule).toContain(rule);
+    }
+  });
+
+  // Modifier classes are appended as strings rather than written whole, so the
+  // scan above cannot see them.
+  it('keeps the state rules the markup appends at runtime', () => {
+    for (const rule of [
+      '.dsh-day.is-profit',
+      '.dsh-day.is-loss',
+      '.dsh-day.is-out',
+      '.dsh-card.is-win',
+      '.dsh-card2.is-pair',
+      '.dsh-chip.is-gold',
+      '.dsh-chip.is-plain',
+      '.dsh-bloom.is-greet',
+      '.dsh-bloom.is-balance',
+      '.dsh-bloom.is-insight',
+      ".dsh-sess[aria-pressed='true']",
+      ".dsh-unit[aria-pressed='true']",
+      '.sb-item.is-active',
+      '.sb-item.is-locked',
+      '.sb-item.is-child',
+    ]) {
+      expect(CSS, rule).toContain(rule);
+    }
+  });
+
+  // A number, a currency or a time inside the RTL tree has to be isolated or
+  // the bidi algorithm reorders it: "+$242.50" renders as "$242.50+". The
+  // class is the isolation, so it has to exist and it has to be used.
+  it('isolates the runs of digits the RTL tree would otherwise reorder', () => {
+    expect(CSS).toContain('.dsh-ltr');
+    expect(CSS).toMatch(/\.dsh-ltr\s*\{[^}]*unicode-bidi:\s*isolate/);
+    const view = SOURCES[0][1];
+    for (const anchor of ['dsh-balance-v dsh-ltr', 'dsh-clock-v dsh-ltr', 'dsh-day-n dsh-ltr']) {
+      expect(view, anchor).toContain(anchor);
+    }
+  });
+
+  // The design is borderless by construction — depth is shadow only. A border
+  // creeping in is the single change that would make it look like a different
+  // page, and it is the sort of thing added while fixing something else.
+  it('draws depth with shadow, never with a border', () => {
+    const borders = [...DASH_CSS.matchAll(/^\s*border:\s*([^;]+);/gm)]
+      .map(m => m[1].trim())
+      .filter(v => v !== 'none');
+    expect(borders).toEqual([]);
   });
 });

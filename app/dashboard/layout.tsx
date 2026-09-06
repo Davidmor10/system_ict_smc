@@ -32,7 +32,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <StaleSessionNotice />
       {/* Renders nothing; keeps the layout at the size it was designed for. */}
       <ViewportScale />
-      <div className="onyx-layout h-screen flex overflow-hidden bg-black text-[#c0c0c0]">
+      {/* The shell is the design's: one radial wash the whole frame sits on,
+          and a rail with no border that the wash shows straight through. The
+          rail is authored FIRST and the document is RTL, so it lands on the
+          right without a mirrored order. */}
+      <div className="onyx-layout onyx-shell h-screen flex overflow-hidden text-[#cbcbd3]">
         <Sidebar />
         {/* Spacer pushes content below the fixed mobile header */}
         <div className="flex-1 flex flex-col min-h-0 max-[880px]:pt-[54px]">

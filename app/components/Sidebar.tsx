@@ -6,36 +6,23 @@ import { UserButton } from '@clerk/nextjs';
 import { useLanguage } from '../hooks/useLanguage';
 import type { DictKey } from '../lib/i18n';
 import { usePlan, type Role } from './PlanProvider';
+import './sidebar.css';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-// Nav icons (Tabler-flavored) inlined as tiny SVG components. Kept in-file
-// so the sidebar stays a single small deployable unit — no icon package,
-// no runtime lookup. currentColor + stroke lets each item paint in the
-// same tone as its label (active gold, locked dim, hover white).
-type IconEl = () => React.JSX.Element;
-const iconProps = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
-function IconGrid()      { return <svg {...iconProps}><rect x="3" y="3"  width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>; }
-function IconBook()      { return <svg {...iconProps}><path d="M3 4h14a2 2 0 0 1 2 2v14a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2Z" /><path d="M7 4v16" /></svg>; }
-function IconNotebook()  { return <svg {...iconProps}><path d="M6 4h11a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" /><path d="M12 8h3M12 12h3M12 16h3" /></svg>; }
-function IconChart()     { return <svg {...iconProps}><path d="M4 20V10M10 20V4M16 20v-7M22 20h-20" /></svg>; }
-// Two sparks — the house mark for anything the AI wrote rather than counted.
-// Keeps the bar chart free for Statistics, which is the page that actually
-// plots bars.
-function IconSparkles()  { return <svg {...iconProps}><path d="M10 3l1.7 5.3L17 10l-5.3 1.7L10 17l-1.7-5.3L3 10l5.3-1.7Z" /><path d="M17.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" /></svg>; }
-function IconCoach()     { return <svg {...iconProps}><path d="M8 9h8M8 13h5" /><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg>; }
-function IconPlaybook()  { return <svg {...iconProps}><path d="M12 4v16" /><path d="M3 6a3 3 0 0 1 3-3h5v18H6a3 3 0 0 1-3-3Z" /><path d="M21 6a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 0 3-3Z" /></svg>; }
-function IconRules()     { return <svg {...iconProps}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z" /><path d="M9 12l2 2 4-4" /></svg>; }
-function IconReports()   { return <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /><path d="M8 13h5M8 17h4M16 12l3 3-3 3" /></svg>; }
-// A path with a marker at its end — a route travelled, not a bar chart. The
-// journey screen is about direction over time, and IconChart already means
-// "the statistics page".
-function IconPath()      { return <svg {...iconProps}><path d="M4 20c3.5 0 3.5-5 7-5s3.5-5 7-5" /><circle cx="18" cy="10" r="2" /><circle cx="4" cy="20" r="1" /></svg>; }
-// A banknote with a check — the owner's payment-verification queue. Distinct
-// from IconRules' shield, which is about the trader's own discipline.
-function IconVerify()    { return <svg {...iconProps}><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M8.5 12l2 2 4-4" /></svg>; }
-function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>; }
-
+// The redesigned rail carries NO nav icons — a leading dot carries the state
+// instead, and the label carries the meaning. Twelve small glyphs at 16px next
+// to twelve Hebrew words were competing with the words rather than helping
+// them, and none of them was ever the thing being read.
+//
+// `child: true` nests an item under the one above it — Statistics sits under
+// Notebook because it is a view of the same record rather than a section of
+// its own.
+//
+// `owner: true` is not a plan tier — no subscription reaches it. It is drawn
+// only for an address on the admin allowlist, and hiding it is a convenience:
+// the page itself answers everyone else with a 404 and never reads a row for
+// them.
 // `child: true` nests an item under the one above it — indented, no icon, a
 // smaller label. Statistics sits under Notebook because it is a view of the
 // same record rather than a section of its own.
@@ -44,24 +31,24 @@ function IconSettings()  { return <svg {...iconProps}><circle cx="12" cy="12" r=
 // only for an address on the admin allowlist, and hiding it is a convenience:
 // the page itself answers everyone else with a 404 and never reads a row for
 // them.
-const NAV: { href: string; key: DictKey; min: Role; Icon: IconEl; child?: boolean; owner?: boolean }[] = [
-  { href: '/dashboard',              key: 'nav_workspace',    min: 'starter',   Icon: IconGrid     },
-  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter',   Icon: IconBook     },
-  { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter',   Icon: IconNotebook },
-  { href: '/dashboard/stats',        key: 'nav_stats',        min: 'starter',   Icon: IconChart, child: true },
-  { href: '/dashboard/progress',     key: 'nav_progress',     min: 'pro',       Icon: IconPath     },
-  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro',    Icon: IconSparkles },
-  { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe', Icon: IconCoach    },
-  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter',   Icon: IconPlaybook },
-  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'starter',   Icon: IconRules    },
-  { href: '/dashboard/reports',      key: 'nav_reports',      min: 'starter',   Icon: IconReports  },
-  { href: '/dashboard/settings',     key: 'nav_settings',     min: 'starter',   Icon: IconSettings },
-  { href: '/dashboard/payments',     key: 'nav_payments',     min: 'starter',   Icon: IconVerify, owner: true },
+const NAV: { href: string; key: DictKey; min: Role; child?: boolean; owner?: boolean }[] = [
+  { href: '/dashboard',              key: 'nav_workspace',    min: 'starter'     },
+  { href: '/dashboard/journal',      key: 'nav_journal',      min: 'starter'     },
+  { href: '/dashboard/notebook',     key: 'nav_notebook',     min: 'starter' },
+  { href: '/dashboard/stats',        key: 'nav_stats',        min: 'starter', child: true },
+  { href: '/dashboard/progress',     key: 'nav_progress',     min: 'pro'     },
+  { href: '/dashboard/ai-analytics', key: 'nav_ai_analytics', min: 'pro' },
+  { href: '/dashboard/coach',        key: 'nav_coach',        min: 'deluxe'    },
+  { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter' },
+  { href: '/dashboard/rules',        key: 'nav_rules',        min: 'starter'    },
+  { href: '/dashboard/reports',      key: 'nav_reports',      min: 'starter'  },
+  { href: '/dashboard/settings',     key: 'nav_settings',     min: 'starter' },
+  { href: '/dashboard/payments',     key: 'nav_payments',     min: 'starter', owner: true },
 ];
 
 function LockIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <rect x="4" y="11" width="16" height="10" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
     </svg>
@@ -70,77 +57,45 @@ function LockIcon() {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { lang, t } = useLanguage();
-  const { canAccess, isAdmin } = usePlan();
-  const rtl = lang === 'he';
+  const { t } = useLanguage();
+  const { canAccess, isAdmin, role } = usePlan();
 
   return (
-    <aside style={{ order: rtl ? 2 : 0 }} className={`hidden min-[881px]:flex w-[210px] shrink-0 flex-col ${rtl ? 'border-l' : 'border-r'} border-[#1c1c1e] bg-black`}>
-
-      {/* ── Branding ─────────────────────────────────────────── */}
-      <div className="px-5 py-5 border-b border-[#1c1c1e]">
-        <span className="block font-serif text-lg font-bold tracking-[0.06em] text-white leading-none">
-          ONYX
-        </span>
-        <span className={`block font-mono text-[10px] font-bold tracking-[0.34em] text-[#d4af37] uppercase leading-none mt-1.5 ${rtl ? 'text-right' : ''}`}>
-          {t('brand_sub')}
-        </span>
+    <aside className="sb" aria-label="ניווט">
+      <div className="sb-logo">
+        <div className="sb-word">ONYX</div>
+        <div className="sb-sub">{t('brand_sub')}</div>
       </div>
 
-      {/* ── Navigation ───────────────────────────────────────── */}
-      <nav className="flex-1 px-3 py-5 flex flex-col gap-0.5">
-        {NAV.filter(item => !item.owner || isAdmin).map(({ href, key, min, Icon, child }) => {
+      <nav className="sb-nav">
+        {NAV.filter(item => !item.owner || isAdmin).map(({ href, key, min, child }) => {
           const locked = !canAccess(min);
           const active = !locked && (pathname === href || (href !== '/dashboard' && pathname.startsWith(href)));
           return (
             <Link
               key={href}
               href={locked ? '/checkout' : href}
-              dir={rtl ? 'rtl' : 'ltr'}
               title={locked ? t('nav_locked_hint') : undefined}
-              style={{
-                transition: 'color 250ms cubic-bezier(0.16,1,0.3,1), background-color 250ms cubic-bezier(0.16,1,0.3,1), border-color 250ms cubic-bezier(0.16,1,0.3,1)',
-                ...(child ? { paddingInlineStart: 26 } : null),
-              }}
-              className={[
-                'flex items-center gap-2.5 px-3 py-2.5 rounded-xl',
-                child ? 'text-[12px] tracking-[0.08em]' : 'text-[13px] tracking-[0.1em]',
-                'font-bold font-mono uppercase',
-                rtl ? 'pr-[10px] pl-3 border-r-2 border-l-0' : 'pl-[10px] pr-3 border-l-2',
-                active
-                  ? 'border-[#d4af37] bg-[#d4af37]/[0.08] text-white'
-                  : locked
-                    ? 'border-transparent text-white/30 hover:text-white/55 hover:bg-white/[0.02]'
-                    : 'border-transparent text-white/55 hover:text-white/95 hover:bg-white/[0.03] hover:border-white/10',
-              ].join(' ')}
+              className={`sb-item${active ? ' is-active' : ''}${locked ? ' is-locked' : ''}${child ? ' is-child' : ''}`}
+              aria-current={active ? 'page' : undefined}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{
-                  background: active ? '#d4af37' : 'transparent',
-                  boxShadow: active ? '0 0 8px rgba(212,175,55,0.7)' : 'none',
-                  transition: 'background 300ms cubic-bezier(0.16,1,0.3,1), box-shadow 300ms cubic-bezier(0.16,1,0.3,1)',
-                  order: rtl ? 1 : 0,
-                }}
-              />
-              <span className={`shrink-0 ${active ? 'text-[#d4af37]' : locked ? 'text-white/30' : 'text-white/50'}`}>
-                <Icon />
-              </span>
-              <span className="flex-1">{t(key)}</span>
-              {locked && <span className="shrink-0 text-[#d4af37]/50" style={{ order: rtl ? -1 : 1 }}><LockIcon /></span>}
+              <span className="sb-dot" aria-hidden />
+              <span className="sb-label">{t(key)}</span>
+              {locked && <span className="sb-lock"><LockIcon /></span>}
             </Link>
           );
         })}
       </nav>
 
-      {/* ── Account + language toggle ─────────── */}
-      <div className="px-5 py-4 border-t border-[#1c1c1e]">
-        {CLERK_ENABLED && (
-          <div className={`flex items-center gap-2.5 mb-3 ${rtl ? 'flex-row-reverse' : ''}`}>
-            <UserButton />
-            <span className="text-xs font-bold font-mono text-white/50 uppercase tracking-[0.18em]">{t('sys_account')}</span>
-          </div>
-        )}
+      {/* The account block. The avatar is Clerk's own button so the menu —
+          sign out, manage account — is still one click away; the design's
+          gradient ring and the plan line sit around it. */}
+      <div className="sb-account">
+        {CLERK_ENABLED && <span className="sb-avatar"><UserButton /></span>}
+        <span className="sb-account-text">
+          <span className="sb-account-k">{t('sys_account')}</span>
+          <span className="sb-account-plan">{role.toUpperCase()}</span>
+        </span>
       </div>
     </aside>
   );

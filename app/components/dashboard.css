@@ -1,0 +1,790 @@
+/* ══════════════════════════════════════════════════════════════════
+   The dashboard.
+
+   A one-to-one build of the handoff in design_handoff_onyx_dashboard:
+   obsidian shell, floating soft-cornered panels with no borders
+   anywhere — depth is shadow only — and a single accent, institutional
+   gold #d4af37.
+
+   Every number here came from the handoff tables. Where the prototype
+   used inline styles, the value moved here unchanged; nothing was
+   rounded to a Tailwind step.
+
+   Scoped under .dsh so none of it leaks into the rest of the app.
+
+   TYPE. Hebrew words take Heebo, display takes Frank Ruhl Libre, and
+   digits take Geist Mono with tabular figures — the same split the
+   journey and statistics screens use, and for the same reason: Geist
+   Mono carries no Hebrew, so a 9px label in it falls back to something
+   unreadable.
+
+   RTL. The page is authored right-to-left rather than mirrored at the
+   end. The one thing that must NOT mirror is a run of digits or Latin —
+   .dsh-ltr isolates those, or "+$242.50" renders as "$242.50+".
+══════════════════════════════════════════════════════════════════ */
+
+.dsh {
+  /* ── palette ─────────────────────────────────────────────── */
+  --d-gold:       #d4af37;
+  --d-gold-bright:#e6c455;
+  --d-gold-light: #f4e6b8;
+  --d-gold-soft:  #dcbf5c;
+  --d-gold-muted: #d6c79c;
+  --d-gold-chip:  #cbbd94;
+
+  --d-white:  #fff;
+  --d-hi-1:   #f2f2f5;
+  --d-hi-2:   #ececef;
+  --d-hi-3:   #e8e8ee;
+  --d-text:   #cbcbd3;
+  --d-text-2: #c6c6ce;
+  --d-text-3: #d0d0d8;
+  --d-mid-1:  #b6b6bf;
+  --d-mid-2:  #b0b0ba;
+  --d-low-1:  #a6a6b0;
+  --d-low-2:  #9d9da7;
+  --d-faint-1:#95959f;
+  --d-faint-2:#8f8f99;
+  --d-place:  #7f7f88;
+
+  --d-green:      #5f9c72;
+  --d-green-deep: #4a7c59;
+  --d-red:        #c47a7a;
+  --d-red-deep:   #a34a4a;
+
+  --d-div-1: #3a3a44;
+  --d-div-2: #33333c;
+  --d-div-3: #4a4a56;
+
+  /* ── type ────────────────────────────────────────────────── */
+  --d-ui:      var(--font-heebo, 'Heebo'), system-ui, sans-serif;
+  --d-display: var(--font-frank, 'Frank Ruhl Libre'), var(--font-playfair, 'Playfair Display'), serif;
+  --d-word:    var(--font-playfair, 'Playfair Display'), var(--font-frank, 'Frank Ruhl Libre'), serif;
+  --d-num:     var(--font-geist-mono, 'Geist Mono'), ui-monospace, monospace;
+
+  /* ── motion ──────────────────────────────────────────────── */
+  --d-ease: cubic-bezier(.16, 1, .3, 1);
+}
+
+/* ── the shell ─────────────────────────────────────────────── */
+
+.dsh {
+  min-height: 100%;
+  background:
+    radial-gradient(120% 80% at 80% -10%, #101017 0%, #08080d 44%, #040407 100%),
+    #05050a;
+  color: var(--d-text);
+  font-family: var(--font-geist-sans, 'Geist'), var(--d-ui), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-y: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.dsh ::selection { background: rgba(212, 175, 55, .24); color: #fff; }
+.dsh ::-webkit-scrollbar { width: 9px; height: 9px; }
+.dsh ::-webkit-scrollbar-track { background: #05050a; }
+.dsh ::-webkit-scrollbar-thumb { background: #1a1a22; border-radius: 99px; }
+.dsh textarea::placeholder { color: var(--d-place); }
+
+.dsh a { color: var(--d-gold); text-decoration: none; transition: color .35s var(--d-ease); }
+.dsh a:hover { color: #e8d08a; }
+
+/* A run of digits, currency, time or Latin inside the RTL tree. Without
+   this "+$242.50" is reordered to "$242.50+" by the bidi algorithm. */
+.dsh-ltr { direction: ltr; unicode-bidi: isolate; }
+
+.dsh-main {
+  padding: 22px 40px 84px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── keyframes ─────────────────────────────────────────────── */
+
+@keyframes dsh-rise {
+  from { opacity: 0; transform: translateY(18px) scale(.995); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dsh-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .28; transform: scale(.74); }
+}
+@keyframes dsh-draw  { from { stroke-dashoffset: 1700; } to { stroke-dashoffset: 0; } }
+/* The arc grows from nothing to the real win rate. `--dsh-ring-to` is
+   circumference − filled, set on the element from the data — the handoff's
+   106.8 − winRate × 106.8. */
+@keyframes dsh-ring  { from { stroke-dashoffset: 106.81; } to { stroke-dashoffset: var(--dsh-ring-to, 0); } }
+@keyframes dsh-glide {
+  0%   { transform: translateX(120%); opacity: 0; }
+  18%  { opacity: 1; }
+  100% { transform: translateX(-320%); opacity: 0; }
+}
+
+/* ── header row ────────────────────────────────────────────── */
+
+.dsh-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap; padding: 4px 8px 6px;
+}
+.dsh-crumb {
+  display: flex; align-items: center; gap: 11px;
+  font-family: var(--d-num); font-size: 10px; letter-spacing: .26em; color: var(--d-low-1);
+}
+.dsh-crumb-mark { color: var(--d-gold); }
+.dsh-crumb-brand { color: var(--d-hi-1); }
+.dsh-crumb-sep { color: var(--d-div-1); }
+.dsh-crumb-page { font-family: var(--d-ui); font-size: 11.5px; letter-spacing: .18em; }
+
+.dsh-header-right { display: flex; align-items: center; gap: 12px; }
+
+.dsh-plan {
+  padding: 6px 12px; border-radius: 999px; background: rgba(212, 175, 55, .1);
+  font-family: var(--d-num); font-size: 8.5px; font-weight: 700;
+  letter-spacing: .3em; color: var(--d-gold-light);
+}
+
+/* The design system's primary button, at sm.
+   Written as `.dsh a.dsh-btn, .dsh .dsh-btn` because `.dsh a` above sets the
+   link colour at (0,1,1) and a bare `.dsh-btn` at (0,1,0) loses to it — which
+   painted the label gold on a gold fill, invisible. */
+.dsh a.dsh-btn, .dsh .dsh-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 126px; height: 32px; padding: 0 16px;
+  border: none; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(160deg, #e8cf74, var(--d-gold) 58%, #b8922a);
+  color: #0a0a0b;
+  font-family: var(--d-ui); font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  box-shadow: 0 10px 26px -14px rgba(212, 175, 55, .95), inset 0 1px 0 rgba(255, 255, 255, .3);
+  transition: all .35s var(--d-ease);
+}
+.dsh a.dsh-btn:hover, .dsh .dsh-btn:hover { filter: brightness(1.06); box-shadow: 0 14px 32px -12px rgba(212, 175, 55, 1), inset 0 1px 0 rgba(255, 255, 255, .38); }
+.dsh .dsh-btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+.dsh-btn.is-sm { min-width: 84px; }
+
+.dsh a.dsh-sq, .dsh .dsh-sq {
+  width: 30px; height: 30px; border-radius: 10px;
+  background: rgba(255, 255, 255, .05);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--d-mid-1); cursor: pointer; font-size: 13px;
+  border: none; transition: all .35s var(--d-ease);
+}
+.dsh a.dsh-sq:hover, .dsh .dsh-sq:hover { background: rgba(212, 175, 55, .18); color: var(--d-gold-light); }
+
+/* ── section 3 · greeting + clock ──────────────────────────── */
+
+.dsh-greet {
+  position: relative; overflow: hidden;
+  border-radius: 24px; padding: 34px 36px;
+  background: linear-gradient(168deg, rgba(255,255,255,.058), rgba(255,255,255,.014) 46%, rgba(255,255,255,.004));
+  box-shadow: 0 40px 120px -44px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.07);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 24px 40px;
+}
+.dsh-bloom { position: absolute; inset: 0; pointer-events: none; }
+.dsh-bloom.is-greet { background: radial-gradient(50% 120% at 86% -20%, rgba(212,175,55,.16), transparent 62%); }
+.dsh-sweep {
+  position: absolute; top: 0; bottom: 0; width: 24%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,.07), transparent);
+  animation: dsh-glide 3s var(--d-ease) .5s both;
+}
+.dsh-greet-col { position: relative; min-width: 0; }
+
+.dsh-dateline { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.dsh-live-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px;
+  background: var(--d-gold); box-shadow: 0 0 12px rgba(212,175,55,1);
+  animation: dsh-pulse 2.6s ease-in-out infinite;
+}
+.dsh-date {
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 500;
+  letter-spacing: .24em; color: var(--d-gold-soft);
+}
+.dsh-h1 {
+  margin: 0; font-family: var(--d-display);
+  font-size: clamp(36px, 3.8vw, 52px); font-weight: 400;
+  color: var(--d-white); line-height: 1.04; letter-spacing: -.018em;
+}
+.dsh-chips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.dsh-chip {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 7px 14px; border-radius: 999px;
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 500; letter-spacing: .08em;
+}
+.dsh-chip.is-gold { background: rgba(212,175,55,.1); color: var(--d-gold-light); }
+.dsh-chip.is-plain { background: rgba(255,255,255,.05); color: var(--d-text-2); gap: 8px; }
+.dsh-chip-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px;
+  background: var(--d-gold); box-shadow: 0 0 9px rgba(212,175,55,.95);
+}
+.dsh-chip-n { font-family: var(--d-num); font-weight: 700; color: var(--d-white); }
+
+.dsh-clock {
+  position: relative; border-radius: 18px; padding: 18px 26px;
+  background: rgba(0,0,0,.34); box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  text-align: center;
+}
+.dsh-clock-k {
+  font-family: var(--d-ui); font-size: 9px; font-weight: 500;
+  letter-spacing: .34em; color: var(--d-low-1); margin-bottom: 10px;
+}
+.dsh-clock-v {
+  font-family: var(--d-num); font-size: 32px; font-weight: 700; color: var(--d-white);
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.dsh-clock-z {
+  margin-top: 9px; font-family: var(--d-num); font-size: 8.5px;
+  letter-spacing: .3em; color: var(--d-low-2);
+}
+
+/* ── section 4 · the summary ───────────────────────────────── */
+
+.dsh-panel {
+  position: relative; overflow: hidden; border-radius: 22px;
+  padding: 28px 32px 30px;
+  background: linear-gradient(168deg, rgba(255,255,255,.048), rgba(255,255,255,.01));
+  box-shadow: 0 30px 90px -40px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.dsh-panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+}
+/* The one heading style the whole page shares. 900 is not a typo — it is
+   what separates a section title from the body at 15px. */
+.dsh-h {
+  display: flex; align-items: center; gap: 11px;
+  font-family: var(--d-ui); font-size: 15px; font-weight: 900;
+  letter-spacing: .14em; color: var(--d-gold-bright);
+}
+.dsh-h-mark { font-size: 12px; }
+.dsh-h-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px;
+  background: var(--d-gold); box-shadow: 0 0 9px rgba(212,175,55,.95);
+}
+.dsh-more { font-family: var(--d-ui); font-size: 11.5px; font-weight: 500; }
+
+.dsh-lines { display: flex; flex-direction: column; gap: 11px; max-width: 104ch; }
+.dsh-line {
+  margin: 0; font-family: var(--d-ui); font-size: 14px; font-weight: 400;
+  line-height: 1.9; color: var(--d-mid-2); text-wrap: pretty;
+}
+.dsh-line[data-i='0'] { font-size: 17px; font-weight: 700; line-height: 1.7; color: var(--d-white); }
+.dsh-line[data-i='1'] { color: var(--d-text-2); }
+
+/* ── section 5 · selectors ─────────────────────────────────── */
+
+.dsh-selectors {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; padding: 2px 8px;
+}
+.dsh-seg { display: flex; gap: 8px; flex-wrap: wrap; }
+.dsh-sess {
+  cursor: pointer; display: flex; align-items: center; gap: 9px;
+  padding: 8px 15px; border: none; border-radius: 999px;
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 400; letter-spacing: .06em;
+  color: var(--d-low-1); background: rgba(255,255,255,.04);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  transition: all .4s var(--d-ease);
+}
+.dsh-sess:hover { color: var(--d-white); background: rgba(255,255,255,.07); }
+.dsh-sess[aria-pressed='true'] {
+  font-weight: 700; color: var(--d-gold-light); background: rgba(212,175,55,.13);
+  box-shadow: inset 0 0 0 1px rgba(212,175,55,.3), 0 0 26px -12px rgba(212,175,55,.9);
+}
+.dsh-sess-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px;
+  background: var(--d-div-1); transition: all .4s var(--d-ease);
+}
+.dsh-sess[aria-pressed='true'] .dsh-sess-dot {
+  background: var(--d-gold); box-shadow: 0 0 9px rgba(212,175,55,.9);
+}
+
+.dsh-unit-wrap { display: flex; align-items: center; gap: 12px; }
+.dsh-unit-k {
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 500;
+  letter-spacing: .28em; color: var(--d-low-1);
+}
+.dsh-unit-track {
+  display: flex; gap: 3px; padding: 3px; border-radius: 999px;
+  background: rgba(255,255,255,.05); box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+.dsh-unit {
+  cursor: pointer; padding: 6px 15px; border: none; border-radius: 999px;
+  font-family: var(--d-num); font-size: 10.5px; font-weight: 700;
+  color: var(--d-low-1); background: transparent;
+  transition: all .35s var(--d-ease);
+}
+.dsh-unit[aria-pressed='true'] {
+  color: #0a0a0b; background: var(--d-gold);
+  box-shadow: 0 8px 22px -10px rgba(212,175,55,.9);
+}
+
+/* ── section 6 · balance + curve + metrics ─────────────────── */
+
+.dsh-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+
+.dsh-balance {
+  position: relative; overflow: hidden; border-radius: 22px;
+  padding: 28px 32px 0;
+  background: linear-gradient(168deg, rgba(255,255,255,.06), rgba(255,255,255,.014));
+  box-shadow: 0 34px 100px -40px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.07);
+  display: flex; flex-direction: column;
+}
+.dsh-bloom.is-balance { background: radial-gradient(60% 80% at 80% 0%, rgba(212,175,55,.12), transparent 66%); }
+.dsh-balance-body { position: relative; }
+.dsh-balance-k {
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 500;
+  letter-spacing: .32em; color: var(--d-mid-2); margin-bottom: 14px;
+}
+.dsh-balance-v {
+  font-family: var(--d-num); font-size: clamp(34px, 3.6vw, 50px); font-weight: 700;
+  color: var(--d-white); letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  line-height: 1; text-shadow: 0 0 60px rgba(212,175,55,.3);
+}
+.dsh-balance-row { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.dsh-balance-delta {
+  font-family: var(--d-num); font-size: 19px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dsh-balance-note {
+  font-family: var(--d-ui); font-size: 11px; font-weight: 300;
+  letter-spacing: .12em; color: var(--d-low-1);
+}
+
+/* Bleeds to the panel edges, which is why the negative margin matches
+   the panel's own padding. */
+.dsh-curve { position: relative; flex: 1; min-height: 150px; margin: 22px -32px 0; }
+.dsh-curve svg { width: 100%; height: 100%; display: block; }
+.dsh-curve-line { animation: dsh-draw 3s var(--d-ease) .3s both; }
+
+.dsh-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
+  gap: 14px; align-content: start;
+}
+
+.dsh-card {
+  border-radius: 20px; padding: 22px 24px; min-width: 0;
+  background: linear-gradient(165deg, rgba(255,255,255,.062), rgba(255,255,255,.014));
+  box-shadow: 0 26px 70px -34px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.07);
+  display: flex; flex-direction: column; gap: 13px;
+  transition: all .5s var(--d-ease);
+}
+.dsh-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 34px 80px -30px rgba(0,0,0,1), 0 0 48px -26px rgba(212,175,55,.85), inset 0 1px 0 rgba(255,255,255,.1);
+}
+.dsh-card-k {
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 500;
+  letter-spacing: .28em; color: var(--d-mid-1);
+}
+.dsh-card-v {
+  font-family: var(--d-num); font-size: 29px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.dsh-card-n {
+  font-family: var(--d-num); font-size: 9px; letter-spacing: .14em; color: var(--d-faint-1);
+}
+
+.dsh-card.is-win { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
+.dsh-win-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dsh-win-legend {
+  display: flex; flex-direction: column; gap: 4px;
+  font-family: var(--d-num); font-size: 10px; letter-spacing: .1em;
+}
+.dsh-ring { position: relative; width: 66px; height: 66px; flex: 0 0 66px; }
+.dsh-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.dsh-ring-arc {
+  filter: drop-shadow(0 0 6px rgba(212,175,55,.7));
+  animation: dsh-ring 1.4s var(--d-ease) .4s both;
+}
+.dsh-ring-v {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--d-num); font-size: 14px; font-weight: 700; color: var(--d-white);
+}
+
+.dsh-card2 {
+  border-radius: 20px; padding: 20px 22px; min-width: 0;
+  background: linear-gradient(165deg, rgba(255,255,255,.042), rgba(255,255,255,.008));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  display: flex; flex-direction: column; gap: 11px;
+  transition: all .5s var(--d-ease);
+}
+.dsh-card2:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 24px 60px -32px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.dsh-card2-k {
+  font-family: var(--d-ui); font-size: 9px; font-weight: 500;
+  letter-spacing: .26em; color: var(--d-low-1);
+}
+.dsh-card2-v {
+  font-family: var(--d-num); font-size: 20px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.dsh-card2-n {
+  font-family: var(--d-num); font-size: 8.5px; letter-spacing: .14em; color: var(--d-faint-2);
+}
+.dsh-card2.is-pair { gap: 12px; }
+
+.dsh-ls-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--d-num); font-size: 19px; font-weight: 700; line-height: 1;
+}
+.dsh-ls-slash { color: var(--d-div-3); font-size: 13px; }
+.dsh-ls-bar {
+  display: flex; height: 4px; border-radius: 99px; overflow: hidden;
+  background: rgba(255,255,255,.07);
+}
+.dsh-ls-long { background: var(--d-green); }
+.dsh-ls-short { background: var(--d-red-deep); }
+
+.dsh-streak { display: flex; gap: 24px; align-items: baseline; }
+.dsh-streak-cell { display: flex; flex-direction: column; gap: 6px; }
+.dsh-streak-v { font-family: var(--d-num); font-size: 20px; font-weight: 700; line-height: 1; }
+.dsh-streak-k {
+  font-family: var(--d-ui); font-size: 9.5px; color: var(--d-faint-2); letter-spacing: .12em;
+}
+
+/* ── section 7 · insight + coach rail ──────────────────────── */
+
+.dsh-insight {
+  position: relative; overflow: hidden; border-radius: 22px;
+  padding: 30px 32px 32px;
+  background: linear-gradient(168deg, rgba(255,255,255,.052), rgba(255,255,255,.012));
+  box-shadow: 0 34px 100px -42px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.065);
+  display: grid; grid-template-columns: minmax(0, 236px) minmax(0, 1fr); gap: 40px;
+}
+.dsh-bloom.is-insight { background: radial-gradient(44% 110% at 96% -10%, rgba(212,175,55,.12), transparent 64%); }
+
+/* The rail is the FIRST grid child, so in RTL it sits on the right. */
+.dsh-rail { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.dsh-rail-sub {
+  font-family: var(--d-ui); font-size: 12px; font-weight: 400;
+  letter-spacing: .06em; color: var(--d-low-1); margin-bottom: 20px;
+}
+.dsh-rail .dsh-h { margin-bottom: 8px; }
+.dsh-checks { display: flex; flex-direction: column; }
+.dsh-check {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px;
+  align-items: center; padding: 11px 0;
+  transition: transform .35s var(--d-ease);
+}
+.dsh-check:hover { transform: translateX(-4px); }
+/* The count and the label share the gold family on purpose: they read as
+   one unit rather than as a number with a caption. */
+.dsh-check-n {
+  font-family: var(--d-num); font-size: 16px; font-weight: 700;
+  color: var(--d-gold-bright); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.dsh-check-l {
+  font-family: var(--d-ui); font-size: 13px; font-weight: 500;
+  color: var(--d-gold-muted); line-height: 1.45; min-width: 0;
+}
+.dsh-rail-foot {
+  margin: 18px 0 0; font-family: var(--d-ui); font-size: 11px; font-weight: 300;
+  line-height: 1.85; color: var(--d-faint-1); text-wrap: pretty;
+}
+.dsh-rail-bottom { margin-top: auto; padding-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+.dsh-rail-ask { font-family: var(--d-ui); font-size: 11px; font-weight: 300; color: var(--d-faint-1); }
+.dsh-votes { display: flex; gap: 7px; flex-wrap: wrap; }
+.dsh-vote {
+  cursor: pointer; padding: 6px 12px; border: none; border-radius: 999px;
+  background: rgba(212,175,55,.07);
+  font-family: var(--d-ui); font-size: 10.5px; font-weight: 500; color: var(--d-gold-chip);
+  transition: all .35s var(--d-ease);
+}
+.dsh-vote:hover { background: rgba(212,175,55,.18); color: var(--d-gold-light); }
+.dsh-vote[aria-pressed='true'] { background: rgba(212,175,55,.24); color: var(--d-gold-light); font-weight: 700; }
+
+.dsh-note { position: relative; min-width: 0; }
+.dsh-note-head {
+  position: relative; display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.dsh-note-date {
+  font-family: var(--d-ui); font-size: 11px; font-weight: 300;
+  letter-spacing: .12em; color: var(--d-low-1);
+}
+.dsh-note-body { position: relative; display: flex; flex-direction: column; gap: 13px; }
+.dsh-note-body p {
+  margin: 0; font-family: var(--d-ui); font-size: 14px; font-weight: 400;
+  line-height: 1.9; color: var(--d-mid-2); text-wrap: pretty;
+}
+.dsh-note-body p:first-child {
+  font-size: 17px; font-weight: 700; line-height: 1.7; color: var(--d-white);
+}
+.dsh-note-body p:nth-child(2) { color: var(--d-text-2); }
+.dsh-note-body strong { color: var(--d-white); font-weight: 700; }
+.dsh-note-body em { font-style: normal; color: var(--d-gold-light); }
+
+.dsh-ask {
+  position: relative; margin-top: 26px; border-radius: 18px; padding: 20px 24px;
+  background: linear-gradient(165deg, rgba(212,175,55,.11), rgba(212,175,55,.025));
+  box-shadow: 0 0 60px -30px rgba(212,175,55,.85), inset 0 1px 0 rgba(255,255,255,.08);
+  transition: box-shadow .5s var(--d-ease);
+}
+.dsh-ask:hover {
+  box-shadow: 0 0 70px -24px rgba(212,175,55,1), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.dsh-ask-k {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 700;
+  letter-spacing: .32em; color: var(--d-gold-bright); margin-bottom: 12px;
+}
+.dsh-ask-q {
+  margin: 0; font-family: var(--d-display); font-size: 18px; font-weight: 500;
+  line-height: 1.6; color: var(--d-white); max-width: 52ch; text-wrap: pretty;
+}
+
+.dsh-answer { position: relative; margin-top: 24px; }
+.dsh-answer-k {
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 500;
+  letter-spacing: .32em; color: var(--d-low-1); margin-bottom: 12px;
+}
+.dsh-answer-in {
+  width: 100%; box-sizing: border-box; resize: none;
+  background: rgba(0,0,0,.34); border: none; border-radius: 16px;
+  padding: 15px 17px; color: #eaeaea;
+  font-family: var(--d-ui); font-size: 13px; font-weight: 300; line-height: 1.8;
+  outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  transition: box-shadow .4s var(--d-ease);
+}
+.dsh-answer-in:focus {
+  box-shadow: inset 0 0 0 1px rgba(212,175,55,.6), 0 0 34px -14px rgba(212,175,55,.9);
+}
+.dsh-answer-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+.dsh-answer-why {
+  font-family: var(--d-ui); font-size: 11px; font-weight: 300; line-height: 1.8;
+  color: var(--d-faint-1); max-width: 74ch; text-wrap: pretty;
+}
+.dsh-answer-saved { margin: 0; font-family: var(--d-ui); font-size: 12.5px; color: var(--d-green); }
+.dsh-note-link { position: relative; margin-top: 22px; display: flex; justify-content: flex-start; }
+.dsh-note-link a { font-family: var(--d-ui); font-size: 12px; font-weight: 500; }
+
+/* ── section 8 · journal + macro ───────────────────────────── */
+
+/* THE ONE PLACE THIS DEVIATES FROM THE HANDOFF, AND IT IS THE HANDOFF'S OWN
+   NUMBERS THAT FORCED IT.
+   
+   The prototype's demo month carried a single "+$0", so nothing in the
+   calendar was ever wider than three characters and two equal columns fit.
+   A real day total is "-$1,500": at the specified 14px mono in a 62px track
+   it runs into the next cell. Every value the handoff fixes — the 14px, the
+   62px minimum, the 9px gap, the 96px week column — is kept, and the journal
+   is given the width those values need instead. The macro panel is a list and
+   loses nothing by being narrower.
+   
+   Below the stack point it is one column, which is what the handoff's
+   auto-fit did at its own 500px. */
+.dsh-wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1120px) {
+  .dsh-wide { grid-template-columns: minmax(0, 1fr); }
+}
+
+.dsh-journal {
+  border-radius: 22px; padding: 28px 30px 30px; min-width: 0;
+  background: linear-gradient(168deg, rgba(255,255,255,.05), rgba(255,255,255,.011));
+  box-shadow: 0 30px 90px -40px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.dsh-journal-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.dsh-h2 { margin: 0; font-family: var(--d-display); font-size: 25px; font-weight: 700; color: var(--d-white); }
+.dsh-journal-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dsh-journal-pnl { font-family: var(--d-ui); font-size: 13.5px; font-weight: 700; color: var(--d-text-3); }
+.dsh-journal-pnl b { font-family: var(--d-num); font-size: 15px; font-weight: 700; }
+.dsh-journal-days { font-family: var(--d-ui); font-size: 13.5px; font-weight: 500; color: var(--d-mid-1); }
+.dsh-monthnav { display: flex; gap: 4px; }
+.dsh-monthnav button {
+  width: 26px; height: 26px; border: none; border-radius: 9px;
+  background: rgba(255,255,255,.05);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--d-mid-1); cursor: pointer; font-size: 11px;
+  transition: all .35s var(--d-ease);
+}
+.dsh-monthnav button:hover { background: rgba(212,175,55,.18); color: var(--d-gold-light); }
+
+.dsh-cal-scroll { overflow-x: auto; }
+.dsh-cal {
+  display: grid; grid-template-columns: repeat(7, minmax(62px, 1fr)) 96px;
+  gap: 9px; min-width: 600px;
+}
+.dsh-dow {
+  font-family: var(--d-ui); font-size: 12px; font-weight: 700;
+  letter-spacing: .16em; color: var(--d-text-2); text-align: center; padding-bottom: 8px;
+}
+.dsh-day {
+  min-height: 82px; border-radius: 14px; padding: 10px 11px; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: rgba(255,255,255,.028); box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  transition: all .4s var(--d-ease);
+}
+.dsh-day:hover { transform: translateY(-3px); background: rgba(255,255,255,.075); }
+.dsh-day-n {
+  font-family: var(--d-num); font-size: 15px; font-weight: 700;
+  color: var(--d-low-1); align-self: flex-start; line-height: 1;
+}
+.dsh-day-b { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dsh-day-v {
+  font-family: var(--d-num); font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  /* A day total is formatted to fit (see fmtCell), but a locale that renders
+     it wider must clip inside the cell rather than run into the next one. */
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dsh-day-s {
+  font-family: var(--d-ui); font-size: 10.5px; font-weight: 500;
+  letter-spacing: .06em; color: var(--d-low-1); line-height: 1;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dsh-day.is-profit {
+  background: rgba(95,156,114,.16); box-shadow: inset 0 0 0 1px rgba(95,156,114,.4);
+}
+.dsh-day.is-loss {
+  background: rgba(163,74,74,.16); box-shadow: inset 0 0 0 1px rgba(163,74,74,.4);
+}
+.dsh-day.is-profit .dsh-day-n, .dsh-day.is-loss .dsh-day-n { color: var(--d-white); }
+.dsh-day.is-profit .dsh-day-v { color: var(--d-green); }
+.dsh-day.is-loss .dsh-day-v { color: var(--d-red); }
+.dsh-day.is-out { background: transparent; box-shadow: none; pointer-events: none; }
+.dsh-day.is-out .dsh-day-n { color: transparent; }
+
+.dsh-week {
+  min-height: 82px; border-radius: 14px; padding: 10px 11px; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: rgba(212,175,55,.07); box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+  transition: all .4s var(--d-ease);
+}
+.dsh-week:hover { transform: translateY(-3px); }
+.dsh-week-n {
+  font-family: var(--d-num); font-size: 12px; font-weight: 700;
+  color: var(--d-gold-bright); align-self: flex-start; line-height: 1;
+}
+.dsh-week-v.is-empty { color: var(--d-faint-1); }
+
+.dsh-legend {
+  display: flex; gap: 20px; flex-wrap: wrap; margin-top: 18px;
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 500;
+  letter-spacing: .06em; color: var(--d-mid-2);
+}
+.dsh-legend span { display: flex; align-items: center; gap: 7px; }
+.dsh-swatch { width: 9px; height: 9px; border-radius: 4px; flex: 0 0 9px; }
+
+.dsh-macro {
+  border-radius: 22px; padding: 28px 30px 30px; min-width: 0;
+  background: linear-gradient(168deg, rgba(255,255,255,.042), rgba(255,255,255,.009));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  display: flex; flex-direction: column;
+}
+.dsh-macro-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.dsh-macro-right { display: flex; align-items: center; gap: 12px; }
+.dsh-macro-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 11px; border-radius: 999px; background: rgba(163,74,74,.18);
+  font-family: var(--d-ui); font-size: 11.5px; font-weight: 700;
+  letter-spacing: .08em; color: #e2b4b4;
+}
+.dsh-macro-pill-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: 0 0 5px; background: var(--d-red-deep);
+}
+.dsh-macro-all { font-family: var(--d-ui); font-size: 13px; font-weight: 700; }
+
+.dsh-macro-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 40px 0; border-radius: 16px; background: rgba(0,0,0,.26);
+}
+.dsh-macro-empty-t {
+  font-family: var(--d-display); font-size: 23px; font-weight: 500;
+  color: var(--d-hi-3); max-width: 26ch; line-height: 1.5;
+}
+.dsh-macro-empty-s {
+  margin-top: 12px; font-family: var(--d-ui); font-size: 13px; font-weight: 400; color: var(--d-low-1);
+}
+
+.dsh-macro-list { flex: 1; display: flex; flex-direction: column; }
+.dsh-macro-row {
+  display: grid; grid-template-columns: auto auto 1fr auto;
+  gap: 12px; align-items: center; padding: 14px 0;
+}
+.dsh-macro-dot { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px; background: var(--d-red-deep); }
+.dsh-macro-day { font-family: var(--d-ui); font-size: 10.5px; font-weight: 500; color: #b3b3b9; }
+.dsh-macro-t { font-family: var(--font-geist-sans, 'Geist'), var(--d-ui); font-size: 12.5px; font-weight: 500; color: var(--d-white); }
+.dsh-macro-cur {
+  display: block; font-family: var(--d-num); font-size: 9px;
+  letter-spacing: .2em; color: #9a9aa0; margin-top: 3px;
+}
+.dsh-macro-time { font-family: var(--d-num); font-size: 11.5px; font-weight: 700; color: var(--d-gold); }
+.dsh-macro-foot {
+  margin: 18px 0 0; font-family: var(--d-ui); font-size: 12px; font-weight: 400;
+  line-height: 1.8; color: var(--d-low-1); text-wrap: pretty;
+}
+
+/* ── footer ────────────────────────────────────────────────── */
+
+.dsh-footer {
+  padding: 4px 8px; font-family: var(--d-ui); font-size: 10.5px;
+  font-weight: 300; letter-spacing: .14em; color: var(--d-faint-2);
+}
+
+/* ── loading + locked ──────────────────────────────────────── */
+
+.dsh-skel { display: flex; flex-direction: column; gap: 12px; }
+.dsh-skel span {
+  height: 13px; border-radius: 99px;
+  background: linear-gradient(90deg, rgba(255,255,255,.05), rgba(255,255,255,.1), rgba(255,255,255,.05));
+  background-size: 200% 100%; animation: dsh-shimmer 1.5s linear infinite;
+}
+@keyframes dsh-shimmer { to { background-position: -200% 0; } }
+
+.dsh-locked { position: relative; text-align: center; padding: 26px 0; }
+.dsh-locked-k {
+  font-family: var(--d-ui); font-size: 9.5px; font-weight: 700;
+  letter-spacing: .32em; color: var(--d-gold-bright); margin-bottom: 14px;
+}
+.dsh-locked-m { font-family: var(--d-ui); font-size: 17px; font-weight: 400; color: var(--d-white); line-height: 1.7; }
+.dsh-locked-n {
+  margin-top: 10px; font-family: var(--d-ui); font-size: 12px;
+  font-weight: 300; color: var(--d-faint-1);
+}
+.dsh-locked-cta { display: inline-block; margin-top: 18px; font-family: var(--d-ui); font-size: 13px; font-weight: 700; }
+
+/* ── responsive ────────────────────────────────────────────── */
+
+@media (max-width: 820px) {
+  .dsh-insight { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  /* The rail is authored first so RTL puts it on the right; stacked, the
+     note has to come first or the page opens on a list of counts. */
+  .dsh-rail { order: 2; }
+  .dsh-note { order: 1; }
+}
+@media (max-width: 880px) {
+  .dsh-main { padding: 18px 16px 96px; }
+  .dsh-greet { padding: 26px 22px; border-radius: 20px; }
+  .dsh-panel, .dsh-journal, .dsh-macro { padding: 22px 20px 24px; }
+  .dsh-insight { padding: 24px 20px 26px; }
+  .dsh-balance { padding: 24px 22px 0; }
+  .dsh-curve { margin: 20px -22px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsh *, .dsh *::before, .dsh *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

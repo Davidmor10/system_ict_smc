@@ -477,3 +477,14 @@ html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
 .onyx-send:not(:disabled):hover  { box-shadow: 0 0 34px -6px rgba(212,175,55,.7); }
 
 .onyx-danger:hover { box-shadow: 0 0 30px -6px rgba(139,58,58,.75); background: #a04545; }
+
+
+/* ── the dashboard shell ───────────────────────────────────────────
+   One wash behind the whole frame — rail included, which is why it is
+   here and not on the dashboard page. The rail carries no background of
+   its own by design, so anything it sits on has to be this. */
+.onyx-shell {
+  background:
+    radial-gradient(120% 80% at 80% -10%, #101017 0%, #08080d 44%, #040407 100%),
+    #05050a;
+}

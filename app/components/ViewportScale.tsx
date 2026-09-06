@@ -3,9 +3,9 @@
 import { useEffect } from 'react';
 
 /** The width the dashboard was designed at. Every panel, grid track and type
- *  size in dp.css was chosen against this, and the auto-fit grids reflow below
- *  it — which is the "cramped and messy on a laptop" the design never intended
- *  and never asked for. */
+ *  size in dashboard.css was chosen against this, and the auto-fit grids
+ *  reflow below it — which is the "cramped and messy on a laptop" the design
+ *  never intended and never asked for. */
 const DESIGN_WIDTH = 1600;
 
 /** Below this the app uses its own mobile layout — a deliberate design in its

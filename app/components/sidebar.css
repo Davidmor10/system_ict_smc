@@ -1,0 +1,111 @@
+/* ══════════════════════════════════════════════════════════════════
+   The navigation rail.
+
+   From the same handoff as dashboard.css, and deliberately styled here
+   rather than in Tailwind classes: the values are the design's, and a
+   rail with no border, no divider and no background — the page gradient
+   shows straight through it — is not a shape Tailwind's utilities
+   describe more clearly than CSS does.
+
+   NO ICONS. Twelve glyphs at 16px beside twelve Hebrew words were
+   competing with the words. The leading dot carries the state.
+══════════════════════════════════════════════════════════════════ */
+
+.sb {
+  --sb-ease: cubic-bezier(.16, 1, .3, 1);
+
+  width: 196px;
+  flex: 0 0 196px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 26px 0 20px;
+  box-sizing: border-box;
+  z-index: 50;
+  /* No border, no divider, no background — by design. */
+}
+
+@media (max-width: 880px) { .sb { display: none; } }
+
+.sb-logo { padding: 0 24px 26px; text-align: center; }
+.sb-word {
+  font-family: var(--font-playfair, 'Playfair Display'), var(--font-frank, 'Frank Ruhl Libre'), serif;
+  font-size: 21px; font-weight: 900; letter-spacing: .26em; color: #fff; line-height: 1;
+}
+.sb-sub {
+  margin-top: 8px;
+  font-family: var(--font-heebo, 'Heebo'), system-ui, sans-serif;
+  font-size: 9px; font-weight: 500; letter-spacing: .46em; color: #d4af37;
+}
+
+.sb-nav {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0 12px; overflow-y: auto;
+}
+.sb-nav::-webkit-scrollbar { width: 6px; }
+.sb-nav::-webkit-scrollbar-track { background: transparent; }
+.sb-nav::-webkit-scrollbar-thumb { background: #1a1a22; border-radius: 99px; }
+
+.sb-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 14px; border-radius: 12px; cursor: pointer;
+  font-family: var(--font-heebo, 'Heebo'), system-ui, sans-serif;
+  font-size: 13.5px; font-weight: 500; letter-spacing: .03em;
+  color: #a6a6b0; background: transparent;
+  transition: all .4s var(--sb-ease);
+}
+.sb-item:hover { color: #fff; background: rgba(255, 255, 255, .055); }
+
+.sb-item.is-active {
+  color: #f4e6b8; font-weight: 700;
+  background: linear-gradient(270deg, rgba(212, 175, 55, .16), rgba(212, 175, 55, .04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+/* An anchor inherits the app's gold link colour; the rail sets its own. */
+.sb-item, .sb-item:hover { text-decoration: none; }
+.sb-item.is-active:hover { color: #fff; }
+
+/* Takes the row's spare width so a lock lands at the far edge rather than
+   next to the word. */
+.sb-label { flex: 1; min-width: 0; }
+
+.sb-item.is-child { padding-inline-start: 26px; font-size: 12.5px; }
+
+.sb-item.is-locked { color: #6a6a74; }
+.sb-item.is-locked:hover { color: #a6a6b0; }
+.sb-lock { margin-inline-start: auto; color: rgba(212, 175, 55, .5); display: flex; }
+
+.sb-dot {
+  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px;
+  background: #33333c;
+  transition: all .4s var(--sb-ease);
+}
+.sb-item.is-active .sb-dot { background: #d4af37; box-shadow: 0 0 9px rgba(212, 175, 55, .9); }
+
+.sb-account {
+  margin-top: auto; padding: 16px 18px 0;
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+}
+.sb-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex: 0 0 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(145deg, #22222c, #0e0e14);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, .28);
+  overflow: hidden;
+}
+.sb-account-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sb-account-k {
+  font-family: var(--font-heebo, 'Heebo'), system-ui, sans-serif;
+  font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1;
+}
+.sb-account-plan {
+  font-family: var(--font-geist-mono, 'Geist Mono'), monospace;
+  font-size: 8px; letter-spacing: .26em; color: #d4af37; line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb *, .sb *::before, .sb *::after { transition: none !important; animation: none !important; }
+}
