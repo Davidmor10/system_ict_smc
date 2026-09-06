@@ -117,6 +117,8 @@ interface Agg {
   wr: number | null; pf: number | null; expectancy: number | null; avgR: number | null;
   maxDD: number; longPct: number | null; shortPct: number | null;
   streakTrades: number; streakDays: number;
+  /** Distinct days with a closed trade, across the whole journal. */
+  tradingDays: number;
 }
 
 function aggregate(trades: TradeEntry[]): Agg {
@@ -163,6 +165,7 @@ function aggregate(trades: TradeEntry[]): Agg {
     longPct: dir ? (longs / dir) * 100 : null,
     shortPct: dir ? (shorts / dir) * 100 : null,
     streakTrades, streakDays,
+    tradingDays: byDay.size,
   };
 }
 
@@ -245,6 +248,7 @@ export default function DashboardView() {
 
   /* ── the month: calendar, monthly change, equity curve ─────── */
   const cal = useMemo(() => buildCalendar(trades, monthCursor), [trades, monthCursor]);
+  const curve = useMemo(() => equityCurve(trades), [trades]);
 
   const monthLabel = useMemo(
     () => monthCursor.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }),
@@ -367,15 +371,22 @@ export default function DashboardView() {
               <div className="dsh-balance-v dsh-ltr">
                 {fmtAbs(accountStart + stats.pnl * p, unit, ctx)}
               </div>
+              {/* THE CHANGE THAT PRODUCED THE BALANCE ABOVE, not the month's.
+                  It used to read the calendar's month, which meant two things
+                  went wrong at once: browsing the calendar to another month
+                  silently rewrote the balance's delta, and an account whose
+                  trades are all in earlier months was told "0.00%" directly
+                  under a balance that was plainly up. The number under a
+                  figure has to be the one that made it. */}
               <div className="dsh-balance-row">
                 <span
                   className="dsh-balance-delta dsh-ltr"
-                  style={{ color: cal.monthPnl >= 0 ? 'var(--d-green)' : 'var(--d-red)' }}
+                  style={{ color: stats.pnl >= 0 ? 'var(--d-green)' : 'var(--d-red)' }}
                 >
-                  {fmt(cal.monthPnl * p, unit, ctx)}
+                  {fmt(stats.pnl * p, unit, ctx)}
                 </span>
                 <span className="dsh-balance-note">
-                  שינוי חודשי · <span className="dsh-ltr">{((cal.monthPnl / accountStart) * 100 * p).toFixed(2)}%</span> · {cal.monthDays} ימי מסחר
+                  שינוי מאז הפתיחה · <span className="dsh-ltr">{((stats.pnl / accountStart) * 100 * p).toFixed(2)}%</span> · {stats.tradingDays} ימי מסחר
                 </span>
               </div>
             </div>
@@ -387,9 +398,9 @@ export default function DashboardView() {
                     <stop offset="84%" stopColor="#d4af37" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path d={`${cal.curve} L600,170 L0,170 Z`} fill="url(#dsh-eq)" />
+                <path d={`${curve} L600,170 L0,170 Z`} fill="url(#dsh-eq)" />
                 <path
-                  className="dsh-curve-line" d={cal.curve} fill="none" stroke="#d4af37"
+                  className="dsh-curve-line" d={curve} fill="none" stroke="#d4af37"
                   strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round"
                   strokeDasharray="1700"
                 />
@@ -655,27 +666,38 @@ function buildCalendar(trades: TradeEntry[], cursor: Date) {
   const monthPnl = [...byDay.values()].reduce((s, d) => s + d.pnl, 0);
   const monthDays = byDay.size;
 
-  // The curve: cumulative P&L across the month's trading days, drawn onto the
-  // handoff's 600×170 box. Left to right, and NOT mirrored in RTL — an equity
-  // curve reads forward in time whichever way the page runs.
-  const ordered = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
-  let cum = 0;
-  const cums = ordered.map(([, v]) => (cum += v.pnl));
-  let curve: string;
-  if (cums.length === 0) {
-    curve = 'M0,150 L600,150';
-  } else if (cums.length === 1) {
-    curve = `M0,150 L600,${(150 - Math.sign(cums[0]) * 40).toFixed(1)}`;
-  } else {
-    const lo = Math.min(0, ...cums), hi = Math.max(0, ...cums);
-    const range = Math.max(1, hi - lo);
-    const step = 600 / (cums.length - 1);
-    curve = cums
-      .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(160 - ((v - lo) / range) * 145).toFixed(1)}`)
-      .join(' ');
-  }
+  return { rows, monthPnl, monthDays };
+}
 
-  return { rows, monthPnl, monthDays, curve };
+/** The account's equity, drawn onto the handoff's 600×170 box.
+ *
+ *  THE WHOLE JOURNAL, not the calendar's month. The curve sits under the
+ *  balance and its since-opening change, so a month's worth of it under a
+ *  since-opening figure would be a third number disagreeing with the two above
+ *  it — and on an account whose trading was in earlier months it drew a flat
+ *  line, which reads as broken rather than as empty.
+ *
+ *  Left to right, and NOT mirrored in RTL: an equity curve reads forward in
+ *  time whichever way the page runs. */
+function equityCurve(trades: TradeEntry[]): string {
+  const byDay = new Map<string, number>();
+  for (const t of trades) {
+    if (t.result === 'OPEN') continue;
+    byDay.set(t.dateISO, (byDay.get(t.dateISO) ?? 0) + (t.pnlUsd ?? tradePnL(t) ?? 0));
+  }
+  const ordered = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  if (ordered.length === 0) return 'M0,150 L600,150';
+
+  // The line starts at the opening balance — zero cumulative — so the first
+  // day's result is a move rather than the baseline.
+  let cum = 0;
+  const cums = [0, ...ordered.map(([, v]) => (cum += v))];
+  const lo = Math.min(...cums), hi = Math.max(...cums);
+  const range = Math.max(1, hi - lo);
+  const step = 600 / (cums.length - 1);
+  return cums
+    .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(160 - ((v - lo) / range) * 145).toFixed(1)}`)
+    .join(' ');
 }
 
 /** One calendar row: seven days and the week's summary cell. */

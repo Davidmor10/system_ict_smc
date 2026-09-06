@@ -409,8 +409,13 @@ html[lang="he"] .sec-title { font-weight: 900; }
   height: calc(100vh / var(--onyx-zoom, 1));
 }
 
-/* ── RTL: sidebar moves to the right, layout mirrors ─────────── */
-html[dir="rtl"] .onyx-layout { flex-direction: row-reverse; }
+/* The rail sits on the right because the document is RTL and the rail is the
+   first child — that is all it takes.
+   
+   There used to be a `flex-direction: row-reverse` here as well, which is the
+   same reversal applied twice: it put the rail back on the LEFT, and the
+   sidebar cancelled it with an explicit `order`. Two mirrors and a
+   counterweight to end up where the document already was. Both are gone. */
 
 /* ── Typing indicator dots ───────────────────────────────────── */
 @keyframes dp-typing-bounce {
