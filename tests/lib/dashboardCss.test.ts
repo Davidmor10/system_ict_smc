@@ -133,3 +133,41 @@ describe('the dashboard stylesheets cover what the dashboard renders', () => {
     expect(borders).toEqual([]);
   });
 });
+
+// ── the preference that erased itself ───────────────────────────────────────
+//
+// The read and the write of the trader's chosen metric set are two effects in
+// one mount flush. The read fires first and QUEUES its state; the write fires
+// straight after with the default still in scope and puts it over the stored
+// value, so the next mount reads back that default. Under React's development
+// double-invoke the next mount is immediate, so it happened on every load:
+// eleven cards chosen, eight after a refresh, and localStorage holding the
+// eight it had just overwritten itself with. Measured, not reasoned about.
+//
+// A ref set at the end of the read effect does NOT fix it — it is already true
+// when the write effect runs in that same flush. It has to be state, so the
+// flip forces a render and the first write sees what the read installed.
+
+describe('the dashboard does not overwrite the preference it is about to read', () => {
+  const VIEW = read('components', 'DashboardView.tsx');
+
+  it('gates both writes on a state flag, not a ref', () => {
+    expect(VIEW).toContain('const [ready, setReady] = useState(false)');
+    expect(VIEW).toContain('if (ready) writeOwned(UNIT_KEY, unit)');
+    expect(VIEW).toContain('if (ready) writeOwned(CARDS_KEY, cards)');
+    // A ref here is the same bug with an extra line.
+    expect(VIEW).not.toMatch(/hydrated\.current/);
+  });
+
+  it('keeps the flag in the write effects\u2019 dependencies', () => {
+    // Without `ready` in the deps the effect never re-runs when it flips, and
+    // the first real write is skipped instead of merely delayed.
+    expect(VIEW).toContain('}, [ready, unit]);');
+    expect(VIEW).toContain('}, [ready, cards]);');
+  });
+
+  it('never lets the trader empty the metric column', () => {
+    // An empty column has no affordance to bring anything back.
+    expect(VIEW).toContain('cs.length > 1 ? cs.filter');
+  });
+});

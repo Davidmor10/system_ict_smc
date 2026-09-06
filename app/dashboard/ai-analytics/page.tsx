@@ -912,6 +912,21 @@ export default function AiAnalyticsPage() {
                   אתה ממש בממוצע רק <b style={{ color: '#d4af37' }}>{Math.round(exits.captureRatio * 100)}%</b> מהיעד שתכננת בעסקאות המנצחות — כלומר אתה נוטה לסגור לפני היעד שקבעת לעצמך. המערכת לא יודעת אם המחיר היה מגיע לשם — רק שאתה יצאת קודם.
                 </p>
               )}
+              {/* AN ABSENCE HAS TO SAY WHY IT IS ONE.
+                  
+                  "מימוש היעד" showed a bare "—" whenever no winning trade
+                  carried a planned target, with nothing anywhere on the panel
+                  to explain it — and a dash beside three filled tiles reads as
+                  a broken number, not as a missing one. The two reasons it can
+                  be empty are different things to be told, so they are said
+                  separately. */}
+              {exits.captureRatio === null && (
+                <p className="mt-5 text-[13.5px] text-white/55 leading-relaxed text-right">
+                  {exits.winnerCount === 0
+                    ? <>אין עדיין עסקה מנצחת עם יציאה רשומה, אז אין מול מה למדוד את מימוש היעד. הוא יופיע כאן אחרי העסקה המנצחת הראשונה שתתעד בה מחיר יציאה.</>
+                    : <>יש עסקאות מנצחות, אבל באף אחת מהן לא נרשם יעד — ובלי יעד אין מול מה למדוד כמה ממנו מימשת. מלא <b style={{ color: '#d4af37' }}>יעד</b> בעסקאות ותקבל את המספר הזה.</>}
+                </p>
+              )}
             </div>
           )}
         </NumberedSection>

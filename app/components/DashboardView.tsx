@@ -251,6 +251,22 @@ export default function DashboardView() {
   const [unit, setUnit] = useState<Unit>('dollar');
   const [cards, setCards] = useState<MetricKey[]>(DEFAULT_CARDS);
   const [editing, setEditing] = useState(false);
+  /** Nothing is written back until what was stored has been read AND applied.
+   *
+   *  WITHOUT THIS THE PREFERENCE ERASES ITSELF. The read and the write are two
+   *  effects in the same mount flush: the read fires first and QUEUES its
+   *  state, then the write fires with the default still in scope and puts it
+   *  over the stored value. The next mount reads back that default — and under
+   *  React's development double-invoke that next mount is immediate, so it
+   *  happened on every load: eleven cards chosen, eight after a refresh, and
+   *  localStorage holding the eight it had just overwritten itself with.
+   *
+   *  It is STATE and not a ref on purpose. A ref set at the end of the read
+   *  effect is already true by the time the write effect runs in that same
+   *  flush, which is the same bug with an extra line — measured, not assumed.
+   *  Flipping state forces a re-render, so the first write sees the value the
+   *  read actually installed. */
+  const [ready, setReady] = useState(false);
   const [session, setSession] = useState<number>(-1);
   const [monthCursor, setMonthCursor] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [macro, setMacro] = useState<MacroEvent[] | null>(null);
@@ -291,10 +307,11 @@ export default function DashboardView() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => { setMacro(Array.isArray(d?.events) ? d.events : []); setMacroToday(typeof d?.today === 'string' ? d.today : null); })
       .catch(() => setMacro([]));
+    setReady(true);
   }, []);
 
-  useEffect(() => { writeOwned(UNIT_KEY, unit); }, [unit]);
-  useEffect(() => { writeOwned(CARDS_KEY, cards); }, [cards]);
+  useEffect(() => { if (ready) writeOwned(UNIT_KEY, unit); }, [ready, unit]);
+  useEffect(() => { if (ready) writeOwned(CARDS_KEY, cards); }, [ready, cards]);
 
   /* ── derived ───────────────────────────────────────────────── */
   const accountStart = settings.accountStartUsd || DEFAULT_SETTINGS.accountStartUsd;
@@ -570,10 +587,18 @@ export default function DashboardView() {
                   </b>
                 </span>
                 <span className="dsh-journal-days">{cal.monthDays} ימי מסחר</span>
+                {/* The earlier month is to the RIGHT and its chevron points
+                    that way; the next month is to the LEFT and points left.
+                    Drawn rather than typed: ‹ and › are in the bidi mirroring
+                    table, so in an RTL run the browser flips them and the back
+                    button ends up pointing forward. */}
                 <span className="dsh-monthnav">
-                  {/* In RTL the earlier month sits to the right, so › goes back. */}
-                  <button type="button" aria-label="חודש קודם" onClick={() => setMonthCursor(m => shiftMonth(m, -1))}>›</button>
-                  <button type="button" aria-label="חודש הבא" onClick={() => setMonthCursor(m => shiftMonth(m, 1))}>‹</button>
+                  <button type="button" aria-label="חודש קודם" onClick={() => setMonthCursor(m => shiftMonth(m, -1))}>
+                    <Chevron dir="right" />
+                  </button>
+                  <button type="button" aria-label="חודש הבא" onClick={() => setMonthCursor(m => shiftMonth(m, 1))}>
+                    <Chevron dir="left" />
+                  </button>
                 </span>
               </span>
             </div>
@@ -645,6 +670,20 @@ export default function DashboardView() {
         </footer>
       </main>
     </div>
+  );
+}
+
+/** A chevron that stays pointing where it is told.
+ *
+ *  ‹ and › are bidi-mirrored characters: typed into an RTL run, the browser
+ *  renders them the other way round, which is how the back button came to
+ *  point forward. */
+function Chevron({ dir }: { dir: 'left' | 'right' }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={dir === 'right' ? 'M9 5l7 7-7 7' : 'M15 5l-7 7 7 7'} />
+    </svg>
   );
 }
 
@@ -889,7 +928,11 @@ interface Curve {
   baseY: number | null;
 }
 
-const CURVE_W = 600, CURVE_H = 170, CURVE_TOP = 14, CURVE_BOTTOM = 158;
+/* CURVE_TOP is the headroom above the highest point. It was 14 of 170 — under
+   a tenth of the box — which put a rising account's peak within a few pixels
+   of the panel's own text. The line is the panel's quietest element and has no
+   business crowding the balance. */
+const CURVE_W = 600, CURVE_H = 170, CURVE_TOP = 30, CURVE_BOTTOM = 158;
 
 /** A monotone cubic through the points — the classic equity-curve line.
  *

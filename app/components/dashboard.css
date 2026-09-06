@@ -393,7 +393,12 @@
   display: flex; flex-direction: column;
 }
 .dsh-bloom.is-balance { background: radial-gradient(60% 80% at 80% 0%, rgba(212,175,55,.12), transparent 66%); }
-.dsh-balance-body { position: relative; }
+/* NEVER COMPRESSED. The panel is a column flex, and a flex child shrinks by
+   default: under any height constraint the balance block would give up its box
+   while its text stayed put, and the curve below would ride up into it. That is
+   the one mechanism that puts the gold line through "שינוי מאז הפתיחה", so it
+   is closed here rather than argued about. */
+.dsh-balance-body { position: relative; flex: 0 0 auto; }
 .dsh-balance-k {
   font-family: var(--d-ui); font-size: 9.5px; font-weight: 500;
   letter-spacing: .32em; color: var(--d-mid-2); margin-bottom: 14px;
@@ -415,7 +420,7 @@
 
 /* Bleeds to the panel edges, which is why the negative margin matches
    the panel's own padding. */
-.dsh-curve { position: relative; flex: 1; min-height: 150px; margin: 22px -32px 0; }
+.dsh-curve { position: relative; flex: 1 1 auto; min-height: 150px; margin: 26px -32px 0; }
 .dsh-curve svg { width: 100%; height: 100%; display: block; }
 .dsh-curve-line { animation: dsh-draw 3s var(--d-ease) .3s both; }
 /* One hairline at the opening balance, one step off the surface — so a curve
