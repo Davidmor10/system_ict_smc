@@ -1,10 +1,10 @@
 'use client';
+import { useScopedTrades } from '../../components/useScopedTrades';
 import { readOwned } from '../../lib/sync/owned';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loadTrades } from '../../lib/journal';
-import type { TradeEntry } from '../../lib/journal';
+
 import { INSTRUMENT_KEYS, type InstrumentKey } from '../../lib/instruments';
 import { type SessionKey, sessionLabel, activeSessions } from '../../lib/sessions';
 import { hydrateList, saveList } from '../../lib/sync/collections';
@@ -316,7 +316,8 @@ export default function PlaybookPage() {
    *  tombstones, so the page cannot work off the active-only list the rest of
    *  the app uses. */
   const [store, setStore] = useState<Setup[]>([]);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
   const [filter, setFilter] = useState<SetupFilter>(DEFAULT_FILTER);
   const [view, setView] = useState<'active' | 'trash'>('active');
   const [drawer, setDrawer] = useState(false);
@@ -344,7 +345,6 @@ export default function PlaybookPage() {
     };
 
     setStore(readStore());
-    setTrades(loadTrades());
     hydrateList<Setup>(PLAYBOOK_COLLECTION, PLAYBOOK_STORAGE_KEY)
       .then(() => setStore(readStore()))
       .catch(() => { /* keep the local copy */ });

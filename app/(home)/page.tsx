@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import Landing from '../(marketing)/components/Landing';
 import MemberHome from '../(marketing)/components/MemberHome';
 import { getSessionId, getUserRole } from '../lib/getUserRole';
+import { PortfolioProvider } from '../components/PortfolioProvider';
 
 // "/" is two pages behind one address.
 //
@@ -25,5 +26,12 @@ export default async function HomePage() {
   const { userId } = await auth();
   if (!userId) return <Landing />;
 
-  return <MemberHome role={await getUserRole()} splashScope={(await getSessionId()) ?? undefined} />;
+  // The provider is mounted here as well as in the dashboard shell: "/" is a
+  // signed-in screen too, and it counts the trader's trades. Without it this
+  // page would be the one place still averaging every portfolio together.
+  return (
+    <PortfolioProvider>
+      <MemberHome role={await getUserRole()} splashScope={(await getSessionId()) ?? undefined} />
+    </PortfolioProvider>
+  );
 }

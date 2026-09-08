@@ -1,10 +1,10 @@
 'use client';
+import { useScopedTrades } from '../../components/useScopedTrades';
 import { readOwned } from '../../lib/sync/owned';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { loadTrades, todayISO } from '../../lib/journal';
-import type { TradeEntry } from '../../lib/journal';
+import { todayISO } from '../../lib/journal';
 import { runFullAnalysis, isoWeekKey, simulate, availableScenarios, timedTradeCount, hourScenario, ruleScenarios,
   closestToSignificance, sampleNeededFor, PATTERN_ALPHA } from '../../lib/analytics';
 import type { ConfidenceLevel, GroupPerformance, WhatIfScenario, ScenarioKind, RuleForWhatIf } from '../../lib/analytics';
@@ -358,7 +358,8 @@ function NumberedSection({ index, total, eyebrow, title, description, extra, chi
 }
 
 export default function AiAnalyticsPage() {
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
   const [patternInsights, setPatternInsights] = useState<PatternInsight[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
@@ -367,7 +368,6 @@ export default function AiAnalyticsPage() {
   const [violations, setViolations] = useState<{ ruleId: string; date: string }[]>([]);
 
   useEffect(() => {
-    setTrades(loadTrades());
     // Rules + their per-day violations power the "חוקים" what-if scenarios.
     // Through the owner envelope — see lib/sync/owned. Read raw, these came
     // back as an object rather than a list, and the analysis silently ran with

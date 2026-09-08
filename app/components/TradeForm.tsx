@@ -10,6 +10,7 @@ import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice
 import { decidedCounts, winRatePercent } from '../lib/calc/decided';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { DEFAULT_SETTINGS, SETTINGS_KEY } from '../lib/settings/types';
+import { usePortfolios } from './PortfolioProvider';
 import { commitList, hydrateList } from '../lib/sync/collections';
 import {
   DEFAULT_CONFIRMATIONS, labelForConfirmation, chipList, addTag, removeTag,
@@ -438,6 +439,12 @@ export default function TradeForm({
       own model and the trader's own choice outranks a link. */
   presetModel?: string;
 }) {
+  // The account this trade belongs to. Read from the switcher rather than
+  // asked for: the trader already chose it, and a second control that could
+  // disagree with the sidebar is a second thing to get wrong.
+  const { selected: portfolio } = usePortfolios();
+  const portfolioId = portfolio?.id ?? null;
+
   const [form, setForm] = useState<FormState>(
     () => (initial ? fromTrade(initial) : { ...empty(), model: presetModel ?? '' }),
   );
@@ -654,6 +661,11 @@ export default function TradeForm({
       // Preserve the id when editing so the save is an in-place update, not a
       // duplicate row.
       id: initial?.id ?? Date.now(),
+      // Which portfolio this belongs to. Kept on an edit rather than re-read,
+      // so re-saving a trade never moves it between accounts; stamped on a new
+      // one, so nothing written from here lands unassigned.
+      ...(initial?.accountId ? { accountId: initial.accountId }
+        : portfolioId ? { accountId: portfolioId } : {}),
       dateISO: form.date,
       time: form.time,
       symbol: form.symbol,

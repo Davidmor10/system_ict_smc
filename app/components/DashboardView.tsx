@@ -18,6 +18,7 @@
 // cannot disagree about the same account.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useScopedTrades } from './useScopedTrades';
 import './dashboard.css';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -27,7 +28,7 @@ import TraderSummary from './TraderSummary';
 import InsightSection from './dashboard/InsightSection';
 import { useCountUp, useReveal } from './dashboard/motion';
 import { readOwned, writeOwned } from '../lib/sync/owned';
-import { loadTrades, hydrateTradesFromCloud, tradePnL, rMultiple } from '../lib/journal';
+import { tradePnL, rMultiple } from '../lib/journal';
 import type { TradeEntry } from '../lib/journal';
 import { activeZone, clockCaption, clockWithSecondsInZone, zoneShortName } from '../lib/time/zone';
 import { hydrateDoc, initSyncListeners } from '../lib/sync/collections';
@@ -241,7 +242,8 @@ export default function DashboardView() {
   const { user, isLoaded } = useUser();
   const firstName = isLoaded ? user?.firstName : undefined;
 
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const { selected: portfolio } = usePortfolios();
   const [clock, setClock] = useState('--:--:--');
@@ -299,9 +301,7 @@ export default function DashboardView() {
       if (kept.length) setCards(kept);
     }
     setSession(getActiveSessionIdx());
-    setTrades(loadTrades());
     initSyncListeners();
-    hydrateTradesFromCloud().then(m => { if (m) setTrades(m); }).catch(() => {});
     hydrateDoc<UserSettings>(SETTINGS_KIND, SETTINGS_KEY)
       .then(doc => { if (doc) setSettings(withDefaults(doc)); })
       .catch(() => { /* the default stands until it arrives */ });

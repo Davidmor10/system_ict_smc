@@ -19,6 +19,8 @@
 import { useMemo, useState } from 'react';
 import { usePortfolios } from './PortfolioProvider';
 import ImportWizard from './ImportWizard';
+import { loadTrades, saveTrades } from '../lib/journal';
+import { backfillAccountId } from '../lib/portfolio/scope';
 import { usePlan } from './PlanProvider';
 import { ZONES, zoneShortName, clockInZone } from '../lib/time/zone';
 import {
@@ -41,8 +43,21 @@ export default function PortfoliosView() {
   const verdict = useMemo(() => canAddPortfolio(portfolios.length, role), [portfolios.length, role]);
 
   async function upsert(p: Portfolio) {
+    const first = portfolios.length === 0;
     const rest = portfolios.filter(x => x.id !== p.id);
     await save([...rest, { ...p, updatedAt: Date.now() }]);
+
+    // The FIRST portfolio adopts everything already in the journal. Until this
+    // moment those trades were one undivided record, so all of them are its —
+    // and the alternative is a journal whose trades belong to no account and
+    // whose numbers depend on a rule nobody can see. Runs once, and only when
+    // there is something to adopt.
+    if (first) {
+      const existing = loadTrades();
+      const { changed, trades } = backfillAccountId(existing, p.id);
+      if (changed) saveTrades(trades);
+    }
+
     select(p.id);
     setCreating(false);
     setEditing(null);

@@ -1,8 +1,9 @@
 'use client';
 
+import { useScopedTrades } from '../../components/useScopedTrades';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { loadTrades, saveTrades, softDelete, todayISO, hydrateTradesFromCloud } from '../../lib/journal';
+import { softDelete, todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { activeSessions, getActiveSessionIdx } from '../../lib/sessions';
 import { clockInZone } from '../../lib/time/zone';
@@ -24,7 +25,8 @@ function labelDate(dateISO: string): string {
 function JournalPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades, all, saveAll, adoptAll } = useScopedTrades();
   const [showForm, setShowForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [nowLabel, setNowLabel] = useState('');
@@ -45,8 +47,6 @@ function JournalPageInner() {
   // trades logged on other devices, propagates deletes) — the fix for the
   // journal appearing empty after re-login / on a new device.
   useEffect(() => {
-    setTrades(loadTrades());
-    hydrateTradesFromCloud().then(setTrades).catch(() => { /* keep local */ });
   }, []);
 
   // Live-session pill: recompute the clock every 30s so it never goes stale on a long visit.
@@ -57,22 +57,26 @@ function JournalPageInner() {
     return () => clearInterval(id);
   }, []);
 
+  // Both of these work on `all`, not on the scoped list, and that is not a
+  // detail: saveTrades replaces the journal wholesale and softDelete calls it
+  // internally, so writing back the visible subset would persist one
+  // portfolio's trades as the whole journal and silently delete the rest.
   function handleSave(trade: TradeEntry) {
     // Upsert semantics: if a trade with this id already exists (edit flow),
     // replace it in place; otherwise prepend as a new trade. The previous
     // version blindly prepended, which duplicated trades on every edit or
     // result-change round-trip.
-    const idx = trades.findIndex(t => t.id === trade.id);
+    const idx = all.findIndex(t => t.id === trade.id);
     const updated = idx >= 0
-      ? trades.map((t, i) => (i === idx ? trade : t))
-      : [trade, ...trades];
-    saveTrades(updated);
-    setTrades(updated);
+      ? all.map((t, i) => (i === idx ? trade : t))
+      : [trade, ...all];
+    saveAll(updated);
   }
 
   function handleDelete(id: number) {
-    const { updatedTrades } = softDelete(trades, id);
-    setTrades(updatedTrades);
+    // softDelete persists on its own, so this only adopts the result.
+    const { updatedTrades } = softDelete(all, id);
+    adoptAll(updatedTrades);
   }
 
   /** Full edit — opens TradeForm prefilled with the trade. Save updates in

@@ -1,9 +1,10 @@
 'use client';
+import { useScopedTrades } from '../../components/useScopedTrades';
 import { readOwned, writeOwned } from '../../lib/sync/owned';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../hooks/useLanguage';
-import { loadTrades, todayISO } from '../../lib/journal';
+import { todayISO } from '../../lib/journal';
 import type { TradeEntry } from '../../lib/journal';
 import { hydrateList, commitList } from '../../lib/sync/collections';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -418,7 +419,8 @@ export default function RulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
   const [userChecks, setUserChecks] = useState<RuleCheck[]>([]);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
   const [macro, setMacro] = useState<MacroRow[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -445,7 +447,6 @@ export default function RulesPage() {
     const c = readOwned<RuleCheck[]>(CHECKS_KEY);
     if (Array.isArray(c)) setUserChecks(c.filter(x => !x.deleted));
 
-    setTrades(loadTrades());
     hydrateList<Rule>('rules', STORAGE_KEY).then(setRules).catch(() => {});
     hydrateList<Violation>('violations', VIOLATIONS_KEY).then(setViolations).catch(() => {});
     hydrateList<RuleCheck>('rule_checks', CHECKS_KEY).then(setUserChecks).catch(() => {});

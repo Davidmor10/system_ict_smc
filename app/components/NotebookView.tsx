@@ -1,9 +1,9 @@
 'use client';
 
+import { useScopedTrades } from './useScopedTrades';
 import './notebook.css';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { loadTrades, hydrateTradesFromCloud, tradePnL } from '../lib/journal';
-import type { TradeEntry } from '../lib/journal';
+import { tradePnL } from '../lib/journal';
 import { hydrateList, commitList, hydrateDoc, saveDoc, initSyncListeners } from '../lib/sync/collections';
 import {
   BUILTIN_FOLDERS, mergedFolders, seedTradeEntries, renumberTradeEntries, newEntry, newFolder,
@@ -79,7 +79,8 @@ export default function NotebookView() {
    *  an empty array that means "not loaded yet", not "the user has none" —
    *  and anything that writes the list back must wait. */
   const [entriesHydrated, setEntriesHydrated] = useState(false);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
 
   /* UI state ─────────────────────────────────────────────────────── */
   const [currentFolderId, setCurrentFolderId] = useState<string>('trades');
@@ -116,8 +117,6 @@ export default function NotebookView() {
   useEffect(() => {
     initSyncListeners();
     // Trades first — they seed the built-in "trades" folder
-    setTrades(loadTrades());
-    hydrateTradesFromCloud().then(m => { if (m) setTrades(m); }).catch(() => {});
     // Custom folders + entries + templates from cloud
     hydrateList<NotebookFolder>(CUSTOM_FOLDERS_KIND, CUSTOM_FOLDERS_KEY).then(setCustomFolders).catch(() => {});
     hydrateList<NotebookEntry>(ENTRIES_KIND, ENTRIES_KEY)
@@ -153,8 +152,9 @@ export default function NotebookView() {
   /* Re-seed trade entries whenever trades change ──────────────────
      Gated on entriesHydrated, and that gate is the whole point.
 
-     loadTrades() is synchronous while hydrateList() is a round-trip, so this
-     effect used to fire with `entries` still [] — then write [...[], seeded]
+     The trades arrive from the local cache first while hydrateList() is a
+     round-trip, so this effect used to fire with `entries` still [] — then
+     write [...[], seeded]
      back to the cloud as the authoritative list. Every note the user had
      written was erased by opening the notebook. It looked like "the editor
      doesn't show what I saved"; the text was saved, and then deleted.

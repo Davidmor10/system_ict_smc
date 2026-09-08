@@ -1,5 +1,6 @@
 'use client';
 
+import { useScopedTrades } from '../../components/useScopedTrades';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -82,7 +83,9 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
   const spotRef = useRef<HTMLDivElement | null>(null);
 
   const [now, setNow] = useState<Date | null>(null);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
+  // Scoped to the selected portfolio, like every other screen — see
+  // components/useScopedTrades. The provider is mounted by this page.
+  const { trades } = useScopedTrades();
   const [rules, setRules] = useState<Rule[]>([]);
   const [checks, setChecks] = useState<RuleCheck[]>([]);
   const [violations, setViolations] = useState<LegacyViolation[]>([]);
@@ -108,8 +111,6 @@ export default function MemberHome({ role, splashScope }: { role: string; splash
   // ── The trader's own record ──────────────────────────────────────────────
   useEffect(() => {
     if (!member) return;
-    setTrades(loadTrades());
-    hydrateTradesFromCloud().then(merged => { if (merged) setTrades(merged); }).catch(() => {});
     hydrateList<Rule>('rules', RULES_KEY).then(setRules).catch(() => {});
     hydrateList<RuleCheck>('rule_checks', CHECKS_KEY).then(setChecks).catch(() => {});
     hydrateList<LegacyViolation>('violations', VIOLATIONS_KEY).then(setViolations).catch(() => {});

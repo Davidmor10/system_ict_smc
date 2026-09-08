@@ -1,11 +1,11 @@
 'use client';
 
+import { useScopedTrades } from './useScopedTrades';
 import { usePortfolios } from './PortfolioProvider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './stats.css';
-import { loadTrades, hydrateTradesFromCloud } from '../lib/journal';
-import type { TradeEntry } from '../lib/journal';
+
 import { computeStatistics } from '../lib/analytics/statistics';
 import type { PerformanceStats, GroupStat, EdgeComponent, DayPoint } from '../lib/analytics/statistics';
 import { hydrateDoc } from '../lib/sync/collections';
@@ -418,14 +418,13 @@ function SectionHead({ title, caption }: { title: string; caption?: string }) {
 }
 
 export default function StatsView() {
-  const [trades, setTrades] = useState<TradeEntry[] | null>(null);
+  // Scoped to the selected portfolio — see components/useScopedTrades.
+  const { trades } = useScopedTrades();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const { selected: portfolio } = usePortfolios();
   const p = useMountProgress();
 
   useEffect(() => {
-    setTrades(loadTrades());
-    hydrateTradesFromCloud().then(setTrades).catch(() => { /* keep the local copy */ });
     hydrateDoc<UserSettings>(SETTINGS_KIND, SETTINGS_KEY)
       .then(doc => { if (doc) setSettings(withDefaults(doc)); })
       .catch(() => { /* defaults are fine */ });
