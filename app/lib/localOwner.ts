@@ -53,7 +53,19 @@ export const CACHE_EPOCH_KEY = 'onyx_cache_epoch';
  *
  *  Costs one re-hydration per device. That is all it costs, because
  *  localStorage is a cache and the cloud is the source of truth. */
-export const CACHE_EPOCH = 3;
+export const CACHE_EPOCH = 4;
+
+// EPOCH 4 — the owner's journal was deleted on purpose.
+//
+// 34 trades that were wrong, and everything the AI layer had built from them,
+// removed server-side by supabase-reset-account.sql. This is the second half
+// of that operation and it is not optional: hydration reads "the cloud is
+// missing what I have" as an outage rather than a deletion — correctly, for
+// an offline-first journal — so without the bump the next page load on any
+// device that held them would push all 34 back up.
+//
+// The device cannot tell a deliberate wipe from a server that lost data.
+// Only the operator can, and this is where they say it.
 
 // EPOCH 3 — the two-window flaw.
 //
