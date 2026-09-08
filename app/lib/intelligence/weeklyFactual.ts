@@ -29,6 +29,16 @@ import { decidedCounts } from '../calc/decided';
 
 export interface FactualWeeklyReport {
   paragraphs: string[];
+  /** The week's trades, one Hebrew line each — handed to the AI observation
+   *  so the model reads the same lines the trader does, rather than a second
+   *  rendering of the same trades that could disagree with the first. */
+  tradeLines: string[];
+  /** The opening sentence, reused as the observation's "this week in numbers"
+   *  block for the same reason. */
+  weekSummary: string;
+  /** Decided trades this week. The observation's prompt names it so the model
+   *  argues from the real number rather than from a vague "few". */
+  decided: number;
   /** Stored alongside the report so the row can be read back without
    *  re-deriving it. Counts only — there is nothing here to interpret. */
   facts: Record<string, unknown>;
@@ -89,7 +99,7 @@ function countPhrase(n: number, one: string, many: string): string {
 }
 
 /** One line per trade, in the trader's own terms. */
-function tradeLine(t: TradeEntry): string {
+export function tradeLine(t: TradeEntry): string {
   const when = `${weekdayHe(t.dateISO)}, ${shortDateHe(t.dateISO)}`;
   const what = `${t.symbol} ${DIRECTION_HE[t.direction] ?? ''}`.trim();
   const outcome = RESULT_HE[t.result] ?? '';
@@ -124,6 +134,8 @@ export function factualWeeklyReport(input: FactualWeekInput): FactualWeeklyRepor
   const prevClosed = input.prevWeekTrades.filter(t => t.result !== 'OPEN').length;
 
   const paragraphs: string[] = [];
+  let tradeLines: string[] = [];
+  let weekSummary = '';
 
   // 1 — what the week held.
   if (closed.length === 0) {
@@ -143,11 +155,13 @@ export function factualWeeklyReport(input: FactualWeekInput): FactualWeeklyRepor
       be > 0 ? countPhrase(be, 'אחת ללא שינוי', 'ללא שינוי') : null,
     ].filter(Boolean).join(', ');
     const openTail = open > 0 ? ` בנוסף ${countPhrase(open, 'עסקה אחת נשארה פתוחה', 'עסקאות נשארו פתוחות')}.` : '';
-    paragraphs.push(`השבוע נסגרו ${countPhrase(closed.length, 'עסקה אחת', 'עסקאות')}: ${split}. סך הכול ${signedRHe(netR)}.${openTail}`);
+    weekSummary = `השבוע נסגרו ${countPhrase(closed.length, 'עסקה אחת', 'עסקאות')}: ${split}. סך הכול ${signedRHe(netR)}.${openTail}`;
+    paragraphs.push(weekSummary);
 
     // 2 — the trades themselves. The most concrete thing the report can say,
     // and at this sample the only thing it should.
-    paragraphs.push(`אלה העסקאות עצמן: ${closed.map(tradeLine).join(' ')}`);
+    tradeLines = closed.map(tradeLine);
+    paragraphs.push(`אלה העסקאות עצמן: ${tradeLines.join(' ')}`);
   }
 
   // 3 — where the week sits in the journal. A count, so the trader can see
@@ -170,8 +184,13 @@ export function factualWeeklyReport(input: FactualWeekInput): FactualWeeklyRepor
     paragraphs.push(`מה שאי אפשר להגיד על השבוע הזה: ${countPhrase(decided, 'עסקה אחת שהוכרעה', 'עסקאות שהוכרעו')} זה מעט מדי כדי להפריד בין הרגל לבין מקריות. כל חיתוך — לפי מכשיר, לפי סשן, לפי כיוון — נשען כאן על עסקה או שתיים, ובגודל כזה גם רצף שלם של רווחים או של הפסדים הוא תוצאה סבירה לגמרי של מזל. לכן לא כתבתי כאן מגמה, סיבה או מסקנה על השיטה שלך: הדוח הזה מתעד את השבוע כפי שהיה. מ־${input.claimFloor} עסקאות סגורות בשבוע אחד נכתב הדוח המלא, זה שמשווה ומסביר.`);
   }
 
+  if (!weekSummary) weekSummary = paragraphs[0] ?? '';
+
   return {
     paragraphs,
+    tradeLines,
+    weekSummary,
+    decided,
     facts: {
       kind: 'factual',
       closedThisWeek: closed.length,

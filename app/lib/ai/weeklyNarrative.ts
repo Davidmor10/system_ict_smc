@@ -163,3 +163,137 @@ Rules:
 
   return { paragraphs: kept };
 }
+
+// ── The thin week ────────────────────────────────────────────────────────────
+//
+// A week below the claim floor gets a written report either way — the factual
+// one in lib/intelligence/weeklyFactual, built from counts with no model in
+// the loop. This adds the one thing a count cannot give: a reading of THESE
+// trades against what the journal already knows about this trader.
+//
+// The distinction the prompt is built around, and the reason this is a
+// separate function rather than a looser weekly letter:
+//
+//   · Four trades cannot establish anything. No trend, no cause, no edge —
+//     that fence is the whole reason the full report has a floor at all.
+//   · Four trades CAN be recognised. Whether they look like the trader's
+//     ordinary week or unlike it is a comparison against a large sample, and
+//     the large sample is the journal, not the week.
+//
+// So it may say "this is the pattern you already have, here it is again" or
+// "this week does not look like your usual", and it may not say "this week
+// shows" anything at all.
+//
+// Returns null on any failure. The report is written without it — the factual
+// spine must never depend on a model being reachable.
+
+export interface ThinWeekFacts {
+  /** One line per closed trade this week, already in Hebrew. */
+  weekTrades: string[];
+  /** The week's counts, in a sentence. */
+  weekSummary: string;
+  /** The whole journal — the only sample large enough to be a reference. */
+  journalSummary: string;
+  /** Durable facts already established about this trader. */
+  knownFactsSummary: string;
+  /** Recurring conditions tracked over time. */
+  patternMemorySummary: string;
+  /** Decided trades this week. Named in the prompt so the model argues from
+   *  the real number rather than from a vague "few". */
+  decidedThisWeek: number;
+}
+
+const THIN_MIN_PARAGRAPHS = 1;
+const THIN_MAX_PARAGRAPHS = 2;
+
+export async function generateThinWeekObservation(
+  facts: ThinWeekFacts, lang: 'he' | 'en', clerkId?: string | null,
+): Promise<string[] | null> {
+  const langInstruction = lang === 'he' ? HEBREW_MENTOR_STYLE : 'Respond in English.';
+
+  const prompt = `You are Onyx, an experienced trading mentor. This trader closed only ${facts.decidedThisWeek} decided trades this week — far too few to conclude anything from the week itself. You do NOT predict markets and you NEVER give buy/sell signals.
+
+${langInstruction}
+
+THIS WEEK'S TRADES, ONE PER LINE:
+${facts.weekTrades.join('\n')}
+
+THIS WEEK IN NUMBERS:
+${facts.weekSummary}
+
+THE WHOLE JOURNAL — the only sample here large enough to be a reference point:
+${facts.journalSummary}
+
+DURABLE FACTS ALREADY ESTABLISHED ABOUT THIS TRADER:
+${facts.knownFactsSummary}
+
+RECURRING CONDITIONS TRACKED OVER TIME:
+${facts.patternMemorySummary}
+
+YOUR JOB, and its hard limit:
+Write ${THIN_MIN_PARAGRAPHS}-${THIN_MAX_PARAGRAPHS} short paragraphs that place THIS WEEK'S trades against what is already known about this trader from the whole journal.
+
+You MAY say:
+- That these specific trades look like the trader's ordinary behaviour — and point at the durable fact or tracked pattern they match.
+- That they look UNLIKE it, naming which established fact they depart from.
+- What is worth watching in the coming weeks as a result — as a question to keep an eye on, never as a finding.
+- Something concrete about an individual trade above, since a single trade is a fact about itself.
+
+You MUST NOT say, under any circumstances:
+- That this week shows a trend, an improvement, or a deterioration. ${facts.decidedThisWeek} trades cannot show any of those.
+- That anything CAUSED this week's result.
+- That the trader has, or has lost, an edge, based on this week.
+- Any statistic about this week beyond the plain counts given above. No win rate for the week, no average for the week.
+- Anything about the market's future.
+
+If this week's trades genuinely do not connect to anything established, say exactly that in one sentence — that they are too few and too ordinary to add to the picture yet — and stop. Saying nothing was found is a legitimate answer and a better one than a manufactured connection.
+
+Produce exactly one JSON object:
+{ "paragraphs": ["<paragraph 1>", "<paragraph 2 — optional>"] }
+
+Rules:
+- Each paragraph 1-3 sentences.
+- Every number must come from the blocks above. Never invent or estimate one.
+- JSON only, no extra text.`;
+
+  let raw: string;
+  try {
+    raw = await generateInsightJson(prompt, clerkId === undefined ? undefined : { clerkId, purpose: 'thin_week_observation' });
+  } catch (err) {
+    logger.warn('generateThinWeekObservation: AI generation failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+
+  let paragraphs: string[];
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = match ? (JSON.parse(match[0]) as { paragraphs?: unknown }) : {};
+    if (!Array.isArray(parsed.paragraphs)) return null;
+    paragraphs = parsed.paragraphs
+      .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+      .slice(0, THIN_MAX_PARAGRAPHS);
+  } catch {
+    return null;
+  }
+  if (paragraphs.length < THIN_MIN_PARAGRAPHS) return null;
+
+  // The same quality gate the weekly letter goes through. There is no retry
+  // here on purpose: this paragraph is an addition to a report that is already
+  // complete without it, so a violating draft is dropped rather than argued
+  // with. A thin week is exactly where a platitude does the most damage.
+  try {
+    const violations = checkProse(paragraphs.join('\n\n'), lang);
+    if (hasHardViolation(violations)) {
+      logger.warn('thin-week observation violated its own rules, dropped', {
+        clerkId, rules: violations.filter(v => v.severity === 'hard').map(v => v.rule),
+      });
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return paragraphs;
+}

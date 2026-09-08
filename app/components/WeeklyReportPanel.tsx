@@ -19,7 +19,7 @@ import { readInsightCache, writeInsightCache } from '../lib/ai/insightCache';
 import { MIN_TRADES_FOR_WEEKLY_CLAIMS } from '../lib/intelligence/weeklyRules';
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
-interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; }
+interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; aiWritten?: boolean; }
 interface HistoryEntry {
   isoWeek: string;
   weekStartDate: string;    // 'YYYY-MM-DD'
@@ -231,10 +231,16 @@ function CurrentReport({
       {/* Header block — eyebrow + week + confidence */}
       <header className="flex items-start justify-between gap-4 pb-6 border-b border-[#1c1c1e] flex-wrap">
         <div>
-          {/* A factual week was not written by a model, and saying it was
-              would be the one false claim in a report built to avoid them. */}
+          {/* A factual week is a record of counts. It may also carry an AI
+              observation placing those trades against the whole journal — or
+              may not, if the model was unreachable. Saying "AI" over a report
+              no model touched would be the one false claim in a report built
+              to avoid them, so the flag travels with the report rather than
+              being guessed from the trade count. */}
           <div className="font-mono text-[12px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-2.5">
-            {isFactual(report.sampleSize) ? 'WEEKLY RECORD' : 'AI · WEEKLY REPORT'}
+            {!isFactual(report.sampleSize) ? 'AI · WEEKLY REPORT'
+              : report.aiWritten ? 'WEEKLY RECORD · AI NOTE'
+              : 'WEEKLY RECORD'}
           </div>
           <h2 style={{ fontFamily: 'var(--serif)' }} className="text-[34px] max-[880px]:text-[26px] font-bold text-white leading-[1.05] m-0 tracking-[-0.005em]">
             הדוח השבועי שלך

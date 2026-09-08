@@ -19,7 +19,7 @@ import { logger } from '../logger';
 import { MIN_DECIDED_FOR_CLAIM } from '../stats/evidence';
 import { decidedCounts } from '../calc/decided';
 import { generateHypothesisPhrasing, generatePatternPhrasing, metricsEvidence } from '../ai/insightPhrasing';
-import { generateNarrativeText, type NarrativeFacts } from '../ai/weeklyNarrative';
+import { generateNarrativeText, generateThinWeekObservation, type NarrativeFacts } from '../ai/weeklyNarrative';
 import {
   summarizeAnalysis, summarizeComparison, summarizeDepth, summarizeKnownFacts, summarizePatternMemory, summarizeRootCause,
 } from '../ai/factsBlock';
@@ -367,6 +367,14 @@ export interface WeeklyDeepAnalysisResult {
   confidenceLevel: ConfidenceLevel;
   sampleSize: number;
   weekKey: string;
+  /** Whether a model wrote any part of this report.
+   *
+   *  A week below the claim floor is written from counts. It MAY also carry an
+   *  AI observation placing those trades against the whole journal — or may
+   *  not, if the model was unreachable or its draft broke the rules. The panel
+   *  labels the report either way, and the label has to be true, so the flag
+   *  travels with it rather than being guessed from the trade count. */
+  aiWritten: boolean;
 }
 
 export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<WeeklyDeepAnalysisResult | null> {
@@ -390,6 +398,10 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
       confidenceLevel: cached.confidenceLevel as ConfidenceLevel,
       sampleSize: cached.tradeCount,
       weekKey,
+      // A full report is always a model's. A factual one records whether an
+      // observation made it in — see `observed` on the stored facts.
+      aiWritten: cached.tradeCount >= MIN_TRADES_FOR_WEEKLY_CLAIMS
+        || (cached.facts as { observed?: boolean } | null)?.observed === true,
     };
   }
 
@@ -404,21 +416,64 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
       daysIn: daysIntoWeekFrom(thisWeekStart, today),
       claimFloor: MIN_TRADES_FOR_WEEKLY_CLAIMS,
     });
+
+    // The counts are the spine and they are already complete. This adds the
+    // one thing counts cannot: a reading of THESE trades against what the
+    // journal already knows about this trader — which is a comparison against
+    // a large sample, not a conclusion drawn from a small one.
+    //
+    // Deliberately cheap and deliberately optional. It reads the stored
+    // profile and pattern rows rather than triggering a full intelligence
+    // refresh, and if the model is unreachable or its draft breaks the rules,
+    // it returns null and the report goes out without it. The trader always
+    // gets a report; the observation is what they get when it can be had.
+    let observation: string[] | null = null;
+    if (factual.decided > 0) {
+      try {
+        const [storedProfile, patternRows] = await Promise.all([
+          repo.getTraderProfile(supabase, userId),
+          repo.getPatternMemory(supabase, userId),
+        ]);
+        observation = await generateThinWeekObservation({
+          weekTrades: factual.tradeLines,
+          weekSummary: factual.weekSummary,
+          journalSummary: summarizeAnalysis(runFullAnalysis(trades)),
+          knownFactsSummary: summarizeKnownFacts(storedProfile?.knownFacts ?? []),
+          patternMemorySummary: summarizePatternMemory(
+            patternRows.filter(p => p.status === 'active' || p.status === 'strengthening'),
+          ),
+          decidedThisWeek: factual.decided,
+        }, lang, userId);
+      } catch (err) {
+        logger.warn('thin-week observation skipped', {
+          userId, error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Spliced in BEFORE the closing paragraph, which states what the week
+    // cannot support. That paragraph has to be the last word: the panel
+    // renders the final paragraph as the takeaway callout, and on a week like
+    // this the takeaway is the limit, not the observation.
+    const paragraphs = observation
+      ? [...factual.paragraphs.slice(0, -1), ...observation, factual.paragraphs[factual.paragraphs.length - 1]]
+      : factual.paragraphs;
+
     await repo.saveWeeklyReport(supabase, {
       clerkId: userId, isoWeek: weekKey, weekStartDate: thisWeekStart,
       tradeCount: closedThisWeek.length,
       // Not a hedge on a claim — there is no claim. It marks the row as one
       // the comparison paths must not read back as evidence of a week.
       confidenceLevel: 'low',
-      narrative: { schemaVersion: 1, paragraphs: factual.paragraphs },
-      facts: factual.facts,
+      narrative: { schemaVersion: 1, paragraphs },
+      facts: { ...factual.facts, observed: observation != null },
       modelUsed: null,
       primaryHypothesisSnapshot: null,
     });
     await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, {
       sampleSize: closedThisWeek.length, confidenceLevel: 'low', factual: true,
     });
-    return { paragraphs: factual.paragraphs, confidenceLevel: 'low', sampleSize: closedThisWeek.length, weekKey };
+    return { paragraphs, confidenceLevel: 'low', sampleSize: closedThisWeek.length, weekKey, aiWritten: observation != null };
   }
 
   const previousProfileRecord = await repo.getTraderProfile(supabase, userId);
@@ -486,7 +541,7 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   });
   await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, { sampleSize: closedThisWeek.length, confidenceLevel });
 
-  return { paragraphs: narrative.paragraphs, confidenceLevel, sampleSize: closedThisWeek.length, weekKey };
+  return { paragraphs: narrative.paragraphs, confidenceLevel, sampleSize: closedThisWeek.length, weekKey, aiWritten: true };
 }
 
 // ── generateDashboardPrimaryInsight ──────────────────────────────────────────
