@@ -66,6 +66,14 @@ export interface UserSettings {
    *  every reader normalizes rather than trusting the shape. */
   sessions: SessionDef[];
 
+  /** When the trader finished (or dismissed) the first-run setup.
+   *
+   *  Its ABSENCE is what makes the setup appear, so it is written on both
+   *  paths — finishing and skipping. A trader who skipped chose the defaults
+   *  deliberately; re-asking would be nagging, and re-asking on a device they
+   *  signed into later would be worse, since the doc syncs. */
+  onboardedAt?: number;
+
   /** Bookkeeping — used by the sync layer to pick a winner across
       devices (newest updatedAt wins). */
   updatedAt?: number;
