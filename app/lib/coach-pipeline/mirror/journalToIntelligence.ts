@@ -47,6 +47,11 @@ function weightedExitPrice(trade: TradeEntry): number | null {
 export function tradeEntryToIntelligenceRow(clerkId: string, trade: TradeEntry, deleted = false) {
   return {
     clerk_id:        clerkId,
+    // Which portfolio this trade belongs to. Empty string rather than null:
+    // it takes part in composite keys on the tables downstream, and null is
+    // not comparable there. The read path maps "" to the oldest portfolio —
+    // the same rule the client applies, in lib/portfolio/scope.
+    account_id:      trade.accountId ?? '',
     id:              deterministicUuid(clerkId, trade.id),
     date:            trade.dateISO,
     time:            trade.time || null,

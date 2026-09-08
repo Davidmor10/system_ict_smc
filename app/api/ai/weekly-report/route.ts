@@ -1,3 +1,4 @@
+import { accountIdFromBody } from '../../../lib/portfolio/request';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWeeklyDeepAnalysis } from '../../../lib/intelligence/service';
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     // Fetches its own trades server-side (via clerk_id) and persists a deep
     // narrative report to weekly_ai_reports — trades in the request body,
     // if any, are ignored.
-    const report = await generateWeeklyDeepAnalysis(userId, lang);
+    const report = await generateWeeklyDeepAnalysis(userId, lang, accountIdFromBody(body));
     return NextResponse.json({ report });
   } catch (err) {
     console.error('[AI Weekly Report]', err);

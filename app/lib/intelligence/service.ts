@@ -25,6 +25,7 @@ import {
 } from '../ai/factsBlock';
 
 import * as repo from './repository';
+import { resolveScope, type AccountScope } from '../portfolio/server';
 import { deriveTraderProfile } from './profile';
 import { diffPatternMemory } from './patternMemory';
 import { computePeriodComparison } from './periods';
@@ -134,25 +135,26 @@ interface RefreshOptions {
 async function refreshIntelligence(
   supabase: SupabaseClient,
   userId: string,
+  scope: AccountScope,
   lang: 'he' | 'en',
   opts: RefreshOptions = {},
 ): Promise<RefreshResult> {
   const phrase = opts.phrase ?? true;
   const nowISO = new Date().toISOString();
-  const trades = await repo.getRecentTrades(supabase, userId);
+  const trades = await repo.getRecentTrades(supabase, userId, scope);
   const analysis = runFullAnalysis(trades);
 
   const [existingProfileRecord, existingPatternRows, existingHypothesis] = await Promise.all([
-    repo.getTraderProfile(supabase, userId),
-    repo.getPatternMemory(supabase, userId),
-    repo.getHypothesis(supabase, userId),
+    repo.getTraderProfile(supabase, userId, scope),
+    repo.getPatternMemory(supabase, userId, scope),
+    repo.getHypothesis(supabase, userId, scope),
   ]);
 
   const candidates = discoverPatterns(trades);
   const diff = diffPatternMemory(userId, candidates, existingPatternRows, nowISO);
-  await repo.savePatternMemory(supabase, diff.toUpsert);
+  await repo.savePatternMemory(supabase, diff.toUpsert, scope);
   await Promise.all(diff.statusChanges.map(change =>
-    repo.appendInsightHistory(supabase, userId, 'pattern_status_change', change.patternId, { ...change }),
+    repo.appendInsightHistory(supabase, userId, scope, 'pattern_status_change', change.patternId, { ...change }),
   ));
 
   const recurringConditions: PatternMemorySubjectSummary[] = diff.toUpsert
@@ -165,7 +167,7 @@ async function refreshIntelligence(
 
   let hypothesis = deriveHypothesis(userId, diff.toUpsert, existingHypothesis, nowISO);
   if (hypothesis.status !== (existingHypothesis?.status ?? null)) {
-    await repo.appendInsightHistory(supabase, userId, 'hypothesis_status_change', null, {
+    await repo.appendInsightHistory(supabase, userId, scope, 'hypothesis_status_change', null, {
       previousStatus: existingHypothesis?.status ?? null, newStatus: hypothesis.status,
     });
   }
@@ -182,7 +184,7 @@ async function refreshIntelligence(
       hypothesis = { ...hypothesis, description: phrasing.description, evidence: phrasing.evidence };
     }
   }
-  await repo.saveHypothesis(supabase, hypothesis);
+  await repo.saveHypothesis(supabase, hypothesis, scope);
 
   // `hasPreviousProfile` is not cosmetic: with nothing to compare against,
   // every trend in the profile defaults to 'flat', and scoring 'flat' as 70
@@ -208,11 +210,11 @@ async function refreshIntelligence(
     profile, previousProfile: existingProfileRecord?.profile ?? null,
     edgeScore, learningScore, scoreHistory, knownFacts,
     builtFromTradeCount: closedCount, lastTradeDateIso: trades[0]?.dateISO ?? null,
-  });
+  }, scope);
   // The audit trail records how much of the score could be read, not just the
   // number — a 62 out of four measurable factors and a 62 out of seven are not
   // the same claim, and only one of them survives a question about it.
-  await repo.appendInsightHistory(supabase, userId, 'profile_update', null, {
+  await repo.appendInsightHistory(supabase, userId, scope, 'profile_update', null, {
     closedCount, edgeScore, learningScore,
     edgeMeasured: edge.measured, edgeTotal: edge.total,
     edgeMeasuredWeight: Number(edge.measuredWeight.toFixed(2)),
@@ -250,10 +252,11 @@ interface FreshIntelligence {
 async function getFreshIntelligence(
   supabase: SupabaseClient,
   userId: string,
+  scope: AccountScope,
   lang: 'he' | 'en',
   _profileRecord: Awaited<ReturnType<typeof repo.getTraderProfile>>,
 ): Promise<FreshIntelligence> {
-  const result = await refreshIntelligence(supabase, userId, lang);
+  const result = await refreshIntelligence(supabase, userId, scope, lang);
   return {
     patternRows: result.patternRows, hypothesis: result.hypothesis, profile: result.profile,
     builtFromTradeCount: result.trades.filter(t => t.result !== 'OPEN').length,
@@ -264,9 +267,18 @@ async function getFreshIntelligence(
 // The profile is always a full recompute, never incrementally patched, so
 // these are documented aliases of the same operation, not two code paths.
 
-export async function buildTraderProfile(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<TraderProfile | null> {
+/** The portfolio to analyse. Every entry point takes it, and every one of them
+ *  resolves it through resolveScope rather than trusting the caller: an id
+ *  that is not this trader's would let one portfolio's analysis be written
+ *  under another's key — a way to corrupt their own record. Omitted, or
+ *  unknown, it falls back to the portfolio that adopts unassigned trades. */
+export async function buildTraderProfile(
+  userId: string, lang: 'he' | 'en' = DEFAULT_LANG, accountId?: string | null,
+): Promise<TraderProfile | null> {
   if (!isSupabaseConfigured()) return null;
-  const result = await refreshIntelligence(getClient(), userId, lang);
+  const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
+  const result = await refreshIntelligence(supabase, userId, scope, lang);
   return result.profile;
 }
 
@@ -294,26 +306,36 @@ export const updateTraderProfile = buildTraderProfile;
  *
  *  Run nightly, the same numbers mean "since yesterday" for everyone, which
  *  is the thing they were always presented as meaning. */
-export async function refreshIntelligenceNightly(userId: string): Promise<{ patternRows: number }> {
+export async function refreshIntelligenceNightly(
+  userId: string, accountId?: string | null,
+): Promise<{ patternRows: number }> {
   if (!isSupabaseConfigured()) return { patternRows: 0 };
-  const result = await refreshIntelligence(getClient(), userId, DEFAULT_LANG, { phrase: false });
+  const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
+  const result = await refreshIntelligence(supabase, userId, scope, DEFAULT_LANG, { phrase: false });
   return { patternRows: result.patternRows.length };
 }
 
 // ── detectPatterns / updatePatternMemory ────────────────────────────────────
 
-export async function detectPatterns(userId: string) {
+export async function detectPatterns(userId: string, accountId?: string | null) {
   if (!isSupabaseConfigured()) return [];
-  const trades = await repo.getRecentTrades(getClient(), userId);
+  const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
+  const trades = await repo.getRecentTrades(supabase, userId, scope);
   return discoverPatterns(trades);
 }
 
 /** Runs the same atomic refresh as buildTraderProfile — pattern memory can't
     be updated in isolation since the profile's recurringConditions and the
     hypothesis both depend on this run's pattern diff. */
-export async function updatePatternMemory(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<PatternMemoryRow[]> {
+export async function updatePatternMemory(
+  userId: string, lang: 'he' | 'en' = DEFAULT_LANG, accountId?: string | null,
+): Promise<PatternMemoryRow[]> {
   if (!isSupabaseConfigured()) return [];
-  const result = await refreshIntelligence(getClient(), userId, lang);
+  const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
+  const result = await refreshIntelligence(supabase, userId, scope, lang);
   return result.patternRows;
 }
 
@@ -341,10 +363,13 @@ function computeTradeWindows(trades: TradeEntry[], thisWeekStart: string): Trade
   };
 }
 
-export async function comparePeriods(userId: string): Promise<PeriodComparison | null> {
+export async function comparePeriods(
+  userId: string, accountId?: string | null,
+): Promise<PeriodComparison | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = getClient();
-  const trades = await repo.getRecentTrades(supabase, userId);
+  const scope = await resolveScope(supabase, userId, accountId);
+  const trades = await repo.getRecentTrades(supabase, userId, scope);
   const thisWeekStart = startOfIsoWeek(todayISO());
   const windows = computeTradeWindows(trades, thisWeekStart);
 
@@ -377,21 +402,24 @@ export interface WeeklyDeepAnalysisResult {
   aiWritten: boolean;
 }
 
-export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<WeeklyDeepAnalysisResult | null> {
+export async function generateWeeklyDeepAnalysis(
+  userId: string, lang: 'he' | 'en' = DEFAULT_LANG, accountId?: string | null,
+): Promise<WeeklyDeepAnalysisResult | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
   const today = todayISO();
   const weekKey = isoWeekKey(today);
   const thisWeekStart = startOfIsoWeek(today);
 
-  const trades = await repo.getRecentTrades(supabase, userId);
+  const trades = await repo.getRecentTrades(supabase, userId, scope);
   const windows = computeTradeWindows(trades, thisWeekStart);
   const closedThisWeek = windows.thisWeekTrades.filter(t => t.result !== 'OPEN');
 
   // Avoid redundant LLM spend on repeat visits within the same week — only
   // regenerate if no report exists yet, or this week's closed-trade count
   // has moved since it was last generated.
-  const cached = await repo.getWeeklyReport(supabase, userId, weekKey);
+  const cached = await repo.getWeeklyReport(supabase, userId, weekKey, scope);
   if (cached && cached.tradeCount === closedThisWeek.length) {
     return {
       paragraphs: cached.narrative.paragraphs,
@@ -431,8 +459,8 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
     if (factual.decided > 0) {
       try {
         const [storedProfile, patternRows] = await Promise.all([
-          repo.getTraderProfile(supabase, userId),
-          repo.getPatternMemory(supabase, userId),
+          repo.getTraderProfile(supabase, userId, scope),
+          repo.getPatternMemory(supabase, userId, scope),
         ]);
         observation = await generateThinWeekObservation({
           weekTrades: factual.tradeLines,
@@ -469,15 +497,15 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
       facts: { ...factual.facts, observed: observation != null },
       modelUsed: null,
       primaryHypothesisSnapshot: null,
-    });
-    await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, {
+    }, scope);
+    await repo.appendInsightHistory(supabase, userId, scope, 'weekly_report', weekKey, {
       sampleSize: closedThisWeek.length, confidenceLevel: 'low', factual: true,
     });
     return { paragraphs, confidenceLevel: 'low', sampleSize: closedThisWeek.length, weekKey, aiWritten: observation != null };
   }
 
-  const previousProfileRecord = await repo.getTraderProfile(supabase, userId);
-  const result = await refreshIntelligence(supabase, userId, lang);
+  const previousProfileRecord = await repo.getTraderProfile(supabase, userId, scope);
+  const result = await refreshIntelligence(supabase, userId, scope, lang);
 
   const thisAnalysis = runFullAnalysis(windows.thisWeekTrades);
   // Decided, not merely closed. The floor is named for decided trades and the
@@ -500,7 +528,7 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   // three quiet weeks in a row would otherwise read as an established history
   // and lift this report's confidence on the strength of weeks that concluded
   // nothing. Only reports that were allowed to make a claim count.
-  const priorReports = (await repo.getRecentWeeklyReports(supabase, userId, (MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1) * 3))
+  const priorReports = (await repo.getRecentWeeklyReports(supabase, userId, scope, (MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1) * 3))
     .filter(r => r.tradeCount >= MIN_TRADES_FOR_WEEKLY_CLAIMS && r.isoWeek !== weekKey);
   const isEarlyInHistory = priorReports.length < MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE;
   const confidenceLevel = isEarlyInHistory
@@ -538,8 +566,8 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
     primaryHypothesisSnapshot: result.hypothesis.description
       ? { description: result.hypothesis.description, status: result.hypothesis.status, confidenceScore: result.hypothesis.confidenceScore }
       : null,
-  });
-  await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, { sampleSize: closedThisWeek.length, confidenceLevel });
+  }, scope);
+  await repo.appendInsightHistory(supabase, userId, scope, 'weekly_report', weekKey, { sampleSize: closedThisWeek.length, confidenceLevel });
 
   return { paragraphs: narrative.paragraphs, confidenceLevel, sampleSize: closedThisWeek.length, weekKey, aiWritten: true };
 }
@@ -568,18 +596,25 @@ function confidenceLevelForScore(score: number): ConfidenceLevel {
  *
  *  Returns an empty history rather than throwing for an account the nightly
  *  run has never touched. */
-export async function getScoreHistory(userId: string): Promise<ScoreSnapshot[]> {
+export async function getScoreHistory(
+  userId: string, accountId?: string | null,
+): Promise<ScoreSnapshot[]> {
   if (!isSupabaseConfigured()) return [];
-  const record = await repo.getTraderProfile(getClient(), userId);
+  const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
+  const record = await repo.getTraderProfile(supabase, userId, scope);
   return record?.scoreHistory ?? [];
 }
 
-export async function generateDashboardPrimaryInsight(userId: string, lang: 'he' | 'en' = DEFAULT_LANG): Promise<AiDiscovery | null> {
+export async function generateDashboardPrimaryInsight(
+  userId: string, lang: 'he' | 'en' = DEFAULT_LANG, accountId?: string | null,
+): Promise<AiDiscovery | null> {
   if (!isSupabaseConfigured()) return null;
   const supabase = getClient();
+  const scope = await resolveScope(supabase, userId, accountId);
 
-  const profileRecord = await repo.getTraderProfile(supabase, userId);
-  const { patternRows, hypothesis, builtFromTradeCount } = await getFreshIntelligence(supabase, userId, lang, profileRecord);
+  const profileRecord = await repo.getTraderProfile(supabase, userId, scope);
+  const { patternRows, hypothesis, builtFromTradeCount } = await getFreshIntelligence(supabase, userId, scope, lang, profileRecord);
 
   // Same arithmetic floor the journal panel applies: a claim resting on more
   // trades than exist is not a weak reading, it is a stale row. Checked here
@@ -613,9 +648,9 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
       if (!phrasing) return null;
       description = phrasing.description;
       evidence = phrasing.evidence;
-      await repo.saveHypothesis(supabase, { ...hypothesis, description, evidence });
+      await repo.saveHypothesis(supabase, { ...hypothesis, description, evidence }, scope);
     }
-    await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', 'hypothesis', {
+    await repo.appendInsightHistory(supabase, userId, scope, 'dashboard_insight_shown', 'hypothesis', {
       confidenceScore: hypothesis.confidenceScore, status: hypothesis.status,
     });
     const sampleSize = Object.values(hypothesis.supportingMetrics)[0]?.confidence.sampleSize ?? 0;
@@ -644,7 +679,7 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
     && Math.abs(anchor.currentMetric.winRate - anchor.aiPhrasedWinRate) <= 2;
 
   if (cacheIsFresh) {
-    await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', anchor.patternId, { cached: true });
+    await repo.appendInsightHistory(supabase, userId, scope, 'dashboard_insight_shown', anchor.patternId, { cached: true });
     return {
       title: anchor.aiTitle!, evidence: anchor.aiEvidence ?? '', action: anchor.aiAction ?? '',
       confidenceLevel: anchor.currentConfidenceLevel, sampleSize: anchor.currentSampleSize,
@@ -657,8 +692,8 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
   await repo.savePatternMemory(supabase, [{
     ...anchor, aiTitle: phrased.title, aiEvidence: phrased.evidence, aiAction: phrased.action,
     aiPhrasedStatus: anchor.status, aiPhrasedWinRate: anchor.currentMetric.winRate,
-  }]);
-  await repo.appendInsightHistory(supabase, userId, 'dashboard_insight_shown', anchor.patternId, { cached: false });
+  }], scope);
+  await repo.appendInsightHistory(supabase, userId, scope, 'dashboard_insight_shown', anchor.patternId, { cached: false });
 
   return {
     title: phrased.title, evidence: phrased.evidence, action: phrased.action,
@@ -670,10 +705,13 @@ export async function generateDashboardPrimaryInsight(userId: string, lang: 'he'
 // Surfaced by /dashboard/progress. It sat here unwired for long enough to grow
 // a comment saying so.
 
-export async function getEvolutionTimeline(userId: string): Promise<EvolutionEntry[]> {
+export async function getEvolutionTimeline(
+  userId: string, accountId?: string | null,
+): Promise<EvolutionEntry[]> {
   if (!isSupabaseConfigured()) return [];
   const supabase = getClient();
-  const reports = await repo.getRecentWeeklyReports(supabase, userId, 24);
+  const scope = await resolveScope(supabase, userId, accountId);
+  const reports = await repo.getRecentWeeklyReports(supabase, userId, scope, 24);
   const records: WeeklyHypothesisRecord[] = reports.map(r => ({
     isoWeek: r.isoWeek, weekStartDate: r.weekStartDate, hypothesis: r.primaryHypothesisSnapshot,
   }));

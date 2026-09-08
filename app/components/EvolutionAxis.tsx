@@ -1,5 +1,6 @@
 'use client';
 
+import { usePortfolios } from './PortfolioProvider';
 import { useEffect, useState } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,15 +21,20 @@ interface Entry {
 
 export default function EvolutionAxis() {
   const [rows, setRows] = useState<Entry[] | null>(null);
+  // The AI answers about the portfolio on screen. Sent with every request and
+  // re-fetched when it changes — a cached answer about the other account is
+  // the same failure as a mixed win rate, with a delay on it.
+  const { selected } = usePortfolios();
+  const account = selected?.id ?? null;
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/ai/evolution', { credentials: 'same-origin' })
+    fetch(`/api/ai/evolution${account ? `?account=${encodeURIComponent(account)}` : ''}`, { credentials: 'same-origin' })
       .then(r => (r.ok ? r.json() : null))
       .then(j => { if (alive) setRows((j?.evolution as Entry[]) ?? []); })
       .catch(() => { if (alive) setRows([]); });
     return () => { alive = false; };
-  }, []);
+  }, [account]);
 
   if (rows === null) return <div className="text-white/30 text-sm">טוען…</div>;
 

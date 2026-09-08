@@ -1,3 +1,4 @@
+import { accountIdFromBody } from '../../../lib/portfolio/request';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -57,7 +58,9 @@ export async function POST(req: NextRequest) {
   const history = (parsed.data.history ?? []) as ChatTurn[];
 
   try {
-    const result = await answerCoachQuestion(userId, parsed.data.question, lang, parsed.data.chatId ?? null, history);
+    const result = await answerCoachQuestion(
+      userId, parsed.data.question, lang, parsed.data.chatId ?? null, history, accountIdFromBody(body),
+    );
     return NextResponse.json(result);
   } catch (err) {
     console.error('[AI Chat]', err);

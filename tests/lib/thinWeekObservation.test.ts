@@ -96,8 +96,8 @@ describe('the report does not depend on it', () => {
 
   it('reads stored rows rather than triggering a full refresh', () => {
     // A quiet week must not cost what a full week costs.
-    expect(service).toContain('repo.getTraderProfile(supabase, userId)');
-    expect(service).toContain('repo.getPatternMemory(supabase, userId)');
+    expect(service).toContain('repo.getTraderProfile(supabase, userId, scope)');
+    expect(service).toContain('repo.getPatternMemory(supabase, userId, scope)');
     const thin = service.slice(service.indexOf('if (closedThisWeek.length < MIN_TRADES_FOR_WEEKLY_CLAIMS)'), service.indexOf('// Avoid redundant LLM spend') + 1 || undefined);
     expect(thin).not.toContain('refreshIntelligence');
   });

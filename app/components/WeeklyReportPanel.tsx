@@ -12,6 +12,7 @@
 //   • History — GET /api/ai/weekly-report/history, backed by the
 //     weekly_ai_reports table. Persistent, cross-device, not localStorage.
 
+import { usePortfolios } from './PortfolioProvider';
 import { useEffect, useState, useMemo } from 'react';
 import InsightText from './InsightText';
 import TypingDots from './TypingDots';
@@ -102,6 +103,11 @@ export default function WeeklyReportPanel({
    *  so it is a miss, not content. */
   fingerprint: string;
 }) {
+  // The AI answers about the portfolio on screen. Sent with every request and
+  // re-fetched when it changes — a cached answer about the other account is
+  // the same failure as a mixed win rate, with a delay on it.
+  const { selected } = usePortfolios();
+  const account = selected?.id ?? null;
   const [report, setReport]       = useState<WeeklyReport | null>(null);
   const [loading, setLoading]     = useState(false);
   const [history, setHistory]     = useState<HistoryEntry[]>([]);
@@ -117,14 +123,16 @@ export default function WeeklyReportPanel({
     // including a week with four trades and a week with none — the server
     // decides what the report may CLAIM, not whether it exists. Gating the
     // fetch on a count was the second half of the same bug.
-    const cachePrefix = 'onyx_ai_weekly_report_v2_';
+    // The portfolio is part of the key. Without it the cache would serve one
+    // account's weekly report while the other is on screen.
+    const cachePrefix = `onyx_ai_weekly_report_v3_${account ?? 'none'}_`;
     const cacheKey = cachePrefix + thisWeek;
     const cached = readInsightCache<WeeklyReport>(cacheKey, fingerprint);
     if (cached && Array.isArray(cached.value?.paragraphs)) { setReport(cached.value); return; }
     setLoading(true);
     fetch('/api/ai/weekly-report', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lang: 'he' }),
+      body: JSON.stringify({ lang: 'he', account }),
     })
       .then(r => r.json())
       .then(({ report }: { report: WeeklyReport | null }) => {
@@ -134,18 +142,18 @@ export default function WeeklyReportPanel({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [thisWeek, fingerprint]);
+  }, [thisWeek, fingerprint, account]);
 
   // Fetch the archive from the DB (persistent, cross-device — replaces the
   // old localStorage-only snippet strip).
   useEffect(() => {
-    fetch('/api/ai/weekly-report/history')
+    fetch(`/api/ai/weekly-report/history${account ? `?account=${encodeURIComponent(account)}` : ''}`)
       .then(r => r.json())
       .then(({ reports }: { reports: HistoryEntry[] }) => {
         if (Array.isArray(reports)) setHistory(reports);
       })
       .catch(() => {});
-  }, [report]); // Re-fetch after a new current-week report lands so the
+  }, [report, account]); // Re-fetch after a new current-week report lands so the
                 // new one shows up in history without a page reload.
 
   // Past-weeks entries only — filter out the current week (rendered above).

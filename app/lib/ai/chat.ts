@@ -10,6 +10,7 @@
 // list of past chats ("אחרונים") that syncs across devices via Supabase.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { resolveScope } from '../portfolio/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../supabase/server';
 import { checkProse, hasHardViolation, buildCorrection } from '../coach-pipeline/quality/insightCheck';
 import { getRecentTrades, getTraderProfile, getHypothesis } from '../intelligence/repository';
@@ -63,6 +64,9 @@ export async function answerCoachQuestion(
   /** Client-supplied history, used only as a fallback when Supabase isn't
       configured (so multi-turn context still works without persistence). */
   fallbackHistory: ChatTurn[] = [],
+  /** The portfolio the trader is looking at. Checked against their own
+   *  portfolios by resolveScope, never trusted as sent. */
+  accountId: string | null = null,
 ): Promise<ChatResult> {
   const supabase = isSupabaseConfigured() ? createServerSupabaseClient() : null;
 
@@ -81,7 +85,11 @@ export async function answerCoachQuestion(
   let closedCount = 0;
   let analysis: FullAnalysis | null = null;
   if (supabase) {
-    const trades = await getRecentTrades(supabase, userId);
+    // The coach answers about the portfolio the trader is looking at. Asking
+    // it a question while one account is on screen and being told about the
+    // average of two is the same failure as a mixed win rate, in prose.
+    const scope = await resolveScope(supabase, userId, accountId);
+    const trades = await getRecentTrades(supabase, userId, scope);
     closedCount = trades.filter(t => t.result !== 'OPEN').length;
     if (closedCount >= MIN_CLOSED_TRADES) {
       // The macro context comes from the cached calendar, exactly as the
@@ -90,8 +98,8 @@ export async function answerCoachQuestion(
       // analytics page has it, and the two surfaces answer the same question
       // differently.
       const [profileRecord, hypothesis, macroCtx] = await Promise.all([
-        getTraderProfile(supabase, userId),
-        getHypothesis(supabase, userId),
+        getTraderProfile(supabase, userId, scope),
+        getHypothesis(supabase, userId, scope),
         loadMacroContext(supabase),
       ]);
       analysis = runFullAnalysis(trades, macroCtx);

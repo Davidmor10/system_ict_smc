@@ -1,4 +1,5 @@
 'use client';
+import { usePortfolios } from '../../components/PortfolioProvider';
 import { useScopedTrades } from '../../components/useScopedTrades';
 import { readOwned } from '../../lib/sync/owned';
 
@@ -360,6 +361,12 @@ function NumberedSection({ index, total, eyebrow, title, description, extra, chi
 export default function AiAnalyticsPage() {
   // Scoped to the selected portfolio — see components/useScopedTrades.
   const { trades } = useScopedTrades();
+  // The AI answers about the portfolio on screen. Sent with every request and
+  // re-fetched when it changes — a cached answer about the other account is
+  // the same failure as a mixed win rate, with a delay on it.
+  const { selected } = usePortfolios();
+  const account = selected?.id ?? null;
+
   const [patternInsights, setPatternInsights] = useState<PatternInsight[]>([]);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [whatIfId, setWhatIfId] = useState<string | null>(null);
@@ -505,12 +512,15 @@ export default function AiAnalyticsPage() {
     // opened the page that day — and the page, finding a cache hit, never
     // asked the server what it now said. That is how an English phrasing
     // survived the deploy that removed it.
-    const cachePrefix = `onyx_ai_patterns_v4_${process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev'}_`;
+    // v5: the portfolio joins the key. Without it, switching accounts served
+    // the previous account's patterns from cache and never asked the server —
+    // the same class of staleness v4 was added for, one dimension over.
+    const cachePrefix = `onyx_ai_patterns_v5_${process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev'}_${account ?? 'none'}_`;
     const cacheKey = cachePrefix + todayISO();
     const cached = readInsightCache<PatternInsight[]>(cacheKey, fingerprint);
     if (cached && Array.isArray(cached.value)) { setPatternInsights(cached.value); return; }
     setPatternsLoading(true);
-    fetch('/api/ai/pattern-insights', {
+    fetch(`/api/ai/pattern-insights${account ? `?account=${encodeURIComponent(account)}` : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // No trades in the body: the route reads them from this account's rows.
@@ -528,7 +538,7 @@ export default function AiAnalyticsPage() {
       .catch(() => {})
       .finally(() => setPatternsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fingerprint]);
+  }, [fingerprint, account]);
 
 
 

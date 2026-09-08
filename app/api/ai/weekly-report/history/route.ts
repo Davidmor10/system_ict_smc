@@ -3,6 +3,8 @@
 // old localStorage-only "past reports" strip (which stored one-sentence
 // snippets and evaporated when the browser was cleared).
 
+import { resolveScope } from '../../../../lib/portfolio/server';
+import { accountIdFrom } from '../../../../lib/portfolio/request';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from '../../../../lib/supabase/server';
@@ -14,7 +16,7 @@ import { requirePlanApi } from '../../../../lib/withRoleCheck';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) {
     logSecurityEvent('auth_failed', { route: '/api/ai/weekly-report/history' });
@@ -33,7 +35,8 @@ export async function GET() {
 
   try {
     const supabase = createServerSupabaseClient();
-    const reports = await getRecentWeeklyReports(supabase, userId, 24);
+    const scope = await resolveScope(supabase, userId, accountIdFrom(req));
+    const reports = await getRecentWeeklyReports(supabase, userId, scope, 24);
     // Trim the response — the client only needs what it can render. The full
     // facts blob is heavy and only used server-side for re-analysis.
     const light = reports.map(r => ({

@@ -78,8 +78,12 @@ beforeEach(() => { fakeDb.tables = {}; });
  *  row is not. */
 function frozenPatternRow(sampleSize: number) {
   const at = '2026-08-01T00:00:00.000Z';
+  // Written before portfolios existed. In Postgres the column defaults to the
+  // empty string, which is the value the scope resolves to for an account with
+  // no portfolios — so the row is still this trader's.
   return {
     clerk_id: CLERK,
+    account_id: '',
     pattern_id: 'ES_nyam',
     kind: 'instrument+session',
     subject: { instrument: 'ES', session: 'nyam' },

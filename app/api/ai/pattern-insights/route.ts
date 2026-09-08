@@ -1,3 +1,5 @@
+import { resolveScope } from '../../../lib/portfolio/server';
+import { accountIdFrom } from '../../../lib/portfolio/request';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePatternInsights } from '../../../lib/ai/patternInsights';
@@ -48,7 +50,10 @@ export async function POST(req: NextRequest) {
     // from the same place the journal page's own totals come from.
     if (!isSupabaseConfigured()) return NextResponse.json({ insights: [] });
     const supabase = createServerSupabaseClient();
-    const trades = await getRecentTrades(supabase, userId);
+    // Scoped to the portfolio the client is looking at, resolved server-side —
+    // a pattern discovered across two accounts is a claim about neither.
+    const scope = await resolveScope(supabase, userId, accountIdFrom(req));
+    const trades = await getRecentTrades(supabase, userId, scope);
 
     // The macro calendar the app has been caching daily since it went live.
     // Folded in here so the event/quiet comparison runs on the real diary

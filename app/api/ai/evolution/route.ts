@@ -16,6 +16,7 @@
 // stores, so it costs one query and no model call.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { accountIdFrom } from '../../../lib/portfolio/request';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { getEvolutionTimeline } from '../../../lib/intelligence/service';
@@ -26,7 +27,7 @@ import { requirePlanApi } from '../../../lib/withRoleCheck';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   const denied = await requirePlanApi('pro', '/api/ai/evolution');
   if (denied) return denied;
 
@@ -42,7 +43,7 @@ export async function GET() {
   }
 
   try {
-    return NextResponse.json({ evolution: await getEvolutionTimeline(userId) });
+    return NextResponse.json({ evolution: await getEvolutionTimeline(userId, accountIdFrom(req)) });
   } catch (err) {
     logger.error('evolution timeline failed', { userId, error: err instanceof Error ? err.message : String(err) });
     // An empty axis, not a 500: this is one section of a long page.

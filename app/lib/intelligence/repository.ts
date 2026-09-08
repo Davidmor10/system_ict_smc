@@ -7,6 +7,7 @@
 // about snake_case columns or jsonb parsing.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { accountFilter, accountKey, type AccountScope } from '../portfolio/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { rowToTrade, type TradeRow } from '../../api/journal/route';
 import type { TradeEntry } from '../journal';
@@ -46,12 +47,19 @@ const TRADE_COLUMNS = [
     leaves deleted_at filtering to the client, so any server-side pipeline
     reading trades directly must filter it here itself — otherwise soft-deleted
     trades would silently pollute the profile/pattern memory. */
-export async function getRecentTrades(supabase: SupabaseClient, clerkId: string): Promise<TradeEntry[]> {
-  const { data, error } = await supabase
+export async function getRecentTrades(
+  supabase: SupabaseClient, clerkId: string, scope: AccountScope,
+): Promise<TradeEntry[]> {
+  const filter = accountFilter(scope);
+  let q = supabase
     .from('journal_trades')
     .select(TRADE_COLUMNS)
     .eq('clerk_id', clerkId)
-    .is('deleted_at', null)
+    .is('deleted_at', null);
+  // Null when the trader has no portfolio at all — the journal is still one
+  // undivided record and reading it whole is the only honest answer.
+  if (filter) q = q.or(filter);
+  const { data, error } = await q
     .order('id', { ascending: false })
     .limit(TRADE_WINDOW);
   // The generated column may not exist yet on a database that hasn't run the
@@ -85,8 +93,11 @@ export interface TraderProfileRecord {
   lastTradeDateIso: string | null;
 }
 
-export async function getTraderProfile(supabase: SupabaseClient, clerkId: string): Promise<TraderProfileRecord | null> {
-  const { data } = await supabase.from('trader_profiles').select('*').eq('clerk_id', clerkId).maybeSingle();
+export async function getTraderProfile(
+  supabase: SupabaseClient, clerkId: string, scope: AccountScope,
+): Promise<TraderProfileRecord | null> {
+  const { data } = await supabase.from('trader_profiles').select('*')
+    .eq('clerk_id', clerkId).eq('account_id', accountKey(scope)).maybeSingle();
   if (!data) return null;
   return {
     profile: data.profile as TraderProfile,
@@ -100,9 +111,12 @@ export async function getTraderProfile(supabase: SupabaseClient, clerkId: string
   };
 }
 
-export async function saveTraderProfile(supabase: SupabaseClient, clerkId: string, record: TraderProfileRecord): Promise<void> {
+export async function saveTraderProfile(
+  supabase: SupabaseClient, clerkId: string, record: TraderProfileRecord, scope: AccountScope,
+): Promise<void> {
   await supabase.from('trader_profiles').upsert({
     clerk_id: clerkId,
+    account_id: accountKey(scope),
     schema_version: record.profile.schemaVersion,
     built_from_trade_count: record.builtFromTradeCount,
     last_trade_date_iso: record.lastTradeDateIso,
@@ -113,13 +127,16 @@ export async function saveTraderProfile(supabase: SupabaseClient, clerkId: strin
     score_history: record.scoreHistory,
     ai_known_facts: record.knownFacts,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'clerk_id' });
+  }, { onConflict: 'clerk_id,account_id' });
 }
 
 // ── Pattern Memory ───────────────────────────────────────────────────────────
 
-export async function getPatternMemory(supabase: SupabaseClient, clerkId: string): Promise<PatternMemoryRow[]> {
-  const { data } = await supabase.from('pattern_memory').select('*').eq('clerk_id', clerkId);
+export async function getPatternMemory(
+  supabase: SupabaseClient, clerkId: string, scope: AccountScope,
+): Promise<PatternMemoryRow[]> {
+  const { data } = await supabase.from('pattern_memory').select('*')
+    .eq('clerk_id', clerkId).eq('account_id', accountKey(scope));
   if (!data) return [];
   return data.map((r): PatternMemoryRow => ({
     clerkId: r.clerk_id, patternId: r.pattern_id, kind: r.kind, subject: r.subject,
@@ -133,10 +150,12 @@ export async function getPatternMemory(supabase: SupabaseClient, clerkId: string
   }));
 }
 
-export async function savePatternMemory(supabase: SupabaseClient, rows: PatternMemoryRow[]): Promise<void> {
+export async function savePatternMemory(
+  supabase: SupabaseClient, rows: PatternMemoryRow[], scope: AccountScope,
+): Promise<void> {
   if (rows.length === 0) return;
   await supabase.from('pattern_memory').upsert(rows.map(r => ({
-    clerk_id: r.clerkId, pattern_id: r.patternId, kind: r.kind, subject: r.subject,
+    clerk_id: r.clerkId, account_id: accountKey(scope), pattern_id: r.patternId, kind: r.kind, subject: r.subject,
     status: r.status, current_metric: r.currentMetric, current_confidence_level: r.currentConfidenceLevel,
     current_sample_size: r.currentSampleSize, baseline_win_rate: r.baselineWinRate, delta: r.delta,
     first_detected_at: r.firstDetectedAt, last_seen_at: r.lastSeenAt, last_updated_at: r.lastUpdatedAt,
@@ -144,13 +163,16 @@ export async function savePatternMemory(supabase: SupabaseClient, rows: PatternM
     ai_title: r.aiTitle, ai_evidence: r.aiEvidence, ai_action: r.aiAction,
     ai_phrased_status: r.aiPhrasedStatus, ai_phrased_win_rate: r.aiPhrasedWinRate,
     created_at: r.createdAt,
-  })), { onConflict: 'clerk_id,pattern_id' });
+  })), { onConflict: 'clerk_id,account_id,pattern_id' });
 }
 
 // ── Trader Hypotheses ────────────────────────────────────────────────────────
 
-export async function getHypothesis(supabase: SupabaseClient, clerkId: string): Promise<HypothesisState | null> {
-  const { data } = await supabase.from('trader_hypotheses').select('*').eq('clerk_id', clerkId).maybeSingle();
+export async function getHypothesis(
+  supabase: SupabaseClient, clerkId: string, scope: AccountScope,
+): Promise<HypothesisState | null> {
+  const { data } = await supabase.from('trader_hypotheses').select('*')
+    .eq('clerk_id', clerkId).eq('account_id', accountKey(scope)).maybeSingle();
   if (!data) return null;
   return {
     clerkId: data.clerk_id, description: data.description, evidence: data.evidence,
@@ -162,15 +184,17 @@ export async function getHypothesis(supabase: SupabaseClient, clerkId: string): 
   };
 }
 
-export async function saveHypothesis(supabase: SupabaseClient, state: HypothesisState): Promise<void> {
+export async function saveHypothesis(
+  supabase: SupabaseClient, state: HypothesisState, scope: AccountScope,
+): Promise<void> {
   await supabase.from('trader_hypotheses').upsert({
-    clerk_id: state.clerkId, description: state.description, evidence: state.evidence,
+    clerk_id: state.clerkId, account_id: accountKey(scope), description: state.description, evidence: state.evidence,
     supporting_pattern_ids: state.supportingPatternIds, supporting_metrics: state.supportingMetrics,
     confidence_score: state.confidenceScore, status: state.status,
     first_detected_at: state.firstDetectedAt, last_updated_at: state.lastUpdatedAt,
     ai_phrased_status: state.aiPhrasedStatus, ai_phrased_confidence: state.aiPhrasedConfidence,
     created_at: state.createdAt,
-  }, { onConflict: 'clerk_id' });
+  }, { onConflict: 'clerk_id,account_id' });
 }
 
 // ── Weekly AI Reports ────────────────────────────────────────────────────────
@@ -187,8 +211,11 @@ export interface WeeklyReportRecord {
   primaryHypothesisSnapshot: HypothesisSnapshot | null;
 }
 
-export async function getWeeklyReport(supabase: SupabaseClient, clerkId: string, isoWeek: string): Promise<WeeklyReportRecord | null> {
-  const { data } = await supabase.from('weekly_ai_reports').select('*').eq('clerk_id', clerkId).eq('iso_week', isoWeek).maybeSingle();
+export async function getWeeklyReport(
+  supabase: SupabaseClient, clerkId: string, isoWeek: string, scope: AccountScope,
+): Promise<WeeklyReportRecord | null> {
+  const { data } = await supabase.from('weekly_ai_reports').select('*')
+    .eq('clerk_id', clerkId).eq('account_id', accountKey(scope)).eq('iso_week', isoWeek).maybeSingle();
   if (!data) return null;
   return {
     clerkId: data.clerk_id, isoWeek: data.iso_week, weekStartDate: data.week_start_date,
@@ -198,20 +225,26 @@ export async function getWeeklyReport(supabase: SupabaseClient, clerkId: string,
   };
 }
 
-export async function saveWeeklyReport(supabase: SupabaseClient, record: WeeklyReportRecord): Promise<void> {
+export async function saveWeeklyReport(
+  supabase: SupabaseClient, record: WeeklyReportRecord, scope: AccountScope,
+): Promise<void> {
   await supabase.from('weekly_ai_reports').upsert({
-    clerk_id: record.clerkId, iso_week: record.isoWeek, week_start_date: record.weekStartDate,
+    clerk_id: record.clerkId, account_id: accountKey(scope),
+    iso_week: record.isoWeek, week_start_date: record.weekStartDate,
     generated_at: new Date().toISOString(), trade_count: record.tradeCount, confidence_level: record.confidenceLevel,
     narrative: record.narrative, facts: record.facts, model_used: record.modelUsed,
     primary_hypothesis_snapshot: record.primaryHypothesisSnapshot,
-  }, { onConflict: 'clerk_id,iso_week' });
+  }, { onConflict: 'clerk_id,account_id,iso_week' });
 }
 
-export async function getRecentWeeklyReports(supabase: SupabaseClient, clerkId: string, limit = 12): Promise<WeeklyReportRecord[]> {
+export async function getRecentWeeklyReports(
+  supabase: SupabaseClient, clerkId: string, scope: AccountScope, limit = 12,
+): Promise<WeeklyReportRecord[]> {
   const { data } = await supabase
     .from('weekly_ai_reports')
     .select('*')
     .eq('clerk_id', clerkId)
+    .eq('account_id', accountKey(scope))
     .order('week_start_date', { ascending: false })
     .limit(limit);
   if (!data) return [];
@@ -228,12 +261,14 @@ export async function getRecentWeeklyReports(supabase: SupabaseClient, clerkId: 
 export async function appendInsightHistory(
   supabase: SupabaseClient,
   clerkId: string,
+  scope: AccountScope,
   kind: 'profile_update' | 'pattern_status_change' | 'hypothesis_status_change' | 'weekly_report' | 'dashboard_insight_shown',
   refId: string | null,
   payload: Record<string, unknown>,
 ): Promise<void> {
   try {
-    await supabase.from('ai_insight_history').insert({ clerk_id: clerkId, kind, ref_id: refId, payload });
+    await supabase.from('ai_insight_history')
+      .insert({ clerk_id: clerkId, account_id: accountKey(scope), kind, ref_id: refId, payload });
   } catch {
     // Best-effort audit trail — never let a logging failure break the pipeline.
   }

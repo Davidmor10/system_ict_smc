@@ -1,4 +1,5 @@
 'use client';
+import { usePortfolios } from '../../components/PortfolioProvider';
 import { readOwned, writeOwned } from '../../lib/sync/owned';
 
 import { useEffect, useRef, useState } from 'react';
@@ -38,6 +39,11 @@ const EASE_REVEAL: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const EASE_SPRING: [number, number, number, number] = [0.34, 1.56, 0.64, 1];
 
 export default function CoachPage() {
+  // The coach answers about the portfolio on screen. Being asked a question
+  // while one account is open and told about the average of two is the same
+  // failure as a mixed win rate, in prose.
+  const { selected: portfolio } = usePortfolios();
+  const account = portfolio?.id ?? null;
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -133,7 +139,7 @@ export default function CoachPage() {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, lang: 'he', chatId: activeChatId, history }),
+        body: JSON.stringify({ question, lang: 'he', chatId: activeChatId, history, account }),
       });
       const data = await res.json().catch(() => ({}));
       const answer = typeof data?.answer === 'string' && data.answer

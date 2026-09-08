@@ -36,6 +36,7 @@ class FakeQuery implements PromiseLike<ResultShape> {
   private upsertConflictCols: string[] = [];
   private insertRows: Row[] | null = null;
   private limitCount: number | null = null;
+  private orGroups: Array<Array<[string, unknown]>> = [];
 
   constructor(private client: FakeSupabaseClient, private table: string) {}
 
@@ -50,6 +51,24 @@ class FakeQuery implements PromiseLike<ResultShape> {
   /** `in(col, values)` — membership, the filter the tombstone-repair path uses
       to bury a batch of ids in one statement. */
   in(col: string, values: unknown[]) { this.inFilters.push([col, values]); return this; }
+
+  /** PostgREST's disjunction, as a comma-separated list of `col.op.value`.
+   *
+   *  Modelled rather than ignored on purpose: the portfolio scope is expressed
+   *  as an `or` (this account's rows, plus the unassigned ones the oldest
+   *  portfolio adopts), and a fake that silently dropped it would let a test
+   *  pass while the real query returned a different set. */
+  or(expr: string) {
+    const group: Array<[string, unknown]> = [];
+    for (const clause of expr.split(',')) {
+      const [col, op, ...rest] = clause.split('.');
+      const raw = rest.join('.');
+      if (op === 'is' && raw === 'null') group.push([col, null]);
+      else if (op === 'eq') group.push([col, raw]);
+    }
+    this.orGroups.push(group);
+    return this;
+  }
 
   order(_col: string, _opts?: unknown) { return this; }
 
@@ -75,7 +94,9 @@ class FakeQuery implements PromiseLike<ResultShape> {
     // null and a column the seed simply never set — mirrors real Postgres,
     // where an absent column reads back as NULL.
     const eqOk = this.filters.every(([col, val]) => (val === null ? (row[col] ?? null) === null : row[col] === val));
-    return eqOk && this.inFilters.every(([col, vals]) => vals.includes(row[col]));
+    const orOk = this.orGroups.every(group =>
+      group.some(([col, val]) => (val === null ? (row[col] ?? null) === null : row[col] === val)));
+    return eqOk && orOk && this.inFilters.every(([col, vals]) => vals.includes(row[col]));
   }
 
   private runSelect(): ResultShape {
