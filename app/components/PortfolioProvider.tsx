@@ -6,9 +6,18 @@
 // Mounted once in the dashboard shell so the list is hydrated once rather than
 // by each consumer. The switcher writes here; the pages read.
 //
-// The local list is read SYNCHRONOUSLY on first render and the cloud copy
-// corrects it a moment later. A switcher that appears a beat after the sidebar
-// reads as a bug, and on a slow connection it would be a long beat.
+// The local list is read in an effect, NOT in the useState initializer, and
+// that distinction is not stylistic. Client components are server-rendered:
+// the initializer runs once on the server, where localStorage does not exist
+// and the list is empty, and again during hydration, where it is not. Any
+// consumer that renders a number off it — the dashboard's opening balance —
+// then produced different text on the two passes.
+//
+// Measured, not reasoned about: React error #418, "the server rendered text
+// didn't match", thrown on load with a portfolio in storage.
+//
+// The cost is one frame showing the fallback balance before the effect lands,
+// on a dashboard whose figures count up from zero anyway.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -35,11 +44,13 @@ const Ctx = createContext<PortfolioState>({
 });
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>(() => loadPortfoliosLocal());
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Local first — instant, and correct until the cloud disagrees.
+    setPortfolios(loadPortfoliosLocal());
     setSelectedId(readSelectedId());
     let alive = true;
     hydratePortfolios()

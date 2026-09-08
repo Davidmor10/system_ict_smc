@@ -105,3 +105,37 @@ describe('what the screens refuse to do', () => {
     expect(view).toContain('העסקאות שלו, הסטטיסטיקות, הדפוסים, הדוחות והתובנות');
   });
 });
+
+describe('the three defects found by driving it', () => {
+  const header = readFileSync('app/components/MobileHeader.tsx', 'utf8');
+
+  it('does not seed state from localStorage in a useState initializer', () => {
+    // Client components are server-rendered. The initializer ran once on the
+    // server with no localStorage and again during hydration with it, so a
+    // consumer rendering a number off the list produced different text on the
+    // two passes. Measured in Chromium: React error #418, "the server rendered
+    // text didn't match". The read moved into the effect.
+    expect(provider).toContain('useState<Portfolio[]>([])');
+    expect(provider).not.toContain('useState<Portfolio[]>(() => loadPortfoliosLocal())');
+    expect(provider).toContain('setPortfolios(loadPortfoliosLocal())');
+  });
+
+  it('does not compute a plan limit from a role it could not resolve', () => {
+    // free → limit 0 → every portfolio write answered "limit exceeded". The
+    // silent-downgrade bug from getUserRole, re-created one layer up.
+    expect(api).toContain('resolved: roleResolved');
+    expect(api).toContain('if (!roleResolved)');
+    expect(api).toContain("status: 503");
+    expect(api).not.toContain('await getUserRole()');
+  });
+
+  it('gives a phone a way to see and change the portfolio', () => {
+    // The rail is hidden below 880px, and the switcher with it — on the screen
+    // size where a trader is most likely to be checking.
+    expect(header).toContain('usePortfolios()');
+    expect(header).toContain('/dashboard/portfolios');
+    // The hardcoded "PRO" badge went with it: it said PRO to every account,
+    // including a Starter's.
+    expect(header).not.toContain('>\n          PRO\n        </span>');
+  });
+});

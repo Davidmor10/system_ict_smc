@@ -1,7 +1,16 @@
 'use client';
 
-/** Fixed brand header, visible on mobile (≤880px) only. */
+import Link from 'next/link';
+import { usePortfolios } from './PortfolioProvider';
+
+/** Fixed brand header, visible on mobile (≤880px) only.
+ *
+ *  It carries the portfolio because the rail does not exist here: the sidebar
+ *  is hidden below 880px, and with it the switcher. Without this a phone had
+ *  no way to see which account it was looking at, and no way to change it —
+ *  on the one screen size where a trader is most likely to be checking. */
 export default function MobileHeader() {
+  const { selected, ready } = usePortfolios();
   return (
     <header
       className="fixed top-0 inset-x-0 z-[60] h-[54px] flex items-center justify-between px-4
@@ -19,18 +28,29 @@ export default function MobileHeader() {
         <span className="font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-[#d4af37]">Trading</span>
       </div>
 
-      {/* PRO badge + live dot */}
-      <div className="flex items-center gap-2">
-        <span
-          className="px-2 py-0.5 rounded-sm border border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37]
-                     font-mono text-[10px] font-bold tracking-[0.2em] uppercase"
-          style={{ boxShadow: '0 0 14px rgba(212,175,55,.22)' }}
-        >
-          PRO
-        </span>
+      {/* The portfolio, and the way to change it. A tap goes to the list —
+          a dropdown in a 54px fixed bar on a phone is a worse control than
+          the page it would be imitating. */}
+      <div className="flex items-center gap-2 min-w-0">
+        {ready && (
+          <Link
+            href="/dashboard/portfolios"
+            className="flex flex-col items-end min-w-0 max-w-[46vw] px-2 py-1 rounded-md
+                       border border-[#d4af37]/35 bg-[#d4af37]/[0.07]"
+          >
+            <span className="text-[11.5px] font-bold text-white leading-tight truncate max-w-full">
+              {selected?.name || 'אין תיק מחובר'}
+            </span>
+            {selected && (
+              <span className="font-mono text-[9px] font-bold text-[#d4af37] tabular-nums leading-tight" dir="ltr">
+                ${Math.round(selected.startingBalanceUsd).toLocaleString('en-US')}
+              </span>
+            )}
+          </Link>
+        )}
         {/* Live pulse */}
         <span
-          className="h-2 w-2 rounded-full bg-[#d4af37] animate-pulse"
+          className="h-2 w-2 rounded-full bg-[#d4af37] animate-pulse shrink-0"
           style={{ boxShadow: '0 0 8px rgba(212,175,55,.7)' }}
         />
       </div>

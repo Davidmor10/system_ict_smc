@@ -8,7 +8,7 @@ import { logger } from '../../lib/logger';
 import { syncNotebook, type SyncNotebookResult } from '../../lib/coach-pipeline/pipelines/syncNotebook';
 import type { ClientNotebookEntry } from '../../lib/coach-pipeline/mirror/notebookToIntelligence';
 import { requirePlanApi } from '../../lib/withRoleCheck';
-import { getUserRole } from '../../lib/getUserRole';
+import { getUserContext } from '../../lib/getUserRole';
 import { portfolioLimit } from '../../lib/portfolio/types';
 import { ownerMismatch } from '../../lib/sync/ownerHeader';
 
@@ -93,7 +93,11 @@ export async function PUT(req: Request) {
   // directly to work around the gate.
   const denied = await requirePlanApi('starter', '/api/collections');
   if (denied) return denied;
-  const role = await getUserRole();
+  // One lookup, and its `resolved` flag respected: a portfolio limit computed
+  // from a role that could not be determined would read as `free` → limit 0,
+  // and every portfolio write would come back "limit exceeded". That is the
+  // silent-downgrade bug from getUserRole, re-created one layer up.
+  const { role, resolved: roleResolved } = await getUserContext();
 
   const { userId } = await auth();
   if (!userId) {
@@ -140,6 +144,13 @@ export async function PUT(req: Request) {
   // the stored array so the delete can propagate, and counting it would lock a
   // Starter out of ever creating another one.
   if (parsed.data.kind === PORTFOLIOS_KIND && Array.isArray(parsed.data.data)) {
+    if (!roleResolved) {
+      logSecurityEvent('role_unresolved', { route: '/api/collections PUT', required: 'starter' });
+      return NextResponse.json(
+        { error: 'Could not verify your plan right now', retryable: true },
+        { status: 503, headers: { 'Retry-After': '2' } },
+      );
+    }
     const live = parsed.data.data.filter(
       (p): p is Record<string, unknown> =>
         !!p && typeof p === 'object' && (p as Record<string, unknown>).deleted !== true,
