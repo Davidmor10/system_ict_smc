@@ -124,6 +124,8 @@ export default function TradeDetailsTable({ trades, onEdit, onDelete, onOpenChar
 
   const pick = (key: string) => { setFilter(key); setOpenId(null); };
 
+  /** `align` is PHYSICAL, and the table is RTL — 'right' is the start of a
+   *  column here, which is where every value in it begins. */
   const headCell = (text: string, align: 'right' | 'left' = 'right', color = 'rgba(255,255,255,.34)') => (
     <span key={text} style={{
       display: 'block', textAlign: align, fontFamily: MONO, fontSize: 9, fontWeight: 700,
@@ -173,7 +175,12 @@ export default function TradeDetailsTable({ trades, onEdit, onDelete, onOpenChar
           {headCell('R', 'right', GOLD)}
           {headCell('תוצאה')}
           {headCell('P&L')}
-          {headCell('סטאפ', 'left')}
+          {/* Physical 'left' in an RTL grid put this header against the far
+              edge of the table — beside the expand caret — while the setup
+              name it labels sits at the other end of the same 1fr column,
+              roughly 830px away. Every other header uses the column's start,
+              which is where its values are. */}
+          {headCell('סטאפ')}
         </div>
 
         {groups.map(g => (

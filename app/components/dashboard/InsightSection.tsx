@@ -112,11 +112,19 @@ export default function InsightSection({ locked }: { locked: boolean }) {
     const text = draft.trim();
     if (!question || !text || answerState === 'sending') return;
     setAnswerState('sending');
-    fetch('/api/coach/daily-insight/answer', {
+
+    const post = () => fetch('/api/coach/daily-insight/answer', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kind: question.kind, answer: text }),
-    })
+    });
+
+    // 503 means the server could not verify the plan — an identity or database
+    // hiccup, not a rejection of the answer. One quiet retry after a beat
+    // clears it; without one the trader loses what they wrote to a fault that
+    // was over before they read the error.
+    post()
+      .then(r => (r.status === 503 ? new Promise<Response>(res => setTimeout(() => res(post()), 1200)) : r))
       .then(r => { if (!r.ok) throw new Error(String(r.status)); setAnswerState('saved'); })
       .catch(() => setAnswerState('failed'));
   }, [draft, question, answerState]);
@@ -226,7 +234,7 @@ export default function InsightSection({ locked }: { locked: boolean }) {
                         </button>
                         <span className="dsh-answer-why">
                           {answerState === 'failed'
-                            ? 'לא נשמר. נסה שוב.'
+                            ? 'לא נשמר, וזו תקלה אצלנו ולא משהו שכתבת. הטקסט שלך נשאר כאן — לחץ שלח שוב.'
                             : 'כל השאר מחושב מהעסקאות שלך. זה הדבר היחיד שרק אתה יכול לספר — ובלעדיו הניתוח לא יכול להתחזק.'}
                         </span>
                       </div>

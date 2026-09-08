@@ -16,9 +16,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 let role = 'free';
+/** Whether the role lookup could answer at all. False models a Clerk or
+ *  Supabase fault, which is NOT the same as an account with no plan. */
+let resolved = true;
 
 vi.mock('../../app/lib/getUserRole', () => ({
   getUserRole: vi.fn(async () => role),
+  getUserContext: vi.fn(async () => ({ role, isOwner: false, resolved })),
   ROLE_RANK: { free: 0, starter: 1, pro: 2, deluxe: 3 },
 }));
 
@@ -49,7 +53,7 @@ const journey = await import('../../app/api/coach/journey/route');
 const body = (o: unknown) =>
   new Request('http://x', { method: 'POST', body: JSON.stringify(o) });
 
-beforeEach(() => { role = 'free'; });
+beforeEach(() => { role = 'free'; resolved = true; });
 
 describe('an account with no subscription is refused', () => {
   const cases: Array<[string, () => Promise<Response>, string]> = [
@@ -150,5 +154,47 @@ describe('the payment settings route is admin-only', () => {
       const res = await call();
       expect(res.status).toBe(403);
     }
+  });
+});
+
+// ── When the plan cannot be verified at all ─────────────────────────────────
+//
+// Production, 8 Sep: four POSTs to the coach answer route logged plan_denied
+// with role 'free' for an owner's account, while five sibling routes behind
+// the same 'pro' gate answered 200 for the same session three minutes later.
+// getUserContext returned a plain 'free' on every failure path, so a momentary
+// fault in Clerk or Supabase was indistinguishable from "this account has no
+// subscription" — and the trader was told to upgrade and lost what they wrote.
+describe('a role that could not be determined', () => {
+  beforeEach(() => { resolved = false; role = 'free'; });
+
+  it('is still refused — an unknown role never grants access', async () => {
+    const res = await dailyInsight.GET();
+    expect(res.ok).toBe(false);
+  });
+
+  it('is refused as a fault of ours, not as a plan shortfall', async () => {
+    const res = await dailyInsight.GET();
+    expect(res.status).toBe(503);
+    expect(res.status).not.toBe(403);
+    expect(res.headers.get('Retry-After')).toBe('2');
+    const json = await res.json() as { retryable?: boolean; requiredPlan?: string };
+    expect(json.retryable).toBe(true);
+    // Nothing that would make a client show an upgrade prompt.
+    expect(json.requiredPlan).toBeUndefined();
+  });
+
+  it('does not hide a real shortfall behind the same answer', async () => {
+    resolved = true;
+    const res = await dailyInsight.GET();
+    expect(res.status).toBe(403);
+  });
+
+  it('holds even for a role that would otherwise be enough', async () => {
+    // The role field still carries 'free' on an unresolved context, but a
+    // caller must not be able to reach in and grant on it.
+    role = 'deluxe';
+    const res = await dailyInsight.GET();
+    expect(res.status).toBe(503);
   });
 });

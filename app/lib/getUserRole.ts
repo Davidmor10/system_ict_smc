@@ -2,6 +2,8 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { connection } from 'next/server';
 import { createServerSupabaseClient, isSupabaseConfigured } from './supabase/server';
 import { effectiveRole } from './payments/access';
+import { isOwnerEmail } from './coach-pipeline/auth/owners';
+import { logger } from './logger';
 
 // Four real tiers, strictly ranked deluxe ⊇ pro ⊇ starter ⊇ free.
 //   free    — dashboard, journal, playbook, rules; NO AI Insight panel
@@ -13,11 +15,34 @@ import { effectiveRole } from './payments/access';
 //             coach) (₪199/mo)
 export type Role = 'free' | 'starter' | 'pro' | 'deluxe';
 export const ROLE_RANK: Record<Role, number> = { free: 0, starter: 1, pro: 2, deluxe: 3 };
-export interface UserContext { role: Role; isOwner: boolean; }
+export interface UserContext {
+  role: Role;
+  isOwner: boolean;
+  /** False when the role could NOT be determined — a Clerk or Supabase call
+   *  failed — as opposed to being determined to be 'free'.
+   *
+   *  The distinction is the whole point. Every failure path here used to
+   *  return 'free', which is indistinguishable from a real answer, so a
+   *  momentary outage in either service was reported to the caller as "this
+   *  account has no plan". A paying trader then got 403 "upgrade required" on
+   *  a feature they had paid for, their answer to the coach's question was
+   *  thrown away, and the log said `role: free` — describing a downgrade that
+   *  never happened as though it were the account's actual state.
+   *
+   *  Observed in production: four POSTs to the coach answer route logged
+   *  plan_denied with role 'free', while five sibling routes behind the same
+   *  'pro' gate answered 200 for the same session three minutes later.
+   *
+   *  Callers must fail closed on `false` — never grant on an unknown role —
+   *  but they must say "try again", not "you need to upgrade". */
+  resolved: boolean;
+}
 
-// Owner emails — always granted the top tier server-side, regardless of
-// Supabase/billing state (this is plan access only, not any admin surface).
-const OWNER_EMAILS = ['davidmor030908@gmail.com', 'davidmor030909@gmail.com'];
+// Owner emails grant the top tier server-side regardless of billing state
+// (plan access only, never an admin surface). The list is imported rather
+// than retyped: coach-pipeline/auth/owners.ts says outright that it is the
+// one list in the codebase, and this file quietly held a second copy of it.
+export { isOwnerEmail };
 
 /** Normalizes a raw stored value to a known Role, defaulting to 'free'. */
 export function normalizeRole(v: unknown): Role {
@@ -33,6 +58,11 @@ export function normalizeRole(v: unknown): Role {
 export async function getUserRole(): Promise<Role> {
   const { role } = await getUserContext();
   return role;
+}
+
+/** Marks a context as "we could not tell". Separate from a resolved 'free'. */
+function unresolved(): UserContext {
+  return { role: 'free', isOwner: false, resolved: false };
 }
 
 export async function getUserContext(): Promise<UserContext> {
@@ -52,34 +82,60 @@ export async function getUserContext(): Promise<UserContext> {
       const session = await auth();
       userId = session.userId;
     }
-  } catch {
-    userId = null;
+  } catch (err) {
+    // Clerk is configured and its session lookup failed. That is not a signed
+    // out visitor; it is no answer at all.
+    logger.warn('role lookup: clerk auth() failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return unresolved();
   }
 
-  if (!userId) return { role: 'free', isOwner: false };
+  // A genuine answer: nobody is signed in, so the role really is free.
+  if (!userId) return { role: 'free', isOwner: false, resolved: true };
 
   // Owner override — grants the top tier even when Supabase isn't configured.
+  //
+  // This is a second network call, to Clerk's backend API, and it can fail on
+  // its own. When it did, the old code fell through with no log and the owner
+  // was served whatever `profiles.role` happened to say — 'free', since an
+  // owner never buys a subscription. The email on the profiles row is the
+  // second source of the same fact, and the nightly worker has always used it
+  // for exactly this reason, so the failure below is recoverable rather than
+  // fatal.
+  let clerkLookupFailed = false;
   try {
     const user = await currentUser();
-    const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
-    if (email && OWNER_EMAILS.includes(email)) {
-      return { role: 'deluxe', isOwner: true };
+    if (isOwnerEmail(user?.primaryEmailAddress?.emailAddress)) {
+      return { role: 'deluxe', isOwner: true, resolved: true };
     }
-  } catch {
-    // Fall through to the Supabase lookup below.
+  } catch (err) {
+    clerkLookupFailed = true;
+    logger.warn('role lookup: clerk currentUser() failed, falling back to the profiles row', {
+      userId, error: err instanceof Error ? err.message : String(err),
+    });
   }
 
-  if (!isSupabaseConfigured()) return { role: 'free', isOwner: false };
+  // Supabase is the only remaining source. If Clerk already failed and this
+  // is unavailable too, there is nothing left to read the role from.
+  if (!isSupabaseConfigured()) {
+    return clerkLookupFailed ? unresolved() : { role: 'free', isOwner: false, resolved: true };
+  }
 
   try {
     const supabase = createServerSupabaseClient();
     const { data, error } = await supabase
       .from('profiles')
-      .select('role, access_until')
+      .select('role, access_until, email')
       .eq('clerk_id', userId)
       .maybeSingle();
 
-    if (error) return { role: 'free', isOwner: false };
+    // A failed read is not a free account. Returning one denied paid features
+    // to paying users every time this query hiccupped.
+    if (error) {
+      logger.warn('role lookup: profiles read failed', { userId, error: error.message });
+      return unresolved();
+    }
 
     // NO ROW: the account exists in Clerk and nowhere else. Create it.
     //
@@ -109,15 +165,24 @@ export async function getUserContext(): Promise<UserContext> {
       } catch {
         // A failed heal costs nothing this request did not already lack.
       }
-      return { role: 'free', isOwner: false };
+      return { role: 'free', isOwner: false, resolved: true };
     }
+
+    const row = data as { role?: unknown; access_until?: string | null; email?: string | null };
+
+    // The owner, recognised from the row rather than from Clerk. Same rule the
+    // nightly worker uses, and the reason a Clerk outage above is survivable.
+    if (isOwnerEmail(row.email)) return { role: 'deluxe', isOwner: true, resolved: true };
 
     // Through the expiry, not straight off the column. A Bit transfer buys one
     // month; once access_until is past the account is free again, whatever the
     // stored role still says. Null means no expiry — see lib/payments/access.
-    return { role: effectiveRole(data.role, (data as { access_until?: string | null }).access_until), isOwner: false };
-  } catch {
-    return { role: 'free', isOwner: false };
+    return { role: effectiveRole(row.role, row.access_until), isOwner: false, resolved: true };
+  } catch (err) {
+    logger.warn('role lookup: profiles query threw', {
+      userId, error: err instanceof Error ? err.message : String(err),
+    });
+    return unresolved();
   }
 }
 

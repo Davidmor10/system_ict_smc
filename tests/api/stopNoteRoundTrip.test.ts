@@ -16,6 +16,9 @@ const fakeDb = new FakeSupabaseClient();
 
 vi.mock('../../app/lib/getUserRole', () => ({
   getUserRole: vi.fn(async () => 'deluxe'),
+  // requirePlanApi reads the full context now, so it can tell a resolved
+  // 'free' from a role it could not determine at all.
+  getUserContext: vi.fn(async () => ({ role: 'deluxe', isOwner: true, resolved: true })),
   ROLE_RANK: { free: 0, starter: 1, pro: 2, deluxe: 3 },
 }));
 vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn(async () => ({ userId: 'user_A' })) }));

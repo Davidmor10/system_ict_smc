@@ -325,16 +325,26 @@ function ValCell({ label, value, tone, align, placeholder = '—', bold = false 
   return (
     <div className="flex flex-col gap-0.5 max-[720px]:flex-row max-[720px]:items-baseline max-[720px]:gap-2">
       <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/35 hidden max-[720px]:inline">{label}</span>
+      {/* `direction: ltr` and `text-align: end` used to sit on the SAME element,
+          and they disagreed about which edge "end" is. The page is RTL, so the
+          column header's `end` resolved to the left of its cell while the value
+          right below it — LTR for the sake of the digits — resolved to the
+          right. Every number in the three numeric columns was therefore offset
+          from its own header by most of the column width, and landed under the
+          neighbouring one instead: a forecast read as an actual.
+
+          Split in two. The outer span inherits the page's direction, so its
+          alignment agrees with the header. `bdi` isolates the number itself so
+          "-277.50" and "0.3%" still render left-to-right. */}
       <span
         className="font-mono text-[13px] tabular-nums"
         style={{
           color: tone ?? 'rgba(255,255,255,0.75)',
           fontWeight: bold ? 800 : 600,
           textAlign: align === 'end' ? 'end' : 'start',
-          direction: 'ltr',
         }}
       >
-        {shown}
+        <bdi dir="ltr">{shown}</bdi>
       </span>
     </div>
   );

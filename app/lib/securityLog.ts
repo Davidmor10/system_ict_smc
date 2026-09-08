@@ -14,7 +14,13 @@
 // tab believed it belonged to one account while the cookie authenticated
 // another. That is the shape of one trader's journal reaching another's
 // rows, so any occurrence is worth reading. See lib/sync/ownerHeader.
-type SecurityEvent = 'auth_failed' | 'rate_limited' | 'validation_failed' | 'plan_denied' | 'owner_mismatch';
+type SecurityEvent =
+  | 'auth_failed' | 'rate_limited' | 'validation_failed' | 'plan_denied' | 'owner_mismatch'
+  /** The role could not be determined at all — an identity or database call
+   *  failed. Distinct from plan_denied on purpose: a run of these is an
+   *  outage, not a run of unpaid accounts, and reading them as the latter is
+   *  how a paying customer's denial goes uninvestigated. */
+  | 'role_unresolved';
 
 export function logSecurityEvent(event: SecurityEvent, details: Record<string, unknown>) {
   console.warn(JSON.stringify({ security_event: event, ts: new Date().toISOString(), ...details }));
