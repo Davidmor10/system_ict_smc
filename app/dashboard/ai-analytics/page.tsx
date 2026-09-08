@@ -384,15 +384,6 @@ export default function AiAnalyticsPage() {
   const fingerprint = useMemo(() => tradesFingerprint(trades), [trades]);
   const hasEnoughData = trades.filter(t => t.result !== 'OPEN').length >= 3;
 
-  // Closed trades in the CURRENT week — not the history. The weekly report is
-  // written about this week alone, so this is the number that decides what its
-  // panel says when there is no report: a week that has not started, a week
-  // the trader deliberately sat out, or a week still short of the floor.
-  const closedThisWeek = useMemo(() => {
-    const week = isoWeekKey(todayISO());
-    return trades.filter(t => t.result !== 'OPEN' && isoWeekKey(t.dateISO) === week).length;
-  }, [trades]);
-
   // The depth layer, now that runFullAnalysis carries it. Read here rather
   // than recomputed so this page and the coach cannot disagree about what a
   // trade is worth.
@@ -1022,7 +1013,7 @@ export default function AiAnalyticsPage() {
           description="מה עשו המספרים בשבוע הנוכחי. השאלה השנייה על אותו שבוע — מה עשית אתה — נמצאת במסלול, כי היא על מגמה ולא על תוצאה."
           extra={<Link href="/dashboard/progress" className="inline-block mt-4 text-[#d4af37] text-[12px] font-bold whitespace-nowrap hover:underline">למסלול ←</Link>}
         >
-          <WeeklyReportPanel hasEnoughData={hasEnoughData} closedThisWeek={closedThisWeek} isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
+          <WeeklyReportPanel isoWeekKey={isoWeekKey} todayISO={todayISO} fingerprint={fingerprint} />
         </NumberedSection>
 
 

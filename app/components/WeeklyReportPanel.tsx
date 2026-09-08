@@ -16,7 +16,7 @@ import { useEffect, useState, useMemo } from 'react';
 import InsightText from './InsightText';
 import TypingDots from './TypingDots';
 import { readInsightCache, writeInsightCache } from '../lib/ai/insightCache';
-import { weeklyEmptyState } from '../lib/intelligence/weeklyEmpty';
+import { MIN_TRADES_FOR_WEEKLY_CLAIMS } from '../lib/intelligence/weeklyRules';
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 interface WeeklyReport { paragraphs: string[]; confidenceLevel: ConfidenceLevel; sampleSize: number; }
@@ -60,18 +60,41 @@ function ConfChip({ level, size = 'md' }: { level: string; size?: 'sm' | 'md' })
   );
 }
 
+/** A week below the claim floor is written from counts alone — no comparison,
+ *  no cause, no conclusion. Labelling that "low confidence" would be wrong in
+ *  both directions: there is no claim to be unconfident about, and the chip
+ *  reads as a weak verdict rather than as a record. */
+function isFactual(tradeCount: number): boolean {
+  return tradeCount < MIN_TRADES_FOR_WEEKLY_CLAIMS;
+}
+
+function KindChip({ tradeCount, level, size = 'md' }: { tradeCount: number; level: string; size?: 'sm' | 'md' }) {
+  if (!isFactual(tradeCount)) return <ConfChip level={level} size={size} />;
+  const cls = size === 'sm' ? 'py-1 px-2.5 text-[11px]' : 'py-1.5 px-3 text-[12px]';
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full font-bold border ${cls}`}
+      style={{ color: 'rgba(255,255,255,0.6)', background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.12)' }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.5)' }} />
+      תיעוד השבוע
+    </span>
+  );
+}
+
+/** "4 עסקאות" / "עסקה אחת" / "בלי עסקאות סגורות". Zero is a real state now
+ *  that quiet weeks are written, and "0 עסקאות" reads like a broken counter. */
+function tradeCountLabel(n: number): string {
+  if (n === 0) return 'בלי עסקאות סגורות';
+  if (n === 1) return 'עסקה אחת';
+  return `${n} עסקאות`;
+}
+
 /* ── Panel ────────────────────────────────────────────────────────────── */
 
-/** Imported, never retyped. The message used to say "3 עסקאות" while the
- *  code required 5, so the screen told the trader a rule the system did not
- *  follow — and they waited for a report that was never going to appear. */
-
 export default function WeeklyReportPanel({
-  hasEnoughData, isoWeekKey, todayISO, fingerprint, closedThisWeek,
+  isoWeekKey, todayISO, fingerprint,
 }: {
-  hasEnoughData: boolean;
-  /** Closed trades in the current week. Drives which empty state is shown. */
-  closedThisWeek: number;
   isoWeekKey: (dateISO: string) => string;
   todayISO: () => string;
   /** Identifies the trades this week's narrative was written about. A report
@@ -90,7 +113,10 @@ export default function WeeklyReportPanel({
   // Fetch current week's report (with a per-week localStorage cache so we
   // don't re-fire the LLM on every page visit).
   useEffect(() => {
-    if (!hasEnoughData) { setReport(null); return; }
+    // No trade-count gate here any more. The report is written for every week,
+    // including a week with four trades and a week with none — the server
+    // decides what the report may CLAIM, not whether it exists. Gating the
+    // fetch on a count was the second half of the same bug.
     const cachePrefix = 'onyx_ai_weekly_report_v2_';
     const cacheKey = cachePrefix + thisWeek;
     const cached = readInsightCache<WeeklyReport>(cacheKey, fingerprint);
@@ -108,7 +134,7 @@ export default function WeeklyReportPanel({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [hasEnoughData, thisWeek, fingerprint]);
+  }, [thisWeek, fingerprint]);
 
   // Fetch the archive from the DB (persistent, cross-device — replaces the
   // old localStorage-only snippet strip).
@@ -133,7 +159,7 @@ export default function WeeklyReportPanel({
 
   return (
     <div dir="rtl" className="flex flex-col gap-6">
-      <CurrentReport loading={loading} report={report} thisWeek={thisWeek} closedThisWeek={closedThisWeek} />
+      <CurrentReport loading={loading} report={report} thisWeek={thisWeek} />
       {past.length > 0 && (
         <HistorySection
           entries={past}
@@ -153,14 +179,11 @@ export default function WeeklyReportPanel({
 /* ── Current-week card ────────────────────────────────────────────────── */
 
 function CurrentReport({
-  loading, report, thisWeek, closedThisWeek,
+  loading, report, thisWeek,
 }: {
   loading: boolean;
   report: WeeklyReport | null;
   thisWeek: string;
-  /** Closed trades in the current week — what decides which of the three
-   *  empty states the trader sees when there is no report. */
-  closedThisWeek: number;
 }) {
   if (loading) {
     return (
@@ -170,35 +193,24 @@ function CurrentReport({
     );
   }
   if (!report) {
-    // Three states, three different things to say. A week with nothing in it
-    // is not a failure to feed the machine — see lib/intelligence/weeklyEmpty.
-    const empty = weeklyEmptyState(closedThisWeek, new Date().getDay());
-    const good  = empty.kind === 'none';
+    // A report now exists for every week — including a week with four trades
+    // and a week with none. So an absent report is no longer a statement
+    // about the trader's week; it means the request did not come back. Say
+    // that, and nothing else: the old copy here explained a threshold, which
+    // would now be explaining a rule that no longer exists.
     return (
       <div
-        className="rounded-[16px] border p-8 sm:p-10 text-center flex flex-col items-center gap-4"
-        style={{
-          background: 'linear-gradient(180deg, #0b0b0d 0%, #050506 100%)',
-          borderColor: good ? 'rgba(74,124,89,0.28)' : '#1c1c1e',
-        }}
+        className="rounded-[16px] border p-8 sm:p-10 text-center flex flex-col items-center gap-3"
+        style={{ background: 'linear-gradient(180deg, #0b0b0d 0%, #050506 100%)', borderColor: '#1c1c1e' }}
       >
-        <div
-          className="font-mono text-[11px] font-bold tracking-[0.22em] uppercase"
-          style={{ color: good ? '#7fae8c' : 'rgba(212,175,55,0.6)' }}
-        >
-          {empty.kind === 'thin' ? 'עוד לא מספיק לדוח' : 'שבוע ללא עסקאות'}
+        <div className="font-mono text-[11px] font-bold tracking-[0.22em] uppercase" style={{ color: 'rgba(212,175,55,0.6)' }}>
+          הדוח לא נטען
         </div>
-        <h3
-          style={{ fontFamily: 'var(--serif)' }}
-          className="m-0 text-[26px] max-[880px]:text-[21px] font-bold text-white leading-tight"
-        >
-          {empty.title}
+        <h3 style={{ fontFamily: 'var(--serif)' }} className="m-0 text-[26px] max-[880px]:text-[21px] font-bold text-white leading-tight">
+          לא הצלחתי להביא את הדוח השבועי
         </h3>
         <p className="m-0 text-[15px] leading-relaxed text-white/60" style={{ maxWidth: '54ch' }}>
-          {empty.body}
-        </p>
-        <p className="m-0 font-mono text-[11px] leading-relaxed text-white/30" style={{ maxWidth: '54ch' }}>
-          {empty.note}
+          זו תקלה בטעינה ולא משהו שחסר ביומן שלך. הדוח נכתב על כל שבוע, גם שבוע עם מעט עסקאות וגם שבוע בלי אף אחת. נסה לרענן את העמוד.
         </p>
       </div>
     );
@@ -219,18 +231,20 @@ function CurrentReport({
       {/* Header block — eyebrow + week + confidence */}
       <header className="flex items-start justify-between gap-4 pb-6 border-b border-[#1c1c1e] flex-wrap">
         <div>
+          {/* A factual week was not written by a model, and saying it was
+              would be the one false claim in a report built to avoid them. */}
           <div className="font-mono text-[12px] font-bold tracking-[0.28em] uppercase text-[#d4af37] mb-2.5">
-            AI · WEEKLY REPORT
+            {isFactual(report.sampleSize) ? 'WEEKLY RECORD' : 'AI · WEEKLY REPORT'}
           </div>
           <h2 style={{ fontFamily: 'var(--serif)' }} className="text-[34px] max-[880px]:text-[26px] font-bold text-white leading-[1.05] m-0 tracking-[-0.005em]">
             הדוח השבועי שלך
           </h2>
-          <div className="mt-2 font-mono text-[13px] text-white/55 tabular-nums" dir="ltr">
-            {thisWeek} · {report.sampleSize} עסקאות
+          <div className="mt-2 font-mono text-[13px] text-white/55 tabular-nums">
+            <span dir="ltr">{thisWeek}</span> · {tradeCountLabel(report.sampleSize)}
           </div>
         </div>
         <div className="shrink-0">
-          <ConfChip level={report.confidenceLevel} />
+          <KindChip tradeCount={report.sampleSize} level={report.confidenceLevel} />
         </div>
       </header>
 
@@ -333,8 +347,8 @@ function HistoryCard({
           <div className="flex items-center gap-3 flex-wrap mb-2">
             <span className="font-mono text-[12px] font-bold tracking-[0.14em] uppercase text-[#d4af37]" dir="ltr">{entry.isoWeek}</span>
             <span className="text-[13px] font-semibold text-white/85">{formatWeekRange(entry.weekStartDate)}</span>
-            <span className="text-[12px] text-white/40 font-mono tabular-nums">· {entry.tradeCount} עסקאות</span>
-            <ConfChip level={entry.confidenceLevel} size="sm" />
+            <span className="text-[12px] text-white/40 font-mono tabular-nums">· {tradeCountLabel(entry.tradeCount)}</span>
+            <KindChip tradeCount={entry.tradeCount} level={entry.confidenceLevel} size="sm" />
           </div>
           {!expanded && headline && (
             <p className="text-[14px] text-white/70 leading-relaxed line-clamp-2 m-0" style={{ fontFamily: 'var(--serif)' }}>

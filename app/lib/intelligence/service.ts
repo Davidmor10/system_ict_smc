@@ -53,13 +53,13 @@ export interface AiDiscovery {
 }
 
 const MAX_RECURRING_PATTERNS = 5;
-/** Decided trades this week before a weekly report is written at all. Three
-    was the old bar, inherited from weeklyReport.ts. Describing a three-trade
-    week is fine; the report's whole structure is comparison, and a three-trade
-    week compared against another one is noise with a narrative on top. */
-// Defined in ./weeklyRules so the on-screen message is built from the same
-// number the gate uses — they had drifted apart once already.
-import { MIN_TRADES_FOR_WEEKLY } from './weeklyRules';
+/** Closed trades this week before the report may COMPARE and CONCLUDE. It no
+    longer decides whether a report exists — a week is always written; below
+    this floor it is written factually, by ./weeklyFactual, with no model and
+    no claim. Defined in ./weeklyRules so the gate, the report and the screen
+    all read one number. */
+import { MIN_TRADES_FOR_WEEKLY_CLAIMS } from './weeklyRules';
+import { daysIntoWeekFrom, factualWeeklyReport } from './weeklyFactual';
 /** Decided trades a PREVIOUS week needs before it is used as a comparison.
     Higher than the bar for writing the report: a thin week can still be
     described, it just cannot be measured against. Shared floor — see
@@ -379,7 +379,6 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
   const trades = await repo.getRecentTrades(supabase, userId);
   const windows = computeTradeWindows(trades, thisWeekStart);
   const closedThisWeek = windows.thisWeekTrades.filter(t => t.result !== 'OPEN');
-  if (closedThisWeek.length < MIN_TRADES_FOR_WEEKLY) return null;
 
   // Avoid redundant LLM spend on repeat visits within the same week — only
   // regenerate if no report exists yet, or this week's closed-trade count
@@ -392,6 +391,34 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
       sampleSize: cached.tradeCount,
       weekKey,
     };
+  }
+
+  // Below the claim floor the week is still written — it is just written by
+  // hand, from counts, with nothing inferred. This used to `return null`, and
+  // a four-trade week produced no report at all.
+  if (closedThisWeek.length < MIN_TRADES_FOR_WEEKLY_CLAIMS) {
+    const factual = factualWeeklyReport({
+      weekTrades: windows.thisWeekTrades,
+      prevWeekTrades: windows.prevWeekTrades,
+      journalTrades: trades,
+      daysIn: daysIntoWeekFrom(thisWeekStart, today),
+      claimFloor: MIN_TRADES_FOR_WEEKLY_CLAIMS,
+    });
+    await repo.saveWeeklyReport(supabase, {
+      clerkId: userId, isoWeek: weekKey, weekStartDate: thisWeekStart,
+      tradeCount: closedThisWeek.length,
+      // Not a hedge on a claim — there is no claim. It marks the row as one
+      // the comparison paths must not read back as evidence of a week.
+      confidenceLevel: 'low',
+      narrative: { schemaVersion: 1, paragraphs: factual.paragraphs },
+      facts: factual.facts,
+      modelUsed: null,
+      primaryHypothesisSnapshot: null,
+    });
+    await repo.appendInsightHistory(supabase, userId, 'weekly_report', weekKey, {
+      sampleSize: closedThisWeek.length, confidenceLevel: 'low', factual: true,
+    });
+    return { paragraphs: factual.paragraphs, confidenceLevel: 'low', sampleSize: closedThisWeek.length, weekKey };
   }
 
   const previousProfileRecord = await repo.getTraderProfile(supabase, userId);
@@ -414,7 +441,12 @@ export async function generateWeeklyDeepAnalysis(userId: string, lang: 'he' | 'e
     { thisWeek: decidedCounts(closedThisWeek).decided, prevWeek: prevClosed },
   );
 
-  const priorReports = await repo.getRecentWeeklyReports(supabase, userId, MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1);
+  // Factual weeks are rows in the same table but they are not prior analyses:
+  // three quiet weeks in a row would otherwise read as an established history
+  // and lift this report's confidence on the strength of weeks that concluded
+  // nothing. Only reports that were allowed to make a claim count.
+  const priorReports = (await repo.getRecentWeeklyReports(supabase, userId, (MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE + 1) * 3))
+    .filter(r => r.tradeCount >= MIN_TRADES_FOR_WEEKLY_CLAIMS && r.isoWeek !== weekKey);
   const isEarlyInHistory = priorReports.length < MIN_PRIOR_REPORTS_FOR_FULL_CONFIDENCE;
   const confidenceLevel = isEarlyInHistory
     ? downgradeConfidence(thisAnalysis.performance.confidence.level)
