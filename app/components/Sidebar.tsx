@@ -1,5 +1,6 @@
 'use client';
 
+import PortfolioSwitcher from './PortfolioSwitcher';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
@@ -42,6 +43,7 @@ const NAV: { href: string; key: DictKey; min: Role; child?: boolean; owner?: boo
   { href: '/dashboard/playbook',     key: 'nav_playbook',     min: 'starter' },
   { href: '/dashboard/rules',        key: 'nav_rules',        min: 'starter'    },
   { href: '/dashboard/reports',      key: 'nav_reports',      min: 'starter'  },
+  { href: '/dashboard/portfolios',   key: 'nav_portfolios',   min: 'starter' },
   { href: '/dashboard/settings',     key: 'nav_settings',     min: 'starter' },
   { href: '/dashboard/payments',     key: 'nav_payments',     min: 'starter', owner: true },
 ];
@@ -66,6 +68,10 @@ export default function Sidebar() {
         <div className="sb-word">ONYX</div>
         <div className="sb-sub">{t('brand_sub')}</div>
       </div>
+
+      {/* Above the nav because it scopes everything in it: the journal, the
+          statistics, the analytics, the coach all belong to one portfolio. */}
+      <PortfolioSwitcher />
 
       <nav className="sb-nav">
         {NAV.filter(item => !item.owner || isAdmin).map(({ href, key, min, child }) => {

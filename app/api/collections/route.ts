@@ -8,11 +8,16 @@ import { logger } from '../../lib/logger';
 import { syncNotebook, type SyncNotebookResult } from '../../lib/coach-pipeline/pipelines/syncNotebook';
 import type { ClientNotebookEntry } from '../../lib/coach-pipeline/mirror/notebookToIntelligence';
 import { requirePlanApi } from '../../lib/withRoleCheck';
+import { getUserRole } from '../../lib/getUserRole';
+import { portfolioLimit } from '../../lib/portfolio/types';
 import { ownerMismatch } from '../../lib/sync/ownerHeader';
 
 // Must match ENTRIES_KIND in app/lib/notebook/store.ts. Not imported from
 // there: that module is client-side and pulls in the whole notebook store.
 const NOTEBOOK_ENTRIES_KIND = 'notebook_entries_v1';
+
+// Must match PORTFOLIOS_KIND in app/lib/portfolio/types.ts. Same reason.
+const PORTFOLIOS_KIND = 'portfolios_v1';
 
 // Generic per-user KV sync for the client's localStorage collections (setups,
 // rules, violations, daily plan, reminders, preferences, lockout). Every query
@@ -88,6 +93,7 @@ export async function PUT(req: Request) {
   // directly to work around the gate.
   const denied = await requirePlanApi('starter', '/api/collections');
   if (denied) return denied;
+  const role = await getUserRole();
 
   const { userId } = await auth();
   if (!userId) {
@@ -126,6 +132,25 @@ export async function PUT(req: Request) {
   if (JSON.stringify(parsed.data.data).length > MAX_BYTES) {
     logSecurityEvent('validation_failed', { route: '/api/collections PUT', userId, reason: 'too_large' });
     return NextResponse.json({ error: 'Collection too large' }, { status: 413 });
+  }
+
+  // The portfolio count is a PLAN limit, and a limit the client alone enforces
+  // is not a limit — this endpoint takes an arbitrary list from the browser.
+  // Tombstoned rows do not count: a deleted portfolio still occupies a slot in
+  // the stored array so the delete can propagate, and counting it would lock a
+  // Starter out of ever creating another one.
+  if (parsed.data.kind === PORTFOLIOS_KIND && Array.isArray(parsed.data.data)) {
+    const live = parsed.data.data.filter(
+      (p): p is Record<string, unknown> =>
+        !!p && typeof p === 'object' && (p as Record<string, unknown>).deleted !== true,
+    ).length;
+    if (live > portfolioLimit(role)) {
+      logSecurityEvent('validation_failed', { route: '/api/collections PUT', userId, reason: 'portfolio_limit' });
+      return NextResponse.json(
+        { error: 'Portfolio limit exceeded', limit: portfolioLimit(role) },
+        { status: 403 },
+      );
+    }
   }
 
   try {

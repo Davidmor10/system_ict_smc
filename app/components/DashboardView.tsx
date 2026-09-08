@@ -32,6 +32,7 @@ import type { TradeEntry } from '../lib/journal';
 import { activeZone, clockCaption, clockWithSecondsInZone, zoneShortName } from '../lib/time/zone';
 import { hydrateDoc, initSyncListeners } from '../lib/sync/collections';
 import { DEFAULT_SETTINGS, SETTINGS_KEY, SETTINGS_KIND, withDefaults } from '../lib/settings/types';
+import { usePortfolios } from './PortfolioProvider';
 import type { UserSettings } from '../lib/settings/types';
 import { activeSessions, getActiveSessionIdx } from '../lib/sessions';
 import { INSTRUMENTS, pointValue } from '../lib/instruments';
@@ -242,6 +243,7 @@ export default function DashboardView() {
 
   const [trades, setTrades] = useState<TradeEntry[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const { selected: portfolio } = usePortfolios();
   const [clock, setClock] = useState('--:--:--');
   const [zoneCaption, setZoneCaption] = useState('שעון ישראל');
   // "IDT · UTC+3" — the abbreviation the trader reads on a clock, next to the
@@ -314,7 +316,13 @@ export default function DashboardView() {
   useEffect(() => { if (ready) writeOwned(CARDS_KEY, cards); }, [ready, cards]);
 
   /* ── derived ───────────────────────────────────────────────── */
-  const accountStart = settings.accountStartUsd || DEFAULT_SETTINGS.accountStartUsd;
+  // The portfolio's own capital wins over the global setting the moment one
+  // exists. Two accounts of different sizes do not share an equity curve, and
+  // until every screen is scoped (step 3) this is the one number where getting
+  // it from the wrong place is visible on the first screen a trader opens.
+  const accountStart = portfolio?.startingBalanceUsd
+    || settings.accountStartUsd
+    || DEFAULT_SETTINGS.accountStartUsd;
   const stats = useMemo(() => aggregate(trades), [trades]);
   const cctx = useMemo(() => contractContext(trades), [trades]);
 

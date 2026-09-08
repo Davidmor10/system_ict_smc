@@ -7,6 +7,7 @@ import MobileHeader from '../components/MobileHeader';
 import PageTransition from '../components/PageTransition';
 import ViewportScale from '../components/ViewportScale';
 import { PlanProvider } from '../components/PlanProvider';
+import { PortfolioProvider } from '../components/PortfolioProvider';
 import { getSessionId, getUserRole } from '../lib/getUserRole';
 import { viewerIsAdmin } from '../lib/payments/admin';
 import { requirePlan } from '../lib/withRoleCheck';
@@ -23,6 +24,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isAdmin = await viewerIsAdmin();
   return (
     <PlanProvider role={role} isAdmin={isAdmin}>
+      {/* Hydrated once here rather than by each consumer — the switcher writes
+          the selection and every scoped screen reads it. */}
+      <PortfolioProvider>
       {/* Same overlay, same session key: whichever screen the visit starts
           on shows it, and only that one. Someone deep-linking straight to
           the dashboard gets the opening; someone who arrived through the
@@ -52,6 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <MobileHeader />
         <MobileNav />
       </div>
+      </PortfolioProvider>
     </PlanProvider>
   );
 }

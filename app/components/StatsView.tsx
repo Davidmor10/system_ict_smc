@@ -1,5 +1,6 @@
 'use client';
 
+import { usePortfolios } from './PortfolioProvider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './stats.css';
@@ -419,6 +420,7 @@ function SectionHead({ title, caption }: { title: string; caption?: string }) {
 export default function StatsView() {
   const [trades, setTrades] = useState<TradeEntry[] | null>(null);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const { selected: portfolio } = usePortfolios();
   const p = useMountProgress();
 
   useEffect(() => {
@@ -429,7 +431,11 @@ export default function StatsView() {
       .catch(() => { /* defaults are fine */ });
   }, []);
 
-  const accountStart = settings.accountStartUsd;
+  // The portfolio's own capital wins over the global setting the moment one
+  // exists. Two accounts of different sizes do not share an equity curve, and
+  // until every screen is scoped (step 3) this is the one number where getting
+  // it from the wrong place is visible on the first screen a trader opens.
+  const accountStart = portfolio?.startingBalanceUsd || settings.accountStartUsd;
   const s: PerformanceStats = useMemo(
     () => computeStatistics(trades ?? [], accountStart),
     [trades, accountStart],

@@ -15,6 +15,7 @@ export const DICT = {
   nav_playbook:         { en: 'Playbook',               he: 'סטאפים'                         },
   nav_rules:            { en: 'Rules',                  he: 'חוקים'                          },
   nav_reports:          { en: 'Reports',                he: 'דוחות'                          },
+  nav_portfolios:       { en: 'Portfolios',             he: 'תיקים'                          },
   nav_settings:         { en: 'Settings',               he: 'הגדרות'                         },
   nav_payments:         { en: 'Payments',               he: 'אימות תשלומים'                  },
   nav_locked_hint:      { en: 'Upgrade to unlock',      he: 'שדרג כדי לפתוח'                 },
