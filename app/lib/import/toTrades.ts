@@ -106,10 +106,10 @@ export function toTradeEntries(parsed: readonly ParsedTrade[], opts: MapOptions)
     const exits = p.exit === null ? [] : [{ price: p.exit, contracts: p.contracts }];
     const open = exits.length === 0;
 
-    // The stop only counts as risk when it is a real distance from the entry.
-    // A stop sitting on the entry is one that was moved to breakeven, and an R
-    // computed from it is a division by nothing.
-    const riskStop = p.stop !== null && !p.stopIsAtEntry ? p.stop : null;
+    // The stop only counts as risk when it sits on the losing side of the
+    // entry. Level with it, or past it, means it was trailed there while the
+    // trade worked — and the distance is then not the risk that was taken.
+    const riskStop = p.stop !== null && !p.stopAtOrPastEntry ? p.stop : null;
 
     const result = open
       ? 'OPEN'

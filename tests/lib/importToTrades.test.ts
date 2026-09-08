@@ -106,21 +106,32 @@ describe('the numbers match what the app would compute by hand', () => {
   });
 });
 
-describe('a stop sitting on the entry', () => {
+describe('a stop trailed to the entry or past it', () => {
   const { trades } = map();
+  const noRisk = trades.filter(t => {
+    const risk = t.direction === 'LONG' ? t.entry - t.stop : t.stop - t.entry;
+    return t.stop !== 0 && risk <= 0;
+  });
 
-  it('produces no R rather than a division by nothing', () => {
-    // 13 Aug and 12 Aug: the stop was moved to breakeven. An R computed from
-    // it would be infinite, and folding it in as 0 would claim the trade came
-    // back flat.
-    const be = trades.filter(t => t.stop !== 0 && Math.abs(t.stop - t.entry) < 0.25);
-    expect(be.length).toBeGreaterThanOrEqual(2);
-    expect(be.every(t => t.tradeR === undefined)).toBe(true);
+  it('covers nine of the sixteen trades', () => {
+    expect(noRisk).toHaveLength(9);
+  });
+
+  it('produces no R rather than an absurd one', () => {
+    // Before the check was signed rather than absolute, the 3 Aug trade — a
+    // long whose stop ended one tick ABOVE the entry — reported +12.0R on a
+    // $24 result, and that number rendered in the import preview.
+    expect(noRisk.every(t => t.tradeR === undefined)).toBe(true);
+  });
+
+  it('leaves the seven with a real risk distance with an R', () => {
+    const withR = trades.filter(t => t.tradeR !== undefined);
+    expect(withR).toHaveLength(7);
+    expect(withR.every(t => Math.abs(t.tradeR as number) < 6)).toBe(true);
   });
 
   it('still carries the price, so the completion form can ask about it', () => {
-    const be = trades.filter(t => t.stop !== 0 && Math.abs(t.stop - t.entry) < 0.25);
-    expect(be.every(t => t.stop > 0)).toBe(true);
+    expect(noRisk.every(t => t.stop > 0)).toBe(true);
   });
 });
 

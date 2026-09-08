@@ -27,10 +27,12 @@
 //
 // AND ONE THING IT CONTAINS THAT IS EASY TO MISREAD
 //
-// The stop price is the stop AS IT STOOD AT THE END. Several of the trader's
-// own trades carry a stop sitting exactly on the entry, which is a stop moved
-// to breakeven, not a plan to risk nothing. `stopIsAtEntry` flags those so the
-// completion form can ask instead of the analysis assuming.
+// The stop price is the stop AS IT STOOD AT THE END. On the trader's own file
+// NINE of sixteen trades carry a stop that is level with the entry or past it,
+// on the profit side — stops trailed up as the trade worked, not plans to risk
+// nothing. `stopAtOrPastEntry` flags those, because the distance from entry to
+// stop is no longer the risk that was taken and an R computed from it is not a
+// small number, it is a wrong one: one of these produced +12R on a $24 trade.
 //
 // Pure: string in, structures out. No app types, no storage, no clock.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,9 +72,10 @@ export interface ParsedTrade {
   exit: number | null;
   stop: number | null;
   target: number | null;
-  /** True when the stop sits within a tick of the entry — a stop moved to
-   *  breakeven, not a plan. */
-  stopIsAtEntry: boolean;
+  /** True when the stop is level with the entry or beyond it on the profit
+   *  side — trailed to breakeven or better, so there is no risk distance left
+   *  in it. Nine of the trader's sixteen trades are in this state. */
+  stopAtOrPastEntry: boolean;
   openedAt: string;
   closedAt: string | null;
   commissionUsd: number | null;
@@ -146,10 +149,6 @@ export class UnrecognisedExport extends Error {
 }
 
 // ── Reconstruction ───────────────────────────────────────────────────────────
-
-/** Prices are quoted in quarter points; anything under half a tick apart is
- *  the same level. Used only to recognise a stop sitting on the entry. */
-const TICK = 0.25;
 
 export function parseTradingViewOrders(csv: string): ParseResult {
   const rows = readCsvRows(csv).filter(r => r.some(c => c.trim() !== ''));
@@ -289,7 +288,10 @@ function buildTrade(
     exit,
     stop,
     target,
-    stopIsAtEntry: stop !== null && Math.abs(stop - entry) < TICK,
+    // Signed, not absolute. A stop on the LOSING side of the entry is risk; a
+    // stop level with it or on the winning side is not, and taking the
+    // magnitude would have read the second as the first.
+    stopAtOrPastEntry: stop !== null && (long ? entry - stop : stop - entry) <= 0,
     openedAt,
     closedAt,
     commissionUsd: commissions.length > 0 ? commissions.reduce((s, c) => s + c, 0) : null,

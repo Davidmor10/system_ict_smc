@@ -18,6 +18,7 @@
 
 import { useMemo, useState } from 'react';
 import { usePortfolios } from './PortfolioProvider';
+import ImportWizard from './ImportWizard';
 import { usePlan } from './PlanProvider';
 import { ZONES, zoneShortName, clockInZone } from '../lib/time/zone';
 import {
@@ -35,6 +36,7 @@ export default function PortfoliosView() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Portfolio | null>(null);
   const [confirming, setConfirming] = useState<Portfolio | null>(null);
+  const [importing, setImporting] = useState<Portfolio | null>(null);
 
   const verdict = useMemo(() => canAddPortfolio(portfolios.length, role), [portfolios.length, role]);
 
@@ -109,6 +111,9 @@ export default function PortfoliosView() {
                     {p.id !== selected?.id && (
                       <button type="button" onClick={() => select(p.id)} className="pf-btn">בחירה</button>
                     )}
+                    <button type="button" onClick={() => setImporting(p)} className="pf-btn is-primary">
+                      {p.lastImportAt ? 'עדכון מקובץ' : 'העלאת קובץ'}
+                    </button>
                     <button type="button" onClick={() => setEditing(p)} className="pf-btn">עריכה</button>
                     <button type="button" onClick={() => setConfirming(p)} className="pf-btn is-danger">מחיקה</button>
                   </div>
@@ -150,6 +155,19 @@ export default function PortfoliosView() {
         )}
       </div>
 
+      {importing && (
+        <ImportWizard
+          portfolio={importing}
+          onClose={() => setImporting(null)}
+          onImported={async () => {
+            // Stamps when this portfolio last saw a file, so the card can say
+            // how long it has been. Written after the trades, never before.
+            const now = Date.now();
+            await save(portfolios.map(x => (x.id === importing.id ? { ...x, lastImportAt: now, updatedAt: now } : x)));
+          }}
+        />
+      )}
+
       {confirming && (
         <DeleteConfirm portfolio={confirming} onCancel={() => setConfirming(null)} onConfirm={() => remove(confirming)} />
       )}
@@ -162,6 +180,8 @@ export default function PortfoliosView() {
         }
         .pf-btn:hover { color: #fff; border-color: rgba(255,255,255,.25); }
         .pf-btn.is-danger:hover { color: #f0899e; border-color: rgba(139,58,58,.55); }
+        .pf-btn.is-primary { color: #f0dc9a; border-color: rgba(212,175,55,.4); background: rgba(212,175,55,.06); }
+        .pf-btn.is-primary:hover { color: #fff; border-color: rgba(212,175,55,.7); }
         .pf-in {
           width: 100%; background: #0a0a0b; border: 1px solid #1c1c1e; border-radius: 8px;
           padding: 10px 12px; color: #fff; font-size: 14.5px; outline: none;

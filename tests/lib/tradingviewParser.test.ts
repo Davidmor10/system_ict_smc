@@ -145,18 +145,29 @@ describe('two trades on one symbol, seven seconds apart — 26 Aug', () => {
 });
 
 describe('the stop is the stop at the END, not the plan', () => {
-  it('flags the trades whose stop sits on the entry', () => {
-    // 13 Aug: entry 30,206.25, stop 30,206.25. 12 Aug: 29,875 and 29,875.
-    // A stop moved to breakeven, not a plan to risk nothing — and an R
-    // computed from it would be a division by nothing.
-    const flagged = result.trades.filter(t => t.stopIsAtEntry);
-    expect(flagged.length).toBeGreaterThanOrEqual(2);
+  it('flags every trade whose stop no longer holds any risk', () => {
+    // Nine of the sixteen. Five sit exactly on the entry (13 Aug, 12 Aug,
+    // 17 Aug, 18 Aug, 20 Aug) and four are PAST it on the profit side —
+    // 3 Aug is a long entered at 28,607.25 with its stop at 28,607.50.
+    // Those four are the ones a magnitude check misses, and one of them
+    // produced +12R on a $24 trade before this was signed.
+    const flagged = result.trades.filter(t => t.stopAtOrPastEntry);
+    expect(flagged).toHaveLength(9);
     expect(flagged.every(t => t.stop !== null)).toBe(true);
+  });
+
+  it('measures the distance with a sign, not a magnitude', () => {
+    const aug3 = byDate('2026-08-03')[0];
+    expect(aug3.direction).toBe('LONG');
+    expect(aug3.entry).toBe(28607.25);
+    expect(aug3.stop).toBe(28607.5);   // above the entry: no risk left
+    expect(aug3.stopAtOrPastEntry).toBe(true);
   });
 
   it('does not flag a trade whose stop is a real distance away', () => {
     const sep = byDate('2026-09-08')[0];
-    expect(sep.stopIsAtEntry).toBe(false);
+    expect(sep.stopAtOrPastEntry).toBe(false);
+    expect(result.trades.filter(t => !t.stopAtOrPastEntry)).toHaveLength(7);
   });
 });
 
