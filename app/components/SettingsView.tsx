@@ -21,9 +21,6 @@ import {
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
 import { ZONES, clockInZone, zoneShortName } from '../lib/time/zone';
-import {
-  DEFAULT_SESSIONS, hourLabel, overlappingSessions, parseHourLabel, type SessionDef,
-} from '../lib/sessions';
 
 type SectionKey = 'profile' | 'trading' | 'account';
 
@@ -47,7 +44,15 @@ export default function SettingsView() {
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [section, setSection]   = useState<SectionKey>('profile');
-  const [saved, setSaved]       = useState(false);
+  /** What the last save actually did, not what it hoped to do.
+   *
+   *  It was a boolean, flipped the instant the button was pressed while the
+   *  network write was left unawaited. So "נשמר וסונכרן" appeared over a write
+   *  that had only been queued locally — and if that browser was never opened
+   *  again, the change lived on one device having been confirmed to the
+   *  trader. Now the page waits for the answer and says which one it got. */
+  const [saved, setSaved]       = useState<null | 'synced' | 'queued'>(null);
+  const [saving, setSaving]     = useState(false);
   /** The last saved state. Anything different from this is unsaved work, and
    *  comparing against it — rather than tracking a boolean — means undoing an
    *  edit by hand correctly clears the dirty flag. */
@@ -80,19 +85,27 @@ export default function SettingsView() {
     [settings, baseline],
   );
 
-  function save() {
+  async function save() {
+    if (saving) return;
     const stamped = { ...settings, updatedAt: Date.now() };
-    void saveDoc(SETTINGS_KIND, SETTINGS_KEY, stamped);
+    setSaving(true);
+    // The local write inside saveDoc happens first and cannot fail silently,
+    // so the baseline moves either way — the edit is not lost. What the await
+    // decides is which of the two truths the trader is told.
+    const outcome = await saveDoc(SETTINGS_KIND, SETTINGS_KEY, stamped).catch(() => 'queued' as const);
     setSettings(stamped);
     setBaseline(stamped);
-    setSaved(true);
+    setSaving(false);
+    setSaved(outcome);
     if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaved(false), 2000);
+    // A queued write is not a two-second reassurance — it is something the
+    // trader may need to act on, so it stays on screen.
+    if (outcome === 'synced') savedTimer.current = setTimeout(() => setSaved(null), 2500);
   }
 
   function revert() {
     setSettings(baseline);
-    setSaved(false);
+    setSaved(null);
   }
 
   // Leaving with unsaved changes should cost a confirmation, not the changes.
@@ -214,31 +227,12 @@ export default function SettingsView() {
                   <Field label="יתרת חשבון התחלתית ($)" hint="עוגן לעקומת ההון בדשבורד ולחישוב ה-drawdown.">
                     <NumericInput value={settings.accountStartUsd} onChange={v => patch('accountStartUsd', v)} min={100} step={500} suffix="USD" />
                   </Field>
-                  <Field label="יחידת תצוגה" hint="איך סטטיסטיקות P&L מוצגות בדשבורד ובכרטיסי העסקאות.">
-                    <PillGroup
-                      value={settings.displayUnit}
-                      onChange={v => patch('displayUnit', v as UserSettings['displayUnit'])}
-                      options={[
-                        { value: 'dollar',  label: '$ Dollar' },
-                        { value: 'r',       label: 'R' },
-                        { value: 'percent', label: '%' },
-                        { value: 'points',  label: 'Points' },
-                        { value: 'ticks',   label: 'Ticks' },
-                      ]}
-                    />
-                  </Field>
+                  {/* The session-window editor lived here and was removed on
+                      request. The `sessions` field itself stays in the doc and
+                      keeps being read — an account that already moved a window
+                      must not have it silently reset by a UI change. */}
                   <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, לאיזה יום עסקה חדשה נרשמת, ובאיזו שעה היא מתועדת.">
                     <ZonePicker value={settings.timezone} onChange={v => patch('timezone', v)} />
-                  </Field>
-                  <Field
-                    label="סשנים"
-                    hint="החלונות שלפיהם המערכת מסווגת כל עסקה. אפשר לכבות סשן שאתה לא סוחר, לשנות שעות, ולהוסיף חלון משלך. השעות הן לפי אזור הזמן שלמעלה."
-                  >
-                    <SessionEditor
-                      value={settings.sessions}
-                      zone={settings.timezone}
-                      onChange={v => patch('sessions', v)}
-                    />
                   </Field>
                 </div>
               )}
@@ -301,8 +295,8 @@ export default function SettingsView() {
             >
               <button
                 type="button"
-                onClick={save}
-                disabled={!dirty}
+                onClick={() => { void save(); }}
+                disabled={!dirty || saving}
                 className="rounded-sm px-5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-[0.16em] transition-all duration-200"
                 style={{
                   background: dirty ? '#d4af37' : 'transparent',
@@ -312,7 +306,7 @@ export default function SettingsView() {
                   boxShadow: dirty ? '0 0 24px rgba(212,175,55,0.35)' : 'none',
                 }}
               >
-                שמירת שינויים
+                {saving ? 'שומר…' : 'שמירת שינויים'}
               </button>
 
               {dirty && (
@@ -325,8 +319,17 @@ export default function SettingsView() {
                 </button>
               )}
 
-              <span className="text-[12.5px] mr-auto" style={{ color: dirty ? '#d4af37' : 'rgba(255,255,255,0.35)' }}>
-                {dirty ? 'יש שינויים שלא נשמרו' : saved ? 'נשמר וסונכרן' : 'הכל שמור'}
+              {/* Three states, and the third one used to be told as the
+                  second: a write that only reached this device was announced
+                  as synced. */}
+              <span
+                className="text-[12.5px] mr-auto"
+                style={{ color: dirty ? '#d4af37' : saved === 'queued' ? '#e0a03a' : 'rgba(255,255,255,0.35)' }}
+              >
+                {dirty ? 'יש שינויים שלא נשמרו'
+                  : saved === 'queued' ? 'נשמר במכשיר הזה בלבד — אין כרגע חיבור לשרת. הסנכרון יושלם מעצמו כשהחיבור יחזור.'
+                  : saved === 'synced' ? 'נשמר וסונכרן'
+                  : 'הכל שמור'}
               </span>
             </div>
           </main>
@@ -338,7 +341,7 @@ export default function SettingsView() {
 
 /* ── Building blocks ─────────────────────────────────────────────────── */
 
-function SectionHeader({ title, eyebrow, saved, dirty }: { title: string; eyebrow: string; saved: boolean; dirty: boolean }) {
+function SectionHeader({ title, eyebrow, saved, dirty }: { title: string; eyebrow: string; saved: null | 'synced' | 'queued'; dirty: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#1c1c1e]">
       <div>
@@ -351,9 +354,14 @@ function SectionHeader({ title, eyebrow, saved, dirty }: { title: string; eyebro
             <span>●</span> לא נשמר
           </span>
         )}
-        {!dirty && saved && (
+        {!dirty && saved === 'synced' && (
           <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-[11px] font-bold text-[#5fd39e] bg-[#5fd39e]/10 border border-[#5fd39e]/35">
             <span>✓</span> נשמר
+          </span>
+        )}
+        {!dirty && saved === 'queued' && (
+          <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-[11px] font-bold text-[#e0a03a] bg-[#e0a03a]/10 border border-[#e0a03a]/35">
+            <span>◒</span> ממתין לסנכרון
           </span>
         )}
       </div>
@@ -482,178 +490,6 @@ function PillGroup<T extends string>({
 //   · An overlap is warned about, never blocked. A trade lands in the first
 //     window that matches, so an overlap is legible rather than broken — and a
 //     trader mid-edit should not be stopped by a state they are passing through.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SessionEditor({
-  value, zone, onChange,
-}: { value: SessionDef[]; zone: string; onChange: (v: SessionDef[]) => void }) {
-  const rows = value.length > 0 ? value : DEFAULT_SESSIONS;
-  const clashes = overlappingSessions(rows);
-  const clashing = new Set(clashes.flat());
-
-  const edit = (key: string, patch: Partial<SessionDef>) =>
-    onChange(rows.map(r => (r.key === key ? { ...r, ...patch } : r)));
-
-  const remove = (key: string) => onChange(rows.filter(r => r.key !== key));
-
-  const add = () => {
-    const key = `custom_${Date.now().toString(36)}`;
-    onChange([...rows, { key, he: 'סשן חדש', en: 'CUSTOM', start: 8, end: 10, enabled: true }]);
-  };
-
-  const isDefault =
-    rows.length === DEFAULT_SESSIONS.length &&
-    rows.every((r, i) => {
-      const d = DEFAULT_SESSIONS[i];
-      return d && r.key === d.key && r.he === d.he && r.start === d.start && r.end === d.end && r.enabled;
-    });
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="rounded-[12px] border border-[#1c1c1e] overflow-hidden">
-        {/* Header — mono labels over the columns the rows fill. */}
-        <div
-          className="hidden sm:grid items-center gap-3 px-4 py-2.5 bg-[#0a0a0b] border-b border-[#1c1c1e] font-mono text-[9.5px] font-bold tracking-[0.18em] text-white/30"
-          style={{ gridTemplateColumns: '38px minmax(0,1fr) 92px 92px 34px' }}
-        >
-          <span>פעיל</span><span>שם</span><span>משעה</span><span>עד שעה</span><span />
-        </div>
-
-        {rows.map(row => (
-          <div
-            key={row.key}
-            className="grid items-center gap-3 px-4 py-3 border-b border-[#1c1c1e] last:border-0 transition-colors"
-            style={{ gridTemplateColumns: '38px minmax(0,1fr) 92px 92px 34px' }}
-            data-off={!row.enabled}
-          >
-            <Switch on={row.enabled} onToggle={() => edit(row.key, { enabled: !row.enabled })} label={row.he} />
-
-            <input
-              type="text"
-              value={row.he}
-              onChange={e => edit(row.key, { he: e.target.value })}
-              maxLength={28}
-              className="min-w-0 bg-transparent border border-transparent hover:border-[#2a2a2d] focus:border-[#d4af37]/45 rounded-[6px] py-1.5 px-2 text-[14px] font-bold text-white focus:outline-none focus:bg-[#d4af37]/[0.04] transition-colors"
-              style={{ opacity: row.enabled ? 1 : 0.45 }}
-              dir="rtl"
-            />
-
-            <HourInput value={row.start} onChange={v => edit(row.key, { start: v })} dim={!row.enabled} />
-            <HourInput value={row.end} onChange={v => edit(row.key, { end: v })} dim={!row.enabled} />
-
-            <button
-              type="button"
-              onClick={() => remove(row.key)}
-              disabled={rows.length <= 1}
-              title="מחיקת הסשן"
-              aria-label={`מחיקת הסשן ${row.he}`}
-              className="w-[34px] h-[30px] grid place-items-center rounded-[6px] border border-transparent text-white/25 hover:text-[#8b3a3a] hover:border-[#8b3a3a]/40 disabled:opacity-25 disabled:hover:text-white/25 disabled:hover:border-transparent transition-colors font-mono text-[13px]"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* A wrapped window is legitimate and easy to mistake for a typo, so it
-          is named rather than left to be discovered. */}
-      {rows.some(r => r.enabled && r.end <= r.start) && (
-        <p className="font-mono text-[10px] tracking-[0.1em] text-white/35">
-          ◈ חלון שנגמר לפני שהוא מתחיל ממשיך אל תוך היום הבא — למשל 22:00 עד 02:00.
-        </p>
-      )}
-
-      {clashes.length > 0 && (
-        <p className="font-mono text-[10px] tracking-[0.1em] text-[#d4af37]/80">
-          ◈ יש חפיפה בין {clashes.map(([a, b]) =>
-            `${rows.find(r => r.key === a)?.he ?? a}–${rows.find(r => r.key === b)?.he ?? b}`).join(' · ')}
-          {' '}· עסקה תשויך לסשן הראשון שמתאים לה ברשימה.
-        </p>
-      )}
-
-      <div className="flex items-center gap-2 mt-1">
-        <button
-          type="button"
-          onClick={add}
-          className="py-2 px-3.5 rounded-[8px] border border-[#2a2a2d] hover:border-[#d4af37]/45 hover:text-white text-white/60 font-mono text-[11px] font-bold tracking-[0.1em] transition-colors"
-        >
-          + הוספת סשן
-        </button>
-        {!isDefault && (
-          <button
-            type="button"
-            onClick={() => onChange(DEFAULT_SESSIONS.map(d => ({ ...d })))}
-            className="py-2 px-3.5 rounded-[8px] border border-transparent hover:border-[#2a2a2d] text-white/35 hover:text-white/70 font-mono text-[11px] font-bold tracking-[0.1em] transition-colors"
-          >
-            חזרה לברירת המחדל
-          </button>
-        )}
-        <span className="ms-auto font-mono text-[10px] tracking-[0.14em] text-white/25">
-          {clockInZone(zone)} · {zoneShortName(zone)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** A time field that stays a time field. It holds the trader's raw keystrokes
- *  while they type — "0", "08", "08:" are all states on the way to "08:00" —
- *  and only commits when the text parses, so the value never jumps under the
- *  cursor mid-edit. */
-function HourInput({ value, onChange, dim }: { value: number; onChange: (v: number) => void; dim?: boolean }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? hourLabel(value);
-
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={text}
-      onChange={e => {
-        const next = e.target.value;
-        setDraft(next);
-        const parsed = parseHourLabel(next);
-        if (parsed !== null) onChange(parsed);
-      }}
-      onBlur={() => setDraft(null)}
-      placeholder="00:00"
-      aria-label="שעה"
-      className="w-full bg-white/[0.03] border border-[#2a2a2d] rounded-[6px] py-1.5 px-2 text-[13px] font-mono tabular-nums text-white text-center focus:outline-none focus:border-[#d4af37]/45 focus:bg-[#d4af37]/[0.04] transition-colors"
-      style={{ opacity: dim ? 0.45 : 1 }}
-      dir="ltr"
-    />
-  );
-}
-
-/** The on/off control. A real button with aria-pressed rather than a styled
- *  checkbox, so it reads correctly to a screen reader and takes focus. */
-function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={`${label} — ${on ? 'פעיל' : 'כבוי'}`}
-      onClick={onToggle}
-      className="relative w-[34px] h-[19px] rounded-full transition-colors shrink-0"
-      style={{
-        background: on ? 'rgba(212,175,55,0.28)' : 'rgba(255,255,255,0.07)',
-        border: `1px solid ${on ? 'rgba(212,175,55,0.5)' : '#2a2a2d'}`,
-      }}
-    >
-      <span
-        className="absolute top-1/2 w-[13px] h-[13px] rounded-full transition-all duration-200"
-        style={{
-          background: on ? '#d4af37' : 'rgba(255,255,255,0.3)',
-          boxShadow: on ? '0 0 10px rgba(212,175,55,0.6)' : 'none',
-          insetInlineStart: on ? '17px' : '2px',
-          transform: 'translateY(-50%)',
-        }}
-      />
-    </button>
-  );
-}
-
 function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [now, setNow] = useState(() => clockInZone(value));
 

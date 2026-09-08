@@ -9,6 +9,7 @@ import { dateProblem } from '../lib/market/hours';
 import { calcRR, calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice, inferResult } from '../lib/calc/trade';
 import { decidedCounts, winRatePercent } from '../lib/calc/decided';
 import { INSTRUMENT_KEYS, INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
+import { DEFAULT_SETTINGS, SETTINGS_KEY } from '../lib/settings/types';
 import { commitList, hydrateList } from '../lib/sync/collections';
 import {
   DEFAULT_CONFIRMATIONS, labelForConfirmation, chipList, addTag, removeTag,
@@ -106,8 +107,28 @@ const LAST_USED_KEY = 'onyx_trade_last_used';
 
 interface LastUsed { symbol: InstrumentKey; model: string; confirmations: string[] }
 
+/** The instrument the trader chose in settings, or the shipped default.
+ *
+ *  Read straight from the settings doc rather than through the settings module
+ *  for the same reason lib/sessions.ts does: this runs during a synchronous
+ *  render before anything has hydrated. Until now `defaultSymbol` was written
+ *  by the settings page and read by NOBODY, so the caption — "a new trade
+ *  opens with this instrument selected" — described something the form did
+ *  not do. It seeds the FIRST trade only; after that the form's own memory of
+ *  the last instrument used is the better guess and takes over. */
+function settingsDefaultSymbol(): InstrumentKey {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS.defaultSymbol;
+  try {
+    const doc = readOwned<{ defaultSymbol?: unknown }>(SETTINGS_KEY);
+    const k = doc?.defaultSymbol;
+    return INSTRUMENT_KEYS.includes(k as InstrumentKey) ? (k as InstrumentKey) : DEFAULT_SETTINGS.defaultSymbol;
+  } catch {
+    return DEFAULT_SETTINGS.defaultSymbol;
+  }
+}
+
 function loadLastUsed(): LastUsed {
-  const fallback: LastUsed = { symbol: 'ES', model: '', confirmations: [] };
+  const fallback: LastUsed = { symbol: settingsDefaultSymbol(), model: '', confirmations: [] };
   if (typeof window === 'undefined') return fallback;
   try {
     const o = readOwned<Partial<LastUsed>>(LAST_USED_KEY);

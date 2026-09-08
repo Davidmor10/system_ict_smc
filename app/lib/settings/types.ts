@@ -33,13 +33,22 @@ export interface UserSettings {
   tradingStyle: TradingStyle;
 
   /** ── Trading defaults ────────────────────────────────────────────── */
-  /** Instrument the trade form pre-selects. */
+  /** Instrument the trade form pre-selects on a FIRST trade.
+   *
+   *  After that the form remembers the last instrument used on this device,
+   *  which is the better guess and the behaviour that already shipped. This
+   *  seeds it — for a while the setting was read by nothing at all, so the
+   *  caption promised a behaviour the form did not have. */
   defaultSymbol: InstrumentKey;
   /** Account starting balance in USD — anchors the equity curve on
       the dashboard when no explicit balance history exists. */
   accountStartUsd: number;
-  /** Preferred display unit for stats — dollar, R, points, ticks, percent. */
-  displayUnit: 'dollar' | 'percent' | 'r' | 'ticks' | 'points';
+  // `displayUnit` used to live here: a five-way picker on the settings page,
+  // captioned "how P&L statistics are shown on the dashboard and on trade
+  // cards", read by nothing in the app. A control that changes nothing is
+  // worse than a missing one — the trader sets it, sees no change, and starts
+  // doubting the settings that DO work. Removed with the picker. An older
+  // stored doc may still carry the key; it is simply ignored.
   /** The clock the app runs on, as an IANA identifier.
    *
    *  This is a real setting, not a caption. Session detection and the date a
@@ -73,7 +82,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
   defaultSymbol: 'ES',
   accountStartUsd: 25_000,
-  displayUnit: 'dollar',
   timezone: 'Asia/Jerusalem',
   sessions: DEFAULT_SESSIONS,
 };

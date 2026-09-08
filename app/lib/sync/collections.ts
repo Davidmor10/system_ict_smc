@@ -54,10 +54,24 @@ export async function flushPending(): Promise<void> {
   writePending(p);
 }
 
+/** What actually happened to a write.
+ *
+ *  'synced' — it reached the server. 'queued' — the local copy is written and
+ *  the push failed, so it sits in the retry queue and will go up on the next
+ *  save, hydrate, or reconnect.
+ *
+ *  Nothing used to distinguish them, so a settings page could report "saved
+ *  and synced" over a write that had only been queued — and if that browser
+ *  was never opened again, the change existed on one device and nowhere else,
+ *  having been confirmed to the trader. */
+export type SaveOutcome = 'synced' | 'queued';
+
 /** Push a collection to the cloud; on failure, queue it for later. */
-async function pushCollection(kind: string, data: unknown): Promise<void> {
-  if (typeof window === 'undefined') return;
-  if (!(await put(kind, data))) queue(kind, data);
+async function pushCollection(kind: string, data: unknown): Promise<SaveOutcome> {
+  if (typeof window === 'undefined') return 'queued';
+  if (await put(kind, data)) return 'synced';
+  queue(kind, data);
+  return 'queued';
 }
 
 // Every local read and write goes through the owner envelope — see ./owned.
@@ -114,9 +128,9 @@ export async function hydrateList<T extends Syncable>(kind: string, localKey: st
 }
 
 /** Persist a list: write the full store (with tombstones) locally and push. */
-export async function saveList<T extends Syncable>(kind: string, localKey: string, items: T[]): Promise<void> {
+export async function saveList<T extends Syncable>(kind: string, localKey: string, items: T[]): Promise<SaveOutcome> {
   writeLocal(localKey, items);
-  await pushCollection(kind, items);
+  return pushCollection(kind, items);
 }
 
 /** Content signature that ignores sync metadata (updatedAt/deleted). */
@@ -167,10 +181,10 @@ export async function hydrateDoc<T extends { updatedAt?: number }>(kind: string,
   return winner;
 }
 
-export async function saveDoc<T extends object>(kind: string, localKey: string, doc: T): Promise<void> {
+export async function saveDoc<T extends object>(kind: string, localKey: string, doc: T): Promise<SaveOutcome> {
   const stamped = { ...doc, updatedAt: Date.now() };
   writeLocal(localKey, stamped);
-  await pushCollection(kind, stamped);
+  return pushCollection(kind, stamped);
 }
 
 // ── Dashboard state (name, reminders, today's plan/focus) as one doc ─────────
