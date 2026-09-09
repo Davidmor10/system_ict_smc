@@ -93,3 +93,37 @@ function readSource(p: string): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return (require('fs') as typeof import('fs')).readFileSync(p, 'utf8');
 }
+
+describe('the night', () => {
+  const sched = readSource('app/lib/coach-pipeline/pipelines/scheduleNightlyJobs.ts');
+  const batch = readSource('app/lib/coach-pipeline/pipelines/processJobBatch.ts');
+  const provider = readSource('app/components/PortfolioProvider.tsx');
+
+  it('picks one portfolio per trader, not one job per portfolio', () => {
+    // A daily insight costs a model call. One per portfolio per night
+    // multiplies that by however many accounts a trader keeps, forever.
+    expect(sched).toContain('nightlyScopeFor(');
+    expect(sched).toContain('if (!scope) { idleSkipped += 1; continue; }');
+  });
+
+  it('counts the traders it skipped rather than letting them vanish', () => {
+    // A night where this number jumps is a signal; without it the drop in
+    // enqueued jobs would read as users disappearing.
+    expect(sched).toContain('idleSkipped');
+  });
+
+  it('carries the portfolio on the job instead of re-deriving it later', () => {
+    // Re-deriving hours later could land on a different account if the trader
+    // switched in between, and the note would be about something they never
+    // asked about.
+    expect(sched).toContain('accountId:   scope.accountId');
+    expect(batch).toContain('accountId: job.account_id');
+    expect(batch).toContain("refreshIntelligenceNightly(job.clerk_id, job.account_id ?? '')");
+  });
+
+  it('can see which portfolio is active, which a server otherwise cannot', () => {
+    // The selection itself never leaves the browser. This is a different
+    // fact — when the account was last looked at, by anyone, on anything.
+    expect(provider).toContain('lastActiveAt: Date.now()');
+  });
+});

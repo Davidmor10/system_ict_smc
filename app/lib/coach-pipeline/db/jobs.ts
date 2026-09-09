@@ -20,6 +20,8 @@ import { getClient, requireClerkId } from './client';
 
 export interface EnqueueInput {
   clerkId:         string;
+  /** The portfolio the job is for. Part of the daily uniqueness key. */
+  accountId?:      string;
   jobType:         JobType;
   targetDate?:     string;                 // 'YYYY-MM-DD' for daily/session insights
   scheduledAt?:    Date;                   // defaults to now
@@ -28,12 +30,15 @@ export interface EnqueueInput {
 }
 
 /** Insert a new job. Idempotent by the unique index on
-    (clerk_id, job_type, target_date) WHERE status IN (pending,running,success):
+    (clerk_id, account_id, job_type, target_date) WHERE status IN (pending,running,success):
     duplicate INSERTs return null instead of throwing. */
 export async function enqueueJob(input: EnqueueInput): Promise<ProcessingJobRow | null> {
   const cid = requireClerkId(input.clerkId);
   const row = {
     clerk_id:        cid,
+    // Part of the "one job per day" unique index. Without it a second
+    // portfolio's run would collide with the first and be silently dropped.
+    account_id:      input.accountId ?? '',
     job_type:        input.jobType,
     status:          'pending' as const,
     target_date:     input.targetDate ?? null,

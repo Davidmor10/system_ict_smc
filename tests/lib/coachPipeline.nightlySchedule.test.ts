@@ -26,13 +26,20 @@ vi.mock('../../app/lib/coach-pipeline/db/flags', () => ({
 
 const { scheduleNightlyJobs } = await import('../../app/lib/coach-pipeline/pipelines/scheduleNightlyJobs');
 
-interface Insert { job_type: string; clerk_id: string; scheduled_at: string }
+interface Insert { job_type: string; clerk_id: string; account_id: string; scheduled_at: string }
 
 /** Just enough of the client for the enqueue loop: the active-trader read, the
  *  plan-tier read, and the insert we are here to look at. */
 function fakeClient(inserts: Insert[]): SupabaseClient {
   const builder = (table: string) => ({
     select() { return this; },
+    // The nightly scope reads the portfolios collection and the journal to
+    // decide which account tonight is about. This trader has neither, which
+    // is the pre-portfolio state — the night runs for them unchanged, under
+    // the empty-string account.
+    eq()     { return this; },
+    limit()  { return this; },
+    maybeSingle: async () => ({ data: null, error: null }),
     gt()     { return this; },
     is()     { return this; },
     in()     { return this; },

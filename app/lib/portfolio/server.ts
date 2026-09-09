@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adoptingPortfolioId } from './scope';
+import { nightlyPortfolio } from './nightly';
 import { normalizePortfolio, PORTFOLIOS_KIND, type Portfolio } from './types';
 
 export async function listPortfolios(
@@ -71,4 +72,53 @@ export function accountFilter(scope: AccountScope): string | null {
 /** The value to WRITE. Never null — the AI tables key on it. */
 export function accountKey(scope: AccountScope): string {
   return scope.accountId ?? '';
+}
+
+/** The portfolio the nightly pipeline should work on for this trader, or null
+ *  when none is worth a model call tonight.
+ *
+ *  Two rules, chosen together — see lib/portfolio/nightly for why:
+ *    · the ACTIVE portfolio, meaning the one last looked at on any device;
+ *    · and only if it has traded inside the recent window.
+ *
+ *  Returns `{ accountId: '' }` for a trader with no portfolios at all, which
+ *  is the placeholder the AI tables already use — their night is unchanged. */
+export async function nightlyScopeFor(
+  supabase: SupabaseClient, clerkId: string, todayISO: string,
+): Promise<{ accountId: string; adoptsUnassigned: boolean } | null> {
+  const portfolios = await listPortfolios(supabase, clerkId);
+  if (portfolios.length === 0) return { accountId: '', adoptsUnassigned: true };
+
+  const { data } = await supabase
+    .from('journal_trades')
+    .select('account_id, date_iso')
+    .eq('clerk_id', clerkId)
+    .is('deleted_at', null)
+    .order('date_iso', { ascending: false })
+    .limit(500);
+
+  const newest = new Map<string, string>();
+  for (const r of (data ?? []) as Array<{ account_id: string | null; date_iso: string }>) {
+    const key = r.account_id ?? '';
+    if (!newest.has(key)) newest.set(key, r.date_iso);
+  }
+
+  const adopting = adoptingPortfolioId(portfolios);
+  const candidates = portfolios.map(p => ({
+    accountId: p.id,
+    // The adopting portfolio also owns whatever carries no account, so a
+    // journal that predates portfolios still counts as recent activity in it.
+    lastTradeDate: [newest.get(p.id), p.id === adopting ? newest.get('') : undefined]
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop() ?? null,
+  }));
+
+  const active = [...portfolios]
+    .sort((a, b) => (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0))[0];
+  const chosen = nightlyPortfolio(
+    candidates, active?.lastActiveAt ? active.id : null, todayISO,
+  );
+  if (!chosen) return null;
+  return { accountId: chosen, adoptsUnassigned: chosen === adopting };
 }

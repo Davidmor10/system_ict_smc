@@ -74,6 +74,11 @@ async function runOne(job: ProcessingJobRow): Promise<
         ?? (job.job_type === 'session_insight' ? israelToday() : israelYesterday());
       const out  = await generateDailyInsight({
         clerkId:  job.clerk_id,
+        // The portfolio the scheduler picked for tonight, carried on the job
+        // rather than re-derived here: re-deriving it hours later could land
+        // on a different account if the trader switched in between, and the
+        // note would then be about something they did not ask for.
+        accountId: job.account_id ?? '',
         date,
         planTier: plan,
         kind:     job.job_type === 'session_insight' ? 'session' : 'daily',
@@ -159,7 +164,7 @@ async function runOne(job: ProcessingJobRow): Promise<
       //
       // No model call: the one piece of prose this stack produces is left for
       // a request that knows which language to write it in.
-      const out = await refreshIntelligenceNightly(job.clerk_id);
+      const out = await refreshIntelligenceNightly(job.clerk_id, job.account_id ?? '');
       return {
         kind: 'success',
         summary: {

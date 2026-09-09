@@ -9,11 +9,12 @@
 
 import { T, type JobType } from '../types';
 import { getClient } from '../db/client';
+import { nightlyScopeFor } from '../../portfolio/server';
 import { enqueueJob } from '../db/jobs';
 import { flags } from '../db/flags';
 import { normalizeRole, type Role } from '../../getUserRole';
 import { isOwnerEmail } from '../auth/owners';
-import { israelYesterday, israelDayOfWeek, scheduleSlotFor } from '../dates';
+import { israelToday, israelYesterday, israelDayOfWeek, scheduleSlotFor } from '../dates';
 import { logger } from '../../logger';
 
 /** Who the pipeline runs for, and how often.
@@ -105,6 +106,10 @@ export async function enumerateEligibleUsers(
 export interface ScheduleResult {
   enumerated:      number;        // total active users seen
   eligible:        number;        // matched today's cadence rule
+  /** Eligible traders whose every portfolio has gone quiet. Counted rather
+   *  than silently absent: a night where this number jumps is a signal, and
+   *  without it the drop would read as users disappearing. */
+  idleSkipped?:    number;
   enqueued:        number;        // fresh jobs inserted
   skippedExisting: number;        // ON CONFLICT DO NOTHING hit
   windowMinutes:   number;
@@ -135,10 +140,18 @@ export async function scheduleNightlyJobs(
 
   let enqueued = 0;
   let existing = 0;
+  let idleSkipped = 0;
   for (const u of users) {
+    // Which of this trader's portfolios tonight is about — the one they last
+    // looked at, and only if it has traded recently. Null means every account
+    // they have is idle, and the night costs nothing for them.
+    const scope = await nightlyScopeFor(getClient(), u.clerkId, israelToday(now));
+    if (!scope) { idleSkipped += 1; continue; }
+
     const scheduledAt = scheduleSlotFor(u.clerkId, windowMinutes, now);
     const row = await enqueueJob({
       clerkId:     u.clerkId,
+      accountId:   scope.accountId,
       jobType,
       targetDate,
       scheduledAt,
@@ -158,6 +171,7 @@ export async function scheduleNightlyJobs(
     // a second cron fire in one day a no-op for both.
     const refresh = await enqueueJob({
       clerkId:     u.clerkId,
+      accountId:   scope.accountId,
       jobType:     'profile_refresh',
       targetDate,
       scheduledAt: new Date(scheduledAt.getTime() + 1_000),
@@ -170,6 +184,7 @@ export async function scheduleNightlyJobs(
     eligible:        users.length,
     enqueued,
     skippedExisting: existing,
+    idleSkipped,
     windowMinutes,
   };
 }

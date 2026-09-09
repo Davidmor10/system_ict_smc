@@ -46,6 +46,15 @@ export interface Portfolio extends Syncable {
   createdAt: number;
   /** Epoch ms of the last successful import. Drives "last updated 8 days ago". */
   lastImportAt?: number;
+  /** Epoch ms of the last time this portfolio was selected.
+   *
+   *  The SELECTION itself is per device and never leaves the browser — a phone
+   *  and a desktop may sit on different accounts. This is a different fact:
+   *  when the account was last looked at, by anyone, on anything. It is here
+   *  because the nightly pipeline runs on the ACTIVE portfolio and runs on a
+   *  server, which cannot see a localStorage key. Two devices on two accounts
+   *  make the newer stamp win, which is the right reading of "active". */
+  lastActiveAt?: number;
   updatedAt?: number;
   /** Soft delete, like every other synced list — a hard delete lets another
    *  device's copy resurrect the row on the next merge. Emptying a portfolio's
@@ -66,17 +75,24 @@ export const PORTFOLIO_LIMIT: Record<Role, number> = {
   deluxe:  Number.POSITIVE_INFINITY,
 };
 
-/** A ceiling on top of the plan limit, for as long as the analysis layer still
- *  reads "all trades" rather than "this portfolio's trades".
+/** A ceiling on top of the plan limit, held at one while the analysis layer
+ *  still read "all trades" rather than "this portfolio's trades".
  *
- *  `main` deploys on every push, so the portfolio entity and the importer go
- *  live before the per-portfolio split does. In that window a second portfolio
- *  would not be a second record — it would be the same mixed journal with a
- *  label on it, and the statistics a trader saw would be wrong in a way
- *  nothing on screen could explain. One portfolio cannot mix with anything.
+ *  `main` deploys on every push, so the portfolio entity and the importer went
+ *  live before the split did. In that window a second portfolio would not have
+ *  been a second record — it would have been the same mixed journal with a
+ *  label on it, and the statistics wrong in a way nothing on screen could
+ *  explain. One portfolio cannot mix with anything.
  *
- *  Raise to Infinity in the same change that lands the split, not before. */
-export const STAGED_PORTFOLIO_CAP = 1;
+ *  Lifted now that both halves are scoped: every screen reads one portfolio
+ *  (lib/portfolio/scope, components/useScopedTrades) and so does the server —
+ *  profile, patterns, hypothesis, weekly report and daily insight all key on
+ *  the account. Behaviour stays across the journal on purpose: a habit belongs
+ *  to the trader, not to the account.
+ *
+ *  Kept as a constant rather than deleted. It is the lever to pull if a future
+ *  change reaches the analysis before it reaches the scoping again. */
+export const STAGED_PORTFOLIO_CAP = Number.POSITIVE_INFINITY;
 
 export function portfolioLimit(role: Role): number {
   return Math.min(PORTFOLIO_LIMIT[role] ?? 0, STAGED_PORTFOLIO_CAP);
@@ -142,6 +158,7 @@ export function normalizePortfolio(raw: unknown): Portfolio | null {
     startingBalanceUsd: Number.isFinite(balance) && balance > 0 ? balance : 0,
     createdAt: Number.isFinite(Number(r.createdAt)) ? Number(r.createdAt) : Date.now(),
     ...(Number.isFinite(Number(r.lastImportAt)) ? { lastImportAt: Number(r.lastImportAt) } : {}),
+    ...(Number.isFinite(Number(r.lastActiveAt)) ? { lastActiveAt: Number(r.lastActiveAt) } : {}),
     ...(Number.isFinite(Number(r.updatedAt)) ? { updatedAt: Number(r.updatedAt) } : {}),
     ...(r.deleted === true ? { deleted: true as const } : {}),
   };

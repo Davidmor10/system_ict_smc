@@ -70,6 +70,15 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const select = useCallback((id: string) => {
     writeSelectedId(id);
     setSelectedId(id);
+    // Stamp the portfolio as the one last looked at. The selection itself
+    // stays on this device; this is what the nightly pipeline reads, because
+    // a server cannot see a localStorage key. Fire-and-forget — a failed
+    // stamp costs a night's note, never the selection.
+    setPortfolios(prev => {
+      const next = prev.map(p => (p.id === id ? { ...p, lastActiveAt: Date.now(), updatedAt: Date.now() } : p));
+      void savePortfolios(next).catch(() => {});
+      return next;
+    });
   }, []);
 
   const save = useCallback(async (next: Portfolio[]) => {

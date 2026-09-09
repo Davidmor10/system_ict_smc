@@ -44,6 +44,12 @@ export type PlanTier = 'free' | 'starter' | 'pro' | 'deluxe';
 
 export interface GenerateInputs {
   clerkId:  string;
+  /** The portfolio this note is about. Empty string means "no portfolio" —
+   *  an account that has not created one, or the one that adopts trades
+   *  written before portfolios existed. Every read and the row itself carry
+   *  it: a note about the average of two accounts is the same failure as a
+   *  mixed win rate, in prose. */
+  accountId?: string;
   date:     string;                // 'YYYY-MM-DD' in Israel time
   planTier: PlanTier;              // caller (cron) supplies this so we don't ping Clerk
   kind?:    InsightKind;           // default 'daily'
@@ -136,12 +142,13 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   }
 
   // 2. Idempotency — if we already have one for today, return it.
-  const existing = await getInsightForDate(cid, inputs.date, kind);
+  const account = inputs.accountId ?? '';
+  const existing = await getInsightForDate(cid, inputs.date, kind, account);
   if (existing) return { status: 'exists', row: existing };
 
   // 3. Load context in parallel where possible.
   const [todayTrades, traderProfile] = await Promise.all([
-    listTradesForDate(cid, inputs.date),
+    listTradesForDate(cid, inputs.date, account),
     // What the trader wrote about themselves. Never throws — an absent bio
     // shortens the prompt, it does not fail the night's run.
     traderProfileBlock(cid).catch(() => ''),
@@ -157,11 +164,11 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   // Never fails the run: a note without this block is the note as it was.
   let lateLogged: TradeRow[] = [];
   try {
-    const [previous] = await listRecentInsights(cid, 1);
+    const [previous] = await listRecentInsights(cid, 1, account);
     // No previous note means this is the trader's first — everything is new,
     // and a "you logged these late" block on a first note is nonsense.
     if (previous?.generated_at) {
-      lateLogged = await listLateLoggedTrades(cid, inputs.date, previous.generated_at);
+      lateLogged = await listLateLoggedTrades(cid, inputs.date, previous.generated_at, 10, account);
     }
   } catch (err) {
     logger.warn('late-logged lookup failed — continuing without it', {
@@ -180,7 +187,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   // says so.
   let statistical: Statistical | undefined;
   try {
-    const history = await listRecentTrades(cid, 200);
+    const history = await listRecentTrades(cid, 200, account);
     if (history.length) statistical = computeStatistical(history, { today: inputs.date });
   } catch (err) {
     // Missing numbers degrade the insight; they must never kill the run.
@@ -195,7 +202,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   let planExecution: ReturnType<typeof computePlanExecution> = null;
   let loggingHabit: ReturnType<typeof computeLoggingHabit> = null;
   try {
-    const window = await listRecentTrades(cid, 60);
+    const window = await listRecentTrades(cid, 60, account);
     planExecution = computePlanExecution(window);
     loggingHabit = computeLoggingHabit(window);
   } catch (err) {
@@ -448,6 +455,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
   };
 
   const inserted = await insertInsight({
+    accountId: account,
     clerkId:            cid,
     date:               inputs.date,
     kind,
@@ -468,7 +476,7 @@ export async function generateDailyInsight(inputs: GenerateInputs): Promise<Gene
 
   if (!inserted) {
     // Race — another worker beat us. Return the winner's row.
-    const winner = await getInsightForDate(cid, inputs.date, kind);
+    const winner = await getInsightForDate(cid, inputs.date, kind, account);
     if (winner) return { status: 'exists', row: winner };
     return { status: 'failed', reason: 'insert conflict but existing row not readable' };
   }

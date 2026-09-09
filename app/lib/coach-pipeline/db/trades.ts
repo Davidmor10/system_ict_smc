@@ -1,10 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // intelligence_trades access. Every function is clerk_id-scoped by
 // construction — no query in this file can escape the current user's rows.
+//
+// And now portfolio-scoped as well. `accountId` is the portfolio being
+// analysed; the empty string means "no portfolio", and a query for it also
+// picks up rows written before the column existed. That disjunction is the
+// same rule the client applies in lib/portfolio/scope, so a trade cannot be
+// shown under one account and counted under another.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { T, type TradeRow } from '../types';
 import { getClient, requireClerkId } from './client';
+
+/** The `or` clause for a portfolio. Empty string — an account with no
+ *  portfolios, or the one that adopts unassigned trades — also matches rows
+ *  the mirror wrote before account_id existed. */
+function accountClause(accountId: string): string {
+  return accountId
+    ? `account_id.eq.${accountId},account_id.is.null,account_id.eq.`
+    : 'account_id.is.null,account_id.eq.';
+}
 
 /** Return this user's trades whose profile-processing watermark isn't set.
     Used by the profile-refresh worker: reads at most `limit` rows (default
@@ -52,12 +67,14 @@ export async function countTradesSince(
 export async function listTradesForDate(
   clerkId: string,
   dateIso: string,   // 'YYYY-MM-DD'
+  accountId: string = '',
 ): Promise<TradeRow[]> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.trades)
     .select('*')
     .eq('clerk_id', cid)
+    .or(accountClause(accountId))
     .eq('date', dateIso)
     .is('deleted_at', null)
     .order('time', { ascending: true, nullsFirst: true });
@@ -85,12 +102,14 @@ export async function listLateLoggedTrades(
   reportDate: string,   // 'YYYY-MM-DD' — the day the note is about
   since: string,        // ISO timestamp — when the coach last wrote
   limit = 10,
+  accountId: string = '',
 ): Promise<TradeRow[]> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.trades)
     .select('*')
     .eq('clerk_id', cid)
+    .or(accountClause(accountId))
     .neq('date', reportDate)
     .gt('created_at', since)
     .is('deleted_at', null)
@@ -110,12 +129,14 @@ export async function listLateLoggedTrades(
 export async function listRecentTrades(
   clerkId: string,
   limit = 200,
+  accountId: string = '',
 ): Promise<TradeRow[]> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.trades)
     .select('*')
     .eq('clerk_id', cid)
+    .or(accountClause(accountId))
     .is('deleted_at', null)
     .order('date', { ascending: false })
     .order('time', { ascending: false, nullsFirst: false })

@@ -26,13 +26,15 @@ describe('plan limits', () => {
     expect(PORTFOLIO_LIMIT.deluxe).toBe(Number.POSITIVE_INFINITY);
   });
 
-  it('is capped while the analysis still reads every trade', () => {
-    // main deploys on every push, so the entity and the importer go live
-    // before the per-portfolio split. In that window a second portfolio is
-    // not a second record — it is the same mixed journal with a label on it.
-    expect(STAGED_PORTFOLIO_CAP).toBe(1);
-    expect(portfolioLimit('deluxe')).toBe(1);
-    expect(portfolioLimit('pro')).toBe(1);
+  it('is no longer capped, now that both halves are scoped', () => {
+    // Held at 1 while the analysis still read every trade — main deploys on
+    // every push, so the entity and the importer went live before the split
+    // and a second portfolio would have been the same mixed journal with a
+    // label on it. Every screen and the server now read one account.
+    expect(STAGED_PORTFOLIO_CAP).toBe(Number.POSITIVE_INFINITY);
+    expect(portfolioLimit('deluxe')).toBe(Number.POSITIVE_INFINITY);
+    expect(portfolioLimit('pro')).toBe(3);
+    expect(portfolioLimit('starter')).toBe(1);
   });
 
   it('still refuses a free account outright', () => {
@@ -44,15 +46,17 @@ describe('plan limits', () => {
     // Different facts. Telling a Deluxe subscriber to upgrade would be
     // nonsense, and telling a Starter the feature is not ready would be false.
     const starter = canAddPortfolio(1, 'starter');
-    const deluxe  = canAddPortfolio(1, 'deluxe');
     expect(starter.ok).toBe(false);
-    expect(deluxe.ok).toBe(false);
-    if (!starter.ok && !deluxe.ok) {
+    if (!starter.ok) {
       expect(starter.reason).toBe('plan');
-      expect(deluxe.reason).toBe('staged');
-      expect(starter.message).not.toBe(deluxe.message);
-      expect(deluxe.message).not.toContain('מסלול');
+      expect(starter.message).toContain('מסלול');
     }
+    // Deluxe is unlimited, so it is never refused at all.
+    expect(canAddPortfolio(50, 'deluxe').ok).toBe(true);
+    // Pro stops at three, and stops for a plan reason rather than a staged one.
+    const pro = canAddPortfolio(3, 'pro');
+    expect(pro.ok).toBe(false);
+    if (!pro.ok) expect(pro.reason).toBe('plan');
   });
 
   it('lets the first one through on every paid plan', () => {

@@ -18,6 +18,8 @@ import { getClient, requireClerkId } from './client';
 
 export interface InsightInsert {
   clerkId:            string;
+  /** The portfolio this insight is about. Empty string = no portfolio. */
+  accountId?:         string;
   date:               string;              // 'YYYY-MM-DD'
   kind:               InsightKind;
   contentMd:          string;
@@ -44,6 +46,9 @@ export async function insertInsight(
   const cid = requireClerkId(input.clerkId);
   const row = {
     clerk_id:            cid,
+    // The portfolio this insight is about. Empty string means "no portfolio",
+    // the same placeholder the rest of the AI tables use — see the migration.
+    account_id:          input.accountId ?? '',
     date:                input.date,
     kind:                input.kind,
     content_md:          input.contentMd,
@@ -78,12 +83,14 @@ export async function getInsightForDate(
   clerkId: string,
   dateIso: string,
   kind: InsightKind = 'daily',
+  accountId: string = '',
 ): Promise<DailyInsightRow | null> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.dailyInsights)
     .select('*')
     .eq('clerk_id', cid)
+    .eq('account_id', accountId)
     .eq('date', dateIso)
     .eq('kind', kind)
     .maybeSingle();
@@ -95,12 +102,14 @@ export async function getInsightForDate(
 export async function listRecentInsights(
   clerkId: string,
   limit = 30,
+  accountId: string = '',
 ): Promise<DailyInsightRow[]> {
   const cid = requireClerkId(clerkId);
   const { data, error } = await getClient()
     .from(T.dailyInsights)
     .select('*')
     .eq('clerk_id', cid)
+    .eq('account_id', accountId)
     // generated_at first, not date.
     //
     // Ordering by `date` meant an insight written under an older prompt could

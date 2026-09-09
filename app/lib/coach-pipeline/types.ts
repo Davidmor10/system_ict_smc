@@ -156,6 +156,8 @@ export interface Statistical {
 export interface ProcessingJobRow {
   id:                    string;
   clerk_id:              string;
+  /** The portfolio this job is for. '' when the trader has none. */
+  account_id?:           string;
   job_type:              JobType;
   status:                JobStatus;
   target_date:           string | null;
