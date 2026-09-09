@@ -16,7 +16,7 @@
 //    to be typed back.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePortfolios } from './PortfolioProvider';
 import ImportWizard from './ImportWizard';
 import { loadTrades, saveTrades } from '../lib/journal';
@@ -39,6 +39,14 @@ export default function PortfoliosView() {
   const [editing, setEditing] = useState<Portfolio | null>(null);
   const [confirming, setConfirming] = useState<Portfolio | null>(null);
   const [importing, setImporting] = useState<Portfolio | null>(null);
+
+  // The switcher links here with ?add=1 so "+ הוספת חשבון מסחר" opens the
+  // form rather than dropping the trader on a list to find the button on.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('add') === '1') {
+      setCreating(true);
+    }
+  }, []);
 
   const verdict = useMemo(() => canAddPortfolio(portfolios.length, role), [portfolios.length, role]);
 
@@ -136,11 +144,11 @@ export default function PortfoliosView() {
               ))}
             </div>
 
-            {creating || editing ? (
+            {editing ? (
               <PortfolioForm
                 initial={editing}
                 existing={portfolios}
-                onCancel={() => { setCreating(false); setEditing(null); }}
+                onCancel={() => setEditing(null)}
                 onSave={upsert}
               />
             ) : (
@@ -169,6 +177,33 @@ export default function PortfoliosView() {
           </>
         )}
       </div>
+
+      {/* Creating an account and giving it its trades are one flow. They were
+          two screens, and a trader who had just created an account had no
+          reason to know a second step existed — they had said what it was and
+          it sat there empty. */}
+      {creating && (
+        <ImportWizard
+          portfolio={null}
+          taken={portfolios}
+          // Persist and select, but do NOT close: upsert also clears the
+          // creating flag, which unmounted the modal mid-commit. The trades
+          // still saved — the function kept running — but the trader watched
+          // the dialog vanish with no confirmation, which reads as a failure.
+          // The wizard closes itself when they are done reading.
+          onCreate={async p => {
+            const first = portfolios.length === 0;
+            await save([...portfolios, { ...p, updatedAt: Date.now() }]);
+            if (first) {
+              const { changed, trades } = backfillAccountId(loadTrades(), p.id);
+              if (changed) saveTrades(trades);
+            }
+            select(p.id);
+          }}
+          onClose={() => setCreating(false)}
+          onImported={() => {}}
+        />
+      )}
 
       {importing && (
         <ImportWizard

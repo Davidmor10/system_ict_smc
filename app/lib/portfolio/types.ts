@@ -164,10 +164,15 @@ export function normalizePortfolio(raw: unknown): Portfolio | null {
   };
 }
 
-export function newPortfolio(name: string, startingBalanceUsd: number, timezone: string): Portfolio {
+/** `id` is injectable so a screen can fix it BEFORE the account is saved —
+ *  the import preview maps trades against it, and generating a second id at
+ *  save time would leave every one of those trades pointing at nothing. */
+export function newPortfolio(
+  name: string, startingBalanceUsd: number, timezone: string, id?: string,
+): Portfolio {
   const now = Date.now();
   return {
-    id: `pf_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    id: id ?? `pf_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     name: name.trim().slice(0, MAX_NAME_LENGTH),
     source: 'tradingview',
     timezone,

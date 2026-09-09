@@ -39,7 +39,7 @@ describe('the timezone is asked, not assumed', () => {
   it('re-computes the whole preview when the answer changes', () => {
     // The mapping is a memo over fileZone, so the table moves with the answer
     // rather than the trader being asked to trust it.
-    expect(wizard).toContain('}, [parsed, fileZone, existing, portfolio.id]);');
+    expect(wizard).toContain('}, [parsed, fileZone, existing, portfolio, newId]);');
   });
 
   it('names the session each trade would land in', () => {
@@ -85,5 +85,56 @@ describe('where it is reached from', () => {
   it('stamps the portfolio only after the trades are saved', () => {
     expect(view).toContain('lastImportAt: now');
     expect(view).toContain('onImported');
+  });
+});
+
+describe('adding a trading account', () => {
+  it('asks for the account and its file on one screen', () => {
+    // These were two screens. A trader who had just created an account had no
+    // reason to know a second step existed — they had said what the account
+    // was and it sat there empty, which is what the report was about.
+    expect(wizard).toContain("useState<Stage>(creating ? 'account' : 'file')");
+    expect(wizard).toContain('function AccountStep(');
+    expect(wizard).toContain('קובץ העסקאות');
+    expect(wizard).toContain('שם החשבון');
+    expect(wizard).toContain('יתרת פתיחה');
+  });
+
+  it('writes out where the file comes from', () => {
+    // The export is four menus deep in TradingView and the path is not
+    // guessable. A trader who cannot find it does not come back for a help
+    // page — the trader who asked for this could not find it either.
+    expect(wizard).toContain('EXPORT_STEPS');
+    expect(wizard).toContain('Export data');
+    expect(wizard.match(/^\s+'.*',$/gm)?.length).toBeGreaterThan(4);
+  });
+
+  it('fixes the account id before the preview maps against it', () => {
+    // Generating a second id at save time would leave every mapped trade
+    // pointing at an account that does not exist.
+    expect(wizard).toContain("useState(() => newPortfolio('', 0, 'Asia/Jerusalem').id)");
+    expect(wizard).toContain("accountId: portfolio?.id ?? newId");
+  });
+
+  it('writes the account before its trades', () => {
+    // The other order leaves trades pointing at a portfolio that does not
+    // exist if the second write fails — invisible on every screen, since
+    // nothing would scope to it.
+    expect(wizard.indexOf('await onCreate(')).toBeLessThan(wizard.indexOf('saveTrades('));
+  });
+
+  it('does not close itself mid-commit', () => {
+    // It did. upsert cleared the creating flag, which unmounted the modal
+    // while the save was still running: the trades landed, and the trader
+    // watched the dialog vanish with no confirmation, which reads as failure.
+    expect(view).toContain('do NOT close');
+    expect(view).not.toContain('onCreate={async p => { await upsert(p); }}');
+  });
+
+  it('is reachable from the switcher, not only from the list', () => {
+    const sw = readFileSync('app/components/PortfolioSwitcher.tsx', 'utf8');
+    expect(sw).toContain('+ הוספת חשבון מסחר');
+    expect(sw).toContain('?add=1');
+    expect(view).toContain("get('add') === '1'");
   });
 });

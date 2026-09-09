@@ -83,6 +83,9 @@ export default function PortfolioSwitcher() {
             </button>
           ))}
           {others.length > 0 && <div className="sb-pf-rule" />}
+          <Link href="/dashboard/portfolios?add=1" className="sb-pf-item is-link" role="menuitem" onClick={() => setOpen(false)}>
+            + הוספת חשבון מסחר
+          </Link>
           <Link href="/dashboard/portfolios" className="sb-pf-item is-link" role="menuitem" onClick={() => setOpen(false)}>
             ניהול תיקים
           </Link>

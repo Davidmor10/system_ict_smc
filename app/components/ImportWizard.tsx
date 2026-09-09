@@ -24,7 +24,10 @@ import { parseTradingViewOrders, UnrecognisedExport, type ParsedTrade } from '..
 import { toTradeEntries, splitAgainstExisting, type Skipped } from '../lib/import/toTrades';
 import { ZONES, activeZone, zoneShortName } from '../lib/time/zone';
 import { sessionLabel } from '../lib/sessions';
-import type { Portfolio } from '../lib/portfolio/types';
+import {
+  newPortfolio, validatePortfolio, MAX_NAME_LENGTH,
+  type NameProblem, type Portfolio,
+} from '../lib/portfolio/types';
 
 const GOLD = '#d4af37';
 const BULL = '#6fa580';
@@ -33,19 +36,40 @@ const BEAR = '#c98080';
 const money = (v: number) =>
   `${v > 0 ? '+' : v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-type Stage = 'file' | 'review' | 'done';
+type Stage = 'account' | 'file' | 'review' | 'done';
 
 export default function ImportWizard({
-  portfolio, onClose, onImported,
+  portfolio, onClose, onImported, onCreate, taken = [],
 }: {
-  portfolio: Portfolio;
+  /** The account being imported into, or null to create one here.
+   *
+   *  Creating the account and giving it its trades were two screens, and a
+   *  trader who had just created one had no reason to know a second step
+   *  existed — they had said what the account was and it sat there empty.
+   *  One flow now: the details and the file are asked for together. */
+  portfolio: Portfolio | null;
   onClose: () => void;
   onImported: (count: number) => void;
+  /** Persist a newly created account. Called before its trades are written. */
+  onCreate?: (p: Portfolio) => Promise<void>;
+  /** The accounts that already exist, so a duplicate name is caught here
+   *  rather than after the file has been read. */
+  taken?: readonly Portfolio[];
 }) {
-  const [stage, setStage] = useState<Stage>('file');
+  const creating = portfolio === null;
+  const [stage, setStage] = useState<Stage>(creating ? 'account' : 'file');
+  // Held here rather than inside the step so a trip back from the review does
+  // not lose what was typed.
+  const [draftName, setDraftName] = useState('');
+  const [draftBalance, setDraftBalance] = useState(0);
+  const [draftZone, setDraftZone] = useState('Asia/Jerusalem');
+  const [problems, setProblems] = useState<NameProblem[]>([]);
+  /** The id the new account will have, fixed up front so the trades mapped in
+   *  the preview carry the same one the account is finally saved with. */
+  const [newId] = useState(() => newPortfolio('', 0, 'Asia/Jerusalem').id);
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState<ParsedTrade[] | null>(null);
-  const [fileZone, setFileZone] = useState(portfolio.timezone);
+  const [fileZone, setFileZone] = useState(portfolio?.timezone ?? 'Asia/Jerusalem');
   const [existing, setExisting] = useState<TradeEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,7 +100,9 @@ export default function ImportWizard({
         return;
       }
       setParsed(result.trades);
-      setStage('review');
+      // When an account is being created the details still have to be filled
+      // in, so the file arriving does not skip past them.
+      if (!creating) setStage('review');
     } catch (e) {
       // "No trades found" and "this is not the right export" are different
       // answers, and a trader given the first will keep re-uploading.
@@ -91,15 +117,21 @@ export default function ImportWizard({
   const mapped = useMemo(() => {
     if (!parsed) return null;
     const { trades, skipped } = toTradeEntries(parsed, {
-      fileZone, appZone: activeZone(), accountId: portfolio.id,
+      fileZone, appZone: activeZone(), accountId: portfolio?.id ?? newId,
     });
     const { fresh, duplicates } = splitAgainstExisting(trades, existing);
     return { fresh, duplicates, skipped };
-  }, [parsed, fileZone, existing, portfolio.id]);
+  }, [parsed, fileZone, existing, portfolio, newId]);
 
   async function commit() {
     if (!mapped || busy) return;
     setBusy(true);
+    // The account is written BEFORE its trades. The other order would leave
+    // trades pointing at a portfolio that does not exist if the second write
+    // failed — invisible on every screen, since nothing would scope to it.
+    if (creating && onCreate) {
+      await onCreate(newPortfolio(draftName, draftBalance, draftZone, newId));
+    }
     // Append, never replace. Everything already in the journal keeps whatever
     // the trader has filled in on it.
     saveTrades([...existing, ...mapped.fresh]);
@@ -122,10 +154,12 @@ export default function ImportWizard({
         <header className="flex items-start justify-between gap-4 p-7 pb-5 border-b border-[#1c1c1e]">
           <div>
             <div className="font-mono text-[11px] font-bold tracking-[0.2em] uppercase mb-2" style={{ color: GOLD }}>
-              ◈ {portfolio.name}
+              ◈ {portfolio?.name || draftName || 'חשבון חדש'}
             </div>
             <h2 style={{ fontFamily: 'var(--serif)' }} className="m-0 text-[26px] font-bold text-white leading-tight">
-              {stage === 'done' ? 'הייבוא הושלם' : 'ייבוא עסקאות מ-TradingView'}
+              {stage === 'done' ? 'החשבון מוכן'
+                : creating ? 'הוספת חשבון מסחר'
+                : 'ייבוא עסקאות מ-TradingView'}
             </h2>
           </div>
           <button type="button" onClick={onClose} aria-label="סגירה"
@@ -133,6 +167,25 @@ export default function ImportWizard({
         </header>
 
         <div className="p-7">
+          {stage === 'account' && (
+            <AccountStep
+              name={draftName} onName={setDraftName}
+              balance={draftBalance} onBalance={setDraftBalance}
+              zone={draftZone} onZone={z => { setDraftZone(z); setFileZone(z); }}
+              problems={problems}
+              error={error}
+              fileName={fileName}
+              onPick={() => input.current?.click()}
+              onDrop={f => void readFile(f)}
+              onSubmit={() => {
+                const found = validatePortfolio(draftName, draftBalance, taken);
+                setProblems(found);
+                if (found.length === 0 && parsed) setStage('review');
+              }}
+              ready={!!parsed}
+            />
+          )}
+
           {stage === 'file' && (
             <FileStep
               error={error}
@@ -148,7 +201,7 @@ export default function ImportWizard({
               mapped={mapped}
               fileZone={fileZone}
               onZone={setFileZone}
-              onBack={() => { setStage('file'); setParsed(null); }}
+              onBack={() => { setStage(creating ? 'account' : 'file'); setParsed(null); }}
               onCommit={() => void commit()}
               busy={busy}
             />
@@ -371,5 +424,152 @@ function Stat({ n, label, tone }: { n: number; label: string; tone: string }) {
       <span className="text-[19px] font-bold tabular-nums" style={{ color: tone }}>{n}</span>
       <span className="text-[12px] text-white/45">{label}</span>
     </span>
+  );
+}
+
+
+/* ── Step 0 — the account, and its file, in one place ─────────────────── */
+
+const COMMON_BALANCES = [10_000, 25_000, 50_000, 100_000, 150_000, 250_000];
+
+/** The export lives four menus deep in TradingView and the path is not
+ *  guessable. Written out rather than linked: a trader who cannot find the
+ *  file does not come back to look for a help page. */
+const EXPORT_STEPS = [
+  'התחבר לחשבון TradingView שלך.',
+  'פתח גרף כלשהו.',
+  'בתחתית המסך, לחץ על Paper Trading או על Live Trading.',
+  'עבור ללשונית היסטוריית הפקודות (History).',
+  'לחץ על שלוש הנקודות בצד, ובחר Export data.',
+  'שמור את הקובץ ב-CSV והעלה אותו כאן.',
+];
+
+function AccountStep({
+  name, onName, balance, onBalance, zone, onZone,
+  problems, error, fileName, onPick, onDrop, onSubmit, ready,
+}: {
+  name: string; onName: (v: string) => void;
+  balance: number; onBalance: (v: number) => void;
+  zone: string; onZone: (v: string) => void;
+  problems: NameProblem[];
+  error: string | null;
+  fileName: string;
+  onPick: () => void;
+  onDrop: (f: File) => void;
+  onSubmit: () => void;
+  ready: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
+  const problem = (f: NameProblem['field']) => problems.find(p => p.field === f)?.message;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">פלטפורמה</span>
+        {/* One option, and a control rather than a label: the day a second
+            broker is supported this is where it goes, and a trader can see
+            now which one the file has to come from. */}
+        <div className="iw-in flex items-center gap-2.5 opacity-80">
+          <span className="font-mono text-[11px] font-bold" style={{ color: GOLD }}>TV</span>
+          <span>TradingView</span>
+        </div>
+      </div>
+
+      <div className="rounded-[10px] border border-[#1c1c1e] bg-white/[0.015] overflow-hidden">
+        <button
+          type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
+          className="w-full flex items-center justify-between gap-3 p-4 text-start"
+        >
+          <span className="text-[13.5px] font-bold text-white/80">איך מייצאים עסקאות מ-TradingView?</span>
+          <span className="text-white/35 text-[12px]" aria-hidden>{open ? '▲' : '▼'}</span>
+        </button>
+        {open && (
+          <ol className="m-0 px-4 pb-4 ps-8 flex flex-col gap-1.5">
+            {EXPORT_STEPS.map((t, i) => (
+              <li key={i} className="text-[13px] leading-relaxed text-white/60">{t}</li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <label className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">שם החשבון</span>
+        <input
+          className="iw-in" value={name} maxLength={MAX_NAME_LENGTH}
+          placeholder="לדוגמה: DAVID 50000 DEMO"
+          aria-invalid={!!problem('name')}
+          onChange={e => onName(e.target.value)}
+        />
+        {problem('name') && <span className="text-[12.5px] text-[#f0899e]">{problem('name')}</span>}
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">יתרת פתיחה ($)</span>
+        <div className="grid grid-cols-3 gap-1.5">
+          {COMMON_BALANCES.map(v => (
+            <button
+              key={v} type="button" onClick={() => onBalance(v)} aria-pressed={balance === v}
+              className="rounded-[8px] border px-3 py-2 text-[13px] text-center transition-all"
+              style={{
+                borderColor: balance === v ? 'rgba(212,175,55,0.55)' : '#1c1c1e',
+                background: balance === v ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.015)',
+                color: balance === v ? '#f0dc9a' : 'rgba(255,255,255,0.6)',
+                fontWeight: balance === v ? 700 : 500,
+              }}
+            >
+              <span dir="ltr">${v.toLocaleString('en-US')}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          className="iw-in" type="number" min={100} step={500} dir="ltr"
+          value={balance || ''} aria-invalid={!!problem('balance')}
+          onChange={e => onBalance(Number(e.target.value) || 0)}
+        />
+        {problem('balance') && <span className="text-[12.5px] text-[#f0899e]">{problem('balance')}</span>}
+      </div>
+
+      <label className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">אזור זמן</span>
+        <select className="iw-in" value={zone} onChange={e => onZone(e.target.value)}>
+          {ZONES.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
+        </select>
+      </label>
+
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">קובץ העסקאות</span>
+        <div
+          className="iw-drop" data-over={over} onClick={onPick}
+          onDragOver={e => { e.preventDefault(); setOver(true); }}
+          onDragLeave={() => setOver(false)}
+          onDrop={e => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f) onDrop(f); }}
+          style={{ padding: '28px 20px' }}
+        >
+          <div className="text-[22px] mb-1.5" aria-hidden>{ready ? '✓' : '↑'}</div>
+          <div className="text-[14px] font-bold" style={{ color: ready ? '#7fae8c' : '#fff' }}>
+            {ready ? 'הקובץ נקרא' : 'גרור לכאן את הקובץ, או לחץ לבחירה'}
+          </div>
+          {fileName && <div className="mt-2 font-mono text-[11px] text-white/50" dir="ltr">{fileName}</div>}
+        </div>
+      </div>
+
+      {error && (
+        <p className="m-0 text-[13.5px] leading-relaxed rounded-[10px] p-3.5"
+          style={{ color: '#f0899e', background: 'rgba(139,58,58,0.08)', border: '1px solid rgba(139,58,58,0.35)' }}>
+          {error}
+        </p>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button" onClick={onSubmit} disabled={!ready}
+          className="rounded-[9px] px-5 py-2.5 font-mono text-[12px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: GOLD, color: '#000' }}
+        >
+          {ready ? 'המשך' : 'ממתין לקובץ'}
+        </button>
+      </div>
+    </div>
   );
 }
