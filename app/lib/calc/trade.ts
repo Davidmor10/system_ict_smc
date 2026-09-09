@@ -26,6 +26,21 @@ export function calcTicks(
   return calcPoints(entry, exitPrice, direction) / tickSize;
 }
 
+/** A price the journal actually holds, or null.
+ *
+ *  Zero is the journal's sentinel for a price that was never recorded — an
+ *  import writes it when the export carried no stop or no take-profit order,
+ *  and the schema requires a number there. Every reader has to agree on that,
+ *  because arithmetic does not: a target of 0 on a short is not "no target",
+ *  it is a target 29,270 points away, and one such trade reported 713R planned
+ *  and dragged an account's average winner to +76R.
+ *
+ *  None of these instruments can print at or below zero, so a non-positive
+ *  price is never a real level. It leaves through the same door as NaN. */
+export function recordedPrice(price: number): number | null {
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 /**
  * Planned reward-to-risk ratio.
  * Returns null if stop === entry (invalid).
@@ -58,7 +73,9 @@ export function calcRR(
   // travelled from one missing target all the way into an average: a single
   // such trade turns an expectancy into NaN and the screen into blanks. An
   // absent input has to leave through the same door as a zero-risk one.
-  if (!Number.isFinite(entry) || !Number.isFinite(stopLoss) || !Number.isFinite(takeProfit)) return null;
+  //
+  // A ZERO is the same absence wearing a number's clothes — see recordedPrice.
+  if (recordedPrice(entry) === null || recordedPrice(stopLoss) === null || recordedPrice(takeProfit) === null) return null;
   const risk = Math.abs(entry - stopLoss);
   if (risk === 0) return null;
 
@@ -101,7 +118,7 @@ export function calcRealizedR(
   // Same reason as calcRR: these are typed as numbers and reached with
   // absences, and NaN would leave here as the number half of `number | null`
   // and pass every guard downstream.
-  if (!Number.isFinite(entry) || !Number.isFinite(exitPrice) || !Number.isFinite(stopLoss)) return null;
+  if (recordedPrice(entry) === null || recordedPrice(exitPrice) === null || recordedPrice(stopLoss) === null) return null;
   const risk = Math.abs(entry - stopLoss);
   if (risk === 0) return null;
   const dir = direction === 'LONG' ? 1 : -1;

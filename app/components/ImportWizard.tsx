@@ -10,22 +10,31 @@
 // An importer that writes first and reports afterwards leaves the trader
 // undoing it by hand, and this one is aimed at people with a hundred trades.
 //
-// THE ZONE QUESTION IS ASKED, NOT ASSUMED.
+// ONE CLOCK, AND IT IS ISRAEL.
 //
-// The export's timestamps carry no zone. Read in the wrong one they do not
-// fail — they file every trade under the wrong session, silently. So the first
-// trade's own time is shown back to the trader with the question attached, and
-// the preview below re-computes the moment they change the answer.
+// The export's timestamps carry no zone. This used to be a question, with a
+// picker on two screens — and it was the wrong question to put to a trader who
+// has no way of knowing what TradingView wrote. The app files and shows every
+// trade on Israel time, and reads the file's own timestamps as already being
+// on it. The first trade's mapped time is shown back plainly in the review, so
+// a file that is genuinely on another clock is visible rather than silent.
+//
+// THE ACCOUNT SIZE COMES FROM THE NAME, NOT FROM A ROW OF CHIPS.
+//
+// The file does not carry it — see balanceFromName. A trader who names an
+// account "DAVID 50000 DEMO" has already said it, and reading it there beats a
+// grid of common sizes where one wrong tap gave an account a $2,100 balance
+// and every drawdown figure on every screen was then measured against it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hydrateTradesFromCloud, saveTrades, loadTrades, type TradeEntry } from '../lib/journal';
 import { parseTradingViewOrders, UnrecognisedExport, type ParsedTrade } from '../lib/import/tradingview';
 import { toTradeEntries, splitAgainstExisting, type Skipped } from '../lib/import/toTrades';
-import { ZONES, activeZone, zoneShortName } from '../lib/time/zone';
+import { DEFAULT_TIMEZONE } from '../lib/time/zone';
 import { sessionLabel } from '../lib/sessions';
 import {
-  newPortfolio, validatePortfolio, MAX_NAME_LENGTH,
+  newPortfolio, validatePortfolio, balanceFromName, MAX_NAME_LENGTH,
   type NameProblem, type Portfolio,
 } from '../lib/portfolio/types';
 
@@ -61,15 +70,17 @@ export default function ImportWizard({
   // Held here rather than inside the step so a trip back from the review does
   // not lose what was typed.
   const [draftName, setDraftName] = useState('');
-  const [draftBalance, setDraftBalance] = useState(0);
-  const [draftZone, setDraftZone] = useState('Asia/Jerusalem');
+  /** Only ever consulted when the NAME holds no size. Kept as a string so an
+   *  empty field stays empty instead of showing a 0 the trader has to clear. */
+  const [typedBalance, setTypedBalance] = useState('');
   const [problems, setProblems] = useState<NameProblem[]>([]);
+  const readBalance = balanceFromName(draftName);
+  const draftBalance = readBalance ?? (Number(typedBalance) || 0);
   /** The id the new account will have, fixed up front so the trades mapped in
    *  the preview carry the same one the account is finally saved with. */
-  const [newId] = useState(() => newPortfolio('', 0, 'Asia/Jerusalem').id);
+  const [newId] = useState(() => newPortfolio('', 0, DEFAULT_TIMEZONE).id);
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState<ParsedTrade[] | null>(null);
-  const [fileZone, setFileZone] = useState(portfolio?.timezone ?? 'Asia/Jerusalem');
   const [existing, setExisting] = useState<TradeEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -116,12 +127,15 @@ export default function ImportWizard({
 
   const mapped = useMemo(() => {
     if (!parsed) return null;
+    // Both zones are Israel, so the reinterpretation is a no-op and the times
+    // in the journal are the times in the file. That is the assumption, said
+    // out loud rather than hidden behind a picker nobody could answer.
     const { trades, skipped } = toTradeEntries(parsed, {
-      fileZone, appZone: activeZone(), accountId: portfolio?.id ?? newId,
+      fileZone: DEFAULT_TIMEZONE, appZone: DEFAULT_TIMEZONE, accountId: portfolio?.id ?? newId,
     });
     const { fresh, duplicates } = splitAgainstExisting(trades, existing);
     return { fresh, duplicates, skipped };
-  }, [parsed, fileZone, existing, portfolio, newId]);
+  }, [parsed, existing, portfolio, newId]);
 
   async function commit() {
     if (!mapped || busy) return;
@@ -130,7 +144,7 @@ export default function ImportWizard({
     // trades pointing at a portfolio that does not exist if the second write
     // failed — invisible on every screen, since nothing would scope to it.
     if (creating && onCreate) {
-      await onCreate(newPortfolio(draftName, draftBalance, draftZone, newId));
+      await onCreate(newPortfolio(draftName, draftBalance, DEFAULT_TIMEZONE, newId));
     }
     // Append, never replace. Everything already in the journal keeps whatever
     // the trader has filled in on it.
@@ -170,8 +184,8 @@ export default function ImportWizard({
           {stage === 'account' && (
             <AccountStep
               name={draftName} onName={setDraftName}
-              balance={draftBalance} onBalance={setDraftBalance}
-              zone={draftZone} onZone={z => { setDraftZone(z); setFileZone(z); }}
+              readBalance={readBalance}
+              typedBalance={typedBalance} onTypedBalance={setTypedBalance}
               problems={problems}
               error={error}
               fileName={fileName}
@@ -199,8 +213,6 @@ export default function ImportWizard({
             <ReviewStep
               parsed={parsed!}
               mapped={mapped}
-              fileZone={fileZone}
-              onZone={setFileZone}
               onBack={() => { setStage(creating ? 'account' : 'file'); setParsed(null); }}
               onCommit={() => void commit()}
               busy={busy}
@@ -289,12 +301,10 @@ function FileStep({
 /* ── Step 2 ───────────────────────────────────────────────────────────── */
 
 function ReviewStep({
-  parsed, mapped, fileZone, onZone, onBack, onCommit, busy,
+  parsed, mapped, onBack, onCommit, busy,
 }: {
   parsed: ParsedTrade[];
   mapped: { fresh: TradeEntry[]; duplicates: TradeEntry[]; skipped: Skipped[] };
-  fileZone: string;
-  onZone: (z: string) => void;
   onBack: () => void;
   onCommit: () => void;
   busy: boolean;
@@ -306,11 +316,12 @@ function ReviewStep({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* The zone question, asked against the trader's own first trade. */}
+      {/* Not a question any more — a statement, shown against the trader's own
+          first trade so a file on another clock is visible rather than silent. */}
       <section className="rounded-[12px] p-4"
         style={{ border: '1px solid rgba(212,175,55,0.3)', background: 'rgba(212,175,55,0.04)' }}>
         <div className="font-mono text-[10px] font-bold tracking-[0.16em] uppercase mb-2" style={{ color: GOLD }}>
-          שאלה אחת לפני שממשיכים
+          שעון ישראל
         </div>
         <p className="m-0 text-[14px] leading-relaxed text-white/80">
           העסקה הראשונה בקובץ רשומה ב־<span className="font-mono text-white" dir="ltr">{firstRaw}</span>.
@@ -320,15 +331,8 @@ function ReviewStep({
           )}
         </p>
         <p className="m-0 mt-2 text-[13px] text-white/50">
-          אם השעה הזאת לא נכונה, השעון של הקובץ שונה משלך — והסשן של כל עסקה יהיה שגוי.
+          כל השעות במערכת הן שעון ישראל, והשעות בקובץ נקראות כפי שהן.
         </p>
-        <label className="flex items-center gap-2.5 mt-3 flex-wrap">
-          <span className="font-mono text-[11px] font-bold tracking-[0.12em] uppercase text-white/45">השעון של הקובץ</span>
-          <select className="iw-in" value={fileZone} onChange={e => onZone(e.target.value)}>
-            {ZONES.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-          </select>
-          <span className="font-mono text-[11px] text-white/35" dir="ltr">{zoneShortName(fileZone)}</span>
-        </label>
       </section>
 
       <div className="flex gap-4 flex-wrap font-mono text-[12px]">
@@ -430,8 +434,6 @@ function Stat({ n, label, tone }: { n: number; label: string; tone: string }) {
 
 /* ── Step 0 — the account, and its file, in one place ─────────────────── */
 
-const COMMON_BALANCES = [10_000, 25_000, 50_000, 100_000, 150_000, 250_000];
-
 /** The export lives four menus deep in TradingView and the path is not
  *  guessable. Written out rather than linked: a trader who cannot find the
  *  file does not come back to look for a help page. */
@@ -445,12 +447,13 @@ const EXPORT_STEPS = [
 ];
 
 function AccountStep({
-  name, onName, balance, onBalance, zone, onZone,
+  name, onName, readBalance, typedBalance, onTypedBalance,
   problems, error, fileName, onPick, onDrop, onSubmit, ready,
 }: {
   name: string; onName: (v: string) => void;
-  balance: number; onBalance: (v: number) => void;
-  zone: string; onZone: (v: string) => void;
+  /** The size read out of the name, or null when the name holds none. */
+  readBalance: number | null;
+  typedBalance: string; onTypedBalance: (v: string) => void;
   problems: NameProblem[];
   error: string | null;
   fileName: string;
@@ -501,41 +504,41 @@ function AccountStep({
           aria-invalid={!!problem('name')}
           onChange={e => onName(e.target.value)}
         />
+        <span className="text-[12.5px] text-white/40 leading-relaxed">
+          אם תכתוב את גודל החשבון בשם, המערכת תיקח אותו משם.
+        </span>
         {problem('name') && <span className="text-[12.5px] text-[#f0899e]">{problem('name')}</span>}
       </label>
 
       <div className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">יתרת פתיחה ($)</span>
-        <div className="grid grid-cols-3 gap-1.5">
-          {COMMON_BALANCES.map(v => (
-            <button
-              key={v} type="button" onClick={() => onBalance(v)} aria-pressed={balance === v}
-              className="rounded-[8px] border px-3 py-2 text-[13px] text-center transition-all"
-              style={{
-                borderColor: balance === v ? 'rgba(212,175,55,0.55)' : '#1c1c1e',
-                background: balance === v ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.015)',
-                color: balance === v ? '#f0dc9a' : 'rgba(255,255,255,0.6)',
-                fontWeight: balance === v ? 700 : 500,
-              }}
-            >
-              <span dir="ltr">${v.toLocaleString('en-US')}</span>
-            </button>
-          ))}
-        </div>
-        <input
-          className="iw-in" type="number" min={100} step={500} dir="ltr"
-          value={balance || ''} aria-invalid={!!problem('balance')}
-          onChange={e => onBalance(Number(e.target.value) || 0)}
-        />
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">גודל החשבון</span>
+        {readBalance !== null ? (
+          <div
+            className="rounded-[8px] px-3 py-2.5 flex items-baseline gap-2.5"
+            style={{ border: '1px solid rgba(212,175,55,0.4)', background: 'rgba(212,175,55,0.06)' }}
+          >
+            <span dir="ltr" className="font-mono text-[16px] font-bold" style={{ color: '#f0dc9a' }}>
+              ${readBalance.toLocaleString('en-US')}
+            </span>
+            <span className="text-[12.5px] text-white/45">נקרא מתוך שם החשבון</span>
+          </div>
+        ) : (
+          <>
+            <input
+              className="iw-in" type="number" min={100} step={500} dir="ltr"
+              placeholder="50000"
+              value={typedBalance} aria-invalid={!!problem('balance')}
+              onChange={e => onTypedBalance(e.target.value)}
+            />
+            {/* Said plainly, because a trader who has just uploaded a file of
+                their own trades reasonably expects it to hold this too. */}
+            <span className="text-[12.5px] text-white/40 leading-relaxed">
+              הקובץ של TradingView לא מכיל את גודל החשבון — יש בו רק את הפקודות. כתוב אותו כאן פעם אחת, או רשום אותו בשם החשבון.
+            </span>
+          </>
+        )}
         {problem('balance') && <span className="text-[12.5px] text-[#f0899e]">{problem('balance')}</span>}
       </div>
-
-      <label className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">אזור זמן</span>
-        <select className="iw-in" value={zone} onChange={e => onZone(e.target.value)}>
-          {ZONES.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-        </select>
-      </label>
 
       <div className="flex flex-col gap-2">
         <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">קובץ העסקאות</span>

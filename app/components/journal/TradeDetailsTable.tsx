@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { TradeEntry } from '../../lib/journal';
 import { plannedRR, rMultiple, tradePnL, missingAnswers } from '../../lib/journal';
-import { calcWeightedExitPrice } from '../../lib/calc/trade';
+import { calcWeightedExitPrice, recordedPrice } from '../../lib/calc/trade';
 import { pointValue } from '../../lib/instruments';
 import { sessionLabel } from '../../lib/sessions';
 import './tradeDetails.css';
@@ -62,8 +62,8 @@ const RESULT_HE: Record<string, string> = { WIN: 'WIN', LOSS: 'LOSS', BE: 'BE', 
 function exitPrice(t: TradeEntry): number | null {
   const measured = calcWeightedExitPrice(t.exits ?? []);
   if (measured !== null) return measured;
-  if (t.result === 'WIN') return t.target;
-  if (t.result === 'LOSS') return t.stop;
+  if (t.result === 'WIN') return recordedPrice(t.target);
+  if (t.result === 'LOSS') return recordedPrice(t.stop);
   if (t.result === 'BE') return t.entry;
   return null;
 }
@@ -232,8 +232,15 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
   const pnl = tradePnL(t);
   const rr = plannedRR(t);
   const perPoint = dollarsPerPoint(t);
-  const risk = Math.abs(t.entry - t.stop) * perPoint;
-  const reward = Math.abs(t.target - t.entry) * perPoint;
+  // The plan, only where the trade actually carries one. A CSV export holds
+  // the orders that were placed — a trade managed by hand may have had no
+  // stop order and no take-profit order in it at all, and the journal writes
+  // 0 there. Drawing that 0 gave a $58,000 "potential profit" on a $24 trade
+  // and a plan bar spanning the whole instrument.
+  const planStop   = recordedPrice(t.stop);
+  const planTarget = recordedPrice(t.target);
+  const risk   = planStop   !== null ? Math.abs(t.entry - planStop) * perPoint : null;
+  const reward = planTarget !== null ? Math.abs(planTarget - t.entry) * perPoint : null;
   const setup = t.model && t.model !== 'לא צוין' ? t.model : '';
   const chart = t.screenshots?.[0] ?? null;
   // Logged before these answers were required. Marked rather than rewritten:
@@ -242,9 +249,11 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
   const missing = missingAnswers(t);
 
   // Every position on the bar is measured FROM THE STOP, which is what makes
-  // one formula correct for a long and a short alike.
-  const span = Math.abs(t.target - t.stop) || 1;
-  const pct = (v: number) => `${((Math.abs(v - t.stop) / span) * 100).toFixed(1)}%`;
+  // one formula correct for a long and a short alike. It needs both ends, so
+  // the bar is drawn only when both were recorded.
+  const hasPlan = planStop !== null && planTarget !== null;
+  const span = hasPlan ? Math.abs(planTarget - planStop) || 1 : 1;
+  const pct = (v: number) => `${((Math.abs(v - (planStop ?? t.entry)) / span) * 100).toFixed(1)}%`;
 
   const num = (value: string, color: string, weight: 700 | 900 = 700) => (
     <span dir="ltr" style={{
@@ -321,13 +330,22 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
           {/* 1 — the plan, drawn. Stop on the right, target on the left, and
               the entry where it actually sat between them. */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 9 }}>
-            <BarLabel text="סטופ" value={price(t.stop)} color="rgba(201,128,128,.75)" />
+            <BarLabel text="סטופ" value={planStop !== null ? price(planStop) : 'לא נרשם'} color="rgba(201,128,128,.75)" />
             <BarLabel text="כניסה" value={price(t.entry)} color={GOLD} />
-            <BarLabel text="יעד" value={price(t.target)} color="rgba(111,165,128,.8)" />
+            <BarLabel text="יעד" value={planTarget !== null ? price(planTarget) : 'לא נרשם'} color="rgba(111,165,128,.8)" />
           </div>
-          <div style={{ position: 'relative', height: 4, background: '#141416', marginBottom: 20 }}>
+          {!hasPlan && (
+            <div style={{
+              position: 'relative', marginBottom: 20, padding: '9px 12px',
+              background: 'rgba(255,255,255,.02)', border: '1px dashed #1c1c1e',
+              fontFamily: SANS, fontSize: 11.5, lineHeight: 1.6, color: 'rgba(255,255,255,.4)',
+            }}>
+              בקובץ שיובא לא הייתה פקודת סטופ או פקודת יעד לעסקה הזאת, ולכן אין תוכנית להשוות אליה. אפשר להשלים את המחירים בעריכה.
+            </div>
+          )}
+          <div hidden={!hasPlan} style={{ position: 'relative', height: 4, background: '#141416', marginBottom: 20 }}>
             <div className="tdt-fill" style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: pct(t.entry), transformOrigin: 'right', background: 'linear-gradient(270deg,rgba(139,58,58,.85),rgba(139,58,58,.35))' }} />
-            <div className="tdt-fill" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${(Math.abs(t.target - t.entry) / span * 100).toFixed(1)}%`, transformOrigin: 'left', background: 'linear-gradient(90deg,rgba(74,124,89,.85),rgba(74,124,89,.35))' }} />
+            <div className="tdt-fill" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${(Math.abs((planTarget ?? t.entry) - t.entry) / span * 100).toFixed(1)}%`, transformOrigin: 'left', background: 'linear-gradient(90deg,rgba(74,124,89,.85),rgba(74,124,89,.35))' }} />
             <div style={{ position: 'absolute', top: -4, bottom: -4, width: 2, background: GOLD, boxShadow: '0 0 10px rgba(212,175,55,.8)', right: pct(t.entry) }} />
             {exit !== null && (
               <div className="tdt-exit" style={{
@@ -340,11 +358,11 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
           {/* 2 — the three figures the plan implies. */}
           <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: '#1c1c1e', border: '1px solid #1c1c1e', marginBottom: 16 }}>
             <DataCell k="יחס סיכוי/סיכון" v={rr !== null ? rr.toFixed(2) : '—'} color={GOLD} glow="rgba(212,175,55,.35)" />
-            <DataCell k="רווח פוטנציאלי" v={money(reward)} color={BULL} glow="rgba(74,124,89,.32)" />
+            <DataCell k="רווח פוטנציאלי" v={reward !== null ? money(reward) : '—'} color={BULL} glow="rgba(74,124,89,.32)" />
             {/* Two decimals here as well. The design's own fixture rendered risk
                 with a floating precision, which puts $72.5 under +$155.00 and
                 breaks the one thing this column is for. */}
-            <DataCell k="סיכון" v={`$${risk.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color={BEAR} glow="rgba(139,58,58,.3)" />
+            <DataCell k="סיכון" v={risk !== null ? `$${risk.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'} color={BEAR} glow="rgba(139,58,58,.3)" />
           </div>
 
           {/* 3 — the context the trade was taken in. */}
@@ -372,7 +390,7 @@ function TradeRow({ trade: t, open, onToggle, onEdit, onDelete, onOpenChart }: {
               }}
             >
               <span style={{ fontFamily: SANS, fontSize: 11.5, color: 'rgba(255,255,255,.55)', lineHeight: 1.6 }}>
-                העסקה הזאת נשמרה לפני שהשאלות האלה היו חובה, ולכן היא לא נספרת במדידה שלהן:{' '}
+                בעסקה הזאת חסרים פרטים, ולכן היא לא נספרת במדידה שלהם:{' '}
                 <b style={{ color: 'rgba(212,175,55,.9)' }}>{missing.map(m => m.label).join(' · ')}</b>
               </span>
               <button type="button" className="tdt-act tdt-act-edit" onClick={() => onEdit(t)}>השלם</button>

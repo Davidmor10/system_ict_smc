@@ -22,13 +22,13 @@
 // gate below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { saveDoc } from '../lib/sync/collections';
 import {
   DEFAULT_SETTINGS, SETTINGS_KEY, SETTINGS_KIND, type UserSettings, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import { ZONES, clockInZone, zoneShortName } from '../lib/time/zone';
+import { DEFAULT_TIMEZONE } from '../lib/time/zone';
 
 const GOLD = '#d4af37';
 
@@ -39,12 +39,10 @@ const STYLE_LABEL: Record<TradingStyle, string> = {
   position: 'פוזיציה · שבועות ומעלה',
 };
 
-/** Sizes a prop account or a personal account actually comes in. Offered as
- *  one tap because the point of this screen is that the number gets set, and
- *  a keypad is where a setup screen loses people. */
-const COMMON_BALANCES = [10_000, 25_000, 50_000, 100_000, 150_000, 250_000];
-
-const STEPS = ['מי אתה', 'החשבון', 'השעון'] as const;
+// The clock was a third step. It is gone: the app runs on Israel time, one
+// clock for every screen and every import, and a picker on a setup screen was
+// asking a new trader to make a decision the app had already made.
+const STEPS = ['מי אתה', 'החשבון'] as const;
 
 /** `suggestedName` comes from the caller rather than from a Clerk hook in
  *  here: this component is then pure UI over a settings draft, which is what
@@ -77,6 +75,10 @@ export default function FirstRunSetup({
     // they happened to be looking at.
     const doc: UserSettings = {
       ...(skipped ? DEFAULT_SETTINGS : draft),
+      // Not a setting any more. Written explicitly rather than left to the
+      // default, so a doc carried over from an older version is corrected on
+      // the way through instead of keeping a zone nothing can change.
+      timezone: DEFAULT_TIMEZONE,
       onboardedAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -153,23 +155,18 @@ export default function FirstRunSetup({
             lede="המספר הזה הוא העוגן של עקומת ההון ושל חישוב הדרואודאון. אם הוא לא נכון, כל אחוז בדשבורד לא נכון — לכן הוא נשאל כאן ולא מחכה שתמצא אותו בהגדרות."
           >
             <Field label="יתרת פתיחה ($)">
-              {/* A fixed three-across grid rather than a wrapping row: six
-                  chips in a flex-wrap left the largest one stranded alone on
-                  a second line, which reads as a different kind of option. */}
-              <div className="grid grid-cols-3 gap-1.5 mb-2.5">
-                {COMMON_BALANCES.map(v => (
-                  <Choice key={v} compact centred on={draft.accountStartUsd === v} onClick={() => patch('accountStartUsd', v)}>
-                    <span dir="ltr">${v.toLocaleString('en-US')}</span>
-                  </Choice>
-                ))}
-              </div>
+              {/* The grid of common sizes that used to sit here is gone. One
+                  tap on the wrong chip is how an account ends up anchored to a
+                  size it never had — and every drawdown percentage on every
+                  screen is then measured against it. Typed, once. */}
               <input
                 className="onb-in"
                 type="number"
                 min={100}
                 step={500}
                 dir="ltr"
-                value={draft.accountStartUsd}
+                placeholder="50000"
+                value={draft.accountStartUsd || ''}
                 onChange={e => patch('accountStartUsd', Number(e.target.value) || 0)}
               />
             </Field>
@@ -181,17 +178,6 @@ export default function FirstRunSetup({
                   </Choice>
                 ))}
               </div>
-            </Field>
-          </Step>
-        )}
-
-        {step === 2 && (
-          <Step
-            title="השעון"
-            lede="לפי זה נקבע איזה סשן פתוח עכשיו ולאיזה יום עסקה חדשה נרשמת. אם השעה למטה נראית נכונה — אתה מסודר."
-          >
-            <Field label="אזור זמן">
-              <ZoneSelect value={draft.timezone} onChange={v => patch('timezone', v)} />
             </Field>
           </Step>
         )}
@@ -288,37 +274,3 @@ function Choice({
   );
 }
 
-function ZoneSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [now, setNow] = useState(() => clockInZone(value));
-  useEffect(() => {
-    const tick = () => setNow(clockInZone(value));
-    tick();
-    const id = setInterval(tick, 20_000);
-    return () => clearInterval(id);
-  }, [value]);
-
-  const groups = useMemo(() => {
-    const out = new Map<string, typeof ZONES[number][]>();
-    for (const z of ZONES) out.set(z.group, [...(out.get(z.group) ?? []), z]);
-    return [...out];
-  }, []);
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      <select
-        className="onb-in"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-      >
-        {groups.map(([group, zones]) => (
-          <optgroup key={group} label={group}>
-            {zones.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-          </optgroup>
-        ))}
-      </select>
-      <span className="font-mono text-[12px] text-white/45 tabular-nums">
-        ◈ השעה כרגע באזור שנבחר: <span dir="ltr">{now} · {zoneShortName(value)}</span>
-      </span>
-    </div>
-  );
-}

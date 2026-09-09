@@ -13,7 +13,7 @@
 import { type InstrumentKey, isKnownInstrument, pointValue } from './instruments';
 import { todayISOInZone } from './time/zone';
 import {
-  calcPnL, calcRR,
+  calcPnL, calcRR, recordedPrice,
   calcMultiExitPnL, calcMultiExitRealizedR, calcWeightedExitPrice,
 } from './calc/trade';
 import { mergeById, active, type Syncable } from './sync/merge';
@@ -632,7 +632,11 @@ export function tradePnL(t: TradeEntry): number | null {
   if (t.result === 'OPEN') return null;
   if (typeof t.pnlUsd === 'number' && Number.isFinite(t.pnlUsd)) return t.pnlUsd;
   if (t.result === 'BE') return 0;
-  const exit = t.result === 'WIN' ? t.target : t.stop;
+  // The level being assumed has to be one the trade actually carries. An
+  // import writes 0 for a stop or target the export never held, and assuming
+  // a win reached zero prices the trade at the whole instrument.
+  const exit = recordedPrice(t.result === 'WIN' ? t.target : t.stop);
+  if (exit === null) return null;
   const assumed = calcPnL(t.entry, exit, t.direction, t.symbol, t.contracts || 1);
   // The fallback needs the level it is assuming the trade reached. Without it
   // the arithmetic yields NaN, which is not "no answer" — it is an answer that
@@ -684,10 +688,16 @@ export interface MissingAnswer { key: string; label: string }
  *  it would mean the detector could never fire again. A field whose blankness
  *  is the signal cannot be made mandatory. */
 export function missingAnswers(t: TradeEntry): MissingAnswer[] {
-  // An open position has not finished being managed — its stop may yet move,
-  // and asking how it went is asking about something that has not happened.
-  if (t.result === 'OPEN') return [];
   const out: MissingAnswer[] = [];
+  // Prices first, and BEFORE the open-position exit below. An import writes 0
+  // where the export carried no such order, and without them there is no plan
+  // to compare anything against — that gap is just as real on a position still
+  // running, which is the case the trader most needs pointed at.
+  if (recordedPrice(t.stop) === null)   out.push({ key: 'stop',           label: 'סטופ' });
+  if (recordedPrice(t.target) === null) out.push({ key: 'target',         label: 'יעד' });
+  // An open position has not finished being managed — its stop may yet move,
+  // and asking how it WENT is asking about something that has not happened.
+  if (t.result === 'OPEN') return out;
   if (t.followedRules === undefined)  out.push({ key: 'followedRules',  label: 'עמידה בחוקים' });
   if (!t.stopMoved)                   out.push({ key: 'stopMoved',      label: 'הזזת סטופ' });
   if (!t.emotionalState)              out.push({ key: 'emotionalState', label: 'מצב רגשי' });
@@ -738,9 +748,12 @@ export function statsByGroup(trades: TradeEntry[]): GroupStats {
   const { wins, losses } = decidedCounts(closed);
   const winRate = winRatePercent(closed) ?? 0;
   const totalPnl = closed.reduce((sum, t) => sum + (tradePnL(t) ?? 0), 0);
-  const rs = closed
-    .map(t => { const r = Math.abs(t.entry - t.stop); const dir = t.direction === 'LONG' ? 1 : -1; return r > 0 ? ((t.target - t.entry) * dir) / r : null; })
-    .filter((r): r is number => r !== null);
+  // Through rMultiple, not re-derived here. This block used to recompute the
+  // PLANNED ratio inline and hand it back as `avgR`, so a group's "average R"
+  // was the average of what the trades were aiming at — and it carried its own
+  // copy of every guard calcRR has, which meant it kept the bugs calcRR was
+  // fixed for. Realized, from one source, like every other average on screen.
+  const rs = closed.map(rMultiple).filter((r): r is number => r !== null);
   const avgR = rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
   return { winRate, tradeCount: trades.length, totalPnl, avgR, wins, losses };
 }

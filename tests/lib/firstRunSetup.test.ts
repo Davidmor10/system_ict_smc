@@ -12,7 +12,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
-import { DEFAULT_SETTINGS } from '../../app/lib/settings/types';
 
 const gate  = readFileSync('app/components/FirstRunGate.tsx', 'utf8');
 const setup = readFileSync('app/components/FirstRunSetup.tsx', 'utf8');
@@ -64,17 +63,29 @@ describe('what it writes', () => {
 });
 
 describe('the balance step', () => {
-  it('offers the sizes accounts actually come in, including the default', () => {
-    const m = setup.match(/COMMON_BALANCES = \[([^\]]+)\]/);
-    expect(m).not.toBeNull();
-    const values = m![1].split(',').map(v => Number(v.replace(/_/g, '').trim()));
-    expect(values).toContain(DEFAULT_SETTINGS.accountStartUsd);
-    expect(values).toContain(50_000);
-    expect(values.length).toBeGreaterThanOrEqual(6);
+  it('is typed, not tapped off a list of common sizes', () => {
+    // The chips are gone. One tap on the wrong one is how an account ends up
+    // anchored to a size it never had — and every drawdown percentage on
+    // every screen is then measured against it.
+    expect(setup).not.toContain('COMMON_BALANCES');
+    expect(setup).toContain('type="number"');
   });
 
-  it('still allows a number that is not on the list', () => {
-    expect(setup).toContain('type="number"');
+  it('starts empty rather than showing a number to clear', () => {
+    expect(setup).toContain("value={draft.accountStartUsd || ''}");
+  });
+});
+
+describe('the clock is not asked about', () => {
+  it('has no zone step and no zone control', () => {
+    // Israel, on request — one clock for every screen and every import.
+    expect(setup).not.toContain('ZoneSelect');
+    expect(setup).not.toContain('ZONES');
+    expect(setup).toContain("const STEPS = ['מי אתה', 'החשבון'] as const;");
+  });
+
+  it('writes the one zone explicitly, so an older doc is corrected', () => {
+    expect(setup).toContain('timezone: DEFAULT_TIMEZONE');
   });
 });
 

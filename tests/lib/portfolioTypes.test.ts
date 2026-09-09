@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PORTFOLIO_LIMIT, STAGED_PORTFOLIO_CAP, portfolioLimit, canAddPortfolio,
   normalizePortfolio, newPortfolio, validatePortfolio, resolveSelected,
-  MIN_BALANCE_USD, type Portfolio,
+  MIN_BALANCE_USD, balanceFromName, type Portfolio,
 } from '../../app/lib/portfolio/types';
 
 const pf = (over: Partial<Portfolio> = {}): Portfolio => ({
@@ -161,5 +161,51 @@ describe('newPortfolio', () => {
   it('gives every portfolio a distinct id', () => {
     const ids = new Set(Array.from({ length: 200 }, () => newPortfolio('x', 1000, 'UTC').id));
     expect(ids.size).toBe(200);
+  });
+});
+
+// ── Where the account size comes from ───────────────────────────────────────
+//
+// Not from the file. A TradingView order-history export holds the orders that
+// were placed; the same fifteen trades belong to a $2,000 account and a
+// $200,000 one alike. It comes from the name, because that is where traders
+// already write it — and because a grid of common sizes gave one account a
+// $2,100 balance on a wrong tap, which every drawdown figure was then measured
+// against.
+
+describe('balanceFromName', () => {
+  it('reads a bare figure', () => {
+    expect(balanceFromName('DAVID 50000 DEMO')).toBe(50_000);
+  });
+
+  it('reads thousands separators and a dollar sign', () => {
+    expect(balanceFromName('Eval $25,000')).toBe(25_000);
+  });
+
+  it('reads the K and M traders write', () => {
+    expect(balanceFromName('APEX 150K')).toBe(150_000);
+    expect(balanceFromName('apex 150k')).toBe(150_000);
+    expect(balanceFromName('Big 1.5M')).toBe(1_500_000);
+  });
+
+  it('takes the largest, so a sequence number cannot win', () => {
+    expect(balanceFromName('Account 2 — 50000')).toBe(50_000);
+  });
+
+  it('reads nothing when there is nothing to read', () => {
+    // Silence, not a common size. A wrong balance is worse than none.
+    expect(balanceFromName('התיק הראשי')).toBeNull();
+    expect(balanceFromName('Main')).toBeNull();
+  });
+
+  it('does not read a small number as an account', () => {
+    // "Account 2" is a sequence number, "Eval 3" an attempt. Reading either as
+    // a balance would be worse than reading nothing at all.
+    expect(balanceFromName('Account 2')).toBeNull();
+    expect(balanceFromName('Eval 3')).toBeNull();
+  });
+
+  it('does not read a contract month as a balance', () => {
+    expect(balanceFromName('MNQZ2026')).toBeNull();
   });
 });

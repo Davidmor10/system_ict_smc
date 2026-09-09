@@ -20,7 +20,7 @@ import {
   type UserSettings, type TradingStyle,
 } from '../lib/settings/types';
 import { INSTRUMENTS, type InstrumentKey } from '../lib/instruments';
-import { ZONES, clockInZone, zoneShortName } from '../lib/time/zone';
+import { DEFAULT_TIMEZONE, clockInZone, zoneShortName } from '../lib/time/zone';
 
 type SectionKey = 'profile' | 'trading' | 'account';
 
@@ -231,8 +231,8 @@ export default function SettingsView() {
                       request. The `sessions` field itself stays in the doc and
                       keeps being read — an account that already moved a window
                       must not have it silently reset by a UI change. */}
-                  <Field label="אזור זמן" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, לאיזה יום עסקה חדשה נרשמת, ובאיזו שעה היא מתועדת.">
-                    <ZonePicker value={settings.timezone} onChange={v => patch('timezone', v)} />
+                  <Field label="שעון" hint="השעון שהמערכת פועלת לפיו: איזה סשן פתוח עכשיו, לאיזה יום עסקה חדשה נרשמת, ובאיזו שעה היא מתועדת.">
+                    <ZoneReadout />
                   </Field>
                 </div>
               )}
@@ -467,13 +467,14 @@ function PillGroup<T extends string>({
   );
 }
 
-/** The timezone control.
+/** The clock, stated rather than chosen.
  *
- *  A `select` over real IANA identifiers, not a text box. The previous field
- *  accepted any string, stored it, and was read by nothing — so it could say
- *  one thing while the app ran on another. The live clock underneath is the
- *  proof the choice took: it is rendered through the same helper the session
- *  detector uses, so if it shows the wrong hour, the sessions are wrong too. */
+ *  This was a select over IANA identifiers. It is one zone now, on request:
+ *  every screen, every import and every session window runs on Israel time.
+ *  The live clock stays — it is rendered through the same helper the session
+ *  detector uses, so if it shows the wrong hour, the sessions are wrong too,
+ *  and a readout that can be checked is worth more than a control that cannot
+ *  be answered. */
 // ─────────────────────────────────────────────────────────────────────────────
 // The session editor.
 //
@@ -490,43 +491,24 @@ function PillGroup<T extends string>({
 //   · An overlap is warned about, never blocked. A trade lands in the first
 //     window that matches, so an overlap is legible rather than broken — and a
 //     trader mid-edit should not be stopped by a state they are passing through.
-function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [now, setNow] = useState(() => clockInZone(value));
+function ZoneReadout() {
+  const [now, setNow] = useState(() => clockInZone(DEFAULT_TIMEZONE));
 
   useEffect(() => {
-    const tick = () => setNow(clockInZone(value));
+    const tick = () => setNow(clockInZone(DEFAULT_TIMEZONE));
     tick();
     const id = setInterval(tick, 20_000);
     return () => clearInterval(id);
-  }, [value]);
-
-  const groups = useMemo(() => {
-    const out = new Map<string, typeof ZONES[number][]>();
-    for (const z of ZONES) {
-      const list = out.get(z.group) ?? [];
-      list.push(z);
-      out.set(z.group, list);
-    }
-    return [...out.entries()];
   }, []);
 
   return (
     <div className="flex flex-col gap-2.5">
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        dir="rtl"
-        className="w-full rounded-sm bg-[#111] border border-[#222] px-3 py-2.5 text-[14px] text-white outline-none focus:border-[#d4af37]/60 transition-colors duration-200"
-      >
-        {groups.map(([group, zones]) => (
-          <optgroup key={group} label={group}>
-            {zones.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-          </optgroup>
-        ))}
-      </select>
+      <div className="w-full rounded-sm bg-[#111] border border-[#222] px-3 py-2.5 text-[14px] text-white/70">
+        שעון ישראל
+      </div>
       <div className="flex items-center gap-2 text-[12.5px] text-white/40">
         <span className="text-[#d4af37]">◈</span>
-        <span>השעה כרגע באזור שנבחר:</span>
+        <span>השעה כרגע:</span>
         <span
           className="font-mono font-bold text-white/80"
           style={{ direction: 'ltr', unicodeBidi: 'isolate', fontVariantNumeric: 'tabular-nums' }}
@@ -534,7 +516,7 @@ function ZonePicker({ value, onChange }: { value: string; onChange: (v: string) 
           {now}
         </span>
         <span className="font-mono" style={{ direction: 'ltr', unicodeBidi: 'isolate' }}>
-          {zoneShortName(value)}
+          {zoneShortName(DEFAULT_TIMEZONE)}
         </span>
       </div>
     </div>

@@ -13,14 +13,6 @@
 // briefly disagree with itself about what day it is.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Must match SETTINGS_KEY in lib/settings/types.ts. Deliberately not imported
- *  from there: that module calls `resolveZone` below to migrate an old doc, and
- *  importing back would make the two files a cycle. The same pattern the
- *  collections route already uses for the notebook kind. */
-import { readOwned } from '../sync/owned';
-
-const SETTINGS_KEY = 'onyx_user_settings_v1';
-
 /** The default, and the fallback for anything unrecognised. */
 export const DEFAULT_TIMEZONE = 'Asia/Jerusalem';
 
@@ -103,21 +95,23 @@ export function resolveZone(stored: string | undefined | null): string {
 
 // ── Reading the trader's choice ─────────────────────────────────────────────
 
-/** The stored zone, read straight from the settings cache.
+/** The zone the app runs on. Israel, always.
  *
- *  Never throws and never blocks. On the server, or before settings have been
- *  hydrated, this is the default — which is also what the previous hardcoded
- *  behaviour was, so nothing regresses while the doc loads. */
+ *  This used to read a stored setting, and the setting used to have a picker
+ *  on three screens — onboarding, settings, and the import wizard, which asked
+ *  a second time about the FILE's clock. It is one zone now, on request.
+ *
+ *  Read from storage no longer, and deliberately: with the controls gone, an
+ *  account whose doc still carries a zone chosen months ago would be stuck on
+ *  it, filing every new trade under the wrong session with nothing on any
+ *  screen able to change it. A stored value that cannot be edited is worse
+ *  than no stored value.
+ *
+ *  Every caller that takes a `zone` argument still takes one — a portfolio
+ *  carries its own, the formatting helpers below accept any — so this is the
+ *  DEFAULT the app supplies, not a constant welded through the code. */
 export function activeZone(): string {
-  if (typeof window === 'undefined') return DEFAULT_TIMEZONE;
-  try {
-    const doc = readOwned<{ timezone?: string; timezoneLabel?: string }>(SETTINGS_KEY);
-    const id = doc?.timezone ?? doc?.timezoneLabel;
-    const resolved = resolveZone(id);
-    return isValidZone(resolved) ? resolved : DEFAULT_TIMEZONE;
-  } catch {
-    return DEFAULT_TIMEZONE;
-  }
+  return DEFAULT_TIMEZONE;
 }
 
 // ── Clock helpers ───────────────────────────────────────────────────────────

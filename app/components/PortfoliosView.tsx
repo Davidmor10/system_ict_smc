@@ -22,15 +22,14 @@ import ImportWizard from './ImportWizard';
 import { loadTrades, saveTrades } from '../lib/journal';
 import { backfillAccountId } from '../lib/portfolio/scope';
 import { usePlan } from './PlanProvider';
-import { ZONES, zoneShortName, clockInZone } from '../lib/time/zone';
+import { DEFAULT_TIMEZONE } from '../lib/time/zone';
 import {
-  canAddPortfolio, newPortfolio, validatePortfolio, MAX_NAME_LENGTH,
+  canAddPortfolio, newPortfolio, validatePortfolio, balanceFromName, MAX_NAME_LENGTH,
   type NameProblem, type Portfolio,
 } from '../lib/portfolio/types';
 
 const GOLD = '#d4af37';
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
-const COMMON = [10_000, 25_000, 50_000, 100_000, 150_000, 250_000];
 
 export default function PortfoliosView() {
   const { portfolios, selected, ready, select, save } = usePortfolios();
@@ -123,8 +122,6 @@ export default function PortfoliosView() {
                     </div>
                     <div className="mt-2 font-mono text-[12px] text-white/45 tabular-nums flex gap-3 flex-wrap">
                       <span dir="ltr">{usd(p.startingBalanceUsd)}</span>
-                      <span>·</span>
-                      <span>{ZONES.find(z => z.id === p.timezone)?.label ?? p.timezone}</span>
                       <span>·</span>
                       <span>{p.lastImportAt ? `יובא ${new Date(p.lastImportAt).toLocaleDateString('he-IL')}` : 'טרם יובאו עסקאות'}</span>
                     </div>
@@ -256,9 +253,18 @@ function PortfolioForm({
 }) {
   // Empty on a new portfolio, and deliberately so — see the header.
   const [name, setName] = useState(initial?.name ?? '');
-  const [balance, setBalance] = useState<number>(initial?.startingBalanceUsd ?? 0);
-  const [zone, setZone] = useState(initial?.timezone ?? 'Asia/Jerusalem');
+  // Held as a string: an empty field has to stay empty rather than show a 0
+  // the trader has to clear before typing.
+  const [typed, setTyped] = useState(
+    initial && initial.startingBalanceUsd > 0 ? String(initial.startingBalanceUsd) : '',
+  );
   const [problems, setProblems] = useState<NameProblem[]>([]);
+
+  // The name first — see balanceFromName. A trader who writes the size into
+  // the name has said it once, in the place they were going to type it anyway.
+  // What they type here still wins, so a wrong size stays correctable.
+  const readFromName = balanceFromName(name);
+  const balance = Number(typed) > 0 ? Number(typed) : (readFromName ?? 0);
 
   const problem = (f: NameProblem['field']) => problems.find(p => p.field === f)?.message;
 
@@ -268,8 +274,8 @@ function PortfolioForm({
     if (found.length > 0) return;
     void onSave(
       initial
-        ? { ...initial, name: name.trim().slice(0, MAX_NAME_LENGTH), startingBalanceUsd: balance, timezone: zone }
-        : newPortfolio(name, balance, zone),
+        ? { ...initial, name: name.trim().slice(0, MAX_NAME_LENGTH), startingBalanceUsd: balance, timezone: DEFAULT_TIMEZONE }
+        : newPortfolio(name, balance, DEFAULT_TIMEZONE),
     );
   }
 
@@ -293,44 +299,27 @@ function PortfolioForm({
       </label>
 
       <div className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">יתרת פתיחה ($)</span>
-        <div className="grid grid-cols-3 gap-1.5">
-          {COMMON.map(v => (
-            <button
-              key={v} type="button" onClick={() => setBalance(v)} aria-pressed={balance === v}
-              className="rounded-[8px] border px-3 py-2 text-[13px] text-center transition-all"
-              style={{
-                borderColor: balance === v ? 'rgba(212,175,55,0.55)' : '#1c1c1e',
-                background: balance === v ? 'rgba(212,175,55,0.08)' : 'rgba(255,255,255,0.015)',
-                color: balance === v ? '#f0dc9a' : 'rgba(255,255,255,0.6)',
-                fontWeight: balance === v ? 700 : 500,
-              }}
-            >
-              <span dir="ltr">{usd(v)}</span>
-            </button>
-          ))}
-        </div>
+        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">גודל החשבון ($)</span>
         <input
           className="pf-in" type="number" min={100} step={500} dir="ltr"
-          value={balance || ''}
+          placeholder={readFromName !== null ? String(readFromName) : '50000'}
+          value={typed}
           aria-invalid={!!problem('balance')}
-          onChange={e => setBalance(Number(e.target.value) || 0)}
+          onChange={e => setTyped(e.target.value)}
         />
+        {readFromName !== null && Number(typed) <= 0 && (
+          <span className="text-[12.5px]" style={{ color: 'rgba(240,220,154,0.8)' }}>
+            נקרא מתוך השם: <span dir="ltr">{usd(readFromName)}</span>
+          </span>
+        )}
+        {/* The grid of common sizes that used to be here is gone: one wrong
+            tap gave an account a size it never had, and every drawdown figure
+            on every screen is measured against this number. */}
+        <span className="text-[12.5px] text-white/35 leading-relaxed">
+          הקובץ של TradingView לא מכיל את גודל החשבון. אפשר לכתוב אותו כאן, או לרשום אותו בשם התיק.
+        </span>
         {problem('balance') && <span className="text-[12.5px] text-[#f0899e]">{problem('balance')}</span>}
       </div>
-
-      <label className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-white/45">אזור זמן</span>
-        <span className="text-[12.5px] text-white/35 -mt-1">
-          השעון שהשעות של התיק הזה נקראות לפיו.
-        </span>
-        <select className="pf-in" value={zone} onChange={e => setZone(e.target.value)}>
-          {ZONES.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-        </select>
-        <span className="font-mono text-[11.5px] text-white/40 tabular-nums">
-          ◈ השעה כרגע: <span dir="ltr">{clockInZone(zone)} · {zoneShortName(zone)}</span>
-        </span>
-      </label>
 
       <div className="flex gap-2 pt-1">
         <button type="button" onClick={submit}

@@ -28,18 +28,25 @@ describe('nothing is written before the last button', () => {
   });
 });
 
-describe('the timezone is asked, not assumed', () => {
+describe('the timezone is stated, not asked', () => {
   it('shows the file\'s own first timestamp back to the trader', () => {
-    // The export carries no zone. Read in the wrong one it does not fail — it
-    // files every trade under the wrong session, silently.
+    // The export carries no zone, and the trader has no way of knowing which
+    // one TradingView wrote. Asking was the wrong move; showing the first
+    // trade's mapped time keeps a file on another clock visible.
     expect(wizard).toContain('העסקה הראשונה בקובץ רשומה');
     expect(wizard).toContain('firstRaw');
+    expect(wizard).toContain('כל השעות במערכת הן שעון ישראל');
   });
 
-  it('re-computes the whole preview when the answer changes', () => {
-    // The mapping is a memo over fileZone, so the table moves with the answer
-    // rather than the trader being asked to trust it.
-    expect(wizard).toContain('}, [parsed, fileZone, existing, portfolio, newId]);');
+  it('offers no zone control anywhere', () => {
+    // Two pickers, on two screens, for a question with no answerable form.
+    expect(wizard).not.toContain('ZONES.map');
+    expect(wizard).not.toContain('setFileZone');
+    expect(wizard).not.toContain('draftZone');
+  });
+
+  it('maps the file on the app\'s one clock', () => {
+    expect(wizard).toContain('fileZone: DEFAULT_TIMEZONE, appZone: DEFAULT_TIMEZONE');
   });
 
   it('names the session each trade would land in', () => {
@@ -97,7 +104,20 @@ describe('adding a trading account', () => {
     expect(wizard).toContain('function AccountStep(');
     expect(wizard).toContain('קובץ העסקאות');
     expect(wizard).toContain('שם החשבון');
-    expect(wizard).toContain('יתרת פתיחה');
+    expect(wizard).toContain('גודל החשבון');
+  });
+
+  it('reads the account size out of the name instead of offering sizes', () => {
+    // The file does not carry a balance, and a grid of common sizes gave an
+    // account $2,100 on one wrong tap — every drawdown figure on every screen
+    // is then measured against it.
+    expect(wizard).toContain('balanceFromName(draftName)');
+    expect(wizard).toContain('נקרא מתוך שם החשבון');
+    expect(wizard).not.toContain('COMMON_BALANCES');
+  });
+
+  it('says plainly that the file does not hold the account size', () => {
+    expect(wizard).toContain('לא מכיל את גודל החשבון');
   });
 
   it('writes out where the file comes from', () => {
@@ -112,7 +132,7 @@ describe('adding a trading account', () => {
   it('fixes the account id before the preview maps against it', () => {
     // Generating a second id at save time would leave every mapped trade
     // pointing at an account that does not exist.
-    expect(wizard).toContain("useState(() => newPortfolio('', 0, 'Asia/Jerusalem').id)");
+    expect(wizard).toContain("useState(() => newPortfolio('', 0, DEFAULT_TIMEZONE).id)");
     expect(wizard).toContain("accountId: portfolio?.id ?? newId");
   });
 
@@ -136,5 +156,27 @@ describe('adding a trading account', () => {
     expect(sw).toContain('+ הוספת חשבון מסחר');
     expect(sw).toContain('?add=1');
     expect(view).toContain("get('add') === '1'");
+  });
+});
+
+// ── One clock, app-wide ─────────────────────────────────────────────────────
+
+describe('the app runs on one zone', () => {
+  const zone = readFileSync('app/lib/time/zone.ts', 'utf8');
+  const settings = readFileSync('app/components/SettingsView.tsx', 'utf8');
+  const portfolios = readFileSync('app/components/PortfoliosView.tsx', 'utf8');
+
+  it('does not read a stored zone any more', () => {
+    // With the controls gone, an account whose doc still carries a zone chosen
+    // months ago would be stuck on it — filing every new trade under the wrong
+    // session with nothing on any screen able to change it.
+    expect(zone).toContain('export function activeZone(): string {\n  return DEFAULT_TIMEZONE;\n}');
+    expect(zone).not.toContain('readOwned');
+  });
+
+  it('offers no zone control on settings or on a portfolio', () => {
+    expect(settings).not.toContain('ZonePicker');
+    expect(settings).toContain('ZoneReadout');
+    expect(portfolios).not.toContain('ZONES');
   });
 });

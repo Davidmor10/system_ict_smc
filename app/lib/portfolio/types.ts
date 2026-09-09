@@ -164,6 +164,54 @@ export function normalizePortfolio(raw: unknown): Portfolio | null {
   };
 }
 
+// ── Where the account size comes from ────────────────────────────────────────
+//
+// NOT from the file. A TradingView order-history export holds the orders that
+// were placed — symbol, side, quantity, prices, times, an order id, the
+// leverage and the margin each order tied up. It does not carry the balance
+// the account started with, and no arithmetic over those rows recovers it: the
+// same fifteen trades belong to a $2,000 account and a $200,000 one alike.
+//
+// It comes from the NAME instead, because that is where traders already put
+// it. A funded or paper account is called "DAVID 50000 DEMO", "APEX 150K",
+// "Eval $25,000" — the size is in the label because the trader needs to tell
+// two accounts apart at a glance. Reading it there means the number is stated
+// once, in the place it was going to be typed anyway, instead of being picked
+// off a row of chips where one wrong tap gives an account a size it never had.
+//
+// When the name holds no such number the app asks. It does not guess, and it
+// does not fall back to a common size — a wrong balance is worse than none,
+// because every drawdown percentage on every screen is measured against it.
+
+/** Below this, a number in a name is not an account size. Higher than
+ *  MIN_BALANCE_USD on purpose: that floor is what a trader may deliberately
+ *  type, this one is what the app is willing to INFER without being told. */
+export const MIN_ACCOUNT_SIZE_USD = 1_000;
+
+/** The largest account-sized number written into a portfolio's name, or null.
+ *
+ *  Accepts a bare figure, thousands separators, a leading dollar sign, and the
+ *  K/M suffixes traders write ("50K", "1.5M"). */
+export function balanceFromName(name: string): number | null {
+  // The number has to STAND ALONE. Anchored on a boundary that is neither a
+  // letter nor a digit, so the year inside a contract month — "MNQZ2026", the
+  // kind of thing a trader does put in an account name — is not a balance.
+  const re = /(?:^|[^\w.,])\$?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([KkMm])?(?!\d)/g;
+  let best: number | null = null;
+  for (const m of name.matchAll(re)) {
+    const digits = Number(m[1].replace(/,/g, ''));
+    if (!Number.isFinite(digits)) continue;
+    const suffix = (m[2] ?? '').toUpperCase();
+    const value = suffix === 'K' ? digits * 1_000 : suffix === 'M' ? digits * 1_000_000 : digits;
+    // A number too small to be an account is a sequence number, a year, or a
+    // version — "Account 2", "Eval 3". Reading those as a balance would be
+    // worse than reading nothing.
+    if (value < MIN_ACCOUNT_SIZE_USD) continue;
+    if (best === null || value > best) best = value;
+  }
+  return best;
+}
+
 /** `id` is injectable so a screen can fix it BEFORE the account is saved —
  *  the import preview maps trades against it, and generating a second id at
  *  save time would leave every one of those trades pointing at nothing. */
